@@ -1,13 +1,13 @@
 ;; jing-vault-v1-sbtc-usdcx
 ;; Personal vault for conditional execution into the sBTC/USDCx Jing market
-;; (.sbtc-usdcx-jing-v3, x=sBTC, y=USDCx) with a Bitflow
+;; (.markets-sbtc-usdcx-jing, x=sBTC, y=USDCx) with a Bitflow
 ;; DLMM fallback path. Each user deploys their own instance.
 ;;
 ;; - Owner: deposits/withdraws funds, signs SIP-018 intents off-chain.
 ;; - Keeper: submits signed intents (jing-deposit, dlmm-swap) and
 ;;           triggers unsigned cancels / revocations on the owner's behalf.
 ;; - Funds never leave owner's control except into the registered market
-;;   (.sbtc-usdcx-jing-v3), into Bitflow's
+;;   (.markets-sbtc-usdcx-jing), into Bitflow's
 ;;   dlmm-pool-sbtc-usdcx-v-1-bps-10 via dlmm-swap-router-v-1-1, or back
 ;;   to OWNER.
 ;;
@@ -175,10 +175,10 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? .sbtc-usdcx-jing-v3
+      (try! (contract-call? .markets-sbtc-usdcx-jing
               cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
     (try! (contract-call? .jing-core log-cancel
-      .sbtc-usdcx-jing-v3 SBTC_TOKEN))
+      .markets-sbtc-usdcx-jing SBTC_TOKEN))
     (ok true)))
 
 (define-public (cancel-jing-usdcx)
@@ -187,10 +187,10 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? .sbtc-usdcx-jing-v3
+      (try! (contract-call? .markets-sbtc-usdcx-jing
               cancel-token-y-deposit USDCX_TOKEN ASSET_USDCX))))
     (try! (contract-call? .jing-core log-cancel
-      .sbtc-usdcx-jing-v3 USDCX_TOKEN))
+      .markets-sbtc-usdcx-jing USDCX_TOKEN))
     (ok true)))
 
 ;; ---------------------------------------------------------------
@@ -218,14 +218,14 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_SBTC)
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? .sbtc-usdcx-jing-v3
+        (try! (contract-call? .markets-sbtc-usdcx-jing
           deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC))))
       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
-        (try! (contract-call? .sbtc-usdcx-jing-v3
+        (try! (contract-call? .markets-sbtc-usdcx-jing
           deposit-token-y amount limit-price USDCX_TOKEN ASSET_USDCX)))))
     (try! (contract-call? .jing-core log-jing-deposit
       msg-hash
-      .sbtc-usdcx-jing-v3
+      .markets-sbtc-usdcx-jing
       (if (is-eq side ASSET_SBTC) SBTC_TOKEN USDCX_TOKEN)
       (if (is-eq side ASSET_SBTC) USDCX_TOKEN SBTC_TOKEN)
       amount limit-price))

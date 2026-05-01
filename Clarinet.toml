@@ -86,13 +86,13 @@ path = "contracts/snpl-trait.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.sbtc-stx-jing-v3]
-path = "contracts/sbtc-stx-jing-v3.clar"
+[contracts.markets-sbtc-stx-jing]
+path = "contracts/markets-sbtc-stx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.sbtc-usdcx-jing-v3]
-path = "contracts/sbtc-usdcx-jing-v3.clar"
+[contracts.markets-sbtc-usdcx-jing]
+path = "contracts/markets-sbtc-usdcx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
 
@@ -106,12 +106,12 @@ path = "contracts/vault-sbtc-usdcx.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.sbtc-stx-jing-reserve]
-path = "contracts/sbtc-stx-jing-reserve.clar"
+[contracts.reserve-sbtc-stx-jing]
+path = "contracts/reserve-sbtc-stx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.sbtc-stx-jing-snpl]
-path = "contracts/sbtc-stx-jing-snpl.clar"
+[contracts.snpl-sbtc-stx-jing]
+path = "contracts/snpl-sbtc-stx-jing.clar"
 clarity_version = 5
 epoch = "3.4"

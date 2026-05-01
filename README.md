@@ -9,16 +9,16 @@ contracts/
 ├── jing-core.clar              registry, equity ledger, single event stream
 ├── jing-vault-auth.clar        SIP-018 hash builder for signed vault intents
 │
-├── sbtc-stx-jing-v3.clar       sBTC/STX market (STX-special: native STX on token-y)
-├── sbtc-usdcx-jing-v3.clar     sBTC/USDCx market (single Pyth feed; both legs FT)
+├── markets-sbtc-stx-jing.clar       sBTC/STX market (STX-special: native STX on token-y)
+├── markets-sbtc-usdcx-jing.clar     sBTC/USDCx market (single Pyth feed; both legs FT)
 │
 ├── vault-sbtc-stx.clar         per-user sBTC/STX vault → market + xyk + DLMM router
 ├── vault-sbtc-usdcx.clar       per-user sBTC/USDCx vault → market + DLMM router
 │
 ├── reserve-trait.clar          trait the reserve implements
 ├── snpl-trait.clar             trait the snpl implements
-├── sbtc-stx-jing-reserve.clar  shared sBTC reserve (lender's pool)
-└── sbtc-stx-jing-snpl.clar     per-borrower credit-line (ports v2 sbtc-stx-0-jing-v2 mainnet refs)
+├── reserve-sbtc-stx-jing.clar  shared sBTC reserve (lender's pool)
+└── snpl-sbtc-stx-jing.clar     per-borrower credit-line (ports v2 sbtc-stx-0-jing-v2 mainnet refs)
 ```
 
 ## Architecture sketch
