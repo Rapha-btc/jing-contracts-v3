@@ -1,13 +1,13 @@
 ;; jing-vault-v1-sbtc-usdcx
 ;; Personal vault for conditional execution into the sBTC/USDCx Jing market
-;; (.markets-sbtc-usdcx-jing, x=sBTC, y=USDCx) with a Bitflow
+;; (JING-MARKET, x=sBTC, y=USDCx) with a Bitflow
 ;; DLMM fallback path. Each user deploys their own instance.
 ;;
 ;; - Owner: deposits/withdraws funds, signs SIP-018 intents off-chain.
 ;; - Keeper: submits signed intents (jing-deposit, dlmm-swap) and
 ;;           triggers unsigned cancels / revocations on the owner's behalf.
 ;; - Funds never leave owner's control except into the registered market
-;;   (.markets-sbtc-usdcx-jing), into Bitflow's
+;;   (JING-MARKET), into Bitflow's
 ;;   dlmm-pool-sbtc-usdcx-v-1-bps-10 via dlmm-swap-router-v-1-1, or back
 ;;   to OWNER.
 ;;
@@ -33,6 +33,14 @@
 ;; Token principals.
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant USDCX_TOKEN 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
+
+;; Jing market this vault is bound to (sBTC = token-x, USDCx = token-y).
+(define-constant JING-MARKET .markets-sbtc-usdcx-jing)
+
+;; Bitflow DLMM router + pool used by execute-dlmm-swap. Pool layout:
+;; x=sBTC, y=USDCx (matches the v3 jing market's layout).
+(define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1)
+(define-constant DLMM_POOL_SBTC_USDCX 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10)
 
 ;; Asset names: doubly used as (a) the SIP-010 ft identifier in `with-ft`
 ;; and (b) the side label embedded in the SIP-018 message hash. Renaming
@@ -175,10 +183,10 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? .markets-sbtc-usdcx-jing
+      (try! (contract-call? JING-MARKET
               cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
     (try! (contract-call? .jing-core log-cancel
-      .markets-sbtc-usdcx-jing SBTC_TOKEN))
+      JING-MARKET SBTC_TOKEN))
     (ok true)))
 
 (define-public (cancel-jing-usdcx)
@@ -187,10 +195,10 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? .markets-sbtc-usdcx-jing
+      (try! (contract-call? JING-MARKET
               cancel-token-y-deposit USDCX_TOKEN ASSET_USDCX))))
     (try! (contract-call? .jing-core log-cancel
-      .markets-sbtc-usdcx-jing USDCX_TOKEN))
+      JING-MARKET USDCX_TOKEN))
     (ok true)))
 
 ;; ---------------------------------------------------------------
@@ -218,14 +226,14 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_SBTC)
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? .markets-sbtc-usdcx-jing
+        (try! (contract-call? JING-MARKET
           deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC))))
       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
-        (try! (contract-call? .markets-sbtc-usdcx-jing
+        (try! (contract-call? JING-MARKET
           deposit-token-y amount limit-price USDCX_TOKEN ASSET_USDCX)))))
     (try! (contract-call? .jing-core log-jing-deposit
       msg-hash
-      .markets-sbtc-usdcx-jing
+      JING-MARKET
       (if (is-eq side ASSET_SBTC) SBTC_TOKEN USDCX_TOKEN)
       (if (is-eq side ASSET_SBTC) USDCX_TOKEN SBTC_TOKEN)
       amount limit-price))
@@ -266,15 +274,15 @@
     (let ((result (if (is-eq side ASSET_SBTC)
                       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
                         (try! (contract-call?
-                          'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1
+                          DLMM_ROUTER
                           swap-x-for-y-simple-multi
-                          'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10
+                          DLMM_POOL_SBTC_USDCX
                           SBTC_TOKEN USDCX_TOKEN amount min-out))))
                       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
                         (try! (contract-call?
-                          'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1
+                          DLMM_ROUTER
                           swap-y-for-x-simple-multi
-                          'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10
+                          DLMM_POOL_SBTC_USDCX
                           SBTC_TOKEN USDCX_TOKEN amount min-out)))))))
       (try! (contract-call? .jing-core log-bitflow-swap
         msg-hash
