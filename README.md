@@ -1,6 +1,6 @@
 # jing-contracts-v3
 
-Clean room of the Jing v3 protocol: a single registry + per-pair blind-batch markets + per-user vaults for conditional execution + a reserve/snpl credit-line stack. Ported from the in-flight `jingswap-contracts` workspace and renamed for clarity.
+The Jing protocol on Stacks: a fair-batch swap venue for sBTC pairs, plus tools that let users automate trades and borrow against their position. This repo holds the smart contracts; the file layout below is the same one you'll see in the `contracts/` folder.
 
 ## Layout
 
@@ -9,45 +9,70 @@ contracts/
 ├── jing-core.clar              registry, equity ledger, single event stream
 ├── jing-vault-auth.clar        SIP-018 hash builder for signed vault intents
 │
-├── markets-sbtc-stx-jing.clar       sBTC/STX market (STX-special: native STX on token-y)
-├── markets-sbtc-usdcx-jing.clar     sBTC/USDCx market (single Pyth feed; both legs FT)
+├── markets-sbtc-stx-jing.clar       sBTC/STX market
+├── markets-sbtc-usdcx-jing.clar     sBTC/USDCx market
 │
-├── vault-sbtc-stx.clar         per-user sBTC/STX vault → market + xyk + DLMM router
-├── vault-sbtc-usdcx.clar       per-user sBTC/USDCx vault → market + DLMM router
+├── vault-sbtc-stx.clar         per-user sBTC/STX vault
+├── vault-sbtc-usdcx.clar       per-user sBTC/USDCx vault
 │
-├── reserve-trait.clar          trait the reserve implements
-├── snpl-trait.clar             trait the snpl implements
+├── reserve-trait.clar          interface the reserve implements
+├── snpl-trait.clar             interface the per-borrower loan implements
 ├── reserve-sbtc-stx-jing.clar  shared sBTC reserve (lender's pool)
-└── snpl-sbtc-stx-jing.clar     per-borrower credit-line (ports v2 sbtc-stx-0-jing-v2 mainnet refs)
+└── snpl-sbtc-stx-jing.clar     per-borrower swap-now-pay-later loan against sBTC
 ```
 
-## Architecture sketch
+## What each piece does, from a user's point of view
 
-- **`jing-core`** is the only contract every other piece talks to. It holds the canonical per-token equity ledger keyed `(token, owner)` and emits the unified event stream consumed by indexers.
-- **Markets** (`*-jing-v3`) are blind-batch auction templates priced by Pyth. Each market is initialized with a token pair and a feed at deploy time. They credit/debit equity in jing-core via `log-deposit-x/y`, `log-distribute-*`, `log-refund-*`, `log-sweep-dust`.
-- **Vaults** (`vault-*`) are per-user single-instance contracts. Owner pre-signs SIP-018 intents off-chain; a whitelisted keeper fires them. Funds only move into the registered market, into pinned Bitflow venues (xyk + DLMM router), or back to OWNER. No trait or principal args from the keeper.
-- **Reserve + snpl** form a credit-line stack on top of the sBTC/STX market. The reserve is a single shared lender pool; one snpl is deployed per borrower.
+### `jing-core`
+The "post office" of the protocol. Every other contract talks to it. It tracks how much sBTC each user has parked across the whole ecosystem (in any vault, market, or loan), and it broadcasts a single event feed that wallets, dashboards, and bots all subscribe to. If you've ever wondered "where's all my sBTC right now?" — that's the question jing-core answers.
 
-## Cross-venue integrations
+### `jing-vault-auth`
+A small utility that produces the signature format used by vaults (see below). Owners sign trade intents off-chain; this contract is what turns a structured intent into the exact bytes they sign. You don't interact with it directly.
 
-The vaults route through:
-- The Jing market for the same pair (primary).
-- Bitflow xyk (sBTC/STX vault only — there's no xyk pool for sBTC/USDCx).
-- Bitflow DLMM via `dlmm-swap-router-v-1-1.swap-{x-for-y,y-for-x}-simple-multi` (auto-traverses up to 319 bins, built-in min-received). Pool layout per pair:
-  - sBTC/STX: `dlmm-pool-stx-sbtc-v-1-bps-15` — **x=wstx, y=sBTC** (Bitflow naming inverts vs. Jing/xyk).
-  - sBTC/USDCx: `dlmm-pool-sbtc-usdcx-v-1-bps-10` — x=sBTC, y=USDCx.
+### Markets — `markets-sbtc-stx-jing` / `markets-sbtc-usdcx-jing`
+A **blind-batch auction**. Instead of front-running each other on order books, depositors put their sBTC (or STX / USDCx) into a shared pool with a price they're willing to accept. After a short window, the market settles every order at the same fair price using a Pyth oracle, and everyone gets filled (or rolled to the next round) without any MEV games. One contract per pair.
 
-## STX handling
+### Vaults — `vault-sbtc-stx` / `vault-sbtc-usdcx`
+Your **personal trading account**. You deploy one (or use a deployer service), park your sBTC and STX/USDCx in it, and sign trade conditions off-chain — *"sell 0.1 sBTC for at least 5,000 USDCx, expires in 24 hours"*. A keeper bot watches the market and executes when conditions are met. Your funds never leave your control: they only move into the official Jing market, into Bitflow's pools, or back to you. The keeper can't substitute tokens or reroute funds.
 
-`vault-sbtc-stx` holds **native STX**. Bitflow's `token-stx-v-1-2` is a SIP-010 façade whose `transfer` is `stx-transfer?` and whose `get-balance` is `stx-get-balance` — there's no minted FT supply. So every STX-side egress in the vault uses `with-stx amount` on the as-contract clause; no `with-ft` ever applies on the STX leg.
+You can have any number of conditional orders open in parallel. Cancel any of them at any time; the keeper can also cancel an in-flight Jing deposit if you change your mind.
 
-`sbtc-stx-jing-v3` mirrors this: token-y operations use `stx-transfer?` + `with-stx` directly, even though the public function signatures still take an `<ft-trait>` (the trait is asserted canonical for safety but never invoked for the actual transfer).
+### Reserve — `reserve-sbtc-stx-jing`
+A **shared sBTC lending pool**. A lender (or DAO) supplies sBTC into the reserve and sets credit limits per borrower. Borrowers don't share collateral or default risk — each borrower has their own line and their own loan contract (snpl, below). The lender earns interest; rates are set per credit-line.
 
-## Equity ledger semantics
+### Snpl — `snpl-sbtc-stx-jing`
+Stands for **"swap now, pay later"**. It's a per-borrower loan contract: the borrower draws sBTC from the reserve, deposits it into the Jing market for STX, and then has a deadline to pay back the loan (with interest) — typically using the STX they swapped into. If they don't repay by the deadline, the lender can seize whatever's left. One snpl per borrower; many borrowers can run in parallel without affecting each other.
 
-- Vaults credit/debit **at ecosystem boundaries** (owner deposit/withdraw, AMM entry/exit). Intra-ecosystem moves (vault → registered market) emit zero equity delta.
-- Markets handle the cross-leg accounting on settle via `log-distribute-*-depositor`: unconditional debit of cleared input + `credit-if-registered` of received counterparty token. Vaults are registered, so the credit fires and their bucket reflects post-trade balances.
-- STX-side equity is denominated in `'SM179...token-stx-v-1-2` (the wstx façade principal) on both vault and market sides — single bucket, no parallel STX/wstx tracking.
+This is useful if you have STX coming in (yield, salary, an inbound bridge) and want sBTC exposure now without buying it outright.
+
+### `reserve-trait` / `snpl-trait`
+Just type definitions — they describe the shape that any reserve / snpl must conform to. Lets the reserve and snpl talk to each other safely without knowing each other's exact code.
+
+## How the parts fit together
+
+```
+        ┌──────────────────────────────┐
+        │           jing-core          │ ← single source of truth for
+        │  (registry, equity, events)  │   "who has what sBTC where"
+        └──┬────────┬──────────┬───────┘
+           │        │          │
+   ┌───────▼──┐  ┌──▼────┐ ┌───▼────────┐
+   │ markets  │  │ vault │ │ reserve +  │
+   │  (per    │◄─┤ (per  │ │ snpl       │
+   │   pair)  │  │ user) │ │ (lending)  │
+   └────┬─────┘  └───┬───┘ └─────┬──────┘
+        │            │           │
+        └─ also routes ─┘        │
+        ─ to Bitflow xyk ─       │
+        ─ + DLMM pools ─         ▼
+                          (uses the market
+                           for the swap)
+```
+
+- The **market** is where actual trades clear, fairly and in batches.
+- A **vault** is a user's smart-account on top: it lets the user pre-sign trade conditions and lets a keeper fire them at the market when those conditions are met. Vaults can also hit Bitflow's xyk and DLMM pools as fallback venues if the market doesn't fill.
+- A **reserve + snpl** stack is for credit: the reserve is the lender's deposit, the snpl is the borrower's account. The snpl uses the same Jing market underneath to swap the borrowed sBTC into STX.
+- Everything emits to **jing-core**, so a single feed of events covers all activity across all pairs and all users.
 
 ## Build
 
@@ -55,11 +80,10 @@ The vaults route through:
 clarinet check
 ```
 
-Mainnet requirements (sBTC, USDCx, Pyth, Bitflow xyk + DLMM + router) are pulled into `.cache/requirements/` automatically on first check.
+Mainnet contracts the project depends on (sBTC, USDCx, Pyth oracles, Bitflow xyk + DLMM + router) are pulled into `.cache/requirements/` automatically on first check.
 
 ## Status
 
-Pre-mainnet. Notable open items:
+Pre-mainnet. One known wrinkle:
 
-- `sbtc-stx-jing-snpl.clar` still hardcodes the v2 mainnet market `'SPV9K21...sbtc-stx-0-jing-v2` and uses v2-style single-side functions (`deposit-sbtc`, `cancel-sbtc-deposit`, `set-sbtc-limit`). Migrating it to call `sbtc-stx-jing-v3` (`deposit-token-x` + asset-name) is a follow-up amend, not done in this port.
-- `clarinet check`'s auto-generated simnet plan can deploy vaults before the markets they reference (Clarinet doesn't infer the dependency from `.contract-call?`); if the check trips on `use of unresolved contract`, manually reorder `deployments/default.simnet-plan.yaml` to put the v3 markets ahead of the vaults.
+- `clarinet check` auto-generates a simnet deploy plan that can put the vaults *before* the markets they reference, which trips a "use of unresolved contract" error. If you hit that, open `deployments/default.simnet-plan.yaml` and move the `markets-*-jing` entries above the `vault-*` entries. Pure tooling quirk — the contracts themselves compile fine.
