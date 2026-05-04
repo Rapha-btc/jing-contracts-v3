@@ -496,6 +496,71 @@ describe.skipIf(!remoteDataEnabled)("creator-escrow", () => {
     expect(getUsdcxBalance(wallet1)).toBe(samBefore + PRICE_30); // round 2 rate
   });
 
+  // -------- sweep semantics: past rounds during active rounds --------
+  it("sweep: works on a past round even while a new round is open", () => {
+    // Round 1: submit + release one delivery, leave 3 unspent slots.
+    fundUsdcx(deployer, PRICE_25 * NUM_VIDEOS_4);
+    expect(startRound(wallet1, wallet2, PRICE_25, NUM_VIDEOS_4).result).toBeOk(
+      Cl.uint(1)
+    );
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeOk(Cl.uint(1));
+    simnet.mineEmptyBurnBlocks(REVIEW_WINDOW + 1);
+    expect(release(1, true, wallet1).result).toBeOk(Cl.bool(true));
+
+    // Round 1 has pending = 0; advance past ends-at and open round 2 WITHOUT
+    // sweeping round 1 first. Both rounds' deposits coexist in the contract.
+    simnet.mineEmptyBurnBlocks(ROUND_BURN_BLOCKS);
+    fundUsdcx(deployer, PRICE_30 * NUM_VIDEOS_4);
+    expect(startRound(wallet1, wallet2, PRICE_30, NUM_VIDEOS_4).result).toBeOk(
+      Cl.uint(2)
+    );
+
+    // Contract pool should hold round 1's leftover ($75) + round 2's deposit
+    // ($120) = $195.
+    const round1Leftover = PRICE_25 * (NUM_VIDEOS_4 - 1); // $75
+    const round2Deposit = PRICE_30 * NUM_VIDEOS_4;        // $120
+    expect(getEscrowBalance()).toBe(round1Leftover + round2Deposit);
+
+    // Sweep round 1 mid-round-2; refund the $75 to owner.
+    const ownerBefore = getUsdcxBalance(deployer);
+    expect(sweep(1).result).toBeOk(Cl.uint(round1Leftover));
+    expect(getUsdcxBalance(deployer)).toBe(ownerBefore + round1Leftover);
+
+    // Round 2's pool intact at $120.
+    expect(getEscrowBalance()).toBe(round2Deposit);
+    expect(getRound(1).value.value.swept.value).toBe(true);
+    expect(getRound(2).value.value.swept.value).toBe(false);
+  });
+
+  // -------- sweep seals the round: lift-veto blocked after sweep --------
+  it("lift-veto after sweep: rejected so future rounds aren't raided", () => {
+    fundUsdcx(deployer, PRICE_25 * NUM_VIDEOS_4);
+    expect(startRound(wallet1, wallet2, PRICE_25, NUM_VIDEOS_4).result).toBeOk(
+      Cl.uint(1)
+    );
+    // Submit + veto so the round has a vetoed (non-pending) delivery.
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeOk(Cl.uint(1));
+    expect(veto(1, "audio is rough").result).toBeOk(Cl.bool(true));
+
+    // Round ends, pending = 0, owner sweeps the full deposit back.
+    simnet.mineEmptyBurnBlocks(ROUND_BURN_BLOCKS);
+    expect(sweep(1).result).toBeOk(Cl.uint(PRICE_25 * NUM_VIDEOS_4));
+
+    // Round 2 starts with its own deposit.
+    fundUsdcx(deployer, PRICE_25 * NUM_VIDEOS_4);
+    expect(startRound(wallet1, wallet2, PRICE_25, NUM_VIDEOS_4).result).toBeOk(
+      Cl.uint(2)
+    );
+
+    // Owner attempts to lift the veto on the now-swept round 1 delivery.
+    // Without the guard, this would let creator drain $25 from round 2's
+    // pool while incrementing round 1's paid-out (silent double-counting).
+    expect(liftVeto(1, HASH_AMENDED).result).toBeErr(Cl.uint(ERR_ALREADY_SWEPT));
+
+    // Round 2's deposit remains untouched.
+    expect(getEscrowBalance()).toBe(PRICE_25 * NUM_VIDEOS_4);
+  });
+
   // -------- read-only sanity --------
   it("read-only surface returns expected shapes", () => {
     const config = cvToJSON(ro(C, "get-config", []));

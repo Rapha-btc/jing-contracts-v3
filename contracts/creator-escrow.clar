@@ -357,6 +357,10 @@
     )
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (is-eq (get status delivery) STATUS_VETOED) ERR_NOT_VETOED)
+    ;; Once OWNER has swept the round, the cycle is sealed -- no resurrecting
+    ;; vetoed deliveries after the budget has been reclaimed. This protects
+    ;; future rounds' deposits from being implicitly raided.
+    (asserts! (not (get swept round-data)) ERR_ALREADY_SWEPT)
     (map-set deliveries { id: delivery-id }
       (merge delivery { status: STATUS_AMENDED_APPROVED })
     )

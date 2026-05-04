@@ -283,6 +283,7 @@
     )
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (is-eq (get status delivery) STATUS_VETOED) ERR_NOT_VETOED)
+    (asserts! (not (get swept round-data)) ERR_ALREADY_SWEPT)
     (map-set deliveries { id: delivery-id }
       (merge delivery { status: STATUS_AMENDED_APPROVED })
     )
