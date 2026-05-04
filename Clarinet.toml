@@ -120,3 +120,8 @@ epoch = "3.4"
 path = "contracts/creator-escrow.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.creator-escrow-stxer]
+path = "contracts/creator-escrow-stxer.clar"
+clarity_version = 5
+epoch = "3.4"

@@ -1,0 +1,19 @@
+{
+  "name": "jing-contracts-v3",
+  "version": "1.0.0",
+  "description": "Jing v3 protocol + creator-escrow simulations.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "vitest run",
+    "sim:creator-escrow": "tsx simulations/simul-creator-escrow.js"
+  },
+  "dependencies": {
+    "@stacks/clarinet-sdk": "^3.16.0",
+    "@stacks/transactions": "^7.2.0",
+    "stxer": "^0.6.1",
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.9",
+    "vitest-environment-clarinet": "^3.0.0"
+  }
+}
