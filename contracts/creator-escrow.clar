@@ -32,6 +32,7 @@
 (define-constant ERR_NOT_CLAIMABLE (err u116))
 (define-constant ERR_ROUND_LIVE (err u117))
 (define-constant ERR_VIDEOS_NOT_EVEN (err u118))
+(define-constant ERR_OVER_CAPACITY (err u119))
 
 (define-constant STATUS_PENDING u0)
 (define-constant STATUS_RELEASED u1)
@@ -175,11 +176,17 @@
       (now burn-block-height)
       (delivery-id (var-get next-delivery-id))
       (review-end (+ now REVIEW_WINDOW_BURN_BLOCKS))
+      (per-video (get per-video round-data))
+      (remaining (- (get deposited round-data) (get paid-out round-data)))
     )
     (asserts! (is-creator-of round-data tx-sender) ERR_NOT_CREATOR)
     (asserts!
       (<= (+ now REVIEW_WINDOW_BURN_BLOCKS) (get ends-at round-data))
       ERR_ROUND_ENDED
+    )
+    (asserts!
+      (<= (* (+ (get pending round-data) u1) per-video) remaining)
+      ERR_OVER_CAPACITY
     )
     (map-set deliveries { id: delivery-id }
       {
@@ -291,9 +298,6 @@
       ERR_NOT_CLAIMABLE
     )
     (asserts! (>= remaining per-video) ERR_INSUFFICIENT_ESCROW)
-    (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX per-video))
-      (try! (contract-call? USDCX_TOKEN transfer
-        per-video current-contract recipient none))))
     (map-set deliveries { id: delivery-id }
       (merge delivery { status: STATUS_RELEASED })
     )
@@ -303,6 +307,9 @@
         pending: (- (get pending round-data) u1)
       })
     )
+    (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX per-video))
+      (try! (contract-call? USDCX_TOKEN transfer
+        per-video current-contract recipient none))))
     (print {
       event: "delivery-released",
       id: delivery-id,

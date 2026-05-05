@@ -64,6 +64,7 @@ const ERR_TERMS_NOT_ACCEPTED = 115;
 const ERR_NOT_CLAIMABLE = 116;
 const ERR_ROUND_LIVE = 117;
 const ERR_VIDEOS_NOT_EVEN = 118;
+const ERR_OVER_CAPACITY = 119;
 
 // Status codes
 const STATUS_PENDING = 0;
@@ -559,6 +560,47 @@ describe.skipIf(!remoteDataEnabled)("creator-escrow", () => {
 
     // Round 2's deposit remains untouched.
     expect(getEscrowBalance()).toBe(PRICE_25 * NUM_VIDEOS_4);
+  });
+
+  // -------- submission cap: pending payouts cannot exceed remaining budget --------
+  it("submit-delivery: caps pending so payouts cannot exceed remaining budget", () => {
+    fundUsdcx(deployer, PRICE_25 * NUM_VIDEOS_2);
+    expect(startRound(wallet1, wallet2, PRICE_25, NUM_VIDEOS_2).result).toBeOk(
+      Cl.uint(1)
+    );
+
+    // 2-slot round: two pending submissions exhaust the cap.
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeOk(Cl.uint(1));
+    expect(submit(URI_2, HASH_2, wallet2).result).toBeOk(Cl.uint(2));
+    expect(Number(getRound(1).value.value.pending.value)).toBe(2);
+
+    // A third submission would push pending payouts above remaining budget.
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeErr(
+      Cl.uint(ERR_OVER_CAPACITY)
+    );
+
+    // A veto frees a slot back up: pending drops to 1.
+    expect(veto(1, "rough cut").result).toBeOk(Cl.bool(true));
+    expect(Number(getRound(1).value.value.pending.value)).toBe(1);
+    // Now a fresh submit fits.
+    expect(submit(URI_1, HASH_AMENDED, wallet1).result).toBeOk(Cl.uint(3));
+
+    // After that, pending is back at the cap; another submit blocked.
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeErr(
+      Cl.uint(ERR_OVER_CAPACITY)
+    );
+
+    // A release also frees a slot AND consumes budget. Pending drops; remaining
+    // also shrinks. The cap auto-tightens with the budget.
+    simnet.mineEmptyBurnBlocks(REVIEW_WINDOW + 1);
+    expect(release(2, true, wallet2).result).toBeOk(Cl.bool(true));
+    // pending was 2 (id 2 + id 3), now 1 (just id 3).
+    expect(Number(getRound(1).value.value.pending.value)).toBe(1);
+    // remaining = $50 - $25 = $25; pending payout needs $25; (1+1)*$25 = $50 > $25.
+    // So a new submission still fails -- budget is the binding constraint now.
+    expect(submit(URI_1, HASH_1, wallet1).result).toBeErr(
+      Cl.uint(ERR_OVER_CAPACITY)
+    );
   });
 
   // -------- read-only sanity --------
