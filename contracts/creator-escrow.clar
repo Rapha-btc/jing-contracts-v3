@@ -33,6 +33,7 @@
 (define-constant ERR_ROUND_LIVE (err u117))
 (define-constant ERR_VIDEOS_NOT_EVEN (err u118))
 (define-constant ERR_OVER_CAPACITY (err u119))
+(define-constant ERR_AMENDED_HASH_MISMATCH (err u120))
 
 (define-constant STATUS_PENDING u0)
 (define-constant STATUS_RELEASED u1)
@@ -69,7 +70,11 @@
     content-uri: (string-utf8 256),
     content-hash: (buff 32),
     status: uint,
-    veto-reason: (optional (string-utf8 256))
+    veto-reason: (optional (string-utf8 256)),
+    ;; Set by `lift-veto` and asserted-against in `release` so the
+    ;; creator's claim tx is an explicit cosign of the amended hash,
+    ;; not the opaque agree-to-terms boolean alone.
+    amended-content-hash: (optional (buff 32))
   }
 )
 
@@ -197,7 +202,8 @@
         content-uri: content-uri,
         content-hash: content-hash,
         status: STATUS_PENDING,
-        veto-reason: none
+        veto-reason: none,
+        amended-content-hash: none
       }
     )
     (map-set rounds { id: round-id }
@@ -259,7 +265,9 @@
     (asserts! (is-eq (get status delivery) STATUS_VETOED) ERR_NOT_VETOED)
     (asserts! (not (get swept round-data)) ERR_ALREADY_SWEPT)
     (map-set deliveries { id: delivery-id }
-      (merge delivery { status: STATUS_AMENDED_APPROVED })
+      (merge delivery
+        { status: STATUS_AMENDED_APPROVED,
+          amended-content-hash: amended-content-hash })
     )
     (map-set rounds { id: round-id }
       (merge round-data { pending: (+ (get pending round-data) u1) })
@@ -277,7 +285,15 @@
   )
 )
 
-(define-public (release (delivery-id uint) (agree-to-terms bool))
+;; `expected-amended-hash` is required when status is AMENDED_APPROVED:
+;; the creator must pass the same hash the owner stored via lift-veto.
+;; This makes the claim tx an explicit on-chain cosign of the amended
+;; hash instead of relying on the opaque agree-to-terms boolean alone.
+;; For the PENDING-window-elapsed path the parameter is ignored.
+(define-public (release
+    (delivery-id uint)
+    (agree-to-terms bool)
+    (expected-amended-hash (optional (buff 32))))
   (let (
       (delivery (unwrap! (map-get? deliveries { id: delivery-id })
                           ERR_DELIVERY_NOT_FOUND))
@@ -296,6 +312,11 @@
           (and (is-eq status STATUS_PENDING)
                (>= now (get review-ends-at delivery))))
       ERR_NOT_CLAIMABLE
+    )
+    (asserts!
+      (or (not (is-eq status STATUS_AMENDED_APPROVED))
+          (is-eq expected-amended-hash (get amended-content-hash delivery)))
+      ERR_AMENDED_HASH_MISMATCH
     )
     (asserts! (>= remaining per-video) ERR_INSUFFICIENT_ESCROW)
     (map-set deliveries { id: delivery-id }
