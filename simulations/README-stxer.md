@@ -4,44 +4,52 @@ Full lifecycle coverage of `markets-sbtc-usdcx-jing.clar` and
 `markets-sbtc-stx-jing.clar` against a pinned mainnet tip via
 [stxer](https://stxer.xyz). Each sim exercises the new `jing-core`
 verified-contract registry flow + a market-specific scenario, and runs
-**unmodified production contract source** (no `-stxer.clar` variants —
-stxer 0.8.0's `addAdvanceBlocks` handles the burn-block timelocks).
+**unmodified production contract source** (with two narrow exceptions
+documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
+nothing else).
 
-## What's different from the old v2 sims
+## Recent design change: jing-core multi-sig-owner model (2026-05-07)
 
-The new jing-core (`contracts/jing-core.clar`) replaces the old
-single-step `approve-market` with a real two-step verified-contract
-registry guarded by:
+`jing-core` was simplified from a four-role two-step timelocked admin
+surface to a single owner-controlled flow with a slim `guardian` role
+for fast pause. The `register` function gained
+`tx-sender == contract-owner` to close a bytecode-replay attack where
+an attacker could deploy hash-matching bytecode at their own principal
+and register it under the canonical's verified hash. See:
 
-- **`TIMELOCK_BURN_BLOCKS = u144`** between propose and confirm
-- **A separate validator role** — owner cannot confirm verified-contracts
-- **Hash-bound registration** — `register` reads `(contract-hash?
-  contract-caller)` and compares it to `(map-get? verified-contracts
-  canonical)`
+- `contracts/JING-CORE-DESIGN.md` — full threat model, what changed
+- `contracts/MULTISIG-DEPLOYMENT.md` — how to deploy from a Stacks
+  native multi-sig
 
-Every sim runs an 8-step prelude before any market call:
+For sims this means the registry prelude is now 4 steps instead of 9:
 
 1. Deploy `jing-core` (Clarity 4)
 2. Deploy market (Clarity 5)
-3. Owner: `propose-validator(VALIDATOR)`
-4. **`addAdvanceBlocks` 144 burn blocks**
-5. Anyone: `confirm-validator(VALIDATOR)`
-6. Owner: `propose-verified-contract(market)` — auto-reads code hash
-7. **`addAdvanceBlocks` 144 burn blocks**
-8. Validator (NOT owner): `confirm-verified-contract(market)`
-9. Owner: `market.initialize(...)` — internally calls `jing-core.register`
+3. Owner: `set-verified-contract(market)` — one step, no timelock
+4. Owner: `market.initialize(...)` — internally calls `jing-core.register`
+   which checks tx-sender == contract-owner AND hash match
 
-The prelude is factored into `simulations/_setup.js#addRegistryInit`
-so each sim is self-contained and roughly the size of the v2 sims.
+The prelude is factored into `simulations/_setup.js#addRegistryInit`.
+The old propose/confirm validator dance + `MAX_VALIDATORS` cap +
+two-step timelocked promotion are gone — multi-sig signing rounds
+provide the audit window an on-chain timelock used to enforce.
+
+Production market contracts now use **`MAX_STALENESS = u80`** (real
+freshness gate, ~80 sec window). This means stored Pyth prices on a
+fork are stale, so every sim that settles uses **`settle-with-refresh`**
+with a freshly-fetched VAA from Hermes — the production keeper path.
+Plain `settle` is still tested in the dedicated `*-settle-refresh`
+sims (proves it correctly fails with `u1005 STALE_PRICE` against
+fork-stored prices).
 
 ## Mainnet addresses
 
 | Role | Address | Notes |
 |------|---------|-------|
-| Deployer / market operator | `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22` | Cannot be a validator |
-| Validator (gas only) | `SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3` | ~20 STX free (rest PoX-locked) — enough for two confirms |
+| Deployer / market operator / jing-core owner | `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22` | In production this is intended to be a multi-sig |
 | sBTC depositor | `SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2` | ~40.5 BTC, 0 free STX |
 | USDCx / STX depositor | `SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51` | ~832 USDCx + ~2953 STX free; doubles as STX-side depositor for sbtc-stx |
+| Guardian (in pause sim only) | `SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3` | Demonstrates the fast-pause role |
 
 ## Running a sim
 
@@ -58,30 +66,29 @@ internet access at run time.
 
 ## Coverage matrix
 
-All sims green as of 2026-05-07. ✓ = clean run, expected errors only.
+All 30 sims green as of 2026-05-07 (re-run after the jing-core
+multi-sig-owner refactor). ✓ = clean run, expected errors only.
 
 | Sim | sBTC/USDCx | sBTC/STX | What it proves |
 |-----|------------|----------|----------------|
-| `simul-markets-sbtc-{usdcx,stx}-jing.js` | [✓](https://stxer.xyz/simulations/mainnet/888377dd855df15cd3fcb37ee4d0014b) | [✓](https://stxer.xyz/simulations/mainnet/afcc8131b73c4ca48f4d90949d1d26aa) | Full lifecycle: registry init → deposits → top-up → close → settle (stored Pyth) → cycle 1 rollover. Verifies `jing-core` equity ledger tracks both legs. |
-| `*-cancel-flows.js` | [✓](https://stxer.xyz/simulations/mainnet/b183431389822348c4794beb67feee82) | [✓](https://stxer.xyz/simulations/mainnet/ea1d64db35127fa298c70586c025178f) | Cancel-deposit happy path, cancel-empty (`u1008`), cancel during settle (`u1002`), cancel-cycle before threshold (`u1014`), cancel-cycle after 42-block advance, then cancel rolled deposits in cycle 1. |
-| `*-same-depositor.js` | [✓](https://stxer.xyz/simulations/mainnet/1e8937e4c4faada4caa90e8acce65e08) | [✓](https://stxer.xyz/simulations/mainnet/b0cb6aa7a247527a9a45b66b51a24c9b) | One principal on both depositor lists, settles cleanly, single payout flow. |
-| `*-small-share-filter.js` | [✓](https://stxer.xyz/simulations/mainnet/fc8026f23e7668f0830f52cf1a2300e5) | [✓](https://stxer.xyz/simulations/mainnet/072785480536c736e072a930f00b84f2) | 3 fish at ~0.17% each get rolled forward at close (`MIN_SHARE_BPS = 20`). USDCx variant tests 2 rolls + cycle-2 settle; STX variant ends after 1 roll (cross-rate clears more per cycle). |
-| `*-dust-sweep.js` | [✓](https://stxer.xyz/simulations/mainnet/fa27fd4c3960967cb2767fdade2a111e) | [✓](https://stxer.xyz/simulations/mainnet/03bdf9bb6455605ec93b87480d768a67) | 3 depositors per side with amounts that maximize integer-truncation dust during proportional distribution; verifies dust gets swept to treasury. |
-| `*-dust-sweep-both.js` | [✓](https://stxer.xyz/simulations/mainnet/3d91e252e53e2a6f68ad01df4467bcc5) | [✓](https://stxer.xyz/simulations/mainnet/c464ae4eadf8272a0ba736d802d3a9ca) | Heavy y-side vs light sBTC → sBTC binding → dust expected on the y-side roll. |
-| `*-settle-refresh.js` | [✓](https://stxer.xyz/simulations/mainnet/d62b4dc608815b2e93d9b1aba7dd67d5) | [✓](https://stxer.xyz/simulations/mainnet/dcea1041460161e1e21acd9aafeb9dab) | Patches `MAX_STALENESS` down to `u60` to prove the freshness gate fires: `settle` (stored stale prices) → `ERR_STALE_PRICE` (u1005); `settle-with-refresh` (fresh VAA) → ok. STX variant uses TWO VAAs (BTC/USD + STX/USD). |
-| `*-swap.js` | [✓](https://stxer.xyz/simulations/mainnet/69035df1775d31f68423faa10545abc1) | [✓](https://stxer.xyz/simulations/mainnet/3bc6d88e27266f7383050b5960ee75f7) | Atomic taker, `deposit-x = true`: `deposit-token-x + close-deposits + settle-with-refresh` in one tx. STX variant uses TWO VAAs. |
-| `*-swap-deposit-y.js` | [✓](https://stxer.xyz/simulations/mainnet/076c8e28b27aa2140dc383a687dd4def) | [✓](https://stxer.xyz/simulations/mainnet/54f21bf1db0dfa2acece19e4a594df8c) | Atomic taker, `deposit-x = false` (symmetric case): `deposit-token-y + close-deposits + settle-with-refresh`. Pre-stages sBTC, taker brings y. STX variant uses TWO VAAs. |
-| `*-limit-rolls.js` | [✓](https://stxer.xyz/simulations/mainnet/872f9a54d7a06a7082234df0e27744da) | [✓](https://stxer.xyz/simulations/mainnet/d91d32b071fa4640643f3d28cb24a2bf) | Limit-violation rolls at settle: 4 depositors per pair, one of each side restrictive. `filter-limit-violating-token-{y,x}-depositor` rolls violators to cycle 1; `log-limit-roll-{y,x}` events fire. |
-| `*-close-and-settle.js` | [✓](https://stxer.xyz/simulations/mainnet/ef1aed955e4fe7800ef36471336bfac8) | [✓](https://stxer.xyz/simulations/mainnet/c46976495c497aafeeeaa6c3e4bc411a) | Third party (not a depositor) atomically closes + settles-with-refresh in one tx. |
-| `*-treasury-fees.js` | [✓](https://stxer.xyz/simulations/mainnet/31895d768ee9833de0b1a4231999db32) | [✓](https://stxer.xyz/simulations/mainnet/0c878f01fc4526456e52572aba9b4502) | Reads treasury balance before/after settle; assert delta = settlement-tuple's `token-x-fee` + `token-y-fee` + dust-sweep. USDCx: sBTC delta=100 sats (fee 100), USDCx delta=80,109 µUSDCx (fee 80,058 + 51 dust). STX: STX delta=100,000 µSTX = exactly 10 bps of cleared. |
-| `*-deposit-gates.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/6532d8b026fee8a46157b4d4db4a1291) | n/a — same gates | Provokes every deposit-time error: `u1019 WRONG_TRAIT` (passing wrong SIP-010 trait), `u1001 DEPOSIT_TOO_SMALL`, `u1017 LIMIT_REQUIRED` (limit-price = 0), `u1018 ALREADY_INITIALIZED` (calling `initialize` twice). All fire correctly; sanity deposit afterward succeeds. |
-| `*-queue-full.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/403da2c5aa05e031388bc21db8346e84) | n/a — same logic | `MAX_DEPOSITORS = u50` queue-full + smallest-bumping. 50 fresh principals fill the y-side; 51st w/ amount = smallest → `u1013 ERR_QUEUE_FULL`; 51st w/ amount > smallest → bumps fish[0] (deposit drops to 0, fish[0]'s USDCx balance refunded by exactly the bumped amount, list still has 50 entries with new challenger). |
-| `simul-jing-core-cancel-pending.js` | [✓](https://stxer.xyz/simulations/mainnet/f516cb76f27e7fce90ce3ba12eecb4d6) — registry-only | Owner aborts pending validator + verified-contract proposals; subsequent confirms fail with `u5013 NO_PENDING_VALIDATOR` and `u5007 NO_PENDING_PROPOSAL`. |
-| `simul-jing-core-remove-validator.js` | [✓](https://stxer.xyz/simulations/mainnet/0a055133fb9f12fcc99d391959846436) — registry-only | `remove-validator` strips authority. Removed validator's `confirm-verified-contract` → `u5001 NOT_AUTHORIZED`. Double-remove → `u5014 NOT_VALIDATOR`. Non-owner remove → `u5001`. |
-| `simul-jing-core-pause.js` | [✓](https://stxer.xyz/simulations/mainnet/5f27077b74b235e28ca3e14f6acc8bb7) — registry + market | Validator pauses (distributed trip-wire). Entry-side `deposit-token-x` blocked with `u5016 PAUSED`. **Exit-side `cancel-token-y-deposit` stays open** (the user-fund safety property). Owner unpause too early → `u5008 TIMELOCK_NOT_ELAPSED`. Non-owner unpause → `u5001`. After 144-block advance, owner unpauses; entry-side resumes. |
-| `simul-jing-core-hash-mismatch.js` | [✓](https://stxer.xyz/simulations/mainnet/764c96b449e4869703e68965ecdf278f) — registry hash gate | Verifies market-A's hash. Deploys market-B with patched bytecode (different hash). `market-B.initialize(canonical = market-A)` → `u5006 HASH_MISMATCH`. `market-B.initialize(canonical = market-B)` (not verified) → `u5005 NOT_VERIFIED`. Sanity: market-A.initialize succeeds. |
-| `simul-jing-core-multi-market.js` | [✓](https://stxer.xyz/simulations/mainnet/5d3149944f99993e33a5ed2a91dc9793) — multi-market jing-core | Both markets registered in one jing-core. Same sBTC depositor deposits into both (100k sats each). `get-token-equity(SBTC, depositor)` = u200,000 (correct sum). `get-balance(depositor)` = `(ok u200000)` (matches). y-side equities tracked per-token correctly. |
-| `simul-jing-core-get-balance.js` | [✓](https://stxer.xyz/simulations/mainnet/9a0de230d7371cdfd94676b5529a1b15) — Zest read | `get-balance(user)` ≡ `get-token-equity(SBTC_TOKEN, user)`. After deposit cycle, sBTC depositor: both reads return u100000. USDCx-only depositor: get-balance returns `(ok u0)`, USDCx equity returns u100,000,000. |
+| `simul-markets-sbtc-{usdcx,stx}-jing.js` | [✓](https://stxer.xyz/simulations/mainnet/a0dac9cb57e598d55bbafeafedcb25c6) | [✓](https://stxer.xyz/simulations/mainnet/c66c292d30afc0b910936cbfad776863) | Full lifecycle via `settle-with-refresh` (production keeper path under MAX_STALENESS u80): registry init → deposits → top-up → close → settle-with-refresh → cycle 1 rollover. STX variant uses TWO VAAs. |
+| `*-cancel-flows.js` | [✓](https://stxer.xyz/simulations/mainnet/46a3720ddbba9997e520f2ceedc56d1d) | [✓](https://stxer.xyz/simulations/mainnet/9a16e83199975802cc3ca6b38b2fdd36) | Cancel-deposit happy path, cancel-empty (`u1008`), cancel during settle (`u1002`), cancel-cycle before threshold (`u1014`), cancel-cycle after 42-block advance, then cancel rolled deposits in cycle 1. |
+| `*-same-depositor.js` | [✓](https://stxer.xyz/simulations/mainnet/8ea516257a612b500e0a8f2948730a64) | [✓](https://stxer.xyz/simulations/mainnet/4238e6c9d7a225d2b9cc97965fa594a7) | One principal on both depositor lists, settles cleanly via settle-with-refresh, single payout flow. |
+| `*-small-share-filter.js` | [✓](https://stxer.xyz/simulations/mainnet/83cfd9d3d0a4043178ee6972149c0b1f) | [✓](https://stxer.xyz/simulations/mainnet/61633541b9657ed90b6094bfe95eae1d) | 3 fish at ~0.17% each get rolled forward at close (`MIN_SHARE_BPS = 20`). USDCx variant tests 2 rolls + cycle-2 settle; STX variant ends after 1 roll (cross-rate clears more per cycle). |
+| `*-dust-sweep.js` | [✓](https://stxer.xyz/simulations/mainnet/759258c1c8c2ad9bfdd297acf7bdb39b) | [✓](https://stxer.xyz/simulations/mainnet/0be56691f64b23d293b2808ce88def55) | 3 depositors per side with amounts that maximize integer-truncation dust during proportional distribution; verifies dust gets swept to treasury. |
+| `*-dust-sweep-both.js` | [✓](https://stxer.xyz/simulations/mainnet/b653fecf1a0e0a7912834acbe83985b8) | [✓](https://stxer.xyz/simulations/mainnet/99f79baa93fe43a3f809adab740c647e) | Heavy y-side vs light sBTC → sBTC binding → dust expected on the y-side roll. |
+| `*-settle-refresh.js` | [✓](https://stxer.xyz/simulations/mainnet/93ada4700e45496f8dd49319a7284ed3) | [✓](https://stxer.xyz/simulations/mainnet/43b2f47b540ba2610e557c20e5e90672) | Proves the production `MAX_STALENESS = u80` freshness gate fires: `settle` against fork-stored stale Pyth → `ERR_STALE_PRICE` (u1005); `settle-with-refresh` with fresh VAA → ok. STX variant uses TWO VAAs (BTC/USD + STX/USD). |
+| `*-swap.js` | [✓](https://stxer.xyz/simulations/mainnet/37da4a1d8fd0c1dd7581d83cda76c99a) | [✓](https://stxer.xyz/simulations/mainnet/b4c16c6617c12d451fec293a641b5e1f) | Atomic taker, `deposit-x = true`: `deposit-token-x + close-deposits + settle-with-refresh` in one tx. STX variant uses TWO VAAs. |
+| `*-swap-deposit-y.js` | [✓](https://stxer.xyz/simulations/mainnet/9679514763b8c02be251e0486078f139) | [✓](https://stxer.xyz/simulations/mainnet/35c6c36098c42c132d2108d63954ca9d) | Atomic taker, `deposit-x = false` (symmetric case): `deposit-token-y + close-deposits + settle-with-refresh`. Pre-stages sBTC, taker brings y. STX variant uses TWO VAAs. |
+| `*-limit-rolls.js` | [✓](https://stxer.xyz/simulations/mainnet/ce0cdfa0fb52ee9581b847c6e0fe361d) | [✓](https://stxer.xyz/simulations/mainnet/4c04d6ad4e2972babc0ab5fee3f34e57) | Limit-violation rolls at settle: 4 depositors per pair, one of each side restrictive. `filter-limit-violating-token-{y,x}-depositor` rolls violators to cycle 1; `log-limit-roll-{y,x}` events fire. |
+| `*-close-and-settle.js` | [✓](https://stxer.xyz/simulations/mainnet/e95fef8e764df56c0b96730a45817e25) | [✓](https://stxer.xyz/simulations/mainnet/463252f5ed6177f32378d49bbab0e034) | Third party (not a depositor) atomically closes + settles-with-refresh in one tx. |
+| `*-treasury-fees.js` | [✓](https://stxer.xyz/simulations/mainnet/43402e40610af1344b145e72b9bded7f) | [✓](https://stxer.xyz/simulations/mainnet/07d15ce456f039dbb96d31f0fccce91e) | Reads treasury balance before/after settle; asserts delta = settlement-tuple's `token-x-fee` + `token-y-fee` + dust-sweep. |
+| `*-deposit-gates.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/d422b95c412209ca02e5155baf15e6e1) | n/a — same gates | Provokes every deposit-time error: `u1019 WRONG_TRAIT`, `u1001 DEPOSIT_TOO_SMALL`, `u1017 LIMIT_REQUIRED`, `u1018 ALREADY_INITIALIZED`. All fire correctly; sanity deposit afterward succeeds. |
+| `*-queue-full.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/40b30ebf80ba5eedc6606325fba5fe41) | n/a — same logic | `MAX_DEPOSITORS` queue-full + smallest-bumping. **Patches `MAX_DEPOSITORS u50 → u5`** in deployed source so test only needs 6 principals (production stays u50). 5 fish fill, challenger w/ amount = smallest → `u1013 ERR_QUEUE_FULL`; challenger w/ amount > smallest → bumps fish[0], deposit drops to 0, fish[0]'s USDCx balance refunded by exactly the bumped amount, list still has 5 entries. |
+| `simul-jing-core-pause.js` | [✓](https://stxer.xyz/simulations/mainnet/fd8f474dcb112ad8db523056001f2cd6) — registry + market | Owner adds a guardian. Guardian pauses (distributed trip-wire). Entry-side `deposit-token-x` blocked with `u5016 PAUSED`. **Exit-side `cancel-token-y-deposit` stays open** (the user-fund safety property). Owner unpause too early → `u5008 TIMELOCK_NOT_ELAPSED`. Non-owner unpause → `u5001`. After 144-block advance, owner unpauses; entry-side resumes. Owner removes guardian; removed-guardian's pause attempt → `u5001`. |
+| `simul-jing-core-hash-mismatch.js` | [✓](https://stxer.xyz/simulations/mainnet/c292ed9127a4e1b3b33c102c60ff793d) — registry hash gate | Verifies market-A's hash via single-step `set-verified-contract` (no validator confirm needed). `market-B.initialize(canonical = market-A)` → `u5006 HASH_MISMATCH`. `market-B.initialize(canonical = market-B)` (not verified) → `u5005 NOT_VERIFIED`. Non-deployer call to `market-A.initialize` → `u1011` (market's own auth gate). Sanity: owner's market-A.initialize succeeds. |
+| `simul-jing-core-multi-market.js` | [✓](https://stxer.xyz/simulations/mainnet/2b3d62469e0aef9484625ca5e2868fef) — multi-market jing-core | Both markets registered in one jing-core. Same sBTC depositor deposits into both (100k sats each). `get-token-equity(SBTC, depositor)` = u200,000 (correct sum). `get-balance(depositor)` = `(ok u200000)`. y-side equities tracked per-token correctly. |
+| `simul-jing-core-get-balance.js` | [✓](https://stxer.xyz/simulations/mainnet/00d4dcdebac67ed33dbcde9c60df6687) — Zest read | `get-balance(user)` ≡ `get-token-equity(SBTC_TOKEN, user)`. After deposit cycle, sBTC depositor: both reads return u100000. USDCx-only depositor: get-balance returns `(ok u0)`, USDCx equity returns u100,000,000. |
 
 ## Defensive gates verified by code review only (not stxer-reachable)
 

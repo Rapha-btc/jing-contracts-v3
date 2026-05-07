@@ -188,6 +188,18 @@ deliberately; they're not reversible without another multi-sig round.
   is only "pause", which is non-destructive and reversible by the
   multi-sig owner. Don't multi-sig the pause path; that defeats its
   fast-response purpose.
+
+  **However** — a compromised guardian key can grief the protocol by
+  re-pausing on a timer (each pause restarts the unpause cooldown). The
+  attack is bounded: owner calls `remove-guardian(compromised)` (one
+  step, immediate), then `unpause` after the 144-block cooldown
+  elapses since the LAST pause. Worst-case downtime is ~1–2 days
+  (multi-sig coordination + cooldown), no asset loss. To keep that
+  worst case from being routine, **store guardian private keys on
+  hardware** (Ledger, hardware HSM) and **never** in CI/CD env vars,
+  team laptops without secure enclaves, or dev machines. The
+  guardian's privilege is small but every key you operate is a leak
+  vector — treat them like deploy keys, not like API tokens.
 - **Stxer simulation before each multi-sig governance tx.** Build the
   tx, run it through stxer against a fork, verify the on-chain effect
   matches expectations, *then* sign. The stxer URL becomes part of the

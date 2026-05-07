@@ -26,6 +26,10 @@ import {
   USDCX_ASSET_NAME,
   USDCX_FQN,
   BTC_USD_FEED_HEX,
+PYTH_STORAGE,
+  PYTH_DECODER,
+  WORMHOLE_CORE,
+  fetchPythVAA,
   addRegistryInit,
 } from "./_setup.js";
 
@@ -56,6 +60,12 @@ const feedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const marketCV = contractPrincipalCV(DEPLOYER, MARKET_NAME);
 
 async function main() {
+  const vaaHex = await fetchPythVAA(BTC_USD_FEED_HEX);
+  const vaaBuf = bufferCV(Buffer.from(vaaHex, "hex"));
+  const [pythStoreAddr, pythStoreName] = PYTH_STORAGE.split(".");
+  const [pythDecAddr, pythDecName] = PYTH_DECODER.split(".");
+  const [wormAddr, wormName] = WORMHOLE_CORE.split(".");
+
   console.log("=== MARKETS-SBTC-USDCX-JING SMALL-SHARE FILTER ===\n");
 
   let builder = SimulationBuilder.new();
@@ -138,8 +148,14 @@ async function main() {
     .withSender(USDCX_DEPOSITOR_1)
     .addContractCall({
       contract_id: MARKET_ID,
-      function_name: "settle",
-      function_args: [sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset],
+      function_name: "settle-with-refresh",
+      function_args: [
+        vaaBuf,
+        contractPrincipalCV(pythStoreAddr, pythStoreName),
+        contractPrincipalCV(pythDecAddr, pythDecName),
+        contractPrincipalCV(wormAddr, wormName),
+        sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset,
+      ],
     })
     .addEvalCode(MARKET_ID, "(get-settlement u0)")
     .addEvalCode(MARKET_ID, "(get-current-cycle)")
@@ -164,8 +180,14 @@ async function main() {
     .withSender(USDCX_DEPOSITOR_1)
     .addContractCall({
       contract_id: MARKET_ID,
-      function_name: "settle",
-      function_args: [sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset],
+      function_name: "settle-with-refresh",
+      function_args: [
+        vaaBuf,
+        contractPrincipalCV(pythStoreAddr, pythStoreName),
+        contractPrincipalCV(pythDecAddr, pythDecName),
+        contractPrincipalCV(wormAddr, wormName),
+        sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset,
+      ],
     })
     .addEvalCode(MARKET_ID, "(get-settlement u1)")
     .addEvalCode(MARKET_ID, "(get-current-cycle)")
@@ -188,8 +210,14 @@ async function main() {
     .withSender(USDCX_DEPOSITOR_1)
     .addContractCall({
       contract_id: MARKET_ID,
-      function_name: "settle",
-      function_args: [sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset],
+      function_name: "settle-with-refresh",
+      function_args: [
+        vaaBuf,
+        contractPrincipalCV(pythStoreAddr, pythStoreName),
+        contractPrincipalCV(pythDecAddr, pythDecName),
+        contractPrincipalCV(wormAddr, wormName),
+        sbtcTrait, sbtcAsset, usdcxTrait, usdcxAsset,
+      ],
     })
     .addEvalCode(MARKET_ID, "(get-settlement u2)")
     .addEvalCode(MARKET_ID, "(get-current-cycle)")

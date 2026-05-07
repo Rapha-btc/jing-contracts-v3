@@ -26,6 +26,10 @@ import {
   WSTX_ASSET_NAME,
   BTC_USD_FEED_HEX,
   STX_USD_FEED_HEX,
+PYTH_STORAGE,
+  PYTH_DECODER,
+  WORMHOLE_CORE,
+  fetchPythVAA,
   addRegistryInit,
 } from "./_setup.js";
 
@@ -67,6 +71,14 @@ const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 const marketCV = contractPrincipalCV(DEPLOYER, MARKET_NAME);
 
 async function main() {
+  const vaaXHex = await fetchPythVAA(BTC_USD_FEED_HEX);
+  const vaaYHex = await fetchPythVAA(STX_USD_FEED_HEX);
+  const vaaXBuf = bufferCV(Buffer.from(vaaXHex, "hex"));
+  const vaaYBuf = bufferCV(Buffer.from(vaaYHex, "hex"));
+  const [pythStoreAddr, pythStoreName] = PYTH_STORAGE.split(".");
+  const [pythDecAddr, pythDecName] = PYTH_DECODER.split(".");
+  const [wormAddr, wormName] = WORMHOLE_CORE.split(".");
+
   console.log("=== MARKETS-SBTC-STX-JING DUST SWEEP ===\n");
 
   let sim = SimulationBuilder.new();
@@ -144,8 +156,14 @@ async function main() {
     .addContractCall({ contract_id: MARKET_ID, function_name: "close-deposits", function_args: [] })
     .addContractCall({
       contract_id: MARKET_ID,
-      function_name: "settle",
-      function_args: [sbtcTrait, sbtcAsset, wstxTrait, wstxAsset],
+      function_name: "settle-with-refresh",
+      function_args: [
+        vaaXBuf, vaaYBuf,
+        contractPrincipalCV(pythStoreAddr, pythStoreName),
+        contractPrincipalCV(pythDecAddr, pythDecName),
+        contractPrincipalCV(wormAddr, wormName),
+        sbtcTrait, sbtcAsset, wstxTrait, wstxAsset,
+      ],
     })
     .addEvalCode(MARKET_ID, "(get-settlement u0)")
     .addEvalCode(MARKET_ID, "(get-current-cycle)")

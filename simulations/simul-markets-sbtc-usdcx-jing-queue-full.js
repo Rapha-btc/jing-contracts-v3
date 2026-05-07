@@ -1,10 +1,12 @@
 // simul-markets-sbtc-usdcx-jing-queue-full.js
-// Stxer simulation: MAX_DEPOSITORS = u50 queue-full + smallest-bumping path.
-// Fills the y-side depositor list with 50 fresh principals, then a 51st with
-// a larger amount bumps out the smallest one. Also tests u1013 ERR_QUEUE_FULL
-// when the 51st arrives with an amount <= smallest.
+// Stxer simulation: queue-full + smallest-bumping path.
+// PATCHES MAX_DEPOSITORS u50 -> u5 in the deployed market source so the test
+// only needs 6 principals (5 fish + 1 challenger) instead of 51. The contract
+// LOGIC under test is identical; production stays at u50. Same pattern as
+// settle-refresh patching MAX_STALENESS for testability.
 //
 // Run: npx tsx simulations/simul-markets-sbtc-usdcx-jing-queue-full.js
+import fs from "node:fs";
 import {
   uintCV,
   contractPrincipalCV,
@@ -43,7 +45,8 @@ function generateAddrs(n) {
   return out;
 }
 
-const FISH_COUNT = 50;
+const PATCHED_MAX_DEPOSITORS = 5;
+const FISH_COUNT = PATCHED_MAX_DEPOSITORS;
 const fish = generateAddrs(FISH_COUNT);
 const CHALLENGER = generateAddrs(1)[0];
 
@@ -79,6 +82,16 @@ async function main() {
   console.log(`Smallest fish[0]: ${fish[0]} (${SMALLEST_AMOUNT} µUSDCx)`);
   console.log(`Challenger      : ${CHALLENGER} (${CHALLENGER_BIG} µUSDCx)`);
 
+  // Patch MAX_DEPOSITORS down to u5 so we only need 6 principals to
+  // exercise the queue-full + smallest-bumping path. Same logic as
+  // production's u50 cap.
+  const marketSource = fs
+    .readFileSync(`./contracts/${MARKET_NAME}.clar`, "utf8")
+    .replace(
+      "(define-constant MAX_DEPOSITORS u50)",
+      `(define-constant MAX_DEPOSITORS u${PATCHED_MAX_DEPOSITORS})`
+    );
+
   let sim = SimulationBuilder.new();
   sim = addRegistryInit(sim, {
     marketName: MARKET_NAME,
@@ -86,6 +99,7 @@ async function main() {
       marketCV, sbtcTrait, usdcxTrait,
       uintCV(MIN_SBTC), uintCV(MIN_USDCX), feedBuf,
     ],
+    marketSourceOverride: marketSource,
   });
 
   // Fund all 51 with STX + USDCx
