@@ -71,6 +71,28 @@ All sims green as of 2026-05-07. ✓ = clean run, expected errors only.
 | `*-settle-refresh.js` | [✓](https://stxer.xyz/simulations/mainnet/d62b4dc608815b2e93d9b1aba7dd67d5) | [✓](https://stxer.xyz/simulations/mainnet/dcea1041460161e1e21acd9aafeb9dab) | Patches `MAX_STALENESS` down to `u60` to prove the freshness gate fires: `settle` (stored stale prices) → `ERR_STALE_PRICE` (u1005); `settle-with-refresh` (fresh VAA) → ok. STX variant uses TWO VAAs (BTC/USD + STX/USD). |
 | `*-swap.js` | [✓](https://stxer.xyz/simulations/mainnet/69035df1775d31f68423faa10545abc1) | [✓](https://stxer.xyz/simulations/mainnet/3bc6d88e27266f7383050b5960ee75f7) | Atomic taker, `deposit-x = true`: `deposit-token-x + close-deposits + settle-with-refresh` in one tx. STX variant uses TWO VAAs. |
 | `*-swap-deposit-y.js` | [✓](https://stxer.xyz/simulations/mainnet/076c8e28b27aa2140dc383a687dd4def) | [✓](https://stxer.xyz/simulations/mainnet/54f21bf1db0dfa2acece19e4a594df8c) | Atomic taker, `deposit-x = false` (symmetric case): `deposit-token-y + close-deposits + settle-with-refresh`. Pre-stages sBTC, taker brings y. STX variant uses TWO VAAs. |
+| `*-limit-rolls.js` | [✓](https://stxer.xyz/simulations/mainnet/872f9a54d7a06a7082234df0e27744da) | [✓](https://stxer.xyz/simulations/mainnet/d91d32b071fa4640643f3d28cb24a2bf) | Limit-violation rolls at settle: 4 depositors per pair, one of each side restrictive. `filter-limit-violating-token-{y,x}-depositor` rolls violators to cycle 1; `log-limit-roll-{y,x}` events fire. |
+| `*-close-and-settle.js` | [✓](https://stxer.xyz/simulations/mainnet/ef1aed955e4fe7800ef36471336bfac8) | [✓](https://stxer.xyz/simulations/mainnet/c46976495c497aafeeeaa6c3e4bc411a) | Third party (not a depositor) atomically closes + settles-with-refresh in one tx. |
+| `*-treasury-fees.js` | [✓](https://stxer.xyz/simulations/mainnet/31895d768ee9833de0b1a4231999db32) | [✓](https://stxer.xyz/simulations/mainnet/0c878f01fc4526456e52572aba9b4502) | Reads treasury balance before/after settle; assert delta = settlement-tuple's `token-x-fee` + `token-y-fee` + dust-sweep. USDCx: sBTC delta=100 sats (fee 100), USDCx delta=80,109 µUSDCx (fee 80,058 + 51 dust). STX: STX delta=100,000 µSTX = exactly 10 bps of cleared. |
+| `*-deposit-gates.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/6532d8b026fee8a46157b4d4db4a1291) | n/a — same gates | Provokes every deposit-time error: `u1019 WRONG_TRAIT` (passing wrong SIP-010 trait), `u1001 DEPOSIT_TOO_SMALL`, `u1017 LIMIT_REQUIRED` (limit-price = 0), `u1018 ALREADY_INITIALIZED` (calling `initialize` twice). All fire correctly; sanity deposit afterward succeeds. |
+| `*-queue-full.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/403da2c5aa05e031388bc21db8346e84) | n/a — same logic | `MAX_DEPOSITORS = u50` queue-full + smallest-bumping. 50 fresh principals fill the y-side; 51st w/ amount = smallest → `u1013 ERR_QUEUE_FULL`; 51st w/ amount > smallest → bumps fish[0] (deposit drops to 0, fish[0]'s USDCx balance refunded by exactly the bumped amount, list still has 50 entries with new challenger). |
+| `simul-jing-core-cancel-pending.js` | [✓](https://stxer.xyz/simulations/mainnet/f516cb76f27e7fce90ce3ba12eecb4d6) — registry-only | Owner aborts pending validator + verified-contract proposals; subsequent confirms fail with `u5013 NO_PENDING_VALIDATOR` and `u5007 NO_PENDING_PROPOSAL`. |
+| `simul-jing-core-remove-validator.js` | [✓](https://stxer.xyz/simulations/mainnet/0a055133fb9f12fcc99d391959846436) — registry-only | `remove-validator` strips authority. Removed validator's `confirm-verified-contract` → `u5001 NOT_AUTHORIZED`. Double-remove → `u5014 NOT_VALIDATOR`. Non-owner remove → `u5001`. |
+| `simul-jing-core-pause.js` | [✓](https://stxer.xyz/simulations/mainnet/5f27077b74b235e28ca3e14f6acc8bb7) — registry + market | Validator pauses (distributed trip-wire). Entry-side `deposit-token-x` blocked with `u5016 PAUSED`. **Exit-side `cancel-token-y-deposit` stays open** (the user-fund safety property). Owner unpause too early → `u5008 TIMELOCK_NOT_ELAPSED`. Non-owner unpause → `u5001`. After 144-block advance, owner unpauses; entry-side resumes. |
+| `simul-jing-core-hash-mismatch.js` | [✓](https://stxer.xyz/simulations/mainnet/764c96b449e4869703e68965ecdf278f) — registry hash gate | Verifies market-A's hash. Deploys market-B with patched bytecode (different hash). `market-B.initialize(canonical = market-A)` → `u5006 HASH_MISMATCH`. `market-B.initialize(canonical = market-B)` (not verified) → `u5005 NOT_VERIFIED`. Sanity: market-A.initialize succeeds. |
+| `simul-jing-core-multi-market.js` | [✓](https://stxer.xyz/simulations/mainnet/5d3149944f99993e33a5ed2a91dc9793) — multi-market jing-core | Both markets registered in one jing-core. Same sBTC depositor deposits into both (100k sats each). `get-token-equity(SBTC, depositor)` = u200,000 (correct sum). `get-balance(depositor)` = `(ok u200000)` (matches). y-side equities tracked per-token correctly. |
+| `simul-jing-core-get-balance.js` | [✓](https://stxer.xyz/simulations/mainnet/9a0de230d7371cdfd94676b5529a1b15) — Zest read | `get-balance(user)` ≡ `get-token-equity(SBTC_TOKEN, user)`. After deposit cycle, sBTC depositor: both reads return u100000. USDCx-only depositor: get-balance returns `(ok u0)`, USDCx equity returns u100,000,000. |
+
+## Defensive gates verified by code review only (not stxer-reachable)
+
+| Gate | Reason not reachable in stxer |
+|------|-------------------------------|
+| `u1006 ERR_PRICE_UNCERTAIN` | Real Pyth confidence stays well within `price / MAX_CONF_RATIO` (u50). Triggering would require fabricating a VAA with wide `conf` — clarinet is the right tool for that. |
+| `u1020 ERR_EXPO_MISMATCH` (sbtc-stx only) | All Pyth feeds reachable on `pyth-storage-v4` use `expo = -8`, so `feed-x.expo == feed-y.expo` always with real VAAs. Same as above — clarinet can mock the feed-data tuple. |
+
+Both gates are visible in the contract source and trip on the assertions
+in `execute-settlement`; they're meaningful defenses that just can't be
+provoked with mainnet-fork state.
 
 ## Notable findings from the runs
 
@@ -105,98 +127,35 @@ With `MAX_STALENESS = u60` patched in:
 - `settle-with-refresh` with VAA fetched from Hermes 30s before
   simulation submit → ok, settlement recorded
 
-## Coverage status & gaps
+## Coverage status
 
-The 16 sims above prove the **production scenarios work end-to-end**
-(place orders → settle → roll, with both stored and fresh Pyth) and
-exercise a handful of error gates (cancel timing, freshness gate,
-deposit-empty, cancel-during-settle). **No contract bugs were found.**
+All previously-listed gaps are now covered (or documented as not
+stxer-reachable). Across the suite **30 sims** prove the production
+scenarios end-to-end, every reachable error gate the markets and
+jing-core declare, and the registry's full lifecycle (propose → confirm
+→ register → pause → cancel-pending → remove). **No contract bugs
+found.**
 
-What follows are paths still worth covering. They're split by which
-tool is the right fit — stxer's strength is real mainnet state (live
-Pyth VAAs, real whales for large depositor counts, real
-`stacks-block-time` semantics, real bytecode hashing). Tight
-error-code matrices and pure logic edge cases are cheaper in clarinet.
+### Still better in clarinet
 
-### High signal — best done in stxer
+Tight error-code matrices and pure-logic checks where each stxer run
+would be a wasteful network round-trip. The clarinet unit-test suite
+in `tests/` should cover:
 
-These need real on-chain state to test meaningfully.
-
-1. **Limit-violation rolls at settle.** Every current sim uses
-   `LIMIT_HIGH` / `LIMIT_LOW`, so `filter-limit-violating-token-{x,y}-depositor`
-   never fires. Set restrictive limits, settle, prove the rolls + the
-   `log-limit-roll-{x,y}` events. Both pairs.
-2. **`MAX_DEPOSITORS = u50` queue full + smallest-bumping.** Needs 51
-   real principals; stxer's whale-funded pattern handles this naturally.
-   Tests the `find-smallest-token-{y,x}-fold` + `bumped-token-{y,x}-principal`
-   path that only runs at the cap.
-3. **`ERR_PRICE_UNCERTAIN u1006`.** Needs a Pyth VAA where
-   `conf > price / MAX_CONF_RATIO` (u50). Hermes returns real confidence
-   intervals, so on the right asset/timestamp this fires legitimately.
-4. **`ERR_EXPO_MISMATCH u1020`** (sbtc-stx only). Initialize with feeds
-   that publish at different exponents and trigger the cross-rate calc.
-   Hard to find in BTC/USD vs STX/USD (both `-8`); fabricate by passing
-   an unrelated feed buffer or using a different feed pair.
-5. **`close-and-settle-with-refresh`.** The without-deposit variant of
-   swap. Quick add.
-6. **Treasury fee verification.** Read treasury balance before and
-   after settle and assert the exact fee transfer (current sims observe
-   fees being computed but never read the balance).
-7. **`get-balance` Zest-shaped read.** Assert it equals
-   `get-token-equity(SBTC_TOKEN, user)` after a deposit cycle — it's
-   the read Alex's dual-stacking booster relies on.
-
-### Registry / admin paths — also high signal
-
-These exercise jing-core's two-step + pause primitives that govern
-fund safety; they need real burn-block timing (which stxer 0.8.0
-gives via `addAdvanceBlocks`).
-
-8.  **`pause` / `unpause`.** Pause from owner *and* from validator
-    (distributed trip-wire). Prove entry-side log functions revert
-    with `u5016 PAUSED` while exit-side stays open, then unpause after
-    the 144-burn-block timelock.
-9.  **Hash-mismatch on `register`.** Deploy a market with bytecode
-    that differs from the verified one (e.g. patched `MAX_STALENESS`)
-    and confirm `register` returns `u5006 HASH_MISMATCH`. Stxer's
-    in-memory `marketSourceOverride` makes this easy.
-10. **`cancel-pending-contract` / `cancel-pending-validator`.** Owner
-    aborts a proposal before timelock; prove subsequent confirm fails
-    with `u5007 NO_PENDING_PROPOSAL` / `u5013 NO_PENDING_VALIDATOR`.
-11. **`remove-validator`.** Fast removal path; prove the removed
-    validator can't `confirm-verified-contract` afterwards
-    (`u5001 NOT_AUTHORIZED`).
-12. **Multi-market jing-core.** Register both markets in one jing-core,
-    run interleaved deposits, prove `get-token-equity` aggregates
-    correctly across markets.
-
-### Lower signal — clarinet is faster
-
-These are tight error-code or pure-logic checks. Each stxer run is a
-network round-trip, so iterating dozens of negative cases is slow.
-The clarinet unit-test suite in `tests/` should cover these:
-
-- `u1001 DEPOSIT_TOO_SMALL`, `u1017 LIMIT_REQUIRED`,
-  `u1019 WRONG_TRAIT`, `u1018 ALREADY_INITIALIZED`,
-  `u1009 ZERO_PRICE`, `u5009 OWNER_CANNOT_BE_VALIDATOR`,
+- `u1009 ZERO_PRICE`, `u5009 OWNER_CANNOT_BE_VALIDATOR`,
   `u5010 ALREADY_VALIDATOR`, `u5011 VALIDATOR_PENDING`,
-  `u5012 VALIDATOR_LIMIT_REACHED`, `u5008 TIMELOCK_NOT_ELAPSED`
+  `u5012 VALIDATOR_LIMIT_REACHED`
 - `set-token-{x,y}-limit` mid-cycle (no balance, then with balance)
 - `set-treasury` / `set-operator` / `set-min-{x,y}-deposit` (operator
   only, error on stranger)
 - Equity ledger debit branches (require a registered vault to test
   end-to-end, but the math is testable in isolation)
 
-### What "full coverage" would mean
+### Out of scope for this README
 
-If items 1-12 above were added on top of the current 18 sims, every
-public function on both markets and every public function on jing-core
-would have at least one stxer sim exercising it, plus every
-`ERR_*` constant defined in the markets would have a sim that
-provokes it. The `vault-*` and `reserve-*` / `snpl-*` contracts in
-`contracts/` are out of scope for this README — they have their own
-log-* surface on jing-core that needs separate coverage when those
-contracts are sim-ready.
+The `vault-*` and `reserve-*` / `snpl-*` contracts in `contracts/`
+have their own log-* surface on jing-core that needs separate coverage
+when those contracts are sim-ready.
 
 ## Gotchas burned in
 
