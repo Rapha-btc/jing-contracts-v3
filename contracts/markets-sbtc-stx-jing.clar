@@ -895,6 +895,14 @@
   (feed-x (buff 32)) (feed-y (buff 32)))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    ;; Markets attest a protocol-wide claim about token pair + oracle.
+    ;; Only jing-core's contract-owner (intended multi-sig) is allowed
+    ;; to make that attestation. Without this gate, anyone deploying
+    ;; hash-matching market bytecode at their own principal could
+    ;; initialize with attacker-chosen tokens/feeds and write events to
+    ;; jing-core impersonating a Jing market. See JING-CORE-DESIGN.md.
+    (asserts! (is-eq tx-sender (contract-call? .jing-core get-contract-owner))
+              ERR_NOT_AUTHORIZED)
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set token-x x)
     (var-set token-y y)

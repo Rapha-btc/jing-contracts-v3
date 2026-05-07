@@ -1,16 +1,16 @@
 // simul-jing-core-pause.js
-// Stxer simulation: protocol-wide pause via jing-core, guardian-flavored.
-// Owner adds a guardian. Guardian pauses (distributed trip-wire). Entry-side
-// log-* (deposit) reverts u5016 PAUSED. Exit-side log-* (cancel-token-y-deposit)
-// stays open. Owner cannot unpause before timelock (u5008). Non-owner cannot
-// unpause ever (u5001). After 144-block advance, owner unpauses; entry-side
-// resumes.
+// Stxer simulation: protocol-wide pause via jing-core. Owner-only path
+// (multi-sig in production). Entry-side log-* (deposit) reverts u5016
+// PAUSED. Exit-side log-* (cancel-token-y-deposit) stays open. Owner
+// cannot unpause before timelock (u5008). Non-owner cannot unpause ever
+// (u5001). Non-owner cannot pause either (u5001) -- the guardian role
+// was considered and dropped (see JING-CORE-DESIGN.md). After 144-block
+// advance, owner unpauses; entry-side resumes.
 //
 // Run: npx tsx simulations/simul-jing-core-pause.js
 import {
   uintCV,
   contractPrincipalCV,
-  standardPrincipalCV,
   stringAsciiCV,
   bufferCV,
 } from "@stacks/transactions";
@@ -31,9 +31,9 @@ import {
   addRegistryInit,
 } from "./_setup.js";
 
-// A non-owner principal we'll add as a guardian. Owner cannot be a
-// guardian, so this is not DEPLOYER.
-const GUARDIAN = "SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3";
+// A non-owner principal we'll try to pause from -- expected to fail u5001
+// because pause is owner-only.
+const NON_OWNER = "SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3";
 
 const JING_CORE_ID = `${DEPLOYER}.${JING_CORE_NAME}`;
 const MARKET_NAME = "markets-sbtc-usdcx-jing";
@@ -54,7 +54,7 @@ const feedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const marketCV = contractPrincipalCV(DEPLOYER, MARKET_NAME);
 
 async function main() {
-  console.log("=== JING-CORE PAUSE/UNPAUSE (guardian-flavored) ===\n");
+  console.log("=== JING-CORE PAUSE/UNPAUSE (owner-only, multi-sig) ===\n");
 
   let sim = SimulationBuilder.new();
   sim = addRegistryInit(sim, {
@@ -66,15 +66,6 @@ async function main() {
   });
 
   const sessionId = await sim
-    // Owner adds a guardian (one step, no timelock)
-    .withSender(DEPLOYER)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "add-guardian",
-      function_args: [standardPrincipalCV(GUARDIAN)],
-    })
-    .addEvalCode(JING_CORE_ID, `(is-guardian '${GUARDIAN})`)
-    .addEvalCode(JING_CORE_ID, "(get-guardian-count)")
-
     // Sanity: deposit BEFORE pause works
     .withSender(USDCX_DEPOSITOR_1)
     .addContractCall({
@@ -82,8 +73,14 @@ async function main() {
       function_args: [uintCV(USDCX_100), uintCV(USDCX_LIMIT_HIGH), usdcxTrait, usdcxAsset],
     })
 
-    // Guardian pauses (distributed trip-wire)
-    .withSender(GUARDIAN)
+    // Non-owner tries to pause -> u5001 NOT_AUTHORIZED
+    .withSender(NON_OWNER)
+    .addContractCall({
+      contract_id: JING_CORE_ID, function_name: "pause", function_args: [],
+    })
+
+    // Owner pauses (multi-sig in production)
+    .withSender(DEPLOYER)
     .addContractCall({
       contract_id: JING_CORE_ID, function_name: "pause", function_args: [],
     })
@@ -109,15 +106,15 @@ async function main() {
       contract_id: JING_CORE_ID, function_name: "unpause", function_args: [],
     })
 
-    // Advance past unpause timelock (only thing TIMELOCK_BURN_BLOCKS still gates)
+    // Advance past unpause timelock
     .addAdvanceBlocks({
       bitcoin_blocks: TIMELOCK_BURN_BLOCKS,
       stacks_blocks_per_bitcoin: 1,
       bitcoin_interval_secs: 1,
     })
 
-    // Non-owner (guardian) tries unpause -> u5001
-    .withSender(GUARDIAN)
+    // Non-owner tries unpause -> u5001
+    .withSender(NON_OWNER)
     .addContractCall({
       contract_id: JING_CORE_ID, function_name: "unpause", function_args: [],
     })
@@ -134,21 +131,6 @@ async function main() {
     .addContractCall({
       contract_id: MARKET_ID, function_name: "deposit-token-x",
       function_args: [uintCV(SBTC_100K), uintCV(SBTC_LIMIT_LOW), sbtcTrait, sbtcAsset],
-    })
-
-    // Owner can also remove the guardian afterwards
-    .withSender(DEPLOYER)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "remove-guardian",
-      function_args: [standardPrincipalCV(GUARDIAN)],
-    })
-    .addEvalCode(JING_CORE_ID, `(is-guardian '${GUARDIAN})`)
-    .addEvalCode(JING_CORE_ID, "(get-guardian-count)")
-
-    // Removed guardian can no longer pause -> u5001
-    .withSender(GUARDIAN)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "pause", function_args: [],
     })
 
     .run();

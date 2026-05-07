@@ -101,9 +101,10 @@ public surface area for attackers to map.
 | `propose-validator`, `confirm-validator`, `cancel-pending-validator`, `remove-validator` | Validator role is gone |
 | `propose-verified-contract`, `confirm-verified-contract`, `cancel-pending-contract` | Replaced by single-step `set-verified-contract` |
 | `is-validator`, `get-validator-count`, `get-pending-validator`, `get-pending-verified-contract` reads | Targets gone |
-| `MAX_VALIDATORS` constant | Replaced by `MAX_GUARDIANS` |
-| `ERR_OWNER_CANNOT_BE_VALIDATOR`, `ERR_ALREADY_VALIDATOR`, `ERR_VALIDATOR_PENDING`, `ERR_VALIDATOR_LIMIT_REACHED`, `ERR_NO_PENDING_VALIDATOR`, `ERR_NOT_VALIDATOR`, `ERR_NEW_OWNER_IS_VALIDATOR`, `ERR_NO_PENDING_PROPOSAL` | Renamed to guardian-equivalents or dropped |
+| `MAX_VALIDATORS` constant | Dropped |
+| `ERR_OWNER_CANNOT_BE_VALIDATOR`, `ERR_ALREADY_VALIDATOR`, `ERR_VALIDATOR_PENDING`, `ERR_VALIDATOR_LIMIT_REACHED`, `ERR_NO_PENDING_VALIDATOR`, `ERR_NOT_VALIDATOR`, `ERR_NEW_OWNER_IS_VALIDATOR`, `ERR_NO_PENDING_PROPOSAL` | Dropped |
 | `set-contract-owner`'s anti-validator assert | Validator concept is gone |
+| Initially-considered guardian role (`add-guardian`, `remove-guardian`, `is-guardian`, `MAX_GUARDIANS`, `ERR_*_GUARDIAN`) | Dropped — see "Guardian role (rejected)" section below for the threat-model reasoning |
 
 ## What replaced it
 
@@ -121,45 +122,51 @@ One-step, owner-only. Hash still computed on-chain via `contract-hash?`
 no removal primitive, same as before -- severing a confirmed template
 could cascade into in-flight fund paths.
 
-## Guardian role (kept)
+## Guardian role (rejected)
 
-```clarity
-(define-map guardians principal bool)
-(define-data-var guardian-count uint u0)
-(define-constant MAX_GUARDIANS u5)
+We considered a slim "guardian" role — a small set of single-key
+addresses authorized only to call `pause` (no other privilege) — to
+provide a *fast distributed trip-wire* without forcing the multi-sig
+to coordinate signatures during an emergency.
 
-(define-public (add-guardian (guardian principal)) ...)    ;; owner-only, one-step
-(define-public (remove-guardian (guardian principal)) ...)  ;; owner-only, one-step
-```
+We dropped it after working through the threat model:
 
-Guardians can ONLY call `pause`. They cannot:
-- Add/remove verified-contracts
-- Change ownership
-- Unpause (owner-only with timelock cooldown)
-- Add/remove other guardians
+- A compromised guardian key can call `pause` repeatedly. Each pause
+  freshens `paused-at`, so the attacker can re-pause every time the
+  unpause cooldown is about to elapse, indefinitely DOS'ing the
+  protocol's entry side until the owner removes them.
+- Recovery: owner calls `remove-guardian(compromised)` (one step,
+  immediate), then waits 144 blocks since the last pause, then
+  `unpause`. Worst-case downtime ~1–2 days of entry-side DOS. No
+  asset loss (exit side stays open the whole time).
+- Recoverable, yes — but **every additional key you operate is a leak
+  vector**. Env vars, CI/CD secrets, dev laptops without HSMs, browser
+  extensions, malicious npm packages: all routine ways for "low
+  privilege" keys to escape. A guardian's *privilege* is small but
+  the *attack surface* of the key is the same as any other key.
 
-The role exists because **fast pause** is a different latency profile
-from owner-level governance. When something is on fire, the first
-trustworthy party to notice should be able to halt entries
-immediately, without coordinating an N-of-M multi-sig signature round.
-Multi-sig is inherently slower because it requires multiple parties to
-sign — appropriate for governance changes, too slow for emergency
-trip-wire.
+Friedger's framing crystallized it: when the deploy key for an
+"electronic front door" leaked via env vars to a North Korean
+attacker, the front door *became* the back door. Same code, same
+lock — different person holding the key. Adding "trusted-low-privilege"
+keys doesn't necessarily make a system safer; it just adds vectors
+that have to be hardened to the same standard as the high-privilege
+keys.
 
-The owner adds and removes guardians one-step (no timelock); the
-multi-sig is the audit. Guardians' privileges are minimal so the
-blast radius of a compromised guardian key is bounded to "they can
-pause the protocol" — annoying but not destructive (deposits halt;
-existing user funds still exit via the always-open exit-side
-log functions; owner unpauses after the 144-block cooldown).
+So pause / unpause are both **owner-only** (multi-sig). For fast
+emergency response, use a multi-sig signing setup that minimizes
+latency (Asigna with pre-coordinated signers, hardware-secured keys,
+ready-to-co-sign emergency tx templates). Trade-off: pause requires
+N-of-M signatures rather than instant single-key, but the protocol's
+key surface stays at one role.
 
 ## Pause / unpause
 
-- **Pause**: `tx-sender == contract-owner OR is-guardian tx-sender` →
-  sets `paused = true`, freshens `paused-at = burn-block-height`.
-  Re-pausing while already paused restarts the unpause timer
-  (intentional: if a new threat surfaces during a pause, hitting pause
-  again extends the cooldown).
+- **Pause**: `tx-sender == contract-owner` only (multi-sig in
+  production). Sets `paused = true`, freshens `paused-at =
+  burn-block-height`. Re-pausing while already paused restarts the
+  unpause timer (intentional: if a new threat surfaces during a
+  pause, hitting pause again extends the cooldown).
 - **Unpause**: owner-only, requires `burn-block-height >= paused-at +
   TIMELOCK_BURN_BLOCKS (u144 ≈ 24h)`. The cooldown prevents a
   panic-resume — even if the owner-multi-sig wants to unpause
@@ -187,9 +194,8 @@ on Stacks.
 |---|---|
 | Attacker deploys hash-matching bytecode and tries to register | Blocked by `tx-sender == contract-owner` in `register` |
 | Attacker compromises one multi-sig signer | Cannot reach quorum; no governance action possible |
-| Attacker compromises N-of-M signers (full multi-sig compromise) | Equivalent to full owner compromise — register, set-verified-contract, set-contract-owner all available. Defense-in-depth against this is operational (key rotation, multi-sig threshold tuning, hardware modules) |
-| Attacker compromises a guardian key | Can call `pause`, nothing else. Owner unpauses after 144-block cooldown. Annoyance, not asset loss |
-| Owner key (multi-sig signers collectively) is honest but slow | Pause via guardian is fast (single-key); unpause cooldown bounds resume-too-early risk |
+| Attacker compromises N-of-M signers (full multi-sig compromise) | Equivalent to full owner compromise — register, set-verified-contract, set-contract-owner, pause/unpause all available. Defense-in-depth against this is operational (key rotation, multi-sig threshold tuning, hardware modules) |
+| Owner key (multi-sig signers collectively) is honest but slow during emergency | Pause requires multi-sig signing rounds. Mitigation: pre-coordinated emergency signing flow (Asigna, ready-to-co-sign templates) keeps pause latency to minutes, not days |
 | Wrong canonical principal in `set-verified-contract` (typo) | One-way confirmation, no removal — typo persists. Mitigation: dry-run via stxer fork, multi-sig review of args, or accept that an unused canonical entry is harmless (it just exists) |
 
 ## Breaking changes for existing tooling
@@ -198,17 +204,18 @@ Anyone integrating with jing-core's old surface will need to adjust:
 
 - `propose-verified-contract` + `confirm-verified-contract` →
   `set-verified-contract` (single owner call)
-- `propose-validator`/`confirm-validator`/`remove-validator` → 
-  `add-guardian`/`remove-guardian` (different name + privilege set)
-- `is-validator` → `is-guardian`
-- Pause callers: validators are no longer authorized (only guardians +
-  owner). Existing validators must be re-added as guardians if pause
-  authority is desired.
-- Event names changed: `verified-contract-proposed` /
+- `propose-validator`/`confirm-validator`/`remove-validator` → gone.
+  Validator role is removed entirely; guardians were considered as a
+  replacement and also dropped (see "Guardian role (rejected)").
+- Pause is now owner-only (was owner OR validator). All pause /
+  unpause goes through the multi-sig.
+- Event names: `verified-contract-proposed` /
   `verified-contract-confirmed` / `validator-proposed` /
-  `validator-confirmed` / etc. → `verified-contract-set` /
-  `guardian-added` / `guardian-removed`
+  `validator-confirmed` / etc. → `verified-contract-set` (everything
+  else gone).
 - `cancel-pending-contract`, `cancel-pending-validator` → gone (no
-  pending state to cancel)
+  pending state to cancel).
+- `is-validator`, `get-validator-count`, `get-pending-validator`,
+  `get-pending-verified-contract` reads → gone.
 
 This is a pre-mainnet change, so no on-chain state migration is needed.

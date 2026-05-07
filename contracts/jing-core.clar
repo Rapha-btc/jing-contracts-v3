@@ -100,6 +100,12 @@
 (define-read-only (get-verified-hash (contract principal))
   (map-get? verified-contracts contract))
 
+;; Public read so market `initialize` can gate registration on
+;; `tx-sender == jing-core.contract-owner`. Returns the current owner
+;; (intended multi-sig in production); set-contract-owner rotations
+;; flow through automatically since each call re-reads.
+(define-read-only (get-contract-owner) (var-get contract-owner))
+
 (define-read-only (is-paused) (var-get paused))
 
 (define-read-only (get-paused-at) (var-get paused-at))
@@ -234,31 +240,36 @@
 ;; ----- Contract registration (vaults, reserves, snpls) -----
 
 ;; Called by a vault, reserve, market, or snpl from its `initialize`.
-;; Single entry point because the auth check and on-chain semantics are
-;; identical for all of them -- they're all hash-verified jing-ecosystem
-;; contracts that get to write log-* events. The canonical principal
-;; the caller passes tells indexers what kind of contract it is (its
-;; name encodes the type, e.g. .jing-vault-v1 vs .loan-reserve vs
-;; .loan-sbtc-stx-0-jing). One-way: no unregister, since severing a
-;; registered contract from jing-core could strain in-flight funds.
+;; Single entry point because the on-chain semantics are identical for
+;; all of them -- they're all hash-verified jing-ecosystem contracts
+;; that get to write log-* events. The canonical principal the caller
+;; passes tells indexers what kind of contract it is (its name encodes
+;; the type, e.g. .jing-vault-v1 vs .loan-reserve vs .loan-sbtc-stx-0).
+;; One-way: no unregister, since severing a registered contract from
+;; jing-core could strain in-flight funds.
 ;;
-;; TWO checks bind correctness:
-;;  1. caller-hash == verified-hash[canonical]: the deployed bytecode
-;;     matches the canonical template the owner explicitly verified.
-;;  2. tx-sender == contract-owner: the deploying entity is the
-;;     contract-owner (intended multi-sig). Without this an attacker
-;;     could deploy hash-matching bytecode at their own principal and
-;;     register it under the canonical's verified hash, then write
-;;     arbitrary log-* events on jing-core under attacker-chosen
-;;     tokens/feed. The hash check alone binds CODE; this check binds
-;;     DEPLOYMENT to a trusted entity.
+;; The hash check binds the deployed CODE to a verified template. It
+;; does NOT bind the DEPLOYMENT to a trusted entity -- that's the
+;; caller's responsibility:
+;;  - For PERSONAL contracts (vaults, reserves, snpls): no extra check
+;;    needed. Each user self-deploys, init params are per-deployment
+;;    (lender/borrower = themselves), and the only "harm" a hash-
+;;    matching attacker can do is pollute jing-core's event/equity
+;;    ledger under their own principal. Indexers filter by trusted
+;;    canonical / principal allowlists.
+;;  - For MARKETS: their `initialize` constitutes a protocol-wide
+;;    attestation about token pair + oracle, so the market source
+;;    asserts `tx-sender == jing-core.get-contract-owner` BEFORE
+;;    calling register. That gate (in the market, not here) is what
+;;    closes the bytecode-replay attack for markets. See
+;;    `markets-sbtc-{usdcx,stx}-jing.clar` and
+;;    `contracts/JING-CORE-DESIGN.md`.
 (define-public (register (canonical principal))
   (let (
     (caller contract-caller)
     (caller-hash (unwrap! (contract-hash? contract-caller) ERR_INVALID_CONTRACT_HASH))
     (verified-hash (unwrap! (map-get? verified-contracts canonical) ERR_NOT_VERIFIED))
   )
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (asserts! (is-eq caller-hash verified-hash) ERR_HASH_MISMATCH)
     (asserts! (is-none (map-get? registered-contracts caller)) ERR_ALREADY_REGISTERED)
     (map-set registered-contracts caller true)

@@ -143,18 +143,15 @@ Once the multi-sig is funded with enough STX for fees:
 
 1. **Deploy `jing-core`** from the multi-sig address. `contract-owner`
    is set to `tx-sender` at deploy time, which is the multi-sig.
-2. **Add guardians** via `add-guardian(principal)` for any fast-pause
-   keys you want (these can be single-key, e.g. team members on call).
-   Each `add-guardian` is a multi-sig tx (N signatures).
-3. **Deploy each market** (`markets-sbtc-usdcx-jing`,
+2. **Deploy each market** (`markets-sbtc-usdcx-jing`,
    `markets-sbtc-stx-jing`, etc.) from the multi-sig.
-4. **Verify each market**: call `jing-core.set-verified-contract(market)`
+3. **Verify each market**: call `jing-core.set-verified-contract(market)`
    for each. One multi-sig tx per market.
-5. **Initialize each market**: call `market.initialize(canonical, x, y,
+4. **Initialize each market**: call `market.initialize(canonical, x, y,
    min-x, min-y, feed)` from the multi-sig. The `tx-sender ==
    contract-owner` check inside `register` propagates and passes
    because the multi-sig is the owner.
-6. **Verify on-chain**: read `(is-registered '<market>)` returns true
+5. **Verify on-chain**: read `(is-registered '<market>)` returns true
    and `(get-verified-hash '<market>)` returns the expected hash.
 
 After that, the protocol is live. Routine governance (adding new
@@ -184,22 +181,15 @@ deliberately; they're not reversible without another multi-sig round.
   signer 4" and "we need to rotate signer 1" on testnet.
 - **Document signer identities off-chain.** Who holds which key, where.
   This survives team turnover.
-- **Pause guardians can be single-key**, intentionally. Their privilege
-  is only "pause", which is non-destructive and reversible by the
-  multi-sig owner. Don't multi-sig the pause path; that defeats its
-  fast-response purpose.
-
-  **However** — a compromised guardian key can grief the protocol by
-  re-pausing on a timer (each pause restarts the unpause cooldown). The
-  attack is bounded: owner calls `remove-guardian(compromised)` (one
-  step, immediate), then `unpause` after the 144-block cooldown
-  elapses since the LAST pause. Worst-case downtime is ~1–2 days
-  (multi-sig coordination + cooldown), no asset loss. To keep that
-  worst case from being routine, **store guardian private keys on
-  hardware** (Ledger, hardware HSM) and **never** in CI/CD env vars,
-  team laptops without secure enclaves, or dev machines. The
-  guardian's privilege is small but every key you operate is a leak
-  vector — treat them like deploy keys, not like API tokens.
+- **Pause is owner-only** — the multi-sig is the trip-wire. We
+  considered a slim "guardian" role for fast pause without a multi-sig
+  signing round and dropped it: every additional key you operate is a
+  leak vector (env vars, CI/CD, dev laptops), and a compromised guardian
+  could grief by re-pausing on a timer. See `JING-CORE-DESIGN.md` →
+  "Guardian role (rejected)" for the full reasoning. To keep emergency
+  pause latency low, set up your multi-sig (Asigna or similar) so the
+  signers can co-sign a pre-approved pause tx in minutes, not hours --
+  the speed comes from operational readiness, not from a separate role.
 - **Stxer simulation before each multi-sig governance tx.** Build the
   tx, run it through stxer against a fork, verify the on-chain effect
   matches expectations, *then* sign. The stxer URL becomes part of the
