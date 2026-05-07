@@ -22,7 +22,7 @@
 
 (define-constant DECIMAL_FACTOR u100)
 
-(define-constant MAX_STALENESS u999999999)
+(define-constant MAX_STALENESS u80)
 (define-constant MAX_CONF_RATIO u50)
 
 (define-constant SAINT 'SP000000000000000000002Q6VF78)
