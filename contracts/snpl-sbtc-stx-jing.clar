@@ -3,18 +3,20 @@
 ;; Per-borrower loan contract specialized for sbtc-stx-0-jing-v2.
 ;; Funded just-in-time by a reserve contract conforming to
 ;; `reserve-trait`. Source code is canonical: every deployment hashes
-;; to the same bytecode. The deployer wires up the borrower and
-;; reserve via `initialize` (one-shot). The borrower can later swap
-;; reserves between loans via `set-reserve`.
+;; to the same bytecode. The borrower IS the deployer (BORROWER is a
+;; deploy-time constant = tx-sender), and `initialize` (one-shot) just
+;; wires up the reserve binding. Borrower can later swap reserves
+;; between loans via `set-reserve`.
 ;;
 ;; One active loan at a time. N snpls run in parallel, each as its
 ;; own Jing depositor principal, with no cross-contamination at
 ;; Jing's per-principal layer.
 ;;
 ;; Flow:
-;;   0. `initialize`   - deployer sets `borrower` and `reserve` vars.
-;;                       Until called, the reserve var equals SAINT
-;;                       (a sentinel) and all lifecycle calls revert.
+;;   0. `initialize`   - borrower (= deployer) sets the `current-reserve`
+;;                       var. Until called, the reserve var equals
+;;                       SAINT (a sentinel) and all lifecycle calls
+;;                       revert.
 ;;   1. `borrow`       - draws sBTC from the configured reserve
 ;;                       (passed as a trait reference, asserted to
 ;;                       match the var), creates loan, starts
@@ -51,14 +53,15 @@
 (define-constant ASSET-SBTC "sbtc-token")
 ;; The Jing market this snpl deposits into. v3 sBTC/STX, sBTC = token-x.
 (define-constant JING-MARKET .markets-sbtc-stx-jing)
-;; Sentinel. Pre-init the borrower and reserve vars equal SAINT, which
-;; no real contract can match; any borrow/repay/seize attempt fails the
-;; reserve assert until `initialize` is called.
+;; Sentinel. Pre-init the reserve var equals SAINT, which no real
+;; contract can match; any borrow/repay/seize attempt fails the reserve
+;; assert until `initialize` is called.
 (define-constant SAINT 'SP000000000000000000002Q6VF78)
-;; Captured at deploy time. Source code is canonical across deployments;
-;; the deployer (whoever ran the deploy tx) is the only one who can
-;; call `initialize`.
-(define-constant DEPLOYER tx-sender)
+;; The borrower IS the deployer. Captured at deploy time as a constant
+;; so it can never be re-set, mis-set, or social-engineered. Source
+;; code is canonical across deployments; each snpl is self-deployed by
+;; the borrower who will use it.
+(define-constant BORROWER tx-sender)
 
 (define-constant CLAWBACK-DELAY u4200)
 (define-constant BPS_PRECISION u10000)
@@ -81,11 +84,9 @@
 (define-constant ERR-DEADLINE-NOT-REACHED (err u108))
 (define-constant ERR-INTEREST-MISMATCH (err u109))
 (define-constant ERR-PAST-DEADLINE (err u110))
-(define-constant ERR-NOT-DEPLOYER (err u111))
 (define-constant ERR-ALREADY-INIT (err u112))
 (define-constant ERR-WRONG-RESERVE (err u113))
 
-(define-data-var borrower principal SAINT)
 (define-data-var current-reserve principal SAINT)
 (define-data-var next-loan-id uint u1)
 (define-data-var active-loan (optional uint) none)
@@ -104,7 +105,7 @@
 ;; ---------- Read-only ----------
 
 (define-read-only (get-reserve) (ok (var-get current-reserve)))
-(define-read-only (get-borrower) (ok (var-get borrower)))
+(define-read-only (get-borrower) (ok BORROWER))
 (define-read-only (get-active-loan) (ok (var-get active-loan)))
 (define-read-only (get-loan (loan-id uint)) (ok (map-get? loans loan-id)))
 
@@ -124,15 +125,16 @@
 ;; After this, the reserve var is no longer SAINT, so re-calling fails.
 ;; Borrower can then swap reserves later via `set-reserve` (subject to
 ;; active-loan gate).
-(define-public (initialize (canonical principal) (init-borrower principal) (init-reserve <reserve-trait>))
+(define-public (initialize (canonical principal) (init-reserve <reserve-trait>))
   (let ((init-reserve-addr (contract-of init-reserve)))
-    (asserts! (is-eq tx-sender DEPLOYER) ERR-NOT-DEPLOYER)
+    ;; BORROWER is the deploy-time tx-sender. Only that principal can
+    ;; call initialize (and is hence both deployer and borrower).
+    (asserts! (is-eq tx-sender BORROWER) ERR-NOT-BORROWER)
     (asserts! (is-eq (var-get current-reserve) SAINT) ERR-ALREADY-INIT)
-    (var-set borrower init-borrower)
     (var-set current-reserve init-reserve-addr)
     (try! (contract-call? .jing-core register canonical))
     (print { event: "initialize",
-             borrower: init-borrower,
+             borrower: BORROWER,
              reserve: init-reserve-addr,
              snpl: current-contract })
     (ok true)))
@@ -142,7 +144,7 @@
 ;; proceeds away from the reserve that funded the loan.
 (define-public (set-reserve (new-reserve <reserve-trait>))
   (let ((new-reserve-addr (contract-of new-reserve)))
-    (asserts! (is-eq tx-sender (var-get borrower)) ERR-NOT-BORROWER)
+    (asserts! (is-eq tx-sender BORROWER) ERR-NOT-BORROWER)
     (asserts! (is-none (var-get active-loan)) ERR-ACTIVE-LOAN-EXISTS)
     (var-set current-reserve new-reserve-addr)
     (try! (contract-call? .jing-core log-snpl-set-reserve new-reserve-addr))
@@ -159,7 +161,7 @@
   (let ((loan-id (var-get next-loan-id))
         (deadline (+ burn-block-height CLAWBACK-DELAY))
         (reserve-addr (contract-of reserve)))
-    (asserts! (is-eq tx-sender (var-get borrower)) ERR-NOT-BORROWER)
+    (asserts! (is-eq tx-sender BORROWER) ERR-NOT-BORROWER)
     (asserts! (is-none (var-get active-loan)) ERR-ACTIVE-LOAN-EXISTS)
     (asserts! (is-eq reserve-addr (var-get current-reserve)) ERR-WRONG-RESERVE)
     (let ((line-bps (try! (contract-call? reserve draw amount))))
@@ -188,7 +190,7 @@
         (jing-cycle (contract-call? JING-MARKET
                       get-current-cycle))
         (amount (get notional-sbtc loan)))
-    (asserts! (is-eq tx-sender (var-get borrower)) ERR-NOT-BORROWER)
+    (asserts! (is-eq tx-sender BORROWER) ERR-NOT-BORROWER)
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
     (asserts! (< burn-block-height (get deadline loan)) ERR-PAST-DEADLINE)
     (try! (as-contract? ((with-ft SBTC ASSET-SBTC amount))
@@ -208,7 +210,7 @@
 (define-public (cancel-swap (loan-id uint))
   (let ((loan (unwrap! (map-get? loans loan-id) ERR-LOAN-NOT-FOUND)))
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
-    (asserts! (or (is-eq tx-sender (var-get borrower))
+    (asserts! (or (is-eq tx-sender BORROWER)
                   (>= burn-block-height (get deadline loan)))
               ERR-NOT-BORROWER)
     (try! (as-contract? ((with-all-assets-unsafe))
@@ -219,7 +221,7 @@
 
 (define-public (set-swap-limit (loan-id uint) (limit-price uint))
   (let ((loan (unwrap! (map-get? loans loan-id) ERR-LOAN-NOT-FOUND)))
-    (asserts! (is-eq tx-sender (var-get borrower)) ERR-NOT-BORROWER)
+    (asserts! (is-eq tx-sender BORROWER) ERR-NOT-BORROWER)
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
     (asserts! (< burn-block-height (get deadline loan)) ERR-PAST-DEADLINE)
     (map-set loans loan-id (merge loan { limit-price: limit-price }))
@@ -247,7 +249,7 @@
         ;; tops up; otherwise refund excess back to borrower.
         (delta (if is-shortfall (- payoff sbtc-balance) (- sbtc-balance payoff)))
         (reserve-addr (contract-of reserve))
-        (borrower-addr (var-get borrower)))
+        (borrower-addr BORROWER))
     (asserts! (is-eq tx-sender borrower-addr) ERR-NOT-BORROWER)
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
     (asserts! (is-eq reserve-addr (var-get current-reserve)) ERR-WRONG-RESERVE)

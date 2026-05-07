@@ -25,10 +25,6 @@
 (define-constant ERR_NOT_VERIFIED (err u5005))
 (define-constant ERR_HASH_MISMATCH (err u5006))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u5008))
-(define-constant ERR_OWNER_CANNOT_BE_GUARDIAN (err u5009))
-(define-constant ERR_ALREADY_GUARDIAN (err u5010))
-(define-constant ERR_GUARDIAN_LIMIT_REACHED (err u5012))
-(define-constant ERR_NOT_GUARDIAN (err u5014))
 (define-constant ERR_PAUSED (err u5016))
 
 ;; Burn blocks (~10 min each) that must elapse between pause and unpause.
@@ -38,11 +34,6 @@
 ;; assumed to be a multi-sig: signing rounds off-chain provide the audit
 ;; window without a hard on-chain delay. See contracts/JING-CORE-DESIGN.md.
 (define-constant TIMELOCK_BURN_BLOCKS u144)
-
-;; Cap on the guardian set. Guardians can ONLY pause (distributed
-;; trip-wire); they have no authority over verified-contracts, ownership,
-;; or unpause. Owner-only roles add/remove guardians one-step.
-(define-constant MAX_GUARDIANS u5)
 
 ;; sBTC principal -- referenced by reads (get-sbtc-equity) and as the
 ;; convenience field on every vault-log print. The equity ledger itself
@@ -69,22 +60,18 @@
 ;; template could cascade into in-flight fund paths; the protocol-level
 ;; response to a flawed template is PAUSE, not removal.
 
-;; Guardian set. Keyed by principal; presence in the map = active
-;; guardian. Guardians can ONLY call `pause` (distributed trip-wire) --
-;; they cannot add verified-contracts, change the owner, or unpause.
-;; `guardian-count` mirrors map size so we can enforce MAX_GUARDIANS
-;; without iterating. Owner cannot be a guardian (asserted on add).
-(define-map guardians principal bool)
-(define-data-var guardian-count uint u0)
-
 ;; Protocol-wide pause. When true, ENTRY-side log-* functions (deposits,
 ;; jing-deposits, bitflow-swaps, market deposits, settlement chain)
 ;; revert. EXIT-side log-* functions (withdraws, refunds, cancels,
 ;; revokes, cancel-cycle) stay open so user funds remain accessible.
-;; Either the owner or any guardian can pause instantly (distributed
-;; trip-wire); only the owner can unpause, and only after
-;; TIMELOCK_BURN_BLOCKS have elapsed since the most recent pause event,
-;; so a release isn't a knee-jerk reversal of an emergency call.
+;; ONLY the contract-owner (intended multi-sig) can pause or unpause --
+;; we considered a separate fast-pause "guardian" role but every
+;; additional key you operate is a leak vector (env vars, CI/CD, dev
+;; laptops), and a compromised guardian could grief by re-pausing on a
+;; timer. The trade-off favored fewer keys + faster multi-sig signing
+;; over a distributed trip-wire. Unpause requires TIMELOCK_BURN_BLOCKS
+;; to elapse since the most recent pause event so a release isn't a
+;; knee-jerk reversal of an emergency call. See JING-CORE-DESIGN.md.
 (define-data-var paused bool false)
 (define-data-var paused-at uint u0)
 
@@ -112,11 +99,6 @@
 
 (define-read-only (get-verified-hash (contract principal))
   (map-get? verified-contracts contract))
-
-(define-read-only (is-guardian (p principal))
-  (default-to false (map-get? guardians p)))
-
-(define-read-only (get-guardian-count) (var-get guardian-count))
 
 (define-read-only (is-paused) (var-get paused))
 
@@ -209,43 +191,20 @@
              by: tx-sender })
     (ok true)))
 
-;; ----- Admin: guardian set management -----
-
-;; Guardians can ONLY call `pause` -- nothing else. The owner adds and
-;; removes guardians one-step (the multi-sig is the audit). Owner
-;; cannot be a guardian (the owner already has pause authority and a
-;; redundant role would muddy events).
-(define-public (add-guardian (guardian principal))
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (not (is-eq guardian (var-get contract-owner))) ERR_OWNER_CANNOT_BE_GUARDIAN)
-    (asserts! (not (is-guardian guardian)) ERR_ALREADY_GUARDIAN)
-    (asserts! (< (var-get guardian-count) MAX_GUARDIANS) ERR_GUARDIAN_LIMIT_REACHED)
-    (map-set guardians guardian true)
-    (var-set guardian-count (+ (var-get guardian-count) u1))
-    (print { event: "guardian-added", guardian: guardian })
-    (ok true)))
-
-(define-public (remove-guardian (guardian principal))
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (is-guardian guardian) ERR_NOT_GUARDIAN)
-    (map-delete guardians guardian)
-    (var-set guardian-count (- (var-get guardian-count) u1))
-    (print { event: "guardian-removed", guardian: guardian })
-    (ok true)))
-
 ;; ----- Admin: protocol-wide pause -----
 
-;; Pause = halt entries, keep exits open. Either the owner OR any
-;; guardian can pause instantly so the trip-wire is distributed. Each
-;; pause call freshens `paused-at`, so re-pausing while already paused
-;; restarts the unpause-eligibility timer (intentional: if a new threat
-;; surfaces mid-pause, hitting pause again extends the cooldown).
+;; Pause = halt entries, keep exits open. Owner-only -- the multi-sig is
+;; the trip-wire. Each pause call freshens `paused-at`, so re-pausing
+;; while already paused restarts the unpause-eligibility timer
+;; (intentional: if a new threat surfaces mid-pause, hitting pause
+;; again extends the cooldown). The "fast distributed trip-wire" of a
+;; separate guardian role was considered and dropped: every key you
+;; operate is a leak vector (env vars, CI/CD), and a compromised
+;; guardian could grief by re-pausing on a timer. Multi-sig pause is
+;; slightly slower but bounds the number of keys to one role.
 (define-public (pause)
   (begin
-    (asserts! (or (is-eq tx-sender (var-get contract-owner))
-                  (is-guardian tx-sender)) ERR_NOT_AUTHORIZED)
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (var-set paused true)
     (var-set paused-at burn-block-height)
     (print { event: "paused",
