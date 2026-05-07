@@ -59,8 +59,44 @@ export const TIMELOCK_BURN_BLOCKS = 144;
 export const CANCEL_THRESHOLD = 42;
 export const JING_CORE_NAME = "jing-core";
 
+// --- Pyth deps (mainnet) for settle-with-refresh + verify-and-update ---
+export const PYTH_DEPLOYER = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y";
+export const PYTH_STORAGE = `${PYTH_DEPLOYER}.pyth-storage-v4`;
+export const PYTH_DECODER = `${PYTH_DEPLOYER}.pyth-pnau-decoder-v3`;
+export const WORMHOLE_CORE = `${PYTH_DEPLOYER}.wormhole-core-v4`;
+export const PYTH_HERMES_BASE = "https://hermes.pyth.network";
+
+/**
+ * Fetch a single Pyth VAA from Hermes for a feed at a given timestamp.
+ * Returns the binary hex string (no 0x prefix).
+ *
+ * Used by sims that call settle-with-refresh / swap / close-and-settle-with-refresh.
+ * Default timestamp is "now - 30 sec" so the VAA's publish-time is within
+ * the production MAX_STALENESS = u80 freshness window.
+ */
+export async function fetchPythVAA(feedHex, timestamp) {
+  const ts = timestamp ?? Math.floor(Date.now() / 1000) - 30;
+  const url = `${PYTH_HERMES_BASE}/v2/updates/price/${ts}?ids[]=${feedHex}`;
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  const d = await r.json();
+  if (!d.binary?.data?.[0]) throw new Error(`No Pyth price at ts=${ts} for ${feedHex.slice(0, 8)}...`);
+  return d.binary.data[0];
+}
+
 /**
  * Add registry-prelude steps + market.initialize to a SimulationBuilder.
+ *
+ * Multi-sig-owner model (no validator role, no two-step propose+confirm):
+ *   1. Deploy jing-core
+ *   2. Deploy market
+ *   3. Owner (DEPLOYER): jing-core.set-verified-contract(market)
+ *   4. Owner: market.initialize(...) -> internally calls jing-core.register
+ *      (register checks tx-sender == contract-owner AND hash match)
+ *
+ * In production the contract-owner is intended to be a multi-sig; the
+ * collapse from two-step + validator role to one-step owner action is
+ * justified by multi-sig signing rounds providing the audit window.
+ * See contracts/JING-CORE-DESIGN.md.
  *
  * @param {SimulationBuilder} builder       fresh / partial builder
  * @param {object} cfg
@@ -74,10 +110,7 @@ export const JING_CORE_NAME = "jing-core";
  * @returns {SimulationBuilder}              builder ready for further calls
  */
 export function addRegistryInit(builder, { marketName, initializeArgs, marketSourceOverride }) {
-  const jingCoreSource = fs.readFileSync(
-    "./contracts/jing-core.clar",
-    "utf8"
-  );
+  const jingCoreSource = fs.readFileSync("./contracts/jing-core.clar", "utf8");
   const marketSource = marketSourceOverride ?? fs.readFileSync(
     `./contracts/${marketName}.clar`,
     "utf8"
@@ -101,55 +134,15 @@ export function addRegistryInit(builder, { marketName, initializeArgs, marketSou
       source_code: marketSource,
       clarity_version: ClarityVersion.Clarity5,
     })
-    // Step 3: propose validator
+    // Step 3: owner sets verified-contract for the market (one step,
+    // no timelock — multi-sig signing is the audit window)
     .withSender(DEPLOYER)
     .addContractCall({
       contract_id: jingCoreId,
-      function_name: "propose-validator",
-      function_args: [standardPrincipalCV(VALIDATOR)],
-    })
-    // Step 4: advance past timelock
-    // bitcoin_interval_secs: 1 keeps stacks-block-time close to the fork's
-    // pin so settle-with-refresh sims can pass the Pyth freshness gate
-    // (default 600s/block would push stacks-block-time ~2 days past the
-    // VAA's publish-time after two timelock advances).
-    .addAdvanceBlocks({
-      bitcoin_blocks: TIMELOCK_BURN_BLOCKS,
-      stacks_blocks_per_bitcoin: 1,
-      bitcoin_interval_secs: 1,
-    })
-    // Step 5: confirm validator (anyone — use validator itself)
-    .withSender(VALIDATOR)
-    .addContractCall({
-      contract_id: jingCoreId,
-      function_name: "confirm-validator",
-      function_args: [standardPrincipalCV(VALIDATOR)],
-    })
-    // Step 6: propose verified-contract
-    .withSender(DEPLOYER)
-    .addContractCall({
-      contract_id: jingCoreId,
-      function_name: "propose-verified-contract",
+      function_name: "set-verified-contract",
       function_args: [marketCV],
     })
-    // Step 7: advance past timelock
-    // bitcoin_interval_secs: 1 keeps stacks-block-time close to the fork's
-    // pin so settle-with-refresh sims can pass the Pyth freshness gate
-    // (default 600s/block would push stacks-block-time ~2 days past the
-    // VAA's publish-time after two timelock advances).
-    .addAdvanceBlocks({
-      bitcoin_blocks: TIMELOCK_BURN_BLOCKS,
-      stacks_blocks_per_bitcoin: 1,
-      bitcoin_interval_secs: 1,
-    })
-    // Step 8: validator confirms verified-contract (owner cannot)
-    .withSender(VALIDATOR)
-    .addContractCall({
-      contract_id: jingCoreId,
-      function_name: "confirm-verified-contract",
-      function_args: [marketCV],
-    })
-    // Step 9: market.initialize -> internally calls jing-core.register
+    // Step 4: owner initializes market — internally calls jing-core.register
     .withSender(DEPLOYER)
     .addContractCall({
       contract_id: marketId,

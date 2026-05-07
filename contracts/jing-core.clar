@@ -24,26 +24,25 @@
 (define-constant ERR_ALREADY_REGISTERED (err u5003))
 (define-constant ERR_NOT_VERIFIED (err u5005))
 (define-constant ERR_HASH_MISMATCH (err u5006))
-(define-constant ERR_NO_PENDING_PROPOSAL (err u5007))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u5008))
-(define-constant ERR_OWNER_CANNOT_BE_VALIDATOR (err u5009))
-(define-constant ERR_ALREADY_VALIDATOR (err u5010))
-(define-constant ERR_VALIDATOR_PENDING (err u5011))
-(define-constant ERR_VALIDATOR_LIMIT_REACHED (err u5012))
-(define-constant ERR_NO_PENDING_VALIDATOR (err u5013))
-(define-constant ERR_NOT_VALIDATOR (err u5014))
-(define-constant ERR_NEW_OWNER_IS_VALIDATOR (err u5015))
+(define-constant ERR_OWNER_CANNOT_BE_GUARDIAN (err u5009))
+(define-constant ERR_ALREADY_GUARDIAN (err u5010))
+(define-constant ERR_GUARDIAN_LIMIT_REACHED (err u5012))
+(define-constant ERR_NOT_GUARDIAN (err u5014))
 (define-constant ERR_PAUSED (err u5016))
 
-;; Burn blocks (~10 min each) that must elapse between proposing and
-;; confirming a verified contract or a new validator. ~24h cushion for
-;; off-chain audit.
+;; Burn blocks (~10 min each) that must elapse between pause and unpause.
+;; Forces deliberation on resume -- a panic-pause can't be reversed within
+;; minutes. The other places this constant used to gate (verified-contract
+;; promotion, validator addition) are gone now that the contract-owner is
+;; assumed to be a multi-sig: signing rounds off-chain provide the audit
+;; window without a hard on-chain delay. See contracts/JING-CORE-DESIGN.md.
 (define-constant TIMELOCK_BURN_BLOCKS u144)
 
-;; Cap on the validator set. Validators independently confirm verified
-;; contracts proposed by the contract-owner; a small set keeps coordination
-;; tractable while distributing the trust away from the owner.
-(define-constant MAX_VALIDATORS u5)
+;; Cap on the guardian set. Guardians can ONLY pause (distributed
+;; trip-wire); they have no authority over verified-contracts, ownership,
+;; or unpause. Owner-only roles add/remove guardians one-step.
+(define-constant MAX_GUARDIANS u5)
 
 ;; sBTC principal -- referenced by reads (get-sbtc-equity) and as the
 ;; convenience field on every vault-log print. The equity ledger itself
@@ -55,53 +54,34 @@
 
 ;; Approved canonical contract templates. Keyed by the canonical contract's
 ;; principal (a human-readable label like 'SP....jing-vault-v1) so events
-;; and reads name what the hash represents. A vault registers by passing
-;; the canonical principal it claims to match; jing-core compares the
-;; vault's actual code hash against the stored hash for that canonical.
+;; and reads name what the hash represents. A market/vault registers by
+;; passing the canonical principal it claims to match; jing-core compares
+;; the contract's actual code hash against the stored hash for that
+;; canonical AND requires tx-sender == contract-owner so an attacker
+;; can't deploy hash-matching bytecode at their own principal and
+;; register it (which would let them write arbitrary log-* events with
+;; attacker-chosen tokens/feed). The contract-owner is intended to be a
+;; multi-sig in production. See contracts/JING-CORE-DESIGN.md.
 (define-map verified-contracts principal (buff 32))
 
-;; Two-step add flow. `propose-verified-contract` writes here with the
-;; current burn-block-height; after TIMELOCK_BURN_BLOCKS elapse, a
-;; validator (NOT the owner) calls `confirm-verified-contract` to promote
-;; it into verified-contracts. The owner can `cancel-pending-contract`
-;; before confirmation.
-(define-map pending-verified-contracts
-  principal
-  { hash: (buff 32), proposed-at: uint })
+;; Lifecycle is one-way. Once a contract is added to verified-contracts
+;; it stays there forever -- no removal primitive. Severing a confirmed
+;; template could cascade into in-flight fund paths; the protocol-level
+;; response to a flawed template is PAUSE, not removal.
 
-;; Lifecycle is one-way. Pending PROPOSALS can still be aborted via
-;; `cancel-pending-contract` before confirmation -- that doesn't touch
-;; the live verified set, only discards a not-yet-promoted entry. Once a
-;; contract is CONFIRMED into verified-contracts, however, it stays
-;; there forever. There is no removal primitive. Removing a confirmed
-;; template -- even with timelock + validator confirmation -- would
-;; expose a class of failure modes where a downstream consumer (e.g. a
-;; market that gates access by hash) could be cut off mid-cycle and
-;; strand user funds. The correct primitive for "stop using this
-;; template now" is PAUSING -- at the per-market level (each market has
-;; its own paused flag), and potentially a future protocol-wide pause
-;; on jing-core's *entry* paths (deposits, new positions) while *exit*
-;; paths (withdraws, cancels, refunds) stay open. That preserves user
-;; fund access while halting growth of any flawed surface.
-
-;; Validator set. Keyed by principal; presence in the map = active
-;; validator. `validator-count` mirrors map size so we can enforce
-;; MAX_VALIDATORS without iterating. Owner cannot be a validator (asserted
-;; at propose time and on owner change).
-(define-map validators principal bool)
-(define-data-var validator-count uint u0)
-
-;; Two-step add flow for validators, mirroring verified-contracts. Anyone
-;; can confirm after TIMELOCK_BURN_BLOCKS -- the timelock IS the audit
-;; window, and the bootstrap case (zero validators) requires a
-;; non-validator confirmer.
-(define-map pending-validators principal uint)
+;; Guardian set. Keyed by principal; presence in the map = active
+;; guardian. Guardians can ONLY call `pause` (distributed trip-wire) --
+;; they cannot add verified-contracts, change the owner, or unpause.
+;; `guardian-count` mirrors map size so we can enforce MAX_GUARDIANS
+;; without iterating. Owner cannot be a guardian (asserted on add).
+(define-map guardians principal bool)
+(define-data-var guardian-count uint u0)
 
 ;; Protocol-wide pause. When true, ENTRY-side log-* functions (deposits,
 ;; jing-deposits, bitflow-swaps, market deposits, settlement chain)
 ;; revert. EXIT-side log-* functions (withdraws, refunds, cancels,
 ;; revokes, cancel-cycle) stay open so user funds remain accessible.
-;; Either the owner or any validator can pause instantly (distributed
+;; Either the owner or any guardian can pause instantly (distributed
 ;; trip-wire); only the owner can unpause, and only after
 ;; TIMELOCK_BURN_BLOCKS have elapsed since the most recent pause event,
 ;; so a release isn't a knee-jerk reversal of an emergency call.
@@ -133,16 +113,10 @@
 (define-read-only (get-verified-hash (contract principal))
   (map-get? verified-contracts contract))
 
-(define-read-only (get-pending-verified-contract (contract principal))
-  (map-get? pending-verified-contracts contract))
+(define-read-only (is-guardian (p principal))
+  (default-to false (map-get? guardians p)))
 
-(define-read-only (is-validator (p principal))
-  (default-to false (map-get? validators p)))
-
-(define-read-only (get-validator-count) (var-get validator-count))
-
-(define-read-only (get-pending-validator (p principal))
-  (map-get? pending-validators p))
+(define-read-only (get-guardian-count) (var-get guardian-count))
 
 (define-read-only (is-paused) (var-get paused))
 
@@ -214,116 +188,64 @@
 
 ;; ----- Admin: verified-contract template management -----
 
-;; Two-step add flow, no removal:
-;; 1. `propose-verified-contract` (owner-only) reads the canonical's code
-;;    hash via `(contract-hash? canonical)` -- so the canonical must be
-;;    deployed first -- and writes it to `pending-verified-contracts`
-;;    with the current burn-block-height. Hash is always computed
-;;    on-chain (no off-chain entry, no fat-finger or forge risk).
-;; 2. After TIMELOCK_BURN_BLOCKS, a VALIDATOR (not the owner) calls
-;;    `confirm-verified-contract` to promote the proposal into
-;;    `verified-contracts`. The owner can `cancel-pending-contract`
-;;    before confirmation.
-;; Lifecycle is one-way: confirmed templates stay forever. Severing a
-;; template could cascade into in-flight fund paths; the protocol-level
-;; response to a flawed template is `pause`, not removal.
-(define-public (propose-verified-contract (contract principal))
+;; Single-step add, no removal. The contract-owner (intended multi-sig)
+;; calls `set-verified-contract` and the canonical's code hash is read
+;; on-chain via `(contract-hash? contract)` and stored. Multi-sig signing
+;; rounds provide the audit window that a separate validator role used
+;; to enforce; collapsing to one step removes the on-chain timelock and
+;; the validator role entirely. See contracts/JING-CORE-DESIGN.md.
+;;
+;; Lifecycle is one-way: once added, templates stay forever. Severing
+;; a template could cascade into in-flight fund paths; the protocol-
+;; level response to a flawed template is `pause`, not removal.
+(define-public (set-verified-contract (contract principal))
   (let ((computed-hash (unwrap! (contract-hash? contract) ERR_INVALID_CONTRACT_HASH)))
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (map-set pending-verified-contracts contract
-      { hash: computed-hash, proposed-at: burn-block-height })
-    (print { event: "verified-contract-proposed",
+    (asserts! (is-none (map-get? verified-contracts contract)) ERR_ALREADY_REGISTERED)
+    (map-set verified-contracts contract computed-hash)
+    (print { event: "verified-contract-set",
              contract: contract,
              hash: computed-hash,
-             proposed-at: burn-block-height,
-             eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS) })
+             by: tx-sender })
     (ok true)))
 
-(define-public (confirm-verified-contract (contract principal))
-  (let ((pending (unwrap! (map-get? pending-verified-contracts contract)
-                         ERR_NO_PENDING_PROPOSAL))
-        (h (get hash pending)))
-    (asserts! (is-validator tx-sender) ERR_NOT_AUTHORIZED)
-    (asserts! (>= burn-block-height (+ (get proposed-at pending) TIMELOCK_BURN_BLOCKS))
-              ERR_TIMELOCK_NOT_ELAPSED)
-    (map-set verified-contracts contract h)
-    (map-delete pending-verified-contracts contract)
-    (print { event: "verified-contract-confirmed",
-             contract: contract,
-             hash: h,
-             confirmed-by: tx-sender })
-    (ok true)))
+;; ----- Admin: guardian set management -----
 
-(define-public (cancel-pending-contract (contract principal))
+;; Guardians can ONLY call `pause` -- nothing else. The owner adds and
+;; removes guardians one-step (the multi-sig is the audit). Owner
+;; cannot be a guardian (the owner already has pause authority and a
+;; redundant role would muddy events).
+(define-public (add-guardian (guardian principal))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (map-delete pending-verified-contracts contract)
-    (print { event: "verified-contract-cancelled", contract: contract })
+    (asserts! (not (is-eq guardian (var-get contract-owner))) ERR_OWNER_CANNOT_BE_GUARDIAN)
+    (asserts! (not (is-guardian guardian)) ERR_ALREADY_GUARDIAN)
+    (asserts! (< (var-get guardian-count) MAX_GUARDIANS) ERR_GUARDIAN_LIMIT_REACHED)
+    (map-set guardians guardian true)
+    (var-set guardian-count (+ (var-get guardian-count) u1))
+    (print { event: "guardian-added", guardian: guardian })
     (ok true)))
 
-;; ----- Admin: validator set management -----
-
-;; Validators are the parties authorized to call `confirm-verified-contract`
-;; after the timelock elapses. The owner proposes templates; validators
-;; independently confirm. Adding a validator follows the same two-step
-;; pattern: owner proposes, ANYONE can confirm after TIMELOCK_BURN_BLOCKS
-;; (anyone, not validator-only, because the bootstrap case starts with
-;; zero validators -- and the timelock is the audit window). Removal is
-;; fast: a compromised validator should be ejected immediately. The owner
-;; cannot be a validator.
-(define-public (propose-validator (validator principal))
+(define-public (remove-guardian (guardian principal))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (not (is-eq validator (var-get contract-owner))) ERR_OWNER_CANNOT_BE_VALIDATOR)
-    (asserts! (not (is-validator validator)) ERR_ALREADY_VALIDATOR)
-    (asserts! (is-none (map-get? pending-validators validator)) ERR_VALIDATOR_PENDING)
-    (asserts! (< (var-get validator-count) MAX_VALIDATORS) ERR_VALIDATOR_LIMIT_REACHED)
-    (map-set pending-validators validator burn-block-height)
-    (print { event: "validator-proposed",
-             validator: validator,
-             proposed-at: burn-block-height,
-             eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS) })
-    (ok true)))
-
-(define-public (confirm-validator (validator principal))
-  (let ((proposed-at (unwrap! (map-get? pending-validators validator)
-                              ERR_NO_PENDING_VALIDATOR)))
-    (asserts! (>= burn-block-height (+ proposed-at TIMELOCK_BURN_BLOCKS))
-              ERR_TIMELOCK_NOT_ELAPSED)
-    (asserts! (< (var-get validator-count) MAX_VALIDATORS) ERR_VALIDATOR_LIMIT_REACHED)
-    (map-set validators validator true)
-    (var-set validator-count (+ (var-get validator-count) u1))
-    (map-delete pending-validators validator)
-    (print { event: "validator-confirmed", validator: validator })
-    (ok true)))
-
-(define-public (cancel-pending-validator (validator principal))
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (map-delete pending-validators validator)
-    (print { event: "validator-cancelled", validator: validator })
-    (ok true)))
-
-(define-public (remove-validator (validator principal))
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (is-validator validator) ERR_NOT_VALIDATOR)
-    (map-delete validators validator)
-    (var-set validator-count (- (var-get validator-count) u1))
-    (print { event: "validator-removed", validator: validator })
+    (asserts! (is-guardian guardian) ERR_NOT_GUARDIAN)
+    (map-delete guardians guardian)
+    (var-set guardian-count (- (var-get guardian-count) u1))
+    (print { event: "guardian-removed", guardian: guardian })
     (ok true)))
 
 ;; ----- Admin: protocol-wide pause -----
 
 ;; Pause = halt entries, keep exits open. Either the owner OR any
-;; validator can pause instantly so the trip-wire is distributed. Each
+;; guardian can pause instantly so the trip-wire is distributed. Each
 ;; pause call freshens `paused-at`, so re-pausing while already paused
 ;; restarts the unpause-eligibility timer (intentional: if a new threat
 ;; surfaces mid-pause, hitting pause again extends the cooldown).
 (define-public (pause)
   (begin
     (asserts! (or (is-eq tx-sender (var-get contract-owner))
-                  (is-validator tx-sender)) ERR_NOT_AUTHORIZED)
+                  (is-guardian tx-sender)) ERR_NOT_AUTHORIZED)
     (var-set paused true)
     (var-set paused-at burn-block-height)
     (print { event: "paused",
@@ -348,26 +270,36 @@
 (define-public (set-contract-owner (new-owner principal))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (not (is-validator new-owner)) ERR_NEW_OWNER_IS_VALIDATOR)
     (ok (var-set contract-owner new-owner))))
 
 ;; ----- Contract registration (vaults, reserves, snpls) -----
 
-;; Called by a vault, reserve, or snpl from its `initialize`. Single
-;; entry point because the auth check and on-chain semantics are
-;; identical for all three -- they're all hash-verified jing-ecosystem
+;; Called by a vault, reserve, market, or snpl from its `initialize`.
+;; Single entry point because the auth check and on-chain semantics are
+;; identical for all of them -- they're all hash-verified jing-ecosystem
 ;; contracts that get to write log-* events. The canonical principal
 ;; the caller passes tells indexers what kind of contract it is (its
 ;; name encodes the type, e.g. .jing-vault-v1 vs .loan-reserve vs
 ;; .loan-sbtc-stx-0-jing). One-way: no unregister, since severing a
 ;; registered contract from jing-core could strain in-flight funds.
-;; Anyone can initiate the tx; the hash check binds correctness.
+;;
+;; TWO checks bind correctness:
+;;  1. caller-hash == verified-hash[canonical]: the deployed bytecode
+;;     matches the canonical template the owner explicitly verified.
+;;  2. tx-sender == contract-owner: the deploying entity is the
+;;     contract-owner (intended multi-sig). Without this an attacker
+;;     could deploy hash-matching bytecode at their own principal and
+;;     register it under the canonical's verified hash, then write
+;;     arbitrary log-* events on jing-core under attacker-chosen
+;;     tokens/feed. The hash check alone binds CODE; this check binds
+;;     DEPLOYMENT to a trusted entity.
 (define-public (register (canonical principal))
   (let (
     (caller contract-caller)
     (caller-hash (unwrap! (contract-hash? contract-caller) ERR_INVALID_CONTRACT_HASH))
     (verified-hash (unwrap! (map-get? verified-contracts canonical) ERR_NOT_VERIFIED))
   )
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (asserts! (is-eq caller-hash verified-hash) ERR_HASH_MISMATCH)
     (asserts! (is-none (map-get? registered-contracts caller)) ERR_ALREADY_REGISTERED)
     (map-set registered-contracts caller true)

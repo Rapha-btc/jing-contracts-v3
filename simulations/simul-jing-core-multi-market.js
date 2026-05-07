@@ -1,7 +1,7 @@
 // simul-jing-core-multi-market.js
-// Stxer simulation: register both markets-sbtc-usdcx-jing and
-// markets-sbtc-stx-jing in one jing-core. Run interleaved deposits and
-// verify get-token-equity tracks each token correctly across markets.
+// Stxer simulation: register both markets in one jing-core. Same sBTC
+// depositor deposits into both → get-token-equity sums to 200k. Verifies
+// the equity ledger correctly aggregates per-token across markets.
 //
 // Run: npx tsx simulations/simul-jing-core-multi-market.js
 import fs from "node:fs";
@@ -9,18 +9,15 @@ import {
   ClarityVersion,
   uintCV,
   contractPrincipalCV,
-  standardPrincipalCV,
   stringAsciiCV,
   bufferCV,
 } from "@stacks/transactions";
 import { SimulationBuilder } from "stxer";
 import {
   DEPLOYER,
-  VALIDATOR,
   USDCX_DEPOSITOR_1,
   STX_DEPOSITOR_1,
   SBTC_DEPOSITOR_1,
-  TIMELOCK_BURN_BLOCKS,
   JING_CORE_NAME,
   SBTC_ADDR,
   SBTC_NAME,
@@ -55,7 +52,7 @@ const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const btcFeedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 
-const SBTC_PER_MARKET = 100_000;     // 0.001 BTC per market deposit
+const SBTC_PER_MARKET = 100_000;
 const USDCX_AMOUNT = 100_000_000;
 const STX_AMOUNT = 100_000_000;
 
@@ -64,10 +61,7 @@ async function main() {
   const usdcxMarketSource = fs.readFileSync(`./contracts/${USDCX_MARKET_NAME}.clar`, "utf8");
   const stxMarketSource = fs.readFileSync(`./contracts/${STX_MARKET_NAME}.clar`, "utf8");
 
-  console.log("=== JING-CORE MULTI-MARKET AGGREGATION ===");
-  console.log("Both markets registered in one jing-core. SBTC_DEPOSITOR_1");
-  console.log("deposits sBTC into both markets in the same cycle.");
-  console.log("Verify get-token-equity(sBTC, sBTC_dep) reflects the SUM.\n");
+  console.log("=== JING-CORE MULTI-MARKET AGGREGATION ===\n");
 
   const sessionId = await SimulationBuilder.new()
     .withSender(DEPLOYER)
@@ -84,45 +78,14 @@ async function main() {
       clarity_version: ClarityVersion.Clarity5,
     })
 
-    // Validator setup
+    // Verify both markets (one-step each, no timelock)
     .withSender(DEPLOYER)
     .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "propose-validator",
-      function_args: [standardPrincipalCV(VALIDATOR)],
-    })
-    .addAdvanceBlocks({
-      bitcoin_blocks: TIMELOCK_BURN_BLOCKS,
-      stacks_blocks_per_bitcoin: 1,
-      bitcoin_interval_secs: 1,
-    })
-    .withSender(VALIDATOR)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "confirm-validator",
-      function_args: [standardPrincipalCV(VALIDATOR)],
-    })
-
-    // Verify both markets
-    .withSender(DEPLOYER)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "propose-verified-contract",
+      contract_id: JING_CORE_ID, function_name: "set-verified-contract",
       function_args: [usdcxMarketCV],
     })
     .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "propose-verified-contract",
-      function_args: [stxMarketCV],
-    })
-    .addAdvanceBlocks({
-      bitcoin_blocks: TIMELOCK_BURN_BLOCKS,
-      stacks_blocks_per_bitcoin: 1,
-      bitcoin_interval_secs: 1,
-    })
-    .withSender(VALIDATOR)
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "confirm-verified-contract",
-      function_args: [usdcxMarketCV],
-    })
-    .addContractCall({
-      contract_id: JING_CORE_ID, function_name: "confirm-verified-contract",
+      contract_id: JING_CORE_ID, function_name: "set-verified-contract",
       function_args: [stxMarketCV],
     })
 
@@ -156,7 +119,6 @@ async function main() {
       function_args: [uintCV(SBTC_PER_MARKET), uintCV(1), sbtcTrait, sbtcAsset],
     })
 
-    // y-side depositors deposit into their respective markets
     .withSender(USDCX_DEPOSITOR_1)
     .addContractCall({
       contract_id: USDCX_MARKET_ID, function_name: "deposit-token-y",
@@ -168,16 +130,10 @@ async function main() {
       function_args: [uintCV(STX_AMOUNT), uintCV(1_000_000_000_000_000), wstxTrait, wstxAsset],
     })
 
-    // Equity reads -- sBTC depositor should hold equity in BOTH markets'
-    // buckets via the unified registry, BUT jing-core's bucket is per-vault
-    // (registered contract), not per-user. Per-user aggregation is off-chain.
-    // The market itself isn't in the equity ledger — only the depositor is.
-    // So for SBTC_DEPOSITOR_1: their per-user sBTC equity should = 2*100k.
+    // Equity reads
     .addEvalCode(JING_CORE_ID, `(get-token-equity '${SBTC_FQN} '${SBTC_DEPOSITOR_1})`)
     .addEvalCode(JING_CORE_ID, `(get-balance '${SBTC_DEPOSITOR_1})`)
-    // Total sBTC equity (across all owners)
     .addEvalCode(JING_CORE_ID, `(get-total-token-equity '${SBTC_FQN})`)
-    // y-side equities
     .addEvalCode(JING_CORE_ID, `(get-token-equity '${USDCX_FQN} '${USDCX_DEPOSITOR_1})`)
     .addEvalCode(JING_CORE_ID, `(get-token-equity '${WSTX_FQN} '${STX_DEPOSITOR_1})`)
     .addEvalCode(JING_CORE_ID, `(get-total-token-equity '${USDCX_FQN})`)
