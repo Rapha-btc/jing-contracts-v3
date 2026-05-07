@@ -66,10 +66,9 @@ internet access at run time.
 
 ## Coverage matrix
 
-All 30 sims green as of 2026-05-07 (re-run after the gate-at-market
-refactor — markets' `initialize` now asserts `tx-sender ==
-jing-core.get-contract-owner` before calling register).
-✓ = clean run, expected errors only.
+All 35 sims green as of 2026-05-07. ✓ = clean run, expected errors
+only. Every public function on both market contracts has at least one
+sim exercising it.
 
 | Sim | sBTC/USDCx | sBTC/STX | What it proves |
 |-----|------------|----------|----------------|
@@ -91,6 +90,10 @@ jing-core.get-contract-owner` before calling register).
 | `simul-jing-core-hash-mismatch.js` | [✓](https://stxer.xyz/simulations/mainnet/38300ef591a410cb164f8dc449c03812) — registry hash gate | Verifies market-A's hash via single-step `set-verified-contract`. `market-B.initialize(canonical = market-A)` → `u5006 HASH_MISMATCH`. `market-B.initialize(canonical = market-B)` (not verified) → `u5005 NOT_VERIFIED`. Non-deployer call to `market-A.initialize` → `u1011` (market's own operator gate). Sanity: owner's market-A.initialize succeeds. |
 | `simul-jing-core-multi-market.js` | [✓](https://stxer.xyz/simulations/mainnet/fe43aad16da54d23e2d625cf00645bad) — multi-market jing-core | Both markets registered in one jing-core. Same sBTC depositor deposits into both (100k sats each). `get-token-equity(SBTC, depositor)` = u200,000 (correct sum). `get-balance(depositor)` = `(ok u200000)`. y-side equities tracked per-token correctly. |
 | `simul-jing-core-get-balance.js` | [✓](https://stxer.xyz/simulations/mainnet/32595c389b511250471108f60f3ce059) — Zest read | `get-balance(user)` ≡ `get-token-equity(SBTC_TOKEN, user)`. After deposit cycle, sBTC depositor: both reads return u100000. USDCx-only depositor: get-balance returns `(ok u0)`, USDCx equity returns u100,000,000. |
+| `*-limit-updates.js` | [✓](https://stxer.xyz/simulations/mainnet/56ef5a076297b63fc40f445fb867ec13) | [✓](https://stxer.xyz/simulations/mainnet/9c442e10845bb514f7a91180ed00fdc4) | `set-token-y-limit` / `set-token-x-limit` mid-cycle update the limits map (read confirms new value). All three negative gates fire: non-depositor → `u1008 NOTHING_TO_WITHDRAW`, limit = 0 → `u1017 LIMIT_REQUIRED`, settle phase → `u1002 NOT_DEPOSIT_PHASE`. |
+| `*-operator-setters.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/ff67bee31b1251c717ccf5db48494534) | n/a — same contract surface | Every operator-only setter exercised: `set-treasury`, `set-paused`, `set-operator`, `set-min-token-y-deposit`, `set-min-token-x-deposit`. Non-operator caller → `u1011 ERR_NOT_AUTHORIZED` for each. Effect-tested: `set-paused(true)` → next deposit reverts `u1010 ERR_PAUSED` (market-level, distinct from jing-core pause); `set-min-*(N)` → deposit below N reverts `u1001 DEPOSIT_TOO_SMALL`; `set-operator(new)` → old operator's set-treasury reverts `u1011`, new operator's succeeds. |
+| `*-queue-full.js` (stx) | [✓](https://stxer.xyz/simulations/mainnet/2e14807e15a24599d9e4d34e884e359d) | n/a — usdcx covers the SIP-010 path | Mirror of usdcx queue-full but tests the **native `stx-transfer?` refund path** for the bumped-out depositor. Patches `MAX_DEPOSITORS u50 → u5`. 5 fish fill, challenger w/ amount = smallest → `u1013 ERR_QUEUE_FULL`; challenger w/ amount > smallest → bumps fish[0], fish[0]'s STX balance refunded by exactly the bumped amount via native stx-transfer?. |
+| `*-one-sided-cycle.js` (usdcx) | [✓](https://stxer.xyz/simulations/mainnet/aded336208b440b94e66be523287995b) | n/a — same logic in stx | Cycle with deposits only on token-y, none on token-x. `close-deposits` fails `u1012 ERR_NOTHING_TO_SETTLE` (total-x = 0 < min-token-x). After adding the missing x-side deposit, `close-deposits` succeeds and `settle-with-refresh` clears normally. |
 
 ## Defensive gates verified by code review only (not stxer-reachable)
 
