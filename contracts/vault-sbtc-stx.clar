@@ -273,19 +273,24 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint))
-  (let (
-    (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
-      action: "bitflow-swap",
-      side: side,
-      amount: amount,
-      limit-price: limit-price,
-      auth-id: auth-id,
-      expiry: expiry,
-    }))
-    (min-out (derive-min-out side amount limit-price))
-  )
+  (begin
+    ;; Validate inputs BEFORE computing min-out. derive-min-out divides by
+    ;; limit-price on the wstx side; binding it inside `let` would runtime-
+    ;; panic on limit-price=0 before the assert could surface a clean
+    ;; ERR_INVALID_PRICE.
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
+    (let (
+      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+        action: "bitflow-swap",
+        side: side,
+        amount: amount,
+        limit-price: limit-price,
+        auth-id: auth-id,
+        expiry: expiry,
+      }))
+      (min-out (derive-min-out side amount limit-price))
+    )
     (try! (verify-and-consume msg-hash sig expiry))
     ;; side=wstx: spending STX (y), receiving sBTC (x) -> swap-y-for-x. Returns dx (uint).
     ;; side=sbtc: spending sBTC (x), receiving STX (y) -> swap-x-for-y. Returns dy (uint).
@@ -303,7 +308,7 @@
         (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
         (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
         amount limit-price out))
-      (ok msg-hash))))
+      (ok msg-hash)))))
 
 ;; Execute a signed DLMM swap intent on Bitflow's
 ;; dlmm-pool-stx-sbtc-v-1-bps-15 (pool layout: x=wstx, y=sBTC).
@@ -319,19 +324,21 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint))
-  (let (
-    (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
-      action: "dlmm-swap",
-      side: side,
-      amount: amount,
-      limit-price: limit-price,
-      auth-id: auth-id,
-      expiry: expiry,
-    }))
-    (min-out (derive-min-out side amount limit-price))
-  )
+  (begin
+    ;; Validate inputs BEFORE computing min-out -- see execute-bitflow-swap.
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
+    (let (
+      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+        action: "dlmm-swap",
+        side: side,
+        amount: amount,
+        limit-price: limit-price,
+        auth-id: auth-id,
+        expiry: expiry,
+      }))
+      (min-out (derive-min-out side amount limit-price))
+    )
     (try! (verify-and-consume msg-hash sig expiry))
     ;; side=wstx: spending wstx (x), want sBTC (y) -> swap-x-for-y-simple-multi
     ;; side=sbtc-token: spending sBTC (y), want wstx (x) -> swap-y-for-x-simple-multi
@@ -355,7 +362,7 @@
         (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
         (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
         amount limit-price (get out result)))
-      (ok msg-hash))))
+      (ok msg-hash)))))
 
 ;; ---------------------------------------------------------------
 ;; Internal helpers

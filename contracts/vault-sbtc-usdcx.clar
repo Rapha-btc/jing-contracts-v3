@@ -253,19 +253,24 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint))
-  (let (
-    (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
-      action: "dlmm-swap",
-      side: side,
-      amount: amount,
-      limit-price: limit-price,
-      auth-id: auth-id,
-      expiry: expiry,
-    }))
-    (min-out (derive-min-out side amount limit-price))
-  )
+  (begin
+    ;; Validate inputs BEFORE computing min-out. derive-min-out divides by
+    ;; limit-price on the usdcx side; binding it inside `let` would
+    ;; runtime-panic on limit-price=0 before the assert could surface a
+    ;; clean ERR_INVALID_PRICE.
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_SBTC) (is-eq side ASSET_USDCX)) ERR_INVALID_SIDE)
+    (let (
+      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+        action: "dlmm-swap",
+        side: side,
+        amount: amount,
+        limit-price: limit-price,
+        auth-id: auth-id,
+        expiry: expiry,
+      }))
+      (min-out (derive-min-out side amount limit-price))
+    )
     (try! (verify-and-consume msg-hash sig expiry))
     ;; side=sbtc-token: spending sBTC (x), want USDCx (y) -> swap-x-for-y-simple-multi
     ;; side=usdcx-token: spending USDCx (y), want sBTC (x) -> swap-y-for-x-simple-multi
@@ -289,7 +294,7 @@
         (if (is-eq side ASSET_SBTC) SBTC_TOKEN USDCX_TOKEN)
         (if (is-eq side ASSET_SBTC) USDCX_TOKEN SBTC_TOKEN)
         amount limit-price (get out result)))
-      (ok msg-hash))))
+      (ok msg-hash)))))
 
 ;; ---------------------------------------------------------------
 ;; Internal helpers
