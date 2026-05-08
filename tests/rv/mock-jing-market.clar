@@ -26,3 +26,16 @@
 (define-public (cancel-token-y-deposit
   (t <ft-trait>) (asset-name (string-ascii 128)))
   (begin (asserts! true (err u0)) (ok u0)))
+
+;; snpl reads these:
+(define-read-only (get-current-cycle) u0)
+
+(define-read-only (get-token-x-deposit (cycle uint) (depositor principal)) u0)
+
+(define-read-only (get-token-y-deposit (cycle uint) (depositor principal)) u0)
+
+(define-public (set-token-x-limit (limit-price uint))
+  (begin (asserts! true (err u0)) (ok true)))
+
+(define-public (set-token-y-limit (limit-price uint))
+  (begin (asserts! true (err u0)) (ok true)))

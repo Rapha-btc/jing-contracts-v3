@@ -151,6 +151,36 @@ text = text.replace(
     "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2",
     ".mock-ft"
 )
+
+# SNPL-specific: pre-init current-reserve to mock-reserve so RV doesn't
+# need to randomly generate a successful initialize() call to unlock
+# the lifecycle. Same idea as initialized=true on the markets/vaults.
+text = text.replace(
+    "(define-data-var current-reserve principal SAINT)",
+    "(define-data-var current-reserve principal .mock-reserve)"
+)
+# Reduce CLAWBACK-DELAY for fuzzing so RV can reach the past-deadline
+# branches (seize, anyone-can-cancel-swap) without having to advance
+# 4200 blocks. u10 is plenty for fuzz.
+text = text.replace(
+    "(define-constant CLAWBACK-DELAY u4200)",
+    "(define-constant CLAWBACK-DELAY u10)"
+)
+# JING-TREASURY hardcoded mainnet principal (snpl repay carve-out).
+# Replace with a simnet account address so the contract can compile and
+# transfers don't depend on resolving a mainnet principal.
+text = text.replace(
+    "'SMH8FRN30ERW1SX26NJTJCKTDR3H27NRJ6W75WQE",
+    "'ST3AM1A56AK2C1XAFJ4115ZSV26EB49BVQ10MGCS0"
+)
+# SNPL-only: the borrow-side slippage check `interest-bps == line-bps`
+# blocks every RV-generated borrow because RV's random uint never
+# matches mock-reserve's fixed return value (200). Disable for fuzz so
+# the loan lifecycle can actually start. Production keeps the check.
+text = text.replace(
+    "(asserts! (is-eq interest-bps line-bps) ERR-INTEREST-MISMATCH)",
+    "(asserts! true ERR-INTEREST-MISMATCH)"
+)
 # Reserve / SNPL local refs
 text = text.replace(
     ".reserve-trait",
