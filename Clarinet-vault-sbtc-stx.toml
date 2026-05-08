@@ -1,0 +1,68 @@
+# RV-only manifest for fuzzing vault-sbtc-stx.
+#
+# The vault hardcodes 7 external principals (sBTC, USDCx, jing-market,
+# dlmm-router, dlmm-pool, jing-core, jing-vault-auth). All replaced with
+# local mocks at build time. See tests/rv/build.sh and
+# tests/rv/README.md.
+[project]
+name = "jing-contracts-v3-rv-vault-stx"
+description = "RV-only manifest for fuzzing vault-sbtc-stx"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Order matters: traits, mocks, then SUT.
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-vault-auth]
+path = "tests/rv/mock-jing-vault-auth.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-market]
+path = "tests/rv/mock-jing-market.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-pool]
+path = "tests/rv/mock-dlmm-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-router]
+path = "tests/rv/mock-dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-pool]
+path = "tests/rv/mock-xyk-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-core]
+path = "tests/rv/mock-xyk-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.vault-sbtc-stx]
+path = "tests/rv/.build/vault-sbtc-stx.clar"
+clarity_version = 5
+epoch = "3.4"

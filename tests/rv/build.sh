@@ -31,6 +31,10 @@ declare -A SUTS=(
   ["markets-sbtc-usdcx-jing"]="contracts/markets-sbtc-usdcx-jing.clar"
   ["markets-sbtc-stx-jing"]="contracts/markets-sbtc-stx-jing.clar"
   ["jing-core"]="contracts/jing-core.clar"
+  ["vault-sbtc-usdcx"]="contracts/vault-sbtc-usdcx.clar"
+  ["vault-sbtc-stx"]="contracts/vault-sbtc-stx.clar"
+  ["snpl-sbtc-stx-jing"]="contracts/snpl-sbtc-stx-jing.clar"
+  ["reserve-sbtc-stx-jing"]="contracts/reserve-sbtc-stx-jing.clar"
 )
 
 # Mainnet SIP-010 trait reference (must match the use-trait line in the
@@ -95,6 +99,74 @@ text = text.replace(
 text = text.replace(
     "(define-data-var min-token-x-deposit uint u0)",
     "(define-data-var min-token-x-deposit uint u1)"
+)
+
+# 6. Vault-specific rewrites (only fire if patterns match):
+#    - mainnet sBTC + USDCx pinned constants -> single mock-ft
+#    - mainnet DLMM router + pool -> mock-dlmm-router
+#    - .markets-sbtc-{usdcx,stx}-jing -> .mock-jing-market
+#    - .jing-vault-auth -> .mock-jing-vault-auth
+text = text.replace(
+    "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token",
+    ".mock-ft"
+)
+text = text.replace(
+    "'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx",
+    ".mock-ft"
+)
+text = text.replace(
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1",
+    ".mock-dlmm-router"
+)
+text = text.replace(
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10",
+    ".mock-dlmm-pool"
+)
+text = text.replace(
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15",
+    ".mock-dlmm-pool"
+)
+text = text.replace(
+    "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2",
+    ".mock-xyk-core"
+)
+text = text.replace(
+    "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1",
+    ".mock-xyk-pool"
+)
+text = text.replace(
+    ".markets-sbtc-usdcx-jing",
+    ".mock-jing-market"
+)
+text = text.replace(
+    ".markets-sbtc-stx-jing",
+    ".mock-jing-market"
+)
+text = text.replace(
+    ".jing-vault-auth",
+    ".mock-jing-vault-auth"
+)
+# Mainnet wstx pseudo-token used by vault-sbtc-stx (token-y for STX vault).
+text = text.replace(
+    "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2",
+    ".mock-ft"
+)
+# Reserve / SNPL local refs
+text = text.replace(
+    ".reserve-trait",
+    ".reserve-trait"
+)
+text = text.replace(
+    ".snpl-trait",
+    ".snpl-trait"
+)
+text = text.replace(
+    ".reserve-sbtc-stx-jing",
+    ".reserve-sbtc-stx-jing"
+)
+text = text.replace(
+    ".snpl-sbtc-stx-jing",
+    ".snpl-sbtc-stx-jing"
 )
 
 # Append invariants
