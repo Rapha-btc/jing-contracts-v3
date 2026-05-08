@@ -221,10 +221,21 @@
       (get-token-x-deposit cycle depositor))
     (map-delete token-x-deposits { cycle: cycle, depositor: depositor })))
 
+;; Merge cycle's depositor lists into next-cycle's existing lists, rather than
+;; overwrite. This preserves any depositors that small-share-filter (in
+;; close-deposits) already rolled forward to next-cycle before cancel-cycle
+;; was called. The two lists are disjoint at cancel-cycle time -- rolled
+;; depositors are removed from cycle's list -- so concat is correct.
 (define-private (roll-depositor-lists (cycle uint))
-  (begin
-    (map-set token-y-depositor-list (+ cycle u1) (get-token-y-depositors cycle))
-    (map-set token-x-depositor-list (+ cycle u1) (get-token-x-depositors cycle))
+  (let ((next-cycle (+ cycle u1)))
+    (map-set token-y-depositor-list next-cycle
+      (unwrap-panic (as-max-len?
+        (concat (get-token-y-depositors next-cycle) (get-token-y-depositors cycle))
+        u50)))
+    (map-set token-x-depositor-list next-cycle
+      (unwrap-panic (as-max-len?
+        (concat (get-token-x-depositors next-cycle) (get-token-x-depositors cycle))
+        u50)))
     (map-delete token-y-depositor-list cycle)
     (map-delete token-x-depositor-list cycle)))
 
@@ -674,12 +685,17 @@
     (cycle (var-get current-cycle))
     (closed-block (var-get deposits-closed-block))
     (totals (get-cycle-totals cycle))
+    (totals-next (get-cycle-totals (+ cycle u1)))
   )
     (asserts! (> closed-block u0) ERR_NOT_SETTLE_PHASE)
     (asserts! (>= stacks-block-height (+ closed-block CANCEL_THRESHOLD))
               ERR_CANCEL_TOO_EARLY)
     (asserts! (is-none (map-get? settlements cycle)) ERR_ALREADY_SETTLED)
-    (map-set cycle-totals (+ cycle u1) totals)
+    ;; Merge cycle totals into next-cycle totals (don't overwrite). Preserves
+    ;; amounts that small-share-filter already moved to next-cycle.
+    (map-set cycle-totals (+ cycle u1)
+      { total-token-x: (+ (get total-token-x totals) (get total-token-x totals-next)),
+        total-token-y: (+ (get total-token-y totals) (get total-token-y totals-next)) })
     (map-delete cycle-totals cycle)
     (map roll-token-y-depositor (get-token-y-depositors cycle))
     (map roll-token-x-depositor (get-token-x-depositors cycle))
