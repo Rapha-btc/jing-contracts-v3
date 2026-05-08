@@ -1552,9 +1552,19 @@ describe.skipIf(!remoteDataEnabled)(
 
       // Skip settle, wait past CANCEL_THRESHOLD.
       simnet.mineEmptyBlocks(CANCEL_THRESHOLD + 1);
-      expect(pub(C, "cancel-cycle", [], wallet1).result).toBeOk(
-        Cl.bool(true),
+      const cancelResult = pub(C, "cancel-cycle", [], wallet1);
+      expect(cancelResult.result).toBeOk(Cl.bool(true));
+
+      // cancel-cycle event logs MERGED C+1 post-state (whale + fish).
+      const cancelEvents = cancelResult.events
+        .filter((e: any) => e.event === "print_event")
+        .map((e: any) => cvToJSON(e.data.value));
+      const cancelEvent = cancelEvents.find(
+        (v: any) => v.value?.event?.value === "cancel-cycle",
       );
+      expect(cancelEvent).toBeDefined();
+      expect(Number(cancelEvent!.value["y-rolled"].value)).toBe(STX_500 + 1);
+      expect(Number(cancelEvent!.value["x-rolled"].value)).toBe(SBTC_2K);
 
       // Cycle 1 totals: WHALE + FISH preserved.
       const totalsC1Post = cvToJSON(

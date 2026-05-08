@@ -2004,9 +2004,23 @@ describe.skipIf(!remoteDataEnabled)(
 
       // Skip settle. Wait past CANCEL_THRESHOLD.
       simnet.mineEmptyBlocks(CANCEL_THRESHOLD + 1);
-      expect(pub(C, "cancel-cycle", [], wallet1).result).toBeOk(
-        Cl.bool(true),
+      const cancelResult = pub(C, "cancel-cycle", [], wallet1);
+      expect(cancelResult.result).toBeOk(Cl.bool(true));
+
+      // The cancel-cycle event logs the MERGED C+1 post-state (whale + fish),
+      // not just the rolled-from-C amounts. Pre-merge-fix this would have
+      // logged 500_000_000 (whale only); post-fix it logs 500_000_001.
+      const cancelEvents = cancelResult.events
+        .filter((e: any) => e.event === "print_event")
+        .map((e: any) => cvToJSON(e.data.value));
+      const cancelEvent = cancelEvents.find(
+        (v: any) => v.value?.event?.value === "cancel-cycle",
       );
+      expect(cancelEvent).toBeDefined();
+      expect(Number(cancelEvent!.value["y-rolled"].value)).toBe(
+        500 * USDCX_1 + 1,
+      );
+      expect(Number(cancelEvent!.value["x-rolled"].value)).toBe(SBTC_2K);
 
       // Cycle 1 totals should hold WHALE + FISH on token-y, not just whale.
       const totalsC1Post = cvToJSON(
