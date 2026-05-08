@@ -658,23 +658,26 @@
     (closed-block (var-get deposits-closed-block))
     (totals (get-cycle-totals cycle))
     (totals-next (get-cycle-totals (+ cycle u1)))
+    (merged-x (+ (get total-token-x totals) (get total-token-x totals-next)))
+    (merged-y (+ (get total-token-y totals) (get total-token-y totals-next)))
   )
     (asserts! (> closed-block u0) ERR_NOT_SETTLE_PHASE)
     (asserts! (>= stacks-block-height (+ closed-block CANCEL_THRESHOLD))
               ERR_CANCEL_TOO_EARLY)
     (asserts! (is-none (map-get? settlements cycle)) ERR_ALREADY_SETTLED)
     ;; Merge cycle totals into next-cycle totals (don't overwrite). Preserves
-    ;; amounts that small-share-filter already moved to next-cycle.
+    ;; amounts that small-share-filter already moved to next-cycle. Logged
+    ;; values reflect the merged C+1 post-state so indexers don't have to
+    ;; reconstruct it from prior small-share-roll events.
     (map-set cycle-totals (+ cycle u1)
-      { total-token-x: (+ (get total-token-x totals) (get total-token-x totals-next)),
-        total-token-y: (+ (get total-token-y totals) (get total-token-y totals-next)) })
+      { total-token-x: merged-x, total-token-y: merged-y })
     (map-delete cycle-totals cycle)
     (map roll-token-y-depositor (get-token-y-depositors cycle))
     (map roll-token-x-depositor (get-token-x-depositors cycle))
     (roll-depositor-lists cycle)
     (advance-cycle)
     (try! (contract-call? .jing-core log-cancel-cycle
-            cycle (get total-token-x totals) (get total-token-y totals)
+            cycle merged-x merged-y
             (var-get token-x) (var-get token-y)))
     (ok true)))
 
