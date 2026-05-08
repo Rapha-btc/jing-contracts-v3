@@ -1,0 +1,19 @@
+# RV-only manifest for fuzzing jing-core.
+#
+# jing-core is Clarity 4 (uses contract-hash? + bool registry shape) --
+# different from the markets/vaults/reserve which are Clarity 5.
+[project]
+name = "jing-contracts-v3-rv-jing-core"
+description = "RV-only manifest for fuzzing jing-core"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.jing-core]
+path = "tests/rv/.build/jing-core.clar"
+clarity_version = 4
+epoch = "latest"
