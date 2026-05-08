@@ -100,6 +100,16 @@ npx vitest run tests/snpl-sbtc-stx-jing.test.ts         # snpl loan lifecycle
 
 Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
 
+### Rendezvous (RV) property fuzzing
+
+```sh
+bash tests/rv/build.sh                                                    # rebuild .clar with mocks
+npx rv . markets-sbtc-usdcx-jing invariant --runs=500 --bail              # fuzz USDCx market
+npx rv . markets-sbtc-stx-jing   invariant --runs=500 --bail              # fuzz STX market
+```
+
+13 invariants per market — list/totals consistency, no-ghosts, bounded lists, cleared-≤-deposited at settle, and `invariant-balance-eq-cycle-totals` (compares actual contract token balance to the sum of `cycle-totals` across cycles 0..199, the one that catches state-corruption bugs like the cancel-cycle × small-share-roll bug above). Both markets pass 500-run sweeps clean. See `tests/rv/README.md` for harness details, the build pipeline, and how the bug was empirically caught by reverting the fix in `.build/`.
+
 ### File map
 
 | File | Surface | Tests |
@@ -139,7 +149,7 @@ Each file is **parity with the matching stxer simulations** in `simulations/`, w
 
 | # | Bug | Found by | Fix commit |
 |---|---|---|---|
-| 1 | `cancel-cycle` overwrote `cycle-totals[C+1]` and the C+1 depositor list — wiping any depositors that `close-deposits` had already moved forward via small-share-filter. Pre-fix: fish-funds locked or whale-funds locked depending on cancel order. | Rendezvous fuzz | merge instead of overwrite |
+| 1 | `cancel-cycle` overwrote `cycle-totals[C+1]` and the C+1 depositor list — wiping any depositors that `close-deposits` had already moved forward via small-share-filter. Pre-fix: fish-funds locked or whale-funds locked depending on cancel order. | Property-based invariant survey of contracts before deploy | `roll-depositor-lists` and `cancel-cycle` totals merge instead of overwrite — `b693796`. Stxer regression sim added per market — `b00693c`. RV harness with `invariant-balance-eq-cycle-totals` set up to catch this class in future runs — `cd10324`, `4ff5170`. |
 | 2 | `execute-{bitflow,dlmm}-swap` panicked with `Runtime(DivisionByZero)` instead of returning `ERR_INVALID_PRICE` when `limit-price=0` on the side where `limit-price` is in the divisor (`wstx` for `vault-sbtc-stx`, `usdcx-token` for `vault-sbtc-usdcx`). The `let` binding evaluated `min-out` before the assert. | Clarinet vault test (`tests/vault-sbtc-stx.test.ts`) | hoist asserts before the let — `ca9793d` |
 
 ### Known wrinkles
