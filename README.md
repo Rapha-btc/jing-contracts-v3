@@ -92,9 +92,11 @@ npx vitest run tests/markets-sbtc-usdcx-jing.test.ts    # USDCx market
 npx vitest run tests/markets-sbtc-stx-jing.test.ts      # sBTC/STX market
 npx vitest run tests/vault-sbtc-usdcx.test.ts           # USDCx vault
 npx vitest run tests/vault-sbtc-stx.test.ts             # sBTC/STX vault
+npx vitest run tests/reserve-sbtc-stx-jing.test.ts      # lender reserve
+npx vitest run tests/snpl-sbtc-stx-jing.test.ts         # snpl loan lifecycle
 ```
 
-**Total: 124 clarinet tests across 5 files** covering `jing-core`, both markets, and both personal vaults (`jing-vault-auth` is exercised indirectly by every signed-intent test).
+**Total: 149 clarinet tests across 7 files** covering `jing-core`, both markets, both personal vaults, the sBTC reserve, and the per-borrower snpl loan contract (`jing-vault-auth` is exercised indirectly by every signed-intent test).
 
 Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
 
@@ -107,6 +109,8 @@ Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, 
 | `tests/markets-sbtc-stx-jing.test.ts` | sBTC/STX market (dual-feed, BTC/USD + STX/USD; STX side via the bitflow `token-stx-v-1-2` wstx facade with native `stx-transfer?` underneath). | 35 |
 | `tests/vault-sbtc-usdcx.test.ts` | Personal vault for the sBTC/USDCx market: SIP-018 signed intents (jing-deposit, dlmm-swap), owner deposits/withdrawals, keeper cancels, equity ledger. | 20 |
 | `tests/vault-sbtc-stx.test.ts` | Personal vault for the sBTC/STX market: same shape as USDCx vault plus `execute-bitflow-swap` (xyk-core path); native STX deposits/withdrawals via `stx-transfer?`. | 22 |
+| `tests/reserve-sbtc-stx-jing.test.ts` | sBTC funding reserve: lender supply/withdraw, credit-line CRUD, paused, min-sbtc-draw, draw + notify-return (snpl-gated paths). | 14 |
+| `tests/snpl-sbtc-stx-jing.test.ts` | Per-borrower swap-now-pay-later loan lifecycle: initialize, set-reserve, borrow, swap-deposit, cancel-swap, set-swap-limit, repay, seize. Past-deadline tests use `simnet.deployContract` with `CLAWBACK-DELAY u10` (vs production `u4200`). | 11 |
 
 Each file is **parity with the matching stxer simulations** in `simulations/`, with the trade-off that clarinet runs locally and instantly while stxer hits a live mainnet fork. The two suites are intentionally redundant: simnet catches logic bugs at the bytecode level, stxer catches integration bugs against real mainnet state (Pyth freshness, Bitflow pool depth, wstx behavior).
 
@@ -126,6 +130,10 @@ Each file is **parity with the matching stxer simulations** in `simulations/`, w
 - **Queue-full + smallest-bumping** — runtime-patched market with `MAX_DEPOSITORS u5` (vs production `u50`). Fish queue saturated, challenger with equal amount rejected (1013), challenger with bigger amount bumps the smallest, refund balance delta verified.
 - **Vault SIP-018 signed intents** — every public function on both vaults (`initialize`, `set-owner-pubkey`, `set-keeper`, `deposit-*`, `withdraw-*`, `revoke-intent`, `cancel-jing-*`, `execute-jing-deposit`, `execute-bitflow-swap`, `execute-dlmm-swap`) plus all 8 vault error codes. Signatures generated locally via `@stacks/transactions.signMessageHashRsv` against the deployer's simnet private key; pubkey installed via `set-owner-pubkey`; message hashes computed by calling `jing-vault-auth.build-intent-hash` read-only. Failure modes: `INVALID_SIGNATURE` (wrong key), `REPLAY` (re-submit same intent), `EXPIRED` (past block height), `INVALID_SIDE` (bad side string), `INVALID_PRICE` (zero limit-price on the side where it's in the divisor — verifies the assert-before-let fix).
 - **Vault → jing-core integration** — every vault-side `log-*` (`log-deposit`, `log-withdraw`, `log-revoke`, `log-cancel`, `log-jing-deposit`, `log-bitflow-swap`) is exercised. Vault's equity bucket on jing-core matches its on-chain balance through the full deposit/withdraw/cancel/swap lifecycle.
+- **Reserve admin + credit lines** — lender-only `supply`, `withdraw-sbtc`, `withdraw-stx`, `set-paused`, `set-min-sbtc-draw`. Credit-line CRUD: `open-credit-line` rejects mismatched borrower (210), duplicates (205); `set-credit-line-cap` / `set-credit-line-interest` / `close-credit-line` reject missing lines (206); `close-credit-line` rejects non-zero outstanding (207).
+- **Reserve `draw` + `notify-return`** — snpl-gated paths reachable via `snpl.borrow` / `snpl.repay`: ERR-NO-CREDIT-LINE (201), ERR-INVALID-AMOUNT below min-sbtc-draw (204), ERR-OVER-LIMIT above cap (202), ERR-PAUSED (209), happy lifecycle bumps then drains `outstanding-sbtc` precisely. All 9 reserve-side `log-reserve-*` events on jing-core are exercised.
+- **SNPL loan lifecycle** — full `initialize → borrow → swap-deposit → cancel-swap → repay` happy path; status transitions (OPEN → REPAID, OPEN → SEIZED) verified on the loan record. Error gates: `borrow` ERR-INTEREST-MISMATCH (109), ERR-ACTIVE-LOAN-EXISTS (104); `swap-deposit` / `set-swap-limit` ERR-LOAN-NOT-FOUND (105), ERR-BAD-STATUS (106), ERR-PAST-DEADLINE (110); `repay` ERR-NOT-FULLY-RESOLVED (107) when sBTC is still locked in the market; `seize` ERR-DEADLINE-NOT-REACHED (108) pre-clawback. Past-deadline branches use a runtime-patched snpl with `CLAWBACK-DELAY u10` (vs production u4200) to avoid pushing simnet past the mainnet head.
+- **SNPL → jing-core integration** — every snpl-side `log-snpl-*` (`log-snpl-set-reserve`, `log-snpl-borrow`, `log-snpl-swap-deposit`, `log-snpl-cancel-swap`, `log-snpl-set-swap-limit`, `log-snpl-repay`, `log-snpl-seize`) is exercised end-to-end.
 
 ### Bugs found and fixed via clarinet + fuzz testing
 
