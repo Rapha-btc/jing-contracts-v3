@@ -17,10 +17,18 @@
 // further senders / calls after init.
 
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import {
   ClarityVersion,
   contractPrincipalCV,
   standardPrincipalCV,
+  serializeCV,
+  tupleCV,
+  stringAsciiCV,
+  uintCV,
+  privateKeyToPublic,
+  publicKeyToHex,
+  signMessageHashRsv,
 } from "@stacks/transactions";
 
 // --- Mainnet addresses used across all v3 sims ---
@@ -149,4 +157,109 @@ export function addRegistryInit(builder, { marketName, initializeArgs, marketSou
       function_name: "initialize",
       function_args: initializeArgs,
     });
+}
+
+// ============================================================================
+// SIP-018 helpers for vault signed-intent stxer sims.
+//
+// The vaults verify intent signatures via `secp256k1-recover?` against the
+// stored `owner-pubkey`. Stxer simulates calls from real mainnet addresses
+// (e.g. SPV9... DEPLOYER) but we don't have their private keys. Workaround:
+//
+//   1. Pick a deterministic test private key (TEST_INTENT_PRIVKEY below).
+//   2. Derive its 33-byte compressed pubkey (TEST_INTENT_PUBKEY_HEX).
+//   3. In the sim, DEPLOYER (the vault OWNER) calls set-owner-pubkey to
+//      install TEST_INTENT_PUBKEY_HEX as the signature-verification pubkey.
+//   4. Sign messages off-chain with TEST_INTENT_PRIVKEY (RSV format).
+//   5. Submit signed intents from any sender (anyone can submit; the sig
+//      is the auth).
+//
+// The OWNER (mainnet address) and the signing-key pubkey are decoupled —
+// that's by design: OWNER controls who can update owner-pubkey, and
+// owner-pubkey is what verifies signatures. For stxer sims we set them to
+// different keys; in production they'd be the same key controlled by the
+// owner.
+// ============================================================================
+
+// 32-byte private key + 0x01 compression suffix (= 33 bytes / 66 hex chars).
+// Deterministic seed so the simulated owner-pubkey + signatures are
+// reproducible across runs.
+export const TEST_INTENT_PRIVKEY =
+  "1111111111111111111111111111111111111111111111111111111111111111" + "01";
+export const TEST_INTENT_PUBKEY_HEX = publicKeyToHex(
+  privateKeyToPublic(TEST_INTENT_PRIVKEY),
+);
+
+// Wrong-key pair to test ERR_INVALID_SIGNATURE in stxer sims.
+export const WRONG_INTENT_PRIVKEY =
+  "2222222222222222222222222222222222222222222222222222222222222222" + "01";
+
+// SIP-018 constants. Match jing-vault-auth.clar's get-domain-hash:
+//   sha256(consensusBuff({ name: "jing-vault", version: "1", chain-id: <id> }))
+const SIP018_PREFIX = Buffer.from("534950303138", "hex"); // ASCII "SIP018"
+const MAINNET_CHAIN_ID = 1;
+
+function sha256(buf) {
+  return createHash("sha256").update(buf).digest();
+}
+
+function cvSha256(cv) {
+  // @stacks/transactions v7 `serializeCV` returns a HEX STRING, not raw
+  // bytes. Buffer.from(string) without an encoding treats the hex chars
+  // as Latin1 (e.g. "0c00..." → bytes 0x30 0x63 0x30 0x30 ...) which
+  // doubles the byte stream and silently corrupts every downstream hash.
+  // Parse explicitly as hex.
+  const out = serializeCV(cv);
+  if (typeof out === "string") return sha256(Buffer.from(out, "hex"));
+  // Fallback for versions that return Uint8Array.
+  return sha256(Buffer.from(out));
+}
+
+function getDomainHash(chainId = MAINNET_CHAIN_ID) {
+  // Clarity serializes tuple keys in canonical (sorted) order. Match it
+  // explicitly here so JS object iteration order can't subtly diverge:
+  //   chain-id < name < version  (alphabetic).
+  const domain = tupleCV({
+    "chain-id": uintCV(chainId),
+    name: stringAsciiCV("jing-vault"),
+    version: stringAsciiCV("1"),
+  });
+  return cvSha256(domain);
+}
+
+/**
+ * Off-chain mirror of jing-vault-auth.build-intent-hash. Returns a 32-byte
+ * Buffer suitable for signMessageHashRsv (which takes hex). Use
+ * `.toString("hex")` for the message-hash hex string.
+ *
+ * @param {object} details
+ * @param {string} details.action      "jing-deposit" | "bitflow-swap" | "dlmm-swap"
+ * @param {string} details.side        e.g. "sbtc-token", "wstx", "usdcx-token"
+ * @param {number|bigint} details.amount
+ * @param {number|bigint} details.limitPrice
+ * @param {number|bigint} details.authId
+ * @param {number|bigint} details.expiry
+ * @param {number} [chainId]            defaults to mainnet (1)
+ */
+export function buildIntentHashHex(details, chainId) {
+  // Same canonical-order rationale as getDomainHash:
+  //   action < amount < auth-id < expiry < limit-price < side  (alphabetic).
+  const detailsTuple = tupleCV({
+    action: stringAsciiCV(details.action),
+    amount: uintCV(details.amount),
+    "auth-id": uintCV(details.authId),
+    expiry: uintCV(details.expiry),
+    "limit-price": uintCV(details.limitPrice),
+    side: stringAsciiCV(details.side),
+  });
+  const detailsHash = cvSha256(detailsTuple);
+  const composed = Buffer.concat([SIP018_PREFIX, getDomainHash(chainId), detailsHash]);
+  return sha256(composed).toString("hex");
+}
+
+/**
+ * Sign a hex message hash with RSV format. Convenience wrapper.
+ */
+export function signIntent(messageHashHex, privateKey = TEST_INTENT_PRIVKEY) {
+  return signMessageHashRsv({ messageHash: messageHashHex, privateKey });
 }
