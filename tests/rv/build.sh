@@ -181,6 +181,12 @@ text = text.replace(
     "(asserts! (is-eq interest-bps line-bps) ERR-INTEREST-MISMATCH)",
     "(asserts! true ERR-INTEREST-MISMATCH)"
 )
+# Reserve-only: pre-init `initialized` so RV doesn't need to randomly
+# generate a successful initialize() to unlock the lifecycle.
+text = text.replace(
+    "(define-data-var initialized bool false)",
+    "(define-data-var initialized bool true)"
+)
 # Reserve / SNPL local refs
 text = text.replace(
     ".reserve-trait",

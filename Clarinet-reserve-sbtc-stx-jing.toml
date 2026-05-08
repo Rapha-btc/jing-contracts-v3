@@ -1,0 +1,46 @@
+# RV-only manifest for fuzzing reserve-sbtc-stx-jing.
+[project]
+name = "jing-contracts-v3-rv-reserve"
+description = "RV-only manifest for fuzzing reserve-sbtc-stx-jing"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.reserve-trait]
+path = "contracts/reserve-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.snpl-trait]
+path = "contracts/snpl-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-snpl]
+path = "tests/rv/mock-snpl.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.reserve-sbtc-stx-jing]
+path = "tests/rv/.build/reserve-sbtc-stx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
