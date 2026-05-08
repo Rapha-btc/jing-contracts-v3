@@ -1939,6 +1939,156 @@ describe.skipIf(!remoteDataEnabled)(
       );
     });
 
+    // --- Regression: small-share-roll → cancel-cycle preserves rolled state ---
+    // Bug found via fuzzing (now fixed):
+    //   Pre-fix, cancel-cycle did `(map-set cycle-totals (+ cycle u1) totals)`
+    //   and `roll-depositor-lists` overwrote next-cycle's list with the current
+    //   cycle's list. If close-deposits' filter-small-share had already moved
+    //   tiny depositors C→C+1 (totals + list), and 42+ blocks then passed
+    //   without settlement, cancel-cycle would WIPE the fish entries from C+1.
+    //   Fish funds remained in token-y-deposits[(C+1, fish_n)] but were
+    //   invisible to settle (not in depositor-list) and to cycle-totals
+    //   (their amounts had been overwritten by whale-only).
+    //
+    // Fix:
+    //   - cancel-cycle now MERGES totals: (+ totals totals-next)
+    //   - roll-depositor-lists now CONCATS: (concat next-list current-list)
+    //
+    // Scenario tested here:
+    //   1. wallet5 deposits 1µUSDCx (fish, < 0.20% threshold).
+    //   2. wallet1 deposits 500 USDCx (whale).
+    //   3. wallet2 deposits sBTC (counter-party so close-deposits passes).
+    //   4. close-deposits: small-share-filter moves fish to C+1 (list+total).
+    //   5. Skip settle. Mine 42+ stacks blocks past close.
+    //   6. cancel-cycle: rolls whale C→C+1.
+    //   7. Verify C+1 contains BOTH whale and fish in totals + list.
+    it("regression: cancel-cycle after small-share-roll preserves rolled fish in C+1 totals + list", function () {
+      setupRegistryAndInit();
+      // Lower min so we can place a fish below the share threshold.
+      pub(C, "set-min-token-y-deposit", [Cl.uint(1)], deployer);
+
+      let funded = true;
+      try {
+        fundSbtc(wallet2, SBTC_2K);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v3-usdcx] cancel-cycle merge: skipped — VM bug");
+        return;
+      }
+      fundUsdcx(wallet1, 500 * USDCX_1);
+      fundUsdcx(wallet5, 1);
+
+      const LIMIT = 5_000_000_000_000;
+      depositY(1, LIMIT, wallet5);                  // FISH (1µUSDCx)
+      depositY(500 * USDCX_1, LIMIT, wallet1);      // WHALE (500 USDCx)
+      depositX(SBTC_2K, 1, wallet2);
+
+      expect(pub(C, "close-deposits", [], wallet1).result).toBeOk(
+        Cl.bool(true),
+      );
+
+      // Sanity post-close: fish was filtered to C+1.
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet5)]),
+      ).toBeUint(1);
+      expect(ro(C, "get-token-y-depositors", [Cl.uint(1)])).toBeList([
+        Cl.principal(wallet5),
+      ]);
+
+      const totalsC1Pre = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(1)]),
+      );
+      expect(Number(totalsC1Pre.value["total-token-y"].value)).toBe(1);
+
+      // Skip settle. Wait past CANCEL_THRESHOLD.
+      simnet.mineEmptyBlocks(CANCEL_THRESHOLD + 1);
+      expect(pub(C, "cancel-cycle", [], wallet1).result).toBeOk(
+        Cl.bool(true),
+      );
+
+      // Cycle 1 totals should hold WHALE + FISH on token-y, not just whale.
+      const totalsC1Post = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(1)]),
+      );
+      const yTotalAfter = Number(totalsC1Post.value["total-token-y"].value);
+      const xTotalAfter = Number(totalsC1Post.value["total-token-x"].value);
+      console.log(
+        `[v3-usdcx] cancel-cycle merge: cycle 1 totals = { y: ${yTotalAfter}, x: ${xTotalAfter} }`,
+      );
+      expect(yTotalAfter).toBe(500 * USDCX_1 + 1);   // whale + fish
+      expect(xTotalAfter).toBe(SBTC_2K);              // whale-x rolled in
+
+      // Depositor lists in C+1 contain BOTH fish and whale (concat order:
+      // fish was already in next-list before cancel; whale was in current-
+      // list and gets concatted onto next-list).
+      const yDeps = cvToJSON(ro(C, "get-token-y-depositors", [Cl.uint(1)]));
+      const yDepStrs = yDeps.value.map((p: any) => p.value);
+      console.log("[v3-usdcx] cycle 1 token-y depositors:", yDepStrs);
+      expect(yDepStrs).toContain(wallet1);
+      expect(yDepStrs).toContain(wallet5);
+
+      const xDeps = cvToJSON(ro(C, "get-token-x-depositors", [Cl.uint(1)]));
+      expect(xDeps.value.map((p: any) => p.value)).toContain(wallet2);
+
+      // Per-depositor maps still reflect each principal's amount.
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet5)]),
+      ).toBeUint(1);
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet1)]),
+      ).toBeUint(500 * USDCX_1);
+      expect(
+        ro(C, "get-token-x-deposit", [Cl.uint(1), Cl.principal(wallet2)]),
+      ).toBeUint(SBTC_2K);
+
+      // Cycle 0 cleared.
+      const totalsC0Post = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(0)]),
+      );
+      expect(Number(totalsC0Post.value["total-token-y"].value)).toBe(0);
+      expect(Number(totalsC0Post.value["total-token-x"].value)).toBe(0);
+      expect(ro(C, "get-token-y-depositors", [Cl.uint(0)])).toBeList([]);
+      expect(ro(C, "get-token-x-depositors", [Cl.uint(0)])).toBeList([]);
+    });
+
+    // --- ERR_STALE_PRICE (1005) ---
+    // MAX_STALENESS = u80 in the source. Pyth's stored publish-time is
+    // pinned to mainnet at fork time. Mining burn blocks advances
+    // stacks-block-time well past publish-time + 80 → freshness gate
+    // fires before the math runs.
+    it("settle: ERR_STALE_PRICE (1005) when stacks-block-time is past Pyth publish-time + MAX_STALENESS", function () {
+      setupRegistryAndInit();
+      let funded = true;
+      try {
+        fundSbtc(wallet2, SBTC_10K);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v3-usdcx] stale-price: skipped — VM bug");
+        return;
+      }
+      fundUsdcx(wallet1, USDCX_100);
+
+      const LIMIT_HIGH = 999_999_999_999_999;
+      depositY(USDCX_100, LIMIT_HIGH, wallet1);
+      depositX(SBTC_10K, 1, wallet2);
+      pub(C, "close-deposits", [], wallet1);
+
+      // Advance time past MAX_STALENESS u80. We use STACKS blocks (not
+      // burn blocks) so simnet's burn-block-height stays at the mainnet
+      // fork point — otherwise Hiro returns 404 for "future" mainnet
+      // state when settle reads pyth-storage. Each stacks block advances
+      // stacks-block-time; 200 blocks is well past 80s on any reasonable
+      // tenure cadence.
+      simnet.mineEmptyBlocks(200);
+
+      const r = settle(wallet1);
+      expect(r.result).toBeErr(Cl.uint(1005));
+    });
+
     // --- register hash-mismatch (5006) ---
     // Mirror of simul-jing-core-hash-mismatch.js. Deploy market-A unchanged
     // and market-B with a tweaked constant so its bytecode hash differs.

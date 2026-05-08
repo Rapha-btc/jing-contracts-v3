@@ -1509,6 +1509,121 @@ describe.skipIf(!remoteDataEnabled)(
       expect(stxAfter - stxBefore).toBe(yFee + yDust);
     });
 
+    // --- Regression: small-share-roll → cancel-cycle preserves rolled state ---
+    // See markets-sbtc-usdcx-jing.test.ts for the full bug context. Same
+    // pre-fix flaw existed in this file (roll-depositor-lists overwrote
+    // C+1's list, cancel-cycle overwrote C+1's totals). Same merge fix.
+    it("regression: cancel-cycle after small-share-roll preserves rolled fish in C+1 totals + list", function () {
+      setupRegistryAndInit();
+      pub(C, "set-min-token-y-deposit", [Cl.uint(1)], deployer);
+
+      let funded = true;
+      try {
+        fundSbtc(wallet2, SBTC_2K);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v3-stx] cancel-cycle merge: skipped — VM bug");
+        return;
+      }
+
+      const LIMIT = 99_999_999_999_999;
+      depositY(1, LIMIT, wallet5);              // FISH (1 µSTX)
+      depositY(STX_500, LIMIT, wallet1);        // WHALE (500 STX)
+      depositX(SBTC_2K, 1, wallet2);
+
+      expect(pub(C, "close-deposits", [], wallet1).result).toBeOk(
+        Cl.bool(true),
+      );
+
+      // Sanity: small-share-filter moved fish to C+1.
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet5)]),
+      ).toBeUint(1);
+      expect(ro(C, "get-token-y-depositors", [Cl.uint(1)])).toBeList([
+        Cl.principal(wallet5),
+      ]);
+
+      const totalsC1Pre = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(1)]),
+      );
+      expect(Number(totalsC1Pre.value["total-token-y"].value)).toBe(1);
+
+      // Skip settle, wait past CANCEL_THRESHOLD.
+      simnet.mineEmptyBlocks(CANCEL_THRESHOLD + 1);
+      expect(pub(C, "cancel-cycle", [], wallet1).result).toBeOk(
+        Cl.bool(true),
+      );
+
+      // Cycle 1 totals: WHALE + FISH preserved.
+      const totalsC1Post = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(1)]),
+      );
+      const yTotalAfter = Number(totalsC1Post.value["total-token-y"].value);
+      const xTotalAfter = Number(totalsC1Post.value["total-token-x"].value);
+      console.log(
+        `[v3-stx] cancel-cycle merge: cycle 1 totals = { y: ${yTotalAfter}, x: ${xTotalAfter} }`,
+      );
+      expect(yTotalAfter).toBe(STX_500 + 1);
+      expect(xTotalAfter).toBe(SBTC_2K);
+
+      // Both depositors in C+1 list.
+      const yDeps = cvToJSON(ro(C, "get-token-y-depositors", [Cl.uint(1)]));
+      const yDepStrs = yDeps.value.map((p: any) => p.value);
+      expect(yDepStrs).toContain(wallet1);
+      expect(yDepStrs).toContain(wallet5);
+
+      // Per-depositor amounts intact.
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet5)]),
+      ).toBeUint(1);
+      expect(
+        ro(C, "get-token-y-deposit", [Cl.uint(1), Cl.principal(wallet1)]),
+      ).toBeUint(STX_500);
+      expect(
+        ro(C, "get-token-x-deposit", [Cl.uint(1), Cl.principal(wallet2)]),
+      ).toBeUint(SBTC_2K);
+
+      // C cleared.
+      const totalsC0Post = cvToJSON(
+        ro(C, "get-cycle-totals", [Cl.uint(0)]),
+      );
+      expect(Number(totalsC0Post.value["total-token-y"].value)).toBe(0);
+      expect(Number(totalsC0Post.value["total-token-x"].value)).toBe(0);
+      expect(ro(C, "get-token-y-depositors", [Cl.uint(0)])).toBeList([]);
+      expect(ro(C, "get-token-x-depositors", [Cl.uint(0)])).toBeList([]);
+    });
+
+    // --- ERR_STALE_PRICE (1005) ---
+    // MAX_STALENESS = u80. Mine burn blocks to push stacks-block-time
+    // past publish-time + 80 — the dual-feed contract checks freshness
+    // on BOTH feed-x AND feed-y; either failing fires 1005.
+    it("settle: ERR_STALE_PRICE (1005) when stacks-block-time is past Pyth publish-time + MAX_STALENESS", function () {
+      setupRegistryAndInit();
+      let funded = true;
+      try {
+        fundSbtc(wallet2, SBTC_10K);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v3-stx] stale-price: skipped — VM bug");
+        return;
+      }
+
+      const LIMIT_HIGH = 999_999_999_999_999;
+      depositY(STX_100, LIMIT_HIGH, wallet1);
+      depositX(SBTC_10K, 1, wallet2);
+      pub(C, "close-deposits", [], wallet1);
+
+      // Stacks blocks (not burn) so we don't push past mainnet head.
+      simnet.mineEmptyBlocks(200);
+
+      const r = settle(wallet1);
+      expect(r.result).toBeErr(Cl.uint(1005));
+    });
+
     // --- Atomic swap (deposit-x=true) ---
     it("atomic swap (deposit-x=true): pre-stages STX, sBTC taker fills in one tx", async function () {
       setupRegistryAndInit();
