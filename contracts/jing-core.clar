@@ -560,10 +560,16 @@
     (token-x principal)
     (token-y principal))
   (begin
-    ;; No-op assert: provides a concrete err type so callers' try! works.
-    ;; Auth is enforced transitively by the parent log-close-deposits assert
-    ;; firing in the same tx and reverting any earlier sub-branch logs.
-    (asserts! true ERR_NOT_AUTHORIZED)
+    ;; Caller-auth gate: contract-caller must be a registered market.
+    ;; The previous "transitive-auth" rationale (relying on a parent
+    ;; log-close-deposits / log-settlement assert in the same tx) is
+    ;; unsound in Clarity: every public function is independently
+    ;; authenticated, so without this check anyone could call any log-*
+    ;; directly and (a) trigger unauthorized debit/credit on the equity
+    ;; ledger via log-distribute-{x,y}-depositor, or (b) emit fake
+    ;; small-share-roll / limit-roll events that mislead indexers.
+    ;; Caught by Rendezvous fuzz of jing-core (2026-05-08).
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "small-share-roll-x",
       market: contract-caller,
@@ -579,7 +585,7 @@
     (token-x principal)
     (token-y principal))
   (begin
-    (asserts! true ERR_NOT_AUTHORIZED)
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "small-share-roll-y",
       market: contract-caller,
@@ -597,7 +603,7 @@
     (token-x principal)
     (token-y principal))
   (begin
-    (asserts! true ERR_NOT_AUTHORIZED)
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "limit-roll-x",
       market: contract-caller,
@@ -616,7 +622,7 @@
     (token-x principal)
     (token-y principal))
   (begin
-    (asserts! true ERR_NOT_AUTHORIZED)
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "limit-roll-y",
       market: contract-caller,
@@ -669,7 +675,7 @@
     (token-x principal)
     (token-y principal))
   (begin
-    (asserts! true ERR_NOT_AUTHORIZED)
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (if (> x-cleared u0) (debit token-x depositor x-cleared) true)
     (credit-if-registered token-y depositor y-received)
     (print {
@@ -693,7 +699,7 @@
     (token-x principal)
     (token-y principal))
   (begin
-    (asserts! true ERR_NOT_AUTHORIZED)
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (if (> y-cleared u0) (debit token-y depositor y-cleared) true)
     (credit-if-registered token-x depositor x-received)
     (print {
