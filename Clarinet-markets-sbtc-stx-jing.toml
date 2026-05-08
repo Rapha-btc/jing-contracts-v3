@@ -1,19 +1,19 @@
-# RV-only manifest for fuzzing markets-sbtc-usdcx-jing.
+# RV-only manifest for fuzzing markets-sbtc-stx-jing.
 #
 # Includes a minimal set of contracts needed to drive deposit/cancel/close
 # paths under random tx sequences:
 #   - local SIP-010 trait
 #   - two mock SIP-010 token contracts (fake transfer, lies about balance)
 #   - mock-jing-core (stub log-* functions, all return ok true)
-#   - markets-sbtc-usdcx-jing (built from production source with use-trait
+#   - markets-sbtc-stx-jing (built from production source with use-trait
 #     and .jing-core references rewritten to local mocks; see tests/rv/build.sh)
 #
 # Run:
-#   bash tests/rv/build.sh markets-sbtc-usdcx-jing
-#   npx rv . markets-sbtc-usdcx-jing invariant --runs=200
+#   bash tests/rv/build.sh markets-sbtc-stx-jing
+#   npx rv . markets-sbtc-stx-jing invariant --runs=200
 [project]
 name = "jing-contracts-v3-rv-usdcx"
-description = "RV-only manifest for fuzzing markets-sbtc-usdcx-jing"
+description = "RV-only manifest for fuzzing markets-sbtc-stx-jing"
 authors = []
 telemetry = false
 cache_dir = "./.cache"
@@ -62,7 +62,7 @@ path = "tests/rv/mock-jing-core.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.markets-sbtc-usdcx-jing]
-path = "tests/rv/.build/markets-sbtc-usdcx-jing.clar"
+[contracts.markets-sbtc-stx-jing]
+path = "tests/rv/.build/markets-sbtc-stx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
