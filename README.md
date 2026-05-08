@@ -90,6 +90,7 @@ npm test                                                # all files
 npx vitest run tests/jing-core.test.ts                  # registry/admin
 npx vitest run tests/markets-sbtc-usdcx-jing.test.ts    # USDCx market
 npx vitest run tests/markets-sbtc-stx-jing.test.ts      # sBTC/STX market
+npx vitest run tests/vault-sbtc-usdcx.test.ts           # USDCx vault
 ```
 
 Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
@@ -99,8 +100,10 @@ Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, 
 | File | Surface | Tests |
 |---|---|---|
 | `tests/jing-core.test.ts` | Registry + admin paths reachable directly on `jing-core` (not via a market). | 10 |
-| `tests/markets-sbtc-usdcx-jing.test.ts` | sBTC/USDCx market (single-feed, BTC/USD). | 35 |
-| `tests/markets-sbtc-stx-jing.test.ts` | sBTC/STX market (dual-feed, BTC/USD + STX/USD; STX side via the bitflow `token-stx-v-1-2` wstx facade with native `stx-transfer?` underneath). | 33 |
+| `tests/markets-sbtc-usdcx-jing.test.ts` | sBTC/USDCx market (single-feed, BTC/USD). | 37 |
+| `tests/markets-sbtc-stx-jing.test.ts` | sBTC/STX market (dual-feed, BTC/USD + STX/USD; STX side via the bitflow `token-stx-v-1-2` wstx facade with native `stx-transfer?` underneath). | 35 |
+| `tests/vault-sbtc-usdcx.test.ts` | Personal vault for the sBTC/USDCx market: SIP-018 signed intents (jing-deposit, dlmm-swap), owner deposits/withdrawals, keeper cancels, equity ledger. | 20 |
+| `tests/vault-sbtc-stx.test.ts` | Personal vault for the sBTC/STX market: same shape as USDCx vault plus `execute-bitflow-swap` (xyk-core path); native STX deposits/withdrawals via `stx-transfer?`. | 22 |
 
 Each file is **parity with the matching stxer simulations** in `simulations/`, with the trade-off that clarinet runs locally and instantly while stxer hits a live mainnet fork. The two suites are intentionally redundant: simnet catches logic bugs at the bytecode level, stxer catches integration bugs against real mainnet state (Pyth freshness, Bitflow pool depth, wstx behavior).
 
@@ -118,6 +121,8 @@ Each file is **parity with the matching stxer simulations** in `simulations/`, w
 - **Treasury fees verification** — actual treasury balance delta after settle equals the fee fields in the settlement tuple. USDCx market does both legs as FT balances; STX market checks sBTC FT delta + native STX balance via `stx-get-balance`.
 - **Live Pyth VAA** — `settle-with-refresh` and `close-and-settle-with-refresh` exercised end-to-end against a fresh Hermes VAA.
 - **Queue-full + smallest-bumping** — runtime-patched market with `MAX_DEPOSITORS u5` (vs production `u50`). Fish queue saturated, challenger with equal amount rejected (1013), challenger with bigger amount bumps the smallest, refund balance delta verified.
+- **Vault SIP-018 signed intents** — every public function on both vaults (`initialize`, `set-owner-pubkey`, `set-keeper`, `deposit-*`, `withdraw-*`, `revoke-intent`, `cancel-jing-*`, `execute-jing-deposit`, `execute-bitflow-swap`, `execute-dlmm-swap`) plus all 8 vault error codes. Signatures generated locally via `@stacks/transactions.signMessageHashRsv` against the deployer's simnet private key; pubkey installed via `set-owner-pubkey`; message hashes computed by calling `jing-vault-auth.build-intent-hash` read-only. Failure modes: `INVALID_SIGNATURE` (wrong key), `REPLAY` (re-submit same intent), `EXPIRED` (past block height), `INVALID_SIDE` (bad side string), `INVALID_PRICE` (zero limit-price on the side where it's in the divisor — verifies the assert-before-let fix).
+- **Vault → jing-core integration** — every vault-side `log-*` (`log-deposit`, `log-withdraw`, `log-revoke`, `log-cancel`, `log-jing-deposit`, `log-bitflow-swap`) is exercised. Vault's equity bucket on jing-core matches its on-chain balance through the full deposit/withdraw/cancel/swap lifecycle.
 
 ### Known wrinkles
 
