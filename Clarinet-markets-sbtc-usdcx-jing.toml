@@ -1,0 +1,127 @@
+[project]
+name = "jing-contracts-v3"
+description = "Jing v3 protocol: core registry + per-pair markets + per-user vaults + reserve/snpl credit lines"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# Mainnet contracts the project depends on.
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2"
+
+# Bitflow's wstx SIP-010 facade -- vault-sbtc-stx and sbtc-stx-jing-v3
+# pass this principal as the canonical token-y trait. Internally it
+# delegates to native-STX operations.
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
+
+# v2 sBTC/STX Jing market -- still hardcoded by sbtc-stx-jing-snpl.clar
+# (snpl migration to sbtc-stx-jing-v3 is pending).
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.sbtc-stx-0-jing-v2"
+
+# Bitflow xyk pool (vault-sbtc-stx execute-bitflow-swap path).
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2"
+
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1"
+
+# Bitflow DLMM (both vaults execute-dlmm-swap path).
+[[project.requirements]]
+contract_id = "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10"
+
+[repl.remote_data]
+enabled = true
+api_url = 'https://api.hiro.so'
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# ----- Local contracts -----
+# Order matters for the simnet deploy plan: dependencies before dependents.
+
+[contracts.jing-core]
+path = "contracts/jing-core.clar"
+clarity_version = 4
+epoch = "latest"
+
+[contracts.jing-vault-auth]
+path = "contracts/jing-vault-auth.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.reserve-trait]
+path = "contracts/reserve-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.snpl-trait]
+path = "contracts/snpl-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing]
+path = "contracts/markets-sbtc-stx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-usdcx-jing]
+path = "tests/rv/.build/markets-sbtc-usdcx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.vault-sbtc-stx]
+path = "contracts/vault-sbtc-stx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.vault-sbtc-usdcx]
+path = "contracts/vault-sbtc-usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.reserve-sbtc-stx-jing]
+path = "contracts/reserve-sbtc-stx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.snpl-sbtc-stx-jing]
+path = "contracts/snpl-sbtc-stx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.creator-escrow]
+path = "contracts/creator-escrow.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.creator-escrow-stxer]
+path = "contracts/creator-escrow-stxer.clar"
+clarity_version = 5
+epoch = "3.4"

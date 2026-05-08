@@ -3,3 +3,6 @@ deployments/
 node_modules/
 .DS_Store
 *.log
+tests/rv/.build/
+.rendezvous-regressions/
+simulations/_run-all-results.tsv
