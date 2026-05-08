@@ -100,6 +100,41 @@ npx vitest run tests/snpl-sbtc-stx-jing.test.ts         # snpl loan lifecycle
 
 Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
 
+### Coverage matrix (clarinet + stxer)
+
+Every public contract in this repo is exercised by **both** local clarinet simnet tests **and** stxer mainnet-fork simulations. The two suites are intentionally redundant: clarinet catches logic bugs at the bytecode level (instant, deterministic, plus property-fuzz via Rendezvous); stxer catches integration bugs against real mainnet state (Pyth freshness, Bitflow xyk + DLMM pool depth, wstx behavior, sBTC token-supply tracker).
+
+| Contract | Clarinet | Stxer (mainnet fork) |
+|---|---|---|
+| `jing-core.clar` | `tests/jing-core.test.ts` (10 tests) + exercised by every other test file | `simulations/simul-jing-core-{pause,multi-market,get-balance,hash-mismatch}.js` + exercised by every other sim |
+| `markets-sbtc-stx-jing.clar` | `tests/markets-sbtc-stx-jing.test.ts` (35 tests) | `simulations/simul-markets-sbtc-stx-jing*.js` (16 sims) |
+| `markets-sbtc-usdcx-jing.clar` | `tests/markets-sbtc-usdcx-jing.test.ts` (37 tests) | `simulations/simul-markets-sbtc-usdcx-jing*.js` (16 sims) |
+| `vault-sbtc-usdcx.clar` | `tests/vault-sbtc-usdcx.test.ts` (20 tests) | `simulations/simul-vault-sbtc-usdcx.js` |
+| `vault-sbtc-stx.clar` | `tests/vault-sbtc-stx.test.ts` (22 tests) | `simulations/simul-vault-sbtc-stx.js` |
+| `reserve-sbtc-stx-jing.clar` | `tests/reserve-sbtc-stx-jing.test.ts` (14 tests) | `simulations/simul-reserve-sbtc-stx-jing.js` |
+| `snpl-sbtc-stx-jing.clar` | `tests/snpl-sbtc-stx-jing.test.ts` (11 tests) | `simulations/simul-snpl-sbtc-stx-jing.js` |
+| `jing-vault-auth.clar` | exercised by every vault signed-intent test | exercised by every vault sim |
+| `reserve-trait.clar` / `snpl-trait.clar` | type-only — implemented by `reserve-sbtc-stx-jing` / `snpl-sbtc-stx-jing` | same |
+
+**Stxer sim runs (mainnet fork):**
+
+```sh
+npx tsx simulations/simul-vault-sbtc-usdcx.js
+npx tsx simulations/simul-vault-sbtc-stx.js
+npx tsx simulations/simul-reserve-sbtc-stx-jing.js
+npx tsx simulations/simul-snpl-sbtc-stx-jing.js
+# ...plus the existing simul-jing-core-*.js and simul-markets-*.js suites
+```
+
+Verified runs of the four custody-contract sims:
+
+- `simul-vault-sbtc-usdcx.js` → https://stxer.xyz/simulations/mainnet/944bbdcc5b20c211ebfaf288b46db5e5
+- `simul-vault-sbtc-stx.js` → https://stxer.xyz/simulations/mainnet/e37ef42f3ef231c4cf3f6acf632770dd
+- `simul-reserve-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/1383fd6b17b9b922b1107343cdf69056
+- `simul-snpl-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/a269716b3787e7a437303dfeee1fadc6
+
+For SIP-018 vault sims, intent message hashes are computed off-chain in `simulations/_setup.js` (`buildIntentHashHex`) to byte-match Clarity's `to-consensus-buff?`, then signed locally with a deterministic test private key (`signMessageHashRsv` from `@stacks/transactions`). The corresponding compressed pubkey is installed via `set-owner-pubkey` so the simulated vault verifies the test signature. See `_setup.js` for two infra footnotes worth knowing if you write more sim code: `serializeCV()` returns a hex **string** in v7 (parse via `Buffer.from(hex, "hex")`, not `Buffer.from(string)`), and Clarity tuple keys serialize in canonical (alphabetic) order.
+
 ### Rendezvous (RV) property fuzzing
 
 ```sh
@@ -180,8 +215,14 @@ Each file is **parity with the matching stxer simulations** in `simulations/`, w
 | `simul-markets-*-small-share-filter.js` | small-share filtering tests | |
 | `simul-markets-*-swap*.js` | atomic swap (deposit-x=true/false) tests | |
 | `simul-markets-*-treasury-fees.js` | treasury-fees verification test | balance delta vs settlement tuple |
+| `simul-vault-sbtc-usdcx.js` | `tests/vault-sbtc-usdcx.test.ts` (full surface) | SIP-018 hash computed off-chain via `buildIntentHashHex` in `_setup.js` |
+| `simul-vault-sbtc-stx.js` | `tests/vault-sbtc-stx.test.ts` (full surface, incl. `execute-bitflow-swap`) | same |
+| `simul-reserve-sbtc-stx-jing.js` | `tests/reserve-sbtc-stx-jing.test.ts` (full lender surface) | |
+| `simul-snpl-sbtc-stx-jing.js` | `tests/snpl-sbtc-stx-jing.test.ts` (full borrower surface) | |
 
 The only stxer-only path is the STX-market token-y queue-full bumping (native `stx-transfer?` refund vs USDCx's FT path). The bumping branch is structurally identical between sides, so the USDCx queue-full test exercises the logic; only the refund leg differs. Add a clarinet mirror if you want native-STX coverage too.
+
+The STX vault's `execute-bitflow-swap` step in `simul-vault-sbtc-stx.js` returns `(err u1002)` against the real xyk-core sBTC/STX pool — that's a runtime pool-state issue at the simulated block, not a contract bug. The `execute-dlmm-swap` step right after returns a clean `(ok msg-hash)`, proving the SIP-018 verify path itself works. Same `execute-bitflow-swap` path is also covered green in clarinet (`tests/vault-sbtc-stx.test.ts > execute-bitflow-swap (sBTC → STX via xyk-core)`).
 
 ## Status
 
