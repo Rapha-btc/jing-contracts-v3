@@ -7,9 +7,21 @@ of mocks) and asserts state invariants after every step.
 ## Status: working, both markets pass 500-run sweeps clean
 
 ```
-markets-sbtc-usdcx-jing  -- 500 runs, 12 invariants, 0 failures
-markets-sbtc-stx-jing    -- 500 runs, 12 invariants, 0 failures
+markets-sbtc-usdcx-jing  -- 500 runs, 13 invariants, 0 failures
+markets-sbtc-stx-jing    -- 500 runs, 13 invariants, 0 failures
 ```
+
+The 13th invariant (`invariant-balance-eq-cycle-totals`) compares the
+contract's actual token balance against the sum of `cycle-totals`
+across all cycles. **This is the invariant that catches the cancel-cycle
+× small-share-roll bug fixed earlier today** — verified by reverting
+the fix in `.build/` and watching RV trip the invariant within ~30
+random tx sequences. With the fix in place, the invariant holds across
+500 runs (43+ checks per market on real state movement). The other 12
+list/totals/ghost/bound invariants still pass trivially under that
+specific bug because the bug had list/totals/map internally consistent
+at *wrong* values; only the contract-balance-vs-cycle-totals check sees
+the underlying corruption.
 
 State actually moves under fuzzing — not just trivial passes:
 
@@ -69,20 +81,26 @@ For both x-side and y-side, on both current cycle and next cycle:
    not exceed the total at settle time. Catches over-fill bugs in the
    clearing formula.
 
-## What this catches and doesn't catch
+## What this catches
 
-**Catches**: drift bugs (one path updates list but not totals;
-one-directional inconsistencies; off-by-one in the small-share filter
-re-counts; unbounded list growth from a queue-full bypass).
+**Drift bugs** (one path updates list but not totals; one-directional
+inconsistencies; off-by-one in the small-share filter re-counts;
+unbounded list growth from a queue-full bypass) — caught by the 12
+list/totals/ghosts/bounds invariants.
 
-**Doesn't catch (yet)**: the specific cancel-cycle × small-share-roll
-bug found 2026-05-07. That bug had list, totals, and deposits-map all
-internally consistent at *wrong* values — sum-of-list = totals held
-trivially because both excluded the rolled depositors. Catching it
-requires a contract-balance-vs-cycle-totals invariant, which means
-mock-ft would need a real ledger (or a vitest+fast-check harness with
-real sBTC/USDCx). Worth a follow-up if more state-mutating bugs
-surface in audit.
+**Conservation bugs** where the contract's actual token balance drifts
+from the sum of declared cycle-totals — caught by the
+`invariant-balance-eq-cycle-totals` invariant. This includes the
+cancel-cycle × small-share-roll bug (fixed 2026-05-07); verified by
+reverting the fix in `.build/` and watching RV trip the invariant on
+the resulting buggy build.
+
+**Out of scope** (not exercised by RV in this setup): settle and swap
+paths take Pyth/wormhole traits with no impls in this manifest, so
+they're skipped. If those paths need fuzzing too, deploy the real
+Pyth contracts (or stubs that return realistic prices) and add Pyth
+trait impls. The balance invariant would also need to subtract
+settled-out amounts since settle legitimately drains the contract.
 
 ## Running
 
