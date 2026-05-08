@@ -91,7 +91,10 @@ npx vitest run tests/jing-core.test.ts                  # registry/admin
 npx vitest run tests/markets-sbtc-usdcx-jing.test.ts    # USDCx market
 npx vitest run tests/markets-sbtc-stx-jing.test.ts      # sBTC/STX market
 npx vitest run tests/vault-sbtc-usdcx.test.ts           # USDCx vault
+npx vitest run tests/vault-sbtc-stx.test.ts             # sBTC/STX vault
 ```
+
+**Total: 124 clarinet tests across 5 files** covering `jing-core`, both markets, and both personal vaults (`jing-vault-auth` is exercised indirectly by every signed-intent test).
 
 Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
 
@@ -123,6 +126,13 @@ Each file is **parity with the matching stxer simulations** in `simulations/`, w
 - **Queue-full + smallest-bumping** — runtime-patched market with `MAX_DEPOSITORS u5` (vs production `u50`). Fish queue saturated, challenger with equal amount rejected (1013), challenger with bigger amount bumps the smallest, refund balance delta verified.
 - **Vault SIP-018 signed intents** — every public function on both vaults (`initialize`, `set-owner-pubkey`, `set-keeper`, `deposit-*`, `withdraw-*`, `revoke-intent`, `cancel-jing-*`, `execute-jing-deposit`, `execute-bitflow-swap`, `execute-dlmm-swap`) plus all 8 vault error codes. Signatures generated locally via `@stacks/transactions.signMessageHashRsv` against the deployer's simnet private key; pubkey installed via `set-owner-pubkey`; message hashes computed by calling `jing-vault-auth.build-intent-hash` read-only. Failure modes: `INVALID_SIGNATURE` (wrong key), `REPLAY` (re-submit same intent), `EXPIRED` (past block height), `INVALID_SIDE` (bad side string), `INVALID_PRICE` (zero limit-price on the side where it's in the divisor — verifies the assert-before-let fix).
 - **Vault → jing-core integration** — every vault-side `log-*` (`log-deposit`, `log-withdraw`, `log-revoke`, `log-cancel`, `log-jing-deposit`, `log-bitflow-swap`) is exercised. Vault's equity bucket on jing-core matches its on-chain balance through the full deposit/withdraw/cancel/swap lifecycle.
+
+### Bugs found and fixed via clarinet + fuzz testing
+
+| # | Bug | Found by | Fix commit |
+|---|---|---|---|
+| 1 | `cancel-cycle` overwrote `cycle-totals[C+1]` and the C+1 depositor list — wiping any depositors that `close-deposits` had already moved forward via small-share-filter. Pre-fix: fish-funds locked or whale-funds locked depending on cancel order. | Rendezvous fuzz | merge instead of overwrite |
+| 2 | `execute-{bitflow,dlmm}-swap` panicked with `Runtime(DivisionByZero)` instead of returning `ERR_INVALID_PRICE` when `limit-price=0` on the side where `limit-price` is in the divisor (`wstx` for `vault-sbtc-stx`, `usdcx-token` for `vault-sbtc-usdcx`). The `let` binding evaluated `min-out` before the assert. | Clarinet vault test (`tests/vault-sbtc-stx.test.ts`) | hoist asserts before the let — `ca9793d` |
 
 ### Known wrinkles
 
