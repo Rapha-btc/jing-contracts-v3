@@ -128,10 +128,12 @@ npx tsx simulations/simul-snpl-sbtc-stx-jing.js
 
 Verified runs of the four custody-contract sims:
 
-- `simul-vault-sbtc-usdcx.js` → https://stxer.xyz/simulations/mainnet/944bbdcc5b20c211ebfaf288b46db5e5
-- `simul-vault-sbtc-stx.js` → https://stxer.xyz/simulations/mainnet/e37ef42f3ef231c4cf3f6acf632770dd
-- `simul-reserve-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/1383fd6b17b9b922b1107343cdf69056
-- `simul-snpl-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/a269716b3787e7a437303dfeee1fadc6
+- `simul-vault-sbtc-usdcx.js` → https://stxer.xyz/simulations/mainnet/51c6ebac890b7491880ebc9215a98f3c
+- `simul-vault-sbtc-stx.js` → https://stxer.xyz/simulations/mainnet/d6ca84de76708ea7134d97ee7a6b1ddb
+- `simul-vault-sbtc-stx-price-gates.js` → https://stxer.xyz/simulations/mainnet/6667c9fd3300747777a5a036f677caa9
+- `simul-vault-sbtc-stx-full-cycle.js` → https://stxer.xyz/simulations/mainnet/7884ac56836d1a3d3dc993ea43732ea4
+- `simul-reserve-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/67d621b36f912de9da8c4f9dd0999a61
+- `simul-snpl-sbtc-stx-jing.js` → https://stxer.xyz/simulations/mainnet/eac28e69336bb430d063a351e2b3a1f3
 
 For SIP-018 vault sims, intent message hashes are computed off-chain in `simulations/_setup.js` (`buildIntentHashHex`) to byte-match Clarity's `to-consensus-buff?`, then signed locally with a deterministic test private key (`signMessageHashRsv` from `@stacks/transactions`). The corresponding compressed pubkey is installed via `set-owner-pubkey` so the simulated vault verifies the test signature. See `_setup.js` for two infra footnotes worth knowing if you write more sim code: `serializeCV()` returns a hex **string** in v7 (parse via `Buffer.from(hex, "hex")`, not `Buffer.from(string)`), and Clarity tuple keys serialize in canonical (alphabetic) order.
 

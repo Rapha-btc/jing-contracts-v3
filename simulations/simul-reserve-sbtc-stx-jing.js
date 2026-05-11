@@ -100,6 +100,7 @@ async function main() {
       btcFeedBuf,
       stxFeedBuf,
     ],
+    useLive: true,
   });
 
   // Trait deps for reserve + snpl.

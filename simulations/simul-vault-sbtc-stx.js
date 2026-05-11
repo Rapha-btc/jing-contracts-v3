@@ -70,6 +70,7 @@ async function main() {
 
   // jing-deposit (STX side) signed intent.
   const jingDepositIntent = {
+    vault: vaultCV,
     action: "jing-deposit",
     side: WSTX_ASSET_NAME, // "wstx"
     amount: STX_100,
@@ -82,6 +83,7 @@ async function main() {
 
   // bitflow-swap (sBTC -> STX via xyk-core sBTC/STX pool).
   const bitflowSwapIntent = {
+    vault: vaultCV,
     action: "bitflow-swap",
     side: SBTC_ASSET_NAME, // "sbtc-token"
     amount: SBTC_10K,
@@ -94,6 +96,7 @@ async function main() {
 
   // dlmm-swap (STX -> sBTC via DLMM router; pool layout x=wstx, y=sBTC).
   const dlmmSwapIntent = {
+    vault: vaultCV,
     action: "dlmm-swap",
     side: WSTX_ASSET_NAME, // "wstx"
     amount: STX_100,
@@ -125,6 +128,7 @@ async function main() {
       btcFeedBuf,
       stxFeedBuf,
     ],
+    useLive: true,
   });
 
   // Deploy jing-vault-auth + vault, register + init.

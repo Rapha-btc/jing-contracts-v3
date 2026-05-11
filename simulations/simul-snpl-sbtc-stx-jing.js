@@ -96,6 +96,7 @@ async function main() {
       btcFeedBuf,
       stxFeedBuf,
     ],
+    useLive: true,
   });
 
   sim = sim

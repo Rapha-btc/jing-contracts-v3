@@ -73,6 +73,7 @@ async function main() {
 
   // Pre-compute signed-intent hashes + signatures.
   const jingDepositIntent = {
+    vault: vaultCV,
     action: "jing-deposit",
     side: USDCX_ASSET_NAME, // "usdcx-token"
     amount: USDCX_100,
@@ -84,6 +85,7 @@ async function main() {
   const jingDepositSig = signIntent(jingDepositHashHex);
 
   const dlmmSwapIntent = {
+    vault: vaultCV,
     action: "dlmm-swap",
     side: SBTC_ASSET_NAME, // "sbtc-token"
     amount: SBTC_10K,
@@ -114,6 +116,7 @@ async function main() {
       uintCV(MIN_USDCX),
       feedBuf,
     ],
+    useLive: true,
   });
 
   // Deploy jing-vault-auth (dep of the vault) + the vault, register + init.

@@ -178,11 +178,160 @@ in `tests/` should cover:
 - Equity ledger debit branches (require a registered vault to test
   end-to-end, but the math is testable in isolation)
 
-### Out of scope for this README
+## Vault + reserve + snpl sims (live mainnet integration)
 
-The `vault-*` and `reserve-*` / `snpl-*` contracts in `contracts/`
-have their own log-* surface on jing-core that needs separate coverage
-when those contracts are sim-ready.
+The market and jing-core sims above deploy everything fresh under the
+`SPV9K21...` deployer. The custody-layer contracts (`vault-sbtc-stx`,
+`vault-sbtc-usdcx`, `reserve-sbtc-stx-jing`, `snpl-sbtc-stx-jing`) target
+a different scenario: they integrate with the **already-deployed mainnet**
+`jing-core` and markets. So they use a `useLive: true` flag on
+`addRegistryInit` that skips the jing-core + market deploy prelude
+entirely.
+
+### Why `useLive`
+
+Once `jing-core` and the markets are live on mainnet at `SPV9K21...`,
+re-running any sim that tries to deploy those same contract names at the
+same principal fails at step 0:
+
+```
+InvalidStacksTransaction("Duplicate contract 'SPV9K21...jing-core'")
+```
+
+…and every subsequent same-sender tx cascades with `TransactionNonceMismatch`
+because the deployer's real mainnet nonce never advanced past 5282. The
+old session IDs in the root `README.md` were captured pre-deploy and
+still hold; new runs of the market sims without further changes will
+fail this way.
+
+`useLive: true` is the fix for the custody contracts that don't need a
+fresh market: skip the deploy prelude, layer the new contracts (vault-auth
++ vault) on top of the live registry. The market sims need a different
+fix (fresh deployer principal) which isn't done yet — their existing
+session IDs are still the canonical reference.
+
+```js
+sim = addRegistryInit(sim, { marketName, initializeArgs, useLive: true });
+// addRegistryInit returns the builder unchanged; you then deploy your
+// own contracts and call into the live jing-core / markets.
+```
+
+### Sims
+
+| Sim | What it proves | Run cmd |
+|---|---|---|
+| `simul-vault-sbtc-stx.js` | Full lifecycle of `vault-sbtc-stx` against the live STX market. Deploys vault, sets owner-pubkey, deposits funds, fires execute-jing-deposit (signed intent), tests replay rejection (`u6003`), cancels the in-flight market deposit, fires execute-bitflow-swap + execute-dlmm-swap. Verifies SIP-018 vault-binding from M2 fix below. | `npx tsx simulations/simul-vault-sbtc-stx.js` |
+| `simul-vault-sbtc-usdcx.js` | Same coverage for the sBTC/USDCx vault. DLMM-only (no Bitflow xyk on this pair). | `npx tsx simulations/simul-vault-sbtc-usdcx.js` |
+| `simul-reserve-sbtc-stx-jing.js` | Reserve happy-path: deploy reserve, set authorized snpl, deposit + register collateral, snpl borrows, repays, lender withdraws. | `npx tsx simulations/simul-reserve-sbtc-stx-jing.js` |
+| `simul-snpl-sbtc-stx-jing.js` | Snpl loan lifecycle end-to-end. | `npx tsx simulations/simul-snpl-sbtc-stx-jing.js` |
+| `simul-vault-sbtc-stx-price-gates.js` | **`derive-min-out` slippage gate** — four cases on bitflow + DLMM, both sides, loose + tight limit-prices. Confirms pool reverts with xyk `u1020 ERR_MINIMUM_Y_AMOUNT` or DLMM `u2003 ERR_MINIMUM_RECEIVED` when the vault's signed limit-price can't be satisfied, and clean fill otherwise. | `npx tsx simulations/simul-vault-sbtc-stx-price-gates.js` |
+| `simul-vault-sbtc-stx-full-cycle.js` | Vault → live jing market full cycle: vault `execute-jing-deposit` lands on the current cycle, a sBTC depositor adds matching inventory, `close-deposits` + `settle-with-refresh` with fresh Pyth VAAs clear the cycle. Proves the signed-intent → market settlement path end-to-end against real on-chain market state. | `npx tsx simulations/simul-vault-sbtc-stx-full-cycle.js` |
+
+Session IDs for the canonical four (vault×2, reserve, snpl) live in the
+root `README.md` Coverage matrix.
+
+### What the vault sims do **not** test (yet)
+
+- **`execute-bitflow-swap` historic `u1002`**: the original
+  `simul-vault-sbtc-stx.js` used `limit-price = 1` on the sbtc side,
+  which floors `derive-min-out` to `u0`. xyk-core's
+  `(asserts! (> min-dy u0) ERR_INVALID_AMOUNT)` then rejected the swap
+  before reaching the pool. **Not a vault bug** — a test-config bug
+  that the new price-gates sim sidesteps. Documenting because the old
+  session IDs still show this error.
+- **Tight-price rejection on the jing market path** isn't sim-tested.
+  `execute-jing-deposit` passes `limit-price` straight through to the
+  market; the market enforces it during clearing/settlement. The
+  full-cycle sim uses a permissive `limit-price` so the vault's
+  deposit always qualifies. A "tight limit-price rolls instead of
+  clears" companion would need to drive a known oracle-cleared price
+  and put the vault's limit on the wrong side of it.
+
+## Recent security-relevant contract changes
+
+### M2: vault-binding in SIP-018 intent hashes
+
+Before the fix, `jing-vault-auth.build-intent-hash` produced a hash
+identical across every vault — domain hash was `{name: "jing-vault",
+version: "1", chain-id}` with no vault principal. A signed intent
+intended for vault A could be replayed verbatim on vault B if both
+vaults shared the same owner-pubkey.
+
+After the fix, `build-intent-hash` injects `contract-caller` into the
+inner hashed tuple:
+
+```clarity
+(sha256 (concat SIP018_MSG_PREFIX
+  (concat (get-domain-hash)
+    (sha256 (unwrap-panic (to-consensus-buff? {
+      vault: contract-caller,         ;; ← M2: scopes the hash to the caller
+      action: (get action details),
+      side: (get side details),
+      ...
+    }))))))
+```
+
+`contract-caller` resolves to whichever vault invoked `build-intent-hash`
+via `contract-call?`. Off-chain signers must include the vault principal
+in the inner tuple alphabetically — `_setup.js#buildIntentHashHex` does
+this via `details.vault`. Verified end-to-end by the two vault sims
+returning `(ok msg-hash)` on legitimate intents and `(err u6003)` on
+replays.
+
+### Defense-in-depth on `verify-and-consume`
+
+Three hardenings layered on top of M2:
+
+1. **Sender gate**: only the OWNER or the registered keeper may submit a
+   signed intent. The signature is still the *authorization*, but the
+   *submission channel* is now restricted, eliminating griefing where a
+   random third party submits a leaked signature to consume gas / burn
+   the auth-id.
+
+2. **`owner-pubkey` must be set**: explicit assert that
+   `owner-pubkey != DEFAULT_PUBKEY` (`0x00…00`). Functionally redundant
+   with the secp256k1 invariant that recovery never returns the all-zeros
+   buffer, but makes the safety property visible to code review rather
+   than implicit in the curve math. New error code `u6021
+   ERR_PUBKEY_NOT_SET`.
+
+3. **Expiry in burn-block-height**: switched from `stacks-block-height`
+   to `burn-block-height` for wall-clock-stable validity windows. A
+   Stacks block stall or flash-block era no longer skews a "valid for
+   1 hour" intent's actual lifetime.
+
+Cheap asserts (sender, pubkey-set, replay, expiry) now fire before the
+secp256k1 recovery, so bogus calls fail-fast without paying the recovery
+cost.
+
+### Action-width bump (16 → 32 chars)
+
+`action: (string-ascii 16)` was tight (4-char headroom over the
+longest current action `bitflow-swap`). Bumped to `(string-ascii 32)`
+for breathing room without touching the hash bytes (Clarity's
+`to-consensus-buff?` for `string-ascii` is length-prefix + bytes — the
+declared max doesn't appear in the serialization, so existing hashes
+stay valid for current action values). The `tests/rv/mock-jing-vault-auth.clar`
+mock was already at `u32`; the production-source file just caught up.
+
+### Deploy-folder pinning
+
+`contracts/deploying/vault-sbtc-stx.clar` and
+`contracts/deploying/vault-sbtc-usdcx.clar` pin sibling-contract
+references to absolute mainnet addresses via named constants:
+
+```clarity
+(define-constant JING-MARKET 'SPV9K21....markets-sbtc-stx-jing)
+(define-constant JING-CORE   'SPV9K21....jing-core)
+(define-constant JING-VAULT-AUTH 'SPV9K21....jing-vault-auth)
+```
+
+The `contracts/` source-of-truth uses relative refs (`.jing-core`,
+`.jing-vault-auth`, `.markets-sbtc-stx-jing`). Tests + sims run against
+the source-of-truth; deploys go from `contracts/deploying/`. No tooling
+enforces this relationship — re-generating `deploying/` from
+`contracts/` (e.g., a comment strip) will wipe the pinned addresses.
+Re-pin manually if that happens.
 
 ## Gotchas burned in
 

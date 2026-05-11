@@ -115,9 +115,17 @@ export async function fetchPythVAA(feedHex, timestamp) {
  * @param {string} [cfg.marketSourceOverride]   optional market source to deploy
  *                                          instead of reading from disk (e.g.
  *                                          patched MAX_STALENESS for refresh sims)
+ * @param {boolean} [cfg.useLive]           when true, skip the deploy + init
+ *                                          prelude and treat jing-core + market
+ *                                          as already deployed on mainnet.
+ *                                          Use for vault/reserve/snpl sims that
+ *                                          piggyback on the live registry+market.
  * @returns {SimulationBuilder}              builder ready for further calls
  */
-export function addRegistryInit(builder, { marketName, initializeArgs, marketSourceOverride }) {
+export function addRegistryInit(builder, { marketName, initializeArgs, marketSourceOverride, useLive = false }) {
+  if (useLive) {
+    return builder;
+  }
   const jingCoreSource = fs.readFileSync("./contracts/jing-core.clar", "utf8");
   const marketSource = marketSourceOverride ?? fs.readFileSync(
     `./contracts/${marketName}.clar`,
@@ -233,6 +241,7 @@ function getDomainHash(chainId = MAINNET_CHAIN_ID) {
  * `.toString("hex")` for the message-hash hex string.
  *
  * @param {object} details
+ * @param {object} details.vault       contractPrincipalCV of the vault that will call build-intent-hash
  * @param {string} details.action      "jing-deposit" | "bitflow-swap" | "dlmm-swap"
  * @param {string} details.side        e.g. "sbtc-token", "wstx", "usdcx-token"
  * @param {number|bigint} details.amount
@@ -242,8 +251,8 @@ function getDomainHash(chainId = MAINNET_CHAIN_ID) {
  * @param {number} [chainId]            defaults to mainnet (1)
  */
 export function buildIntentHashHex(details, chainId) {
-  // Same canonical-order rationale as getDomainHash:
-  //   action < amount < auth-id < expiry < limit-price < side  (alphabetic).
+  // Canonical (alphabetic) tuple-key order matches Clarity's to-consensus-buff?:
+  //   action < amount < auth-id < expiry < limit-price < side < vault.
   const detailsTuple = tupleCV({
     action: stringAsciiCV(details.action),
     amount: uintCV(details.amount),
@@ -251,6 +260,7 @@ export function buildIntentHashHex(details, chainId) {
     expiry: uintCV(details.expiry),
     "limit-price": uintCV(details.limitPrice),
     side: stringAsciiCV(details.side),
+    vault: details.vault,
   });
   const detailsHash = cvSha256(detailsTuple);
   const composed = Buffer.concat([SIP018_PREFIX, getDomainHash(chainId), detailsHash]);
