@@ -43,12 +43,8 @@
     owner: OWNER,
     pubkey: (var-get owner-pubkey),
     keeper: (var-get keeper),
-    sbtc-balance: (unwrap-panic (contract-call?
-      'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
-      get-balance current-contract)),
-    usdcx-balance: (unwrap-panic (contract-call?
-      'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx
-      get-balance current-contract)),
+    sbtc-balance: (unwrap-panic (contract-call? SBTC_TOKEN get-balance current-contract)),
+    usdcx-balance: (unwrap-panic (contract-call? USDCX_TOKEN get-balance current-contract)),
   })
 
 (define-read-only (is-signature-used (h (buff 32)))
@@ -77,8 +73,7 @@
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
-    (try! (contract-call? SBTC_TOKEN
-      transfer amount tx-sender current-contract none))
+    (try! (contract-call? SBTC_TOKEN transfer amount tx-sender current-contract none))
     (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
     (ok true)))
 
@@ -86,8 +81,7 @@
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
-    (try! (contract-call? USDCX_TOKEN
-      transfer amount tx-sender current-contract none))
+    (try! (contract-call? USDCX_TOKEN transfer amount tx-sender current-contract none))
     (try! (contract-call? JING-CORE log-deposit USDCX_TOKEN amount))
     (ok true)))
 
@@ -96,8 +90,7 @@
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-      (try! (contract-call? SBTC_TOKEN
-        transfer amount current-contract OWNER none))))
+      (try! (contract-call? SBTC_TOKEN transfer amount current-contract OWNER none))))
     (try! (contract-call? JING-CORE log-withdraw SBTC_TOKEN amount))
     (ok true)))
 
@@ -106,8 +99,7 @@
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
-      (try! (contract-call? USDCX_TOKEN
-        transfer amount current-contract OWNER none))))
+      (try! (contract-call? USDCX_TOKEN transfer amount current-contract OWNER none))))
     (try! (contract-call? JING-CORE log-withdraw USDCX_TOKEN amount))
     (ok true)))
 
@@ -127,8 +119,7 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET
-              cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
+      (try! (contract-call? JING-MARKET cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
     (ok true)))
 
@@ -138,8 +129,7 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET
-              cancel-token-y-deposit USDCX_TOKEN ASSET_USDCX))))
+      (try! (contract-call? JING-MARKET cancel-token-y-deposit USDCX_TOKEN ASSET_USDCX))))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET USDCX_TOKEN))
     (ok true)))
 
@@ -164,11 +154,9 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_SBTC)
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? JING-MARKET
-          deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC))))
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC))))
       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
-        (try! (contract-call? JING-MARKET
-          deposit-token-y amount limit-price USDCX_TOKEN ASSET_USDCX)))))
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price USDCX_TOKEN ASSET_USDCX)))))
     (try! (contract-call? JING-CORE log-jing-deposit
       msg-hash
       JING-MARKET
