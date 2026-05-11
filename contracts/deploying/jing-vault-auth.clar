@@ -9,7 +9,7 @@
   }))))
 
 (define-read-only (build-intent-hash (details {
-  action: (string-ascii 16),
+  action: (string-ascii 32),
   side: (string-ascii 128),
   amount: uint,
   limit-price: uint,

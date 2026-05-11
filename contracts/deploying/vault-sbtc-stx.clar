@@ -27,8 +27,11 @@
 (define-constant ERR_INVALID_SIDE (err u6011))
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
+(define-constant ERR_PUBKEY_NOT_SET (err u6021))
 
-(define-data-var owner-pubkey (buff 33) 0x000000000000000000000000000000000000000000000000000000000000000000)
+(define-constant DEFAULT_PUBKEY 0x000000000000000000000000000000000000000000000000000000000000000000)
+
+(define-data-var owner-pubkey (buff 33) DEFAULT_PUBKEY)
 
 (define-data-var keeper (optional principal) none)
 
@@ -44,9 +47,7 @@
     pubkey: (var-get owner-pubkey),
     keeper: (var-get keeper),
     stx-balance: (stx-get-balance current-contract),
-    sbtc-balance: (unwrap-panic (contract-call?
-      'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
-      get-balance current-contract)),
+    sbtc-balance: (unwrap-panic (contract-call? SBTC_TOKEN get-balance current-contract)),
   })
 
 (define-read-only (is-signature-used (h (buff 32)))
@@ -83,8 +84,7 @@
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
-    (try! (contract-call? SBTC_TOKEN
-      transfer amount tx-sender current-contract none))
+    (try! (contract-call? SBTC_TOKEN transfer amount tx-sender current-contract none))
     (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
     (ok true)))
 
@@ -102,8 +102,7 @@
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-      (try! (contract-call? SBTC_TOKEN
-        transfer amount current-contract OWNER none))))
+      (try! (contract-call? SBTC_TOKEN transfer amount current-contract OWNER none))))
     (try! (contract-call? JING-CORE log-withdraw SBTC_TOKEN amount))
     (ok true)))
 
@@ -123,8 +122,7 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET
-              cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))))
+      (try! (contract-call? JING-MARKET cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET WSTX_TOKEN))
     (ok true)))
 
@@ -134,11 +132,9 @@
                   (is-eq (some tx-sender) (var-get keeper)))
               ERR_NOT_OWNER)
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET
-              cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
+      (try! (contract-call? JING-MARKET cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
     (ok true)))
-
 
 (define-public (execute-jing-deposit
     (sig (buff 65))
@@ -161,11 +157,9 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
       (try! (as-contract? ((with-stx amount))
-        (try! (contract-call? JING-MARKET
-          deposit-token-y amount limit-price WSTX_TOKEN ASSET_WSTX))))
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price WSTX_TOKEN ASSET_WSTX))))
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? JING-MARKET
-          deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC)))))
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC)))))
     (try! (contract-call? JING-CORE log-jing-deposit
       msg-hash
       JING-MARKET
@@ -259,14 +253,17 @@
     (msg-hash (buff 32))
     (sig (buff 65))
     (expiry uint))
-  (let (
-    (signer (unwrap! (secp256k1-recover? msg-hash sig) ERR_INVALID_SIGNATURE))
-  )
-    (asserts! (is-eq signer (var-get owner-pubkey)) ERR_INVALID_SIGNATURE)
+  (begin
+    (asserts! (or (is-eq tx-sender OWNER)
+                  (is-eq (some tx-sender) (var-get keeper)))
+              ERR_NOT_OWNER)
+    (asserts! (not (is-eq (var-get owner-pubkey) DEFAULT_PUBKEY)) ERR_PUBKEY_NOT_SET)
     (asserts! (is-none (map-get? used-pubkey-authorizations msg-hash)) ERR_REPLAY)
-    (asserts! (or (is-eq expiry u0) (< stacks-block-height expiry)) ERR_EXPIRED)
-    (map-set used-pubkey-authorizations msg-hash signer)
-    (ok true)))
+    (asserts! (or (is-eq expiry u0) (< burn-block-height expiry)) ERR_EXPIRED)
+    (let ((signer (unwrap! (secp256k1-recover? msg-hash sig) ERR_INVALID_SIGNATURE)))
+      (asserts! (is-eq signer (var-get owner-pubkey)) ERR_INVALID_SIGNATURE)
+      (map-set used-pubkey-authorizations msg-hash signer)
+      (ok true))))
 
 (define-private (derive-min-out
     (side (string-ascii 128))
