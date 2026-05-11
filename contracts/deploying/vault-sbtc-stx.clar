@@ -6,7 +6,9 @@
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX_TOKEN 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 
-(define-constant JING-MARKET .markets-sbtc-stx-jing)
+(define-constant JING-MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing)
+(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core)
+(define-constant JING-VAULT-AUTH 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth)
 
 (define-constant XYK_CORE 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2)
 (define-constant XYK_POOL_SBTC_STX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1)
@@ -34,7 +36,6 @@
 
 (define-data-var initialized bool false)
 
-
 (define-read-only (get-owner) OWNER)
 
 (define-read-only (get-status)
@@ -53,14 +54,12 @@
 
 (define-read-only (is-initialized) (var-get initialized))
 
-
 (define-public (initialize (canonical principal))
   (begin
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set initialized true)
-    (try! (contract-call? .jing-core register canonical))
+    (try! (contract-call? JING-CORE register canonical))
     (ok true)))
-
 
 (define-public (set-owner-pubkey (pubkey (buff 33)))
   (begin
@@ -77,7 +76,7 @@
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (stx-transfer? amount tx-sender current-contract))
-    (try! (contract-call? .jing-core log-deposit WSTX_TOKEN amount))
+    (try! (contract-call? JING-CORE log-deposit WSTX_TOKEN amount))
     (ok true)))
 
 (define-public (deposit-sbtc (amount uint))
@@ -86,7 +85,7 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (contract-call? SBTC_TOKEN
       transfer amount tx-sender current-contract none))
-    (try! (contract-call? .jing-core log-deposit SBTC_TOKEN amount))
+    (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
     (ok true)))
 
 (define-public (withdraw-stx (amount uint))
@@ -95,7 +94,7 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-stx amount))
       (try! (stx-transfer? amount current-contract OWNER))))
-    (try! (contract-call? .jing-core log-withdraw WSTX_TOKEN amount))
+    (try! (contract-call? JING-CORE log-withdraw WSTX_TOKEN amount))
     (ok true)))
 
 (define-public (withdraw-sbtc (amount uint))
@@ -105,7 +104,7 @@
     (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
       (try! (contract-call? SBTC_TOKEN
         transfer amount current-contract OWNER none))))
-    (try! (contract-call? .jing-core log-withdraw SBTC_TOKEN amount))
+    (try! (contract-call? JING-CORE log-withdraw SBTC_TOKEN amount))
     (ok true)))
 
 (define-public (revoke-intent (target-hash (buff 32)))
@@ -115,9 +114,8 @@
               ERR_NOT_OWNER)
     (asserts! (is-none (map-get? used-pubkey-authorizations target-hash)) ERR_REPLAY)
     (map-set used-pubkey-authorizations target-hash (var-get owner-pubkey))
-    (try! (contract-call? .jing-core log-revoke target-hash))
+    (try! (contract-call? JING-CORE log-revoke target-hash))
     (ok true)))
-
 
 (define-public (cancel-jing-stx)
   (begin
@@ -127,8 +125,7 @@
     (try! (as-contract? ((with-all-assets-unsafe))
       (try! (contract-call? JING-MARKET
               cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))))
-    (try! (contract-call? .jing-core log-cancel
-      JING-MARKET WSTX_TOKEN))
+    (try! (contract-call? JING-CORE log-cancel JING-MARKET WSTX_TOKEN))
     (ok true)))
 
 (define-public (cancel-jing-sbtc)
@@ -139,8 +136,7 @@
     (try! (as-contract? ((with-all-assets-unsafe))
       (try! (contract-call? JING-MARKET
               cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
-    (try! (contract-call? .jing-core log-cancel
-      JING-MARKET SBTC_TOKEN))
+    (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
     (ok true)))
 
 
@@ -152,7 +148,7 @@
     (auth-id uint)
     (expiry uint))
   (let (
-    (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+    (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
       action: "jing-deposit",
       side: side,
       amount: amount,
@@ -170,7 +166,7 @@
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
         (try! (contract-call? JING-MARKET
           deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC)))))
-    (try! (contract-call? .jing-core log-jing-deposit
+    (try! (contract-call? JING-CORE log-jing-deposit
       msg-hash
       JING-MARKET
       (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
@@ -189,7 +185,7 @@
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
     (let (
-      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
         action: "bitflow-swap",
         side: side,
         amount: amount,
@@ -209,7 +205,7 @@
                      (try! (contract-call? XYK_CORE
                        swap-x-for-y XYK_POOL_SBTC_STX SBTC_TOKEN WSTX_TOKEN
                        amount min-out)))))))
-      (try! (contract-call? .jing-core log-bitflow-swap
+      (try! (contract-call? JING-CORE log-bitflow-swap
         msg-hash
         (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
         (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
@@ -227,7 +223,7 @@
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
     (let (
-      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
         action: "dlmm-swap",
         side: side,
         amount: amount,
@@ -251,7 +247,7 @@
                           swap-y-for-x-simple-multi
                           DLMM_POOL_STX_SBTC
                           WSTX_TOKEN SBTC_TOKEN amount min-out)))))))
-      (try! (contract-call? .jing-core log-bitflow-swap
+      (try! (contract-call? JING-CORE log-bitflow-swap
         msg-hash
         (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
         (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
