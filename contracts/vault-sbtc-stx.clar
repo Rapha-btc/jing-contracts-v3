@@ -80,12 +80,18 @@
 (define-constant ERR_INVALID_SIDE (err u6011))
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
+(define-constant ERR_PUBKEY_NOT_SET (err u6021))
+
+;; Sentinel for the unset owner-pubkey. The signed-intent paths refuse
+;; to run while owner-pubkey still equals this value (defense in depth
+;; on top of the secp256k1 invariant that recover-? never returns it).
+(define-constant DEFAULT_PUBKEY 0x000000000000000000000000000000000000000000000000000000000000000000)
 
 ;; ---------------------------------------------------------------
 ;; State
 ;; ---------------------------------------------------------------
 
-(define-data-var owner-pubkey (buff 33) 0x000000000000000000000000000000000000000000000000000000000000000000)
+(define-data-var owner-pubkey (buff 33) DEFAULT_PUBKEY)
 
 (define-data-var keeper (optional principal) none)
 
@@ -368,18 +374,25 @@
 ;; Internal helpers
 ;; ---------------------------------------------------------------
 
+;; Cheap asserts first (sender auth, pubkey-set, replay, expiry) so
+;; bogus calls fail before paying for secp256k1 recovery. expiry is
+;; in BURN block height for wall-clock-stable validity windows even if
+;; Stacks block production stalls or accelerates.
 (define-private (verify-and-consume
     (msg-hash (buff 32))
     (sig (buff 65))
     (expiry uint))
-  (let (
-    (signer (unwrap! (secp256k1-recover? msg-hash sig) ERR_INVALID_SIGNATURE))
-  )
-    (asserts! (is-eq signer (var-get owner-pubkey)) ERR_INVALID_SIGNATURE)
+  (begin
+    (asserts! (or (is-eq tx-sender OWNER)
+                  (is-eq (some tx-sender) (var-get keeper)))
+              ERR_NOT_OWNER)
+    (asserts! (not (is-eq (var-get owner-pubkey) DEFAULT_PUBKEY)) ERR_PUBKEY_NOT_SET)
     (asserts! (is-none (map-get? used-pubkey-authorizations msg-hash)) ERR_REPLAY)
-    (asserts! (or (is-eq expiry u0) (< stacks-block-height expiry)) ERR_EXPIRED)
-    (map-set used-pubkey-authorizations msg-hash signer)
-    (ok true)))
+    (asserts! (or (is-eq expiry u0) (< burn-block-height expiry)) ERR_EXPIRED)
+    (let ((signer (unwrap! (secp256k1-recover? msg-hash sig) ERR_INVALID_SIGNATURE)))
+      (asserts! (is-eq signer (var-get owner-pubkey)) ERR_INVALID_SIGNATURE)
+      (map-set used-pubkey-authorizations msg-hash signer)
+      (ok true))))
 
 ;; Derive Bitflow min-out from (amount, limit-price).
 ;;
