@@ -1,5 +1,3 @@
-
-
 (define-constant OWNER tx-sender)
 
 (define-constant PRICE_PRECISION u100000000)
@@ -27,7 +25,6 @@
 (define-constant ERR_INVALID_SIDE (err u6011))
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
-
 
 (define-data-var owner-pubkey (buff 33) 0x000000000000000000000000000000000000000000000000000000000000000000)
 

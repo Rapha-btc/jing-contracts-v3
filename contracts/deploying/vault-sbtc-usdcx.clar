@@ -1,5 +1,3 @@
-
-
 (define-constant OWNER tx-sender)
 
 (define-constant PRICE_PRECISION u100000000)
@@ -33,7 +31,6 @@
 (define-map used-pubkey-authorizations (buff 32) (buff 33))
 
 (define-data-var initialized bool false)
-
 
 (define-read-only (get-owner) OWNER)
 

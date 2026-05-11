@@ -37,6 +37,7 @@
   (sha256 (concat SIP018_MSG_PREFIX
     (concat (get-domain-hash)
       (sha256 (unwrap-panic (to-consensus-buff? {
+        vault: contract-caller,
         action: (get action details),
         side: (get side details),
         amount: (get amount details),
