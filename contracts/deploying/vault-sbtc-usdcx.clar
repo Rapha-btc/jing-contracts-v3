@@ -6,7 +6,9 @@
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant USDCX_TOKEN 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
 
-(define-constant JING-MARKET .markets-sbtc-usdcx-jing)
+(define-constant JING-MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing)
+(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core)
+(define-constant JING-VAULT-AUTH 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth)
 
 (define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1)
 (define-constant DLMM_POOL_SBTC_USDCX 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10)
@@ -22,7 +24,6 @@
 (define-constant ERR_INVALID_SIDE (err u6011))
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
-
 
 (define-data-var owner-pubkey (buff 33) 0x000000000000000000000000000000000000000000000000000000000000000000)
 
@@ -52,14 +53,12 @@
 
 (define-read-only (is-initialized) (var-get initialized))
 
-
 (define-public (initialize (canonical principal))
   (begin
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set initialized true)
-    (try! (contract-call? .jing-core register canonical))
+    (try! (contract-call? JING-CORE register canonical))
     (ok true)))
-
 
 (define-public (set-owner-pubkey (pubkey (buff 33)))
   (begin
@@ -77,7 +76,7 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (contract-call? SBTC_TOKEN
       transfer amount tx-sender current-contract none))
-    (try! (contract-call? .jing-core log-deposit SBTC_TOKEN amount))
+    (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
     (ok true)))
 
 (define-public (deposit-usdcx (amount uint))
@@ -86,7 +85,7 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (contract-call? USDCX_TOKEN
       transfer amount tx-sender current-contract none))
-    (try! (contract-call? .jing-core log-deposit USDCX_TOKEN amount))
+    (try! (contract-call? JING-CORE log-deposit USDCX_TOKEN amount))
     (ok true)))
 
 (define-public (withdraw-sbtc (amount uint))
@@ -96,7 +95,7 @@
     (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
       (try! (contract-call? SBTC_TOKEN
         transfer amount current-contract OWNER none))))
-    (try! (contract-call? .jing-core log-withdraw SBTC_TOKEN amount))
+    (try! (contract-call? JING-CORE log-withdraw SBTC_TOKEN amount))
     (ok true)))
 
 (define-public (withdraw-usdcx (amount uint))
@@ -106,7 +105,7 @@
     (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
       (try! (contract-call? USDCX_TOKEN
         transfer amount current-contract OWNER none))))
-    (try! (contract-call? .jing-core log-withdraw USDCX_TOKEN amount))
+    (try! (contract-call? JING-CORE log-withdraw USDCX_TOKEN amount))
     (ok true)))
 
 (define-public (revoke-intent (target-hash (buff 32)))
@@ -116,9 +115,8 @@
               ERR_NOT_OWNER)
     (asserts! (is-none (map-get? used-pubkey-authorizations target-hash)) ERR_REPLAY)
     (map-set used-pubkey-authorizations target-hash (var-get owner-pubkey))
-    (try! (contract-call? .jing-core log-revoke target-hash))
+    (try! (contract-call? JING-CORE log-revoke target-hash))
     (ok true)))
-
 
 (define-public (cancel-jing-sbtc)
   (begin
@@ -128,8 +126,7 @@
     (try! (as-contract? ((with-all-assets-unsafe))
       (try! (contract-call? JING-MARKET
               cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
-    (try! (contract-call? .jing-core log-cancel
-      JING-MARKET SBTC_TOKEN))
+    (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
     (ok true)))
 
 (define-public (cancel-jing-usdcx)
@@ -140,10 +137,8 @@
     (try! (as-contract? ((with-all-assets-unsafe))
       (try! (contract-call? JING-MARKET
               cancel-token-y-deposit USDCX_TOKEN ASSET_USDCX))))
-    (try! (contract-call? .jing-core log-cancel
-      JING-MARKET USDCX_TOKEN))
+    (try! (contract-call? JING-CORE log-cancel JING-MARKET USDCX_TOKEN))
     (ok true)))
-
 
 (define-public (execute-jing-deposit
     (sig (buff 65))
@@ -153,7 +148,7 @@
     (auth-id uint)
     (expiry uint))
   (let (
-    (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+    (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
       action: "jing-deposit",
       side: side,
       amount: amount,
@@ -171,7 +166,7 @@
       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
         (try! (contract-call? JING-MARKET
           deposit-token-y amount limit-price USDCX_TOKEN ASSET_USDCX)))))
-    (try! (contract-call? .jing-core log-jing-deposit
+    (try! (contract-call? JING-CORE log-jing-deposit
       msg-hash
       JING-MARKET
       (if (is-eq side ASSET_SBTC) SBTC_TOKEN USDCX_TOKEN)
@@ -190,7 +185,7 @@
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_SBTC) (is-eq side ASSET_USDCX)) ERR_INVALID_SIDE)
     (let (
-      (msg-hash (contract-call? .jing-vault-auth build-intent-hash {
+      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
         action: "dlmm-swap",
         side: side,
         amount: amount,
@@ -214,13 +209,12 @@
                           swap-y-for-x-simple-multi
                           DLMM_POOL_SBTC_USDCX
                           SBTC_TOKEN USDCX_TOKEN amount min-out)))))))
-      (try! (contract-call? .jing-core log-bitflow-swap
+      (try! (contract-call? JING-CORE log-bitflow-swap
         msg-hash
         (if (is-eq side ASSET_SBTC) SBTC_TOKEN USDCX_TOKEN)
         (if (is-eq side ASSET_SBTC) USDCX_TOKEN SBTC_TOKEN)
         amount limit-price (get out result)))
       (ok msg-hash)))))
-
 
 (define-private (verify-and-consume
     (msg-hash (buff 32))
