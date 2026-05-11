@@ -1,74 +1,21 @@
-;; jing-vault-v1
-;; Personal vault for conditional execution into the sBTC/STX Jing market
-;; (JING-MARKET) with a Bitflow xyk fallback path.
-;; Each user deploys their own instance.
-;;
-;; - Owner: deposits/withdraws funds, signs SIP-018 intents off-chain.
-;; - Keeper: submits signed intents (jing-deposit, bitflow-swap) and
-;;           triggers unsigned cancels / revocations on the owner's behalf.
-;; - Funds never leave owner's control except into the registered market
-;;   (JING-MARKET), into Bitflow's xyk-core-v-1-2
-;;   sBTC/STX pool (pinned principals), or back to OWNER.
-;;
-;; All assets and venues are pinned at compile time. There are no trait
-;; or principal arguments accepted from the keeper -- substitution
-;; vector closed by construction.
-;;
-;; STX handling
-;; ------------
-;; The vault holds native STX throughout. WSTX_TOKEN
-;; ('SM179...token-stx-v-1-2) is just a SIP-010 facade -- its `transfer`
-;; is `stx-transfer?`, its `get-balance` is `stx-get-balance`, no
-;; minted FT supply. So when v3-stx-sbtc / DLMM / xyk call
-;; `t.transfer(...)` with `t = WSTX_TOKEN`, native STX moves directly.
-;; The vault never calls deposit-stx/withdraw-stx on the wrapper.
-;; Every STX-side egress just needs `with-stx amount` on the as-contract
-;; clause; no `with-ft` ever applies on the STX leg.
-;;
-;; Equity ledger: vault and market both denominate STX-side equity in
-;; WSTX_TOKEN (the wstx wrapper principal). Single bucket end-to-end:
-;; vault credits on deposit-stx, market's distribute path debits on
-;; settle (unconditional), refunds skip via debit-if-not-registered, and
-;; vault debits on withdraw-stx. STX-side and sBTC-side are both exact.
-;; Native STX is the user-facing form only -- at the deposit/withdraw
-;; boundary -- and never appears as a ledger label.
 
-;; ---------------------------------------------------------------
-;; Constants
-;; ---------------------------------------------------------------
 
 (define-constant OWNER tx-sender)
 
-;; Precision: Pyth is 8-dec, so limit-price is STX/sBTC * 1e8.
 (define-constant PRICE_PRECISION u100000000)
-;; sBTC is 8-dec (sats), STX/wstx is 6-dec (ustx). Conversion factor = 1e2.
 (define-constant DECIMAL_FACTOR u100)
 
-;; Token principals. The STX side is denominated in wstx everywhere on
-;; the ledger (matches what the market emits) -- single bucket, no
-;; parallel STX/wstx tracking. Native STX is just the user-facing form
-;; at the deposit/withdraw boundary; internally and in events, it's wstx.
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX_TOKEN 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 
-;; Jing market this vault is bound to (sBTC = token-x, native STX on y).
 (define-constant JING-MARKET .markets-sbtc-stx-jing)
 
-;; Bitflow xyk pool used by execute-bitflow-swap. Pool layout: x=sBTC,
-;; y=wstx (handled with native STX via xyk-core's wrapping).
 (define-constant XYK_CORE 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2)
 (define-constant XYK_POOL_SBTC_STX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1)
 
-;; Bitflow DLMM router + pool used by execute-dlmm-swap. Pool layout:
-;; x=wstx, y=sBTC (Bitflow's DLMM names the pool stx-sbtc, inverse of
-;; the xyk pool layout above and inverse of the v3 jing market).
 (define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1)
 (define-constant DLMM_POOL_STX_SBTC 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15)
 
-;; Asset names: doubly used as (a) the SIP-010 ft identifier in `with-ft`
-;; and (b) the side label embedded in the SIP-018 message hash. Renaming
-;; changes every prior intent's hash, so these ARE part of the
-;; signed-intent wire format.
 (define-constant ASSET_WSTX "wstx")
 (define-constant ASSET_SBTC "sbtc-token")
 
@@ -81,9 +28,6 @@
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
 
-;; ---------------------------------------------------------------
-;; State
-;; ---------------------------------------------------------------
 
 (define-data-var owner-pubkey (buff 33) 0x000000000000000000000000000000000000000000000000000000000000000000)
 
@@ -93,9 +37,6 @@
 
 (define-data-var initialized bool false)
 
-;; ---------------------------------------------------------------
-;; Read-only
-;; ---------------------------------------------------------------
 
 (define-read-only (get-owner) OWNER)
 
@@ -115,9 +56,6 @@
 
 (define-read-only (is-initialized) (var-get initialized))
 
-;; ---------------------------------------------------------------
-;; Initialization
-;; ---------------------------------------------------------------
 
 (define-public (initialize (canonical principal))
   (begin
@@ -126,9 +64,6 @@
     (try! (contract-call? .jing-core register canonical))
     (ok true)))
 
-;; ---------------------------------------------------------------
-;; Owner-only admin
-;; ---------------------------------------------------------------
 
 (define-public (set-owner-pubkey (pubkey (buff 33)))
   (begin
@@ -176,8 +111,6 @@
     (try! (contract-call? .jing-core log-withdraw SBTC_TOKEN amount))
     (ok true)))
 
-;; Burn a signed intent's message hash so it can never fire. Owner or
-;; keeper.
 (define-public (revoke-intent (target-hash (buff 32)))
   (begin
     (asserts! (or (is-eq tx-sender OWNER)
@@ -188,14 +121,6 @@
     (try! (contract-call? .jing-core log-revoke target-hash))
     (ok true)))
 
-;; ---------------------------------------------------------------
-;; Trusted-principal Jing cancels (no signature required)
-;; ---------------------------------------------------------------
-;;
-;; Owner or keeper can cancel an in-flight deposit on the registered
-;; market. Refund lands back in the vault and is freely eligible for
-;; any pre-signed intent whose balance the vault can now satisfy.
-;; cancel-jing-stx unwraps the wstx refund back to native STX.
 
 (define-public (cancel-jing-stx)
   (begin
@@ -221,12 +146,7 @@
       JING-MARKET SBTC_TOKEN))
     (ok true)))
 
-;; ---------------------------------------------------------------
-;; Signed intents
-;; ---------------------------------------------------------------
 
-;; Execute a signed Jing deposit intent. STX side wraps native STX to
-;; wstx via token-stx-v-1-2 before depositing into the market.
 (define-public (execute-jing-deposit
     (sig (buff 65))
     (side (string-ascii 128))
@@ -261,11 +181,6 @@
       amount limit-price))
     (ok msg-hash)))
 
-;; Execute a signed Bitflow swap intent on the sBTC/STX xyk pool.
-;; min-out is derived on-chain from (amount, limit-price). All Bitflow
-;; principals are pinned constants. xyk-core handles the wstx wrap
-;; internally on the STX leg, so the vault sends/receives native STX
-;; here -- no transient wrap.
 (define-public (execute-bitflow-swap
     (sig (buff 65))
     (side (string-ascii 128))
@@ -274,10 +189,6 @@
     (auth-id uint)
     (expiry uint))
   (begin
-    ;; Validate inputs BEFORE computing min-out. derive-min-out divides by
-    ;; limit-price on the wstx side; binding it inside `let` would runtime-
-    ;; panic on limit-price=0 before the assert could surface a clean
-    ;; ERR_INVALID_PRICE.
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
     (let (
@@ -292,8 +203,6 @@
       (min-out (derive-min-out side amount limit-price))
     )
     (try! (verify-and-consume msg-hash sig expiry))
-    ;; side=wstx: spending STX (y), receiving sBTC (x) -> swap-y-for-x. Returns dx (uint).
-    ;; side=sbtc: spending sBTC (x), receiving STX (y) -> swap-x-for-y. Returns dy (uint).
     (let ((out (if (is-eq side ASSET_WSTX)
                    (try! (as-contract? ((with-stx amount))
                      (try! (contract-call? XYK_CORE
@@ -310,13 +219,6 @@
         amount limit-price out))
       (ok msg-hash)))))
 
-;; Execute a signed DLMM swap intent on Bitflow's
-;; dlmm-pool-stx-sbtc-v-1-bps-15 (pool layout: x=wstx, y=sBTC).
-;; Routes through Bitflow's dlmm-swap-router-v-1-1 which traverses up
-;; to MAX_STEPS bins automatically and enforces min-received (= our
-;; min-out) internally -- no bin-id arg, no post-trade assert needed.
-;; SIP-018 action is "dlmm-swap" so the message hash is distinct from
-;; bitflow-swap.
 (define-public (execute-dlmm-swap
     (sig (buff 65))
     (side (string-ascii 128))
@@ -325,7 +227,6 @@
     (auth-id uint)
     (expiry uint))
   (begin
-    ;; Validate inputs BEFORE computing min-out -- see execute-bitflow-swap.
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
     (let (
@@ -340,10 +241,6 @@
       (min-out (derive-min-out side amount limit-price))
     )
     (try! (verify-and-consume msg-hash sig expiry))
-    ;; side=wstx: spending wstx (x), want sBTC (y) -> swap-x-for-y-simple-multi
-    ;; side=sbtc-token: spending sBTC (y), want wstx (x) -> swap-y-for-x-simple-multi
-    ;; Router returns (ok {in: uint, out: uint}); we credit equity by the
-    ;; exact `out`, matching what actually landed in the vault.
     (let ((result (if (is-eq side ASSET_WSTX)
                       (try! (as-contract? ((with-stx amount))
                         (try! (contract-call?
@@ -364,9 +261,6 @@
         amount limit-price (get out result)))
       (ok msg-hash)))))
 
-;; ---------------------------------------------------------------
-;; Internal helpers
-;; ---------------------------------------------------------------
 
 (define-private (verify-and-consume
     (msg-hash (buff 32))
@@ -381,15 +275,6 @@
     (map-set used-pubkey-authorizations msg-hash signer)
     (ok true)))
 
-;; Derive Bitflow min-out from (amount, limit-price).
-;;
-;; limit-price = STX_per_sBTC * 1e8 (PRICE_PRECISION)
-;; sBTC is 8-dec (sats), STX/wstx is 6-dec (ustx), DECIMAL_FACTOR = 1e2.
-;;
-;; side="stx"  (spending A ustx, want >= M sats):
-;;   M = A * (PRICE_PRECISION * DECIMAL_FACTOR) / limit-price
-;; side="sbtc" (spending A sats, want >= M ustx):
-;;   M = A * limit-price / (PRICE_PRECISION * DECIMAL_FACTOR)
 (define-private (derive-min-out
     (side (string-ascii 128))
     (amount uint)
