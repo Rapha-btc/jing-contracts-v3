@@ -27,7 +27,7 @@
 ;; `auth-id` is a uniqueness salt (e.g. Date.now() in ms).
 ;; `expiry` is a Stacks block height after which the intent is dead.
 (define-read-only (build-intent-hash (details {
-  action: (string-ascii 16),
+  action: (string-ascii 32),
   side: (string-ascii 128),
   amount: uint,
   limit-price: uint,
