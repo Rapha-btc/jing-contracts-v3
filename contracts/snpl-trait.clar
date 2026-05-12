@@ -18,12 +18,23 @@
 
 (use-trait reserve-trait .reserve-trait.reserve-trait)
 
-(define-trait snpl-trait
-  (
-    (get-borrower () (response principal uint))
-    (get-reserve () (response principal uint))
-    (get-active-loan () (response (optional uint) uint))
-    (get-loan (uint) (response (optional {
+(define-trait snpl-trait (
+  (get-borrower
+    ()
+    (response principal uint)
+  )
+  (get-reserve
+    ()
+    (response principal uint)
+  )
+  (get-active-loan
+    ()
+    (response (optional uint) uint)
+  )
+  (get-loan
+    (uint)
+    (
+      response       (optional {
       notional-sbtc: uint,
       payoff-sbtc: uint,
       interest-bps: uint,
@@ -31,9 +42,21 @@
       deadline: uint,
       position-stx: uint,
       limit-price: uint,
-      status: uint
-    }) uint))
-    (borrow (uint uint <reserve-trait>) (response uint uint))
-    (repay (uint <reserve-trait>) (response bool uint))
-    (seize (uint <reserve-trait>) (response bool uint))
-  ))
+      status: uint,
+    })
+      uint
+    )
+  )
+  (borrow
+    (uint uint <reserve-trait>)
+    (response uint uint)
+  )
+  (repay
+    (uint <reserve-trait>)
+    (response bool uint)
+  )
+  (seize
+    (uint <reserve-trait>)
+    (response bool uint)
+  )
+))

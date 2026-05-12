@@ -11,7 +11,8 @@
     name: "jing-vault",
     version: "1",
     chain-id: chain-id,
-  }))))
+  })))
+)
 
 ;; `action` is "jing-deposit" or "bitflow-swap" (ASCII, up to 16 chars).
 ;; `side` is the symbol of the token being spent. For sBTC/STX vaults
@@ -44,4 +45,6 @@
         limit-price: (get limit-price details),
         auth-id: (get auth-id details),
         expiry: (get expiry details),
-      })))))))
+      })))
+    )))
+)

@@ -1,4 +1,3 @@
-
 (define-constant SIP018_MSG_PREFIX 0x534950303138)
 
 (define-read-only (get-domain-hash)
@@ -6,7 +5,8 @@
     name: "jing-vault",
     version: "1",
     chain-id: chain-id,
-  }))))
+  })))
+)
 
 (define-read-only (build-intent-hash (details {
   action: (string-ascii 32),
@@ -26,4 +26,6 @@
         limit-price: (get limit-price details),
         auth-id: (get auth-id details),
         expiry: (get expiry details),
-      })))))))
+      })))
+    )))
+)

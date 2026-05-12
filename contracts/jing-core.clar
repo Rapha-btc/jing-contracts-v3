@@ -53,7 +53,10 @@
 ;; register it (which would let them write arbitrary log-* events with
 ;; attacker-chosen tokens/feed). The contract-owner is intended to be a
 ;; multi-sig in production. See contracts/JING-CORE-DESIGN.md.
-(define-map verified-contracts principal (buff 32))
+(define-map verified-contracts
+  principal
+  (buff 32)
+)
 
 ;; Lifecycle is one-way. Once a contract is added to verified-contracts
 ;; it stays there forever -- no removal primitive. Severing a confirmed
@@ -84,43 +87,74 @@
 ;; whether a contract is registered, not who owns it. Equity is keyed
 ;; per-principal, so each registered contract holds its own equity
 ;; bucket and any external aggregation per-user is off-chain.
-(define-map registered-contracts principal bool)
-
+(define-map registered-contracts
+  principal
+  bool
+)
 
 ;; Equity per (token, owner). Debits floor at 0 to absorb proportional
 ;; distribution rounding.
-(define-map token-equity { token: principal, owner: principal } uint)
-(define-map total-token-equity principal uint)
+(define-map token-equity
+  {
+    token: principal,
+    owner: principal,
+  }
+  uint
+)
+(define-map total-token-equity
+  principal
+  uint
+)
 
 ;; ----- Read-only -----
 
 (define-read-only (is-verified-contract (contract principal))
-  (is-some (map-get? verified-contracts contract)))
+  (is-some (map-get? verified-contracts contract))
+)
 
 (define-read-only (get-verified-hash (contract principal))
-  (map-get? verified-contracts contract))
+  (map-get? verified-contracts contract)
+)
 
 ;; Public read so market `initialize` can gate registration on
 ;; `tx-sender == jing-core.contract-owner`. Returns the current owner
 ;; (intended multi-sig in production); set-contract-owner rotations
 ;; flow through automatically since each call re-reads.
-(define-read-only (get-contract-owner) (var-get contract-owner))
+(define-read-only (get-contract-owner)
+  (var-get contract-owner)
+)
 
-(define-read-only (is-paused) (var-get paused))
+(define-read-only (is-paused)
+  (var-get paused)
+)
 
-(define-read-only (get-paused-at) (var-get paused-at))
+(define-read-only (get-paused-at)
+  (var-get paused-at)
+)
 
 (define-read-only (get-unpause-eligible-at)
-  (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS))
+  (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS)
+)
 
 (define-read-only (is-registered (p principal))
-  (default-to false (map-get? registered-contracts p)))
+  (default-to false (map-get? registered-contracts p))
+)
 
-(define-read-only (get-token-equity (token principal) (owner principal))
-  (default-to u0 (map-get? token-equity { token: token, owner: owner })))
+(define-read-only (get-token-equity
+    (token principal)
+    (owner principal)
+  )
+  (default-to u0
+    (map-get? token-equity {
+      token: token,
+      owner: owner,
+    })
+  )
+)
 
 (define-read-only (get-total-token-equity (token principal))
-  (default-to u0 (map-get? total-token-equity token)))
+  (default-to u0 (map-get? total-token-equity token))
+)
 
 ;; Zest-shaped read-only for the dual-stacking-boost cross-checks.
 ;; Returns the principal's DIRECT sBTC equity in the jing ecosystem
@@ -130,49 +164,103 @@
 ;; reflects the unified bool-shape registry -- jing-core no longer maps
 ;; vaults to owners.
 (define-read-only (get-balance (user principal))
-  (ok (get-token-equity SBTC_TOKEN user)))
+  (ok (get-token-equity SBTC_TOKEN user))
+)
 
 ;; ----- Private equity helpers -----
 
-(define-private (credit (token principal) (who principal) (amount uint))
-  (let (
-    (current (get-token-equity token who))
-    (total (get-total-token-equity token))
+(define-private (credit
+    (token principal)
+    (who principal)
+    (amount uint)
   )
-    (map-set token-equity { token: token, owner: who } (+ current amount))
+  (let (
+      (current (get-token-equity token who))
+      (total (get-total-token-equity token))
+    )
+    (map-set token-equity {
+      token: token,
+      owner: who,
+    }
+      (+ current amount)
+    )
     (map-set total-token-equity token (+ total amount))
-    true))
-
-(define-private (debit (token principal) (who principal) (amount uint))
-  (let (
-    (current (get-token-equity token who))
-    (total (get-total-token-equity token))
-    (applied (if (> amount current) current amount))
+    true
   )
-    (map-set token-equity { token: token, owner: who } (- current applied))
+)
+
+(define-private (debit
+    (token principal)
+    (who principal)
+    (amount uint)
+  )
+  (let (
+      (current (get-token-equity token who))
+      (total (get-total-token-equity token))
+      (applied (if (> amount current)
+        current
+        amount
+      ))
+    )
+    (map-set token-equity {
+      token: token,
+      owner: who,
+    }
+      (- current applied)
+    )
     (map-set total-token-equity token (- total applied))
-    true))
+    true
+  )
+)
 
 ;; Equity helpers keyed on whether the principal is a registered
 ;; jing-ecosystem contract (vault, reserve, or snpl). Tokens at a
 ;; registered contract stay in the ecosystem -> tracked as equity on
 ;; that contract's bucket. Tokens at a non-registered principal (a user
 ;; wallet) leave the ecosystem -> no equity change.
-(define-private (credit-if-not-registered (token principal) (p principal) (amount uint))
-  (if (is-registered p) true (credit token p amount)))
+(define-private (credit-if-not-registered
+    (token principal)
+    (p principal)
+    (amount uint)
+  )
+  (if (is-registered p)
+    true
+    (credit token p amount)
+  )
+)
 
-(define-private (debit-if-not-registered (token principal) (p principal) (amount uint))
-  (if (is-registered p) true (debit token p amount)))
+(define-private (debit-if-not-registered
+    (token principal)
+    (p principal)
+    (amount uint)
+  )
+  (if (is-registered p)
+    true
+    (debit token p amount)
+  )
+)
 
-(define-private (credit-if-registered (token principal) (p principal) (amount uint))
-  (if (is-registered p) (credit token p amount) true))
+(define-private (credit-if-registered
+    (token principal)
+    (p principal)
+    (amount uint)
+  )
+  (if (is-registered p)
+    (credit token p amount)
+    true
+  )
+)
 
 ;; Helper consumed by `try!` at the top of every entry-side log-* function.
 ;; Returns (ok true) when open, (err ERR_PAUSED) when paused -- so try!
 ;; propagates the err into the calling log function and out to the
 ;; caller's tx, reverting all state changes atomically.
 (define-private (check-not-paused)
-  (if (var-get paused) ERR_PAUSED (ok true)))
+  (if (var-get paused)
+    ERR_PAUSED
+    (ok true)
+  )
+)
 
 ;; ----- Admin: verified-contract template management -----
 
@@ -189,13 +277,19 @@
 (define-public (set-verified-contract (contract principal))
   (let ((computed-hash (unwrap! (contract-hash? contract) ERR_INVALID_CONTRACT_HASH)))
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (is-none (map-get? verified-contracts contract)) ERR_ALREADY_REGISTERED)
+    (asserts! (is-none (map-get? verified-contracts contract))
+      ERR_ALREADY_REGISTERED
+    )
     (map-set verified-contracts contract computed-hash)
-    (print { event: "verified-contract-set",
-             contract: contract,
-             hash: computed-hash,
-             by: tx-sender })
-    (ok true)))
+    (print {
+      event: "verified-contract-set",
+      contract: contract,
+      hash: computed-hash,
+      by: tx-sender,
+    })
+    (ok true)
+  )
+)
 
 ;; ----- Admin: protocol-wide pause -----
 
@@ -213,11 +307,15 @@
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (var-set paused true)
     (var-set paused-at burn-block-height)
-    (print { event: "paused",
-             by: tx-sender,
-             paused-at: burn-block-height,
-             eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS) })
-    (ok true)))
+    (print {
+      event: "paused",
+      by: tx-sender,
+      paused-at: burn-block-height,
+      eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS),
+    })
+    (ok true)
+  )
+)
 
 ;; Unpause = release. Owner-only, and only callable after
 ;; TIMELOCK_BURN_BLOCKS have elapsed since the most recent pause event.
@@ -227,15 +325,23 @@
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (asserts! (>= burn-block-height (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS))
-              ERR_TIMELOCK_NOT_ELAPSED)
+      ERR_TIMELOCK_NOT_ELAPSED
+    )
     (var-set paused false)
-    (print { event: "unpaused", by: tx-sender })
-    (ok true)))
+    (print {
+      event: "unpaused",
+      by: tx-sender,
+    })
+    (ok true)
+  )
+)
 
 (define-public (set-contract-owner (new-owner principal))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (ok (var-set contract-owner new-owner))))
+    (ok (var-set contract-owner new-owner))
+  )
+)
 
 ;; ----- Contract registration (vaults, reserves, snpls) -----
 
@@ -266,18 +372,24 @@
 ;;    `contracts/JING-CORE-DESIGN.md`.
 (define-public (register (canonical principal))
   (let (
-    (caller contract-caller)
-    (caller-hash (unwrap! (contract-hash? contract-caller) ERR_INVALID_CONTRACT_HASH))
-    (verified-hash (unwrap! (map-get? verified-contracts canonical) ERR_NOT_VERIFIED))
-  )
+      (caller contract-caller)
+      (caller-hash (unwrap! (contract-hash? contract-caller) ERR_INVALID_CONTRACT_HASH))
+      (verified-hash (unwrap! (map-get? verified-contracts canonical) ERR_NOT_VERIFIED))
+    )
     (asserts! (is-eq caller-hash verified-hash) ERR_HASH_MISMATCH)
-    (asserts! (is-none (map-get? registered-contracts caller)) ERR_ALREADY_REGISTERED)
+    (asserts! (is-none (map-get? registered-contracts caller))
+      ERR_ALREADY_REGISTERED
+    )
     (map-set registered-contracts caller true)
-    (print { event: "registered",
-             contract: caller,
-             canonical: canonical,
-             hash: caller-hash })
-    (ok true)))
+    (print {
+      event: "registered",
+      contract: caller,
+      canonical: canonical,
+      hash: caller-hash,
+    })
+    (ok true)
+  )
+)
 
 ;; ====================================================================
 ;; Vault-side logs -- contract-caller is the vault
@@ -307,40 +419,73 @@
 ;; indexer can attribute events across vault templates (sbtc-stx,
 ;; sbtc-usdcx, future pairs) without a schema migration.
 
-(define-public (log-deposit (token principal) (amount uint))
+(define-public (log-deposit
+    (token principal)
+    (amount uint)
+  )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (credit token contract-caller amount)
-    (print { event: "vault-deposit", vault: contract-caller,
-             token: token, amount: amount,
-             equity: (get-token-equity token contract-caller) })
-    (ok true)))
+    (print {
+      event: "vault-deposit",
+      vault: contract-caller,
+      token: token,
+      amount: amount,
+      equity: (get-token-equity token contract-caller),
+    })
+    (ok true)
+  )
+)
 
-(define-public (log-withdraw (token principal) (amount uint))
+(define-public (log-withdraw
+    (token principal)
+    (amount uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (debit token contract-caller amount)
-    (print { event: "vault-withdraw", vault: contract-caller,
-             token: token, amount: amount,
-             equity: (get-token-equity token contract-caller)})
-    (ok true)))
+    (print {
+      event: "vault-withdraw",
+      vault: contract-caller,
+      token: token,
+      amount: amount,
+      equity: (get-token-equity token contract-caller),
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-revoke (target-hash (buff 32)))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "vault-revoke", vault: contract-caller, target-hash: target-hash })
-    (ok true)))
+    (print {
+      event: "vault-revoke",
+      vault: contract-caller,
+      target-hash: target-hash,
+    })
+    (ok true)
+  )
+)
 
-(define-public (log-cancel (market principal) (token-in principal))
+(define-public (log-cancel
+    (market principal)
+    (token-in principal)
+  )
   ;; market is the market the vault is reclaiming from. token-in is
   ;; whichever token the vault originally deposited and is now getting
   ;; refunded.
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "vault-cancel", vault: contract-caller,
-             market: market, token-in: token-in })
-    (ok true)))
+    (print {
+      event: "vault-cancel",
+      vault: contract-caller,
+      market: market,
+      token-in: token-in,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-jing-deposit
     (msg-hash (buff 32))
@@ -348,7 +493,8 @@
     (token-in principal)
     (token-out principal)
     (amount uint)
-    (limit-price uint))
+    (limit-price uint)
+  )
   ;; Intra-ecosystem transfer (vault -> approved market). No equity delta
   ;; here; credit happened on vault ingress, debit happens on market
   ;; cleared/refund. market disambiguates which pair when a single vault
@@ -367,7 +513,9 @@
       amount: amount,
       limit-price: limit-price,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-bitflow-swap
     (msg-hash (buff 32))
@@ -375,7 +523,8 @@
     (token-out principal)
     (amount uint)
     (limit-price uint)
-    (out uint))
+    (out uint)
+  )
   ;; Vault leaves the ecosystem on token-in side, re-enters on token-out
   ;; side. Both legs update equity unconditionally so the vault's bucket
   ;; mirrors actual on-chain balances. Caller passes the venue's exact
@@ -398,7 +547,9 @@
       equity-in: (get-token-equity token-in contract-caller),
       equity-out: (get-token-equity token-out contract-caller),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 ;; ====================================================================
 ;; Market-side logs -- contract-caller must be a registered market
@@ -420,23 +571,37 @@
     (bumped (optional principal))
     (bumped-amount uint)
     (token-x principal)
-    (token-y principal))
-  (begin 
+    (token-y principal)
+  )
+  (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped b (debit-if-not-registered token-x b bumped-amount) true)
+    (match bumped
+      b (debit-if-not-registered token-x b bumped-amount)
+      true
+    )
     (credit-if-not-registered token-x depositor delta)
     (print {
       event: "deposit-x",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
-      amount: amount, delta: delta, limit: limit, cycle: cycle,
-      bumped: bumped, bumped-amount: bumped-amount,
+      amount: amount,
+      delta: delta,
+      limit: limit,
+      cycle: cycle,
+      bumped: bumped,
+      bumped-amount: bumped-amount,
       equity-x: (get-token-equity token-x depositor),
-      bumped-equity-x: (match bumped b (some (get-token-equity token-x b)) none),
+      bumped-equity-x: (match bumped
+        b (some (get-token-equity token-x b))
+        none
+      ),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-deposit-y
     (depositor principal)
@@ -447,98 +612,133 @@
     (bumped (optional principal))
     (bumped-amount uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped b (debit-if-not-registered token-y b bumped-amount) true)
+    (match bumped
+      b (debit-if-not-registered token-y b bumped-amount)
+      true
+    )
     (credit-if-not-registered token-y depositor delta)
     (print {
       event: "deposit-y",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
-      amount: amount, delta: delta, limit: limit, cycle: cycle,
-      bumped: bumped, bumped-amount: bumped-amount,
+      amount: amount,
+      delta: delta,
+      limit: limit,
+      cycle: cycle,
+      bumped: bumped,
+      bumped-amount: bumped-amount,
       equity-y: (get-token-equity token-y depositor),
-      bumped-equity-y: (match bumped b (some (get-token-equity token-y b)) none),
+      bumped-equity-y: (match bumped
+        b (some (get-token-equity token-y b))
+        none
+      ),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-refund-x
     (depositor principal)
     (amount uint)
     (cycle uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (debit-if-not-registered token-x depositor amount)
     (print {
       event: "refund-x",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
-      amount: amount, cycle: cycle,
+      amount: amount,
+      cycle: cycle,
       equity-x: (get-token-equity token-x depositor),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-refund-y
     (depositor principal)
     (amount uint)
     (cycle uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (debit-if-not-registered token-y depositor amount)
     (print {
       event: "refund-y",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
-      amount: amount, cycle: cycle,
+      amount: amount,
+      cycle: cycle,
       equity-y: (get-token-equity token-y depositor),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-set-limit-x
     (depositor principal)
     (limit uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "set-limit-x",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, limit: limit,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-set-limit-y
     (depositor principal)
     (limit uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "set-limit-y",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, limit: limit,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-close-deposits
     (cycle uint)
     (closed-at-block uint)
     (elapsed-blocks uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     ;; Gates the close-deposits + small-share-roll branch via tx atomicity:
     ;; small-share-rolls are logged earlier in the same tx but the whole tx
@@ -548,17 +748,23 @@
     (print {
       event: "close-deposits",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      cycle: cycle, closed-at-block: closed-at-block, elapsed-blocks: elapsed-blocks,
+      token-x: token-x,
+      token-y: token-y,
+      cycle: cycle,
+      closed-at-block: closed-at-block,
+      elapsed-blocks: elapsed-blocks,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-small-share-roll-x
     (depositor principal)
     (cycle uint)
     (amount uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     ;; Caller-auth gate: contract-caller must be a registered market.
     ;; The previous "transitive-auth" rationale (relying on a parent
@@ -573,26 +779,37 @@
     (print {
       event: "small-share-roll-x",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, cycle: cycle, amount: amount,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      cycle: cycle,
+      amount: amount,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-small-share-roll-y
     (depositor principal)
     (cycle uint)
     (amount uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "small-share-roll-y",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, cycle: cycle, amount: amount,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      cycle: cycle,
+      amount: amount,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-limit-roll-x
     (depositor principal)
@@ -601,17 +818,24 @@
     (limit uint)
     (clearing uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "limit-roll-x",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, cycle: cycle, amount: amount,
-      limit: limit, clearing: clearing,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      cycle: cycle,
+      amount: amount,
+      limit: limit,
+      clearing: clearing,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-limit-roll-y
     (depositor principal)
@@ -620,17 +844,24 @@
     (limit uint)
     (clearing uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "limit-roll-y",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      depositor: depositor, cycle: cycle, amount: amount,
-      limit: limit, clearing: clearing,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      cycle: cycle,
+      amount: amount,
+      limit: limit,
+      clearing: clearing,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-settlement
     (cycle uint)
@@ -644,7 +875,8 @@
     (y-fee uint)
     (x-is-binding bool)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     ;; Gates the entire settle branch via tx atomicity. Limit-rolls run
     ;; earlier in execute-settlement and are reverted when this trips;
@@ -656,15 +888,25 @@
     (print {
       event: "settlement",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       cycle: cycle,
-      oracle-price: oracle-price, clearing-price: clearing-price,
-      x-cleared: x-cleared, y-cleared: y-cleared,
-      x-unfilled: x-unfilled, y-unfilled: y-unfilled,
-      x-fee: x-fee, y-fee: y-fee,
-      binding-side: (if x-is-binding "x" "y"),
+      oracle-price: oracle-price,
+      clearing-price: clearing-price,
+      x-cleared: x-cleared,
+      y-cleared: y-cleared,
+      x-unfilled: x-unfilled,
+      y-unfilled: y-unfilled,
+      x-fee: x-fee,
+      y-fee: y-fee,
+      binding-side: (if x-is-binding
+        "x"
+        "y"
+      ),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-distribute-x-depositor
     (depositor principal)
@@ -673,22 +915,31 @@
     (x-cleared uint)
     (x-rolled uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (if (> x-cleared u0) (debit token-x depositor x-cleared) true)
+    (if (> x-cleared u0)
+      (debit token-x depositor x-cleared)
+      true
+    )
     (credit-if-registered token-y depositor y-received)
     (print {
       event: "distribute-x-depositor",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
       cycle: cycle,
-      x-cleared: x-cleared, y-received: y-received, x-rolled: x-rolled,
+      x-cleared: x-cleared,
+      y-received: y-received,
+      x-rolled: x-rolled,
       equity-x: (get-token-equity token-x depositor),
       equity-y: (get-token-equity token-y depositor),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-distribute-y-depositor
     (depositor principal)
@@ -697,22 +948,31 @@
     (y-cleared uint)
     (y-rolled uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (if (> y-cleared u0) (debit token-y depositor y-cleared) true)
+    (if (> y-cleared u0)
+      (debit token-y depositor y-cleared)
+      true
+    )
     (credit-if-registered token-x depositor x-received)
     (print {
       event: "distribute-y-depositor",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       depositor: depositor,
       cycle: cycle,
-      y-cleared: y-cleared, x-received: x-received, y-rolled: y-rolled,
+      y-cleared: y-cleared,
+      x-received: x-received,
+      y-rolled: y-rolled,
       equity-x: (get-token-equity token-x depositor),
       equity-y: (get-token-equity token-y depositor),
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-sweep-dust
     (x-unfilled uint)
@@ -724,35 +984,49 @@
     (y-payout-dust uint)
     (y-roll-dust uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "sweep-dust",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
-      x-unfilled: x-unfilled, y-unfilled: y-unfilled,
-      x-dust: x-dust, x-payout-dust: x-payout-dust, x-roll-dust: x-roll-dust,
-      y-dust: y-dust, y-payout-dust: y-payout-dust, y-roll-dust: y-roll-dust,
+      token-x: token-x,
+      token-y: token-y,
+      x-unfilled: x-unfilled,
+      y-unfilled: y-unfilled,
+      x-dust: x-dust,
+      x-payout-dust: x-payout-dust,
+      x-roll-dust: x-roll-dust,
+      y-dust: y-dust,
+      y-payout-dust: y-payout-dust,
+      y-roll-dust: y-roll-dust,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (log-cancel-cycle
     (cycle uint)
     (x-rolled uint)
     (y-rolled uint)
     (token-x principal)
-    (token-y principal))
+    (token-y principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (print {
       event: "cancel-cycle",
       market: contract-caller,
-      token-x: token-x, token-y: token-y,
+      token-x: token-x,
+      token-y: token-y,
       cycle: cycle,
-      x-rolled: x-rolled, y-rolled: y-rolled,
+      x-rolled: x-rolled,
+      y-rolled: y-rolled,
     })
-    (ok true)))
+    (ok true)
+  )
+)
 
 ;; ====================================================================
 ;; Reserve-side logs -- contract-caller must be a registered reserve
@@ -770,99 +1044,168 @@
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (credit SBTC_TOKEN contract-caller amount)
-    (print { event: "reserve-supply",
-             reserve: contract-caller,
-             amount: amount,
-             sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller) })
-    (ok true)))
+    (print {
+      event: "reserve-supply",
+      reserve: contract-caller,
+      amount: amount,
+      sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller),
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-withdraw-sbtc (amount uint))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
     (debit SBTC_TOKEN contract-caller amount)
-    (print { event: "reserve-withdraw-sbtc",
-             reserve: contract-caller,
-             amount: amount,
-             sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller) })
-    (ok true)))
+    (print {
+      event: "reserve-withdraw-sbtc",
+      reserve: contract-caller,
+      amount: amount,
+      sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller),
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-withdraw-stx (amount uint))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-withdraw-stx",
-             reserve: contract-caller, amount: amount })
-    (ok true)))
+    (print {
+      event: "reserve-withdraw-stx",
+      reserve: contract-caller,
+      amount: amount,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-open-credit-line
-    (snpl principal) (borrower principal)
-    (cap-sbtc uint) (interest-bps uint))
+    (snpl principal)
+    (borrower principal)
+    (cap-sbtc uint)
+    (interest-bps uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-open-credit-line",
-             reserve: contract-caller,
-             snpl: snpl, borrower: borrower,
-             cap-sbtc: cap-sbtc, interest-bps: interest-bps })
-    (ok true)))
+    (print {
+      event: "reserve-open-credit-line",
+      reserve: contract-caller,
+      snpl: snpl,
+      borrower: borrower,
+      cap-sbtc: cap-sbtc,
+      interest-bps: interest-bps,
+    })
+    (ok true)
+  )
+)
 
-(define-public (log-reserve-set-credit-line-cap (snpl principal) (cap-sbtc uint))
+(define-public (log-reserve-set-credit-line-cap
+    (snpl principal)
+    (cap-sbtc uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-set-credit-line-cap",
-             reserve: contract-caller, snpl: snpl, cap-sbtc: cap-sbtc })
-    (ok true)))
+    (print {
+      event: "reserve-set-credit-line-cap",
+      reserve: contract-caller,
+      snpl: snpl,
+      cap-sbtc: cap-sbtc,
+    })
+    (ok true)
+  )
+)
 
-(define-public (log-reserve-set-credit-line-interest (snpl principal) (interest-bps uint))
+(define-public (log-reserve-set-credit-line-interest
+    (snpl principal)
+    (interest-bps uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-set-credit-line-interest",
-             reserve: contract-caller, snpl: snpl, interest-bps: interest-bps })
-    (ok true)))
+    (print {
+      event: "reserve-set-credit-line-interest",
+      reserve: contract-caller,
+      snpl: snpl,
+      interest-bps: interest-bps,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-close-credit-line (snpl principal))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-close-credit-line",
-             reserve: contract-caller, snpl: snpl })
-    (ok true)))
+    (print {
+      event: "reserve-close-credit-line",
+      reserve: contract-caller,
+      snpl: snpl,
+    })
+    (ok true)
+  )
+)
 
 ;; Reserve's OWN paused flag (per-reserve, separate from jing-core's
 ;; protocol-wide pause). Logged here for index visibility.
 (define-public (log-reserve-set-paused (paused-state bool))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-set-paused",
-             reserve: contract-caller, paused: paused-state })
-    (ok true)))
+    (print {
+      event: "reserve-set-paused",
+      reserve: contract-caller,
+      paused: paused-state,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-set-min-sbtc-draw (amount uint))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-set-min-sbtc-draw",
-             reserve: contract-caller, amount: amount })
-    (ok true)))
+    (print {
+      event: "reserve-set-min-sbtc-draw",
+      reserve: contract-caller,
+      amount: amount,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-draw
-    (snpl principal) (amount uint) (new-outstanding-sbtc uint))
+    (snpl principal)
+    (amount uint)
+    (new-outstanding-sbtc uint)
+  )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-draw",
-             reserve: contract-caller,
-             snpl: snpl,
-             amount: amount,
-             new-outstanding-sbtc: new-outstanding-sbtc })
-    (ok true)))
+    (print {
+      event: "reserve-draw",
+      reserve: contract-caller,
+      snpl: snpl,
+      amount: amount,
+      new-outstanding-sbtc: new-outstanding-sbtc,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-reserve-notify-return
-    (snpl principal) (amount uint) (new-outstanding-sbtc uint))
+    (snpl principal)
+    (amount uint)
+    (new-outstanding-sbtc uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "reserve-notify-return",
-             reserve: contract-caller,
-             snpl: snpl,
-             amount: amount,
-             new-outstanding-sbtc: new-outstanding-sbtc })
-    (ok true)))
+    (print {
+      event: "reserve-notify-return",
+      reserve: contract-caller,
+      snpl: snpl,
+      amount: amount,
+      new-outstanding-sbtc: new-outstanding-sbtc,
+    })
+    (ok true)
+  )
+)
 
 ;; ====================================================================
 ;; SNPL-side logs -- contract-caller must be a registered snpl. SNPL never
@@ -874,82 +1217,133 @@
 (define-public (log-snpl-set-reserve (reserve principal))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-set-reserve",
-             snpl: contract-caller, reserve: reserve })
-    (ok true)))
+    (print {
+      event: "snpl-set-reserve",
+      snpl: contract-caller,
+      reserve: reserve,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-snpl-borrow
-    (loan-id uint) (borrower principal) (amount uint)
-    (interest-bps uint) (deadline uint) (reserve principal))
+    (loan-id uint)
+    (borrower principal)
+    (amount uint)
+    (interest-bps uint)
+    (deadline uint)
+    (reserve principal)
+  )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-borrow",
-             snpl: contract-caller,
-             loan-id: loan-id,
-             borrower: borrower,
-             amount: amount,
-             interest-bps: interest-bps,
-             deadline: deadline,
-             reserve: reserve })
-    (ok true)))
+    (print {
+      event: "snpl-borrow",
+      snpl: contract-caller,
+      loan-id: loan-id,
+      borrower: borrower,
+      amount: amount,
+      interest-bps: interest-bps,
+      deadline: deadline,
+      reserve: reserve,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-snpl-swap-deposit
-    (loan-id uint) (amount uint) (limit uint) (cycle uint))
+    (loan-id uint)
+    (amount uint)
+    (limit uint)
+    (cycle uint)
+  )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-swap-deposit",
-             snpl: contract-caller,
-             loan-id: loan-id,
-             amount: amount,
-             limit: limit,
-             cycle: cycle })
-    (ok true)))
+    (print {
+      event: "snpl-swap-deposit",
+      snpl: contract-caller,
+      loan-id: loan-id,
+      amount: amount,
+      limit: limit,
+      cycle: cycle,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-snpl-cancel-swap (loan-id uint))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-cancel-swap",
-             snpl: contract-caller, loan-id: loan-id })
-    (ok true)))
+    (print {
+      event: "snpl-cancel-swap",
+      snpl: contract-caller,
+      loan-id: loan-id,
+    })
+    (ok true)
+  )
+)
 
-(define-public (log-snpl-set-swap-limit (loan-id uint) (limit-price uint))
+(define-public (log-snpl-set-swap-limit
+    (loan-id uint)
+    (limit-price uint)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-set-swap-limit",
-             snpl: contract-caller,
-             loan-id: loan-id,
-             limit-price: limit-price })
-    (ok true)))
+    (print {
+      event: "snpl-set-swap-limit",
+      snpl: contract-caller,
+      loan-id: loan-id,
+      limit-price: limit-price,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-snpl-repay
     (loan-id uint)
-    (payoff-sbtc uint) (lender-payoff-sbtc uint) (fee-sbtc uint)
-    (delta-sbtc uint) (is-shortfall bool)
-    (stx-released uint) (reserve principal))
+    (payoff-sbtc uint)
+    (lender-payoff-sbtc uint)
+    (fee-sbtc uint)
+    (delta-sbtc uint)
+    (is-shortfall bool)
+    (stx-released uint)
+    (reserve principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-repay",
-             snpl: contract-caller,
-             loan-id: loan-id,
-             payoff-sbtc: payoff-sbtc,
-             lender-payoff-sbtc: lender-payoff-sbtc,
-             fee-sbtc: fee-sbtc,
-             delta-sbtc: delta-sbtc,
-             is-shortfall: is-shortfall,
-             stx-released: stx-released,
-             reserve: reserve })
-    (ok true)))
+    (print {
+      event: "snpl-repay",
+      snpl: contract-caller,
+      loan-id: loan-id,
+      payoff-sbtc: payoff-sbtc,
+      lender-payoff-sbtc: lender-payoff-sbtc,
+      fee-sbtc: fee-sbtc,
+      delta-sbtc: delta-sbtc,
+      is-shortfall: is-shortfall,
+      stx-released: stx-released,
+      reserve: reserve,
+    })
+    (ok true)
+  )
+)
 
 (define-public (log-snpl-seize
-    (loan-id uint) (stx-seized uint) (sbtc-seized uint) (reserve principal))
+    (loan-id uint)
+    (stx-seized uint)
+    (sbtc-seized uint)
+    (reserve principal)
+  )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print { event: "snpl-seize",
-             snpl: contract-caller,
-             loan-id: loan-id,
-             stx-seized: stx-seized,
-             sbtc-seized: sbtc-seized,
-             reserve: reserve })
-    (ok true)))
+    (print {
+      event: "snpl-seize",
+      snpl: contract-caller,
+      loan-id: loan-id,
+      stx-seized: stx-seized,
+      sbtc-seized: sbtc-seized,
+      reserve: reserve,
+    })
+    (ok true)
+  )
+)

@@ -35,11 +35,16 @@
 
 (define-data-var keeper (optional principal) none)
 
-(define-map used-pubkey-authorizations (buff 32) (buff 33))
+(define-map used-pubkey-authorizations
+  (buff 32)
+  (buff 33)
+)
 
 (define-data-var initialized bool false)
 
-(define-read-only (get-owner) OWNER)
+(define-read-only (get-owner)
+  OWNER
+)
 
 (define-read-only (get-status)
   {
@@ -47,32 +52,42 @@
     pubkey: (var-get owner-pubkey),
     keeper: (var-get keeper),
     stx-balance: (stx-get-balance current-contract),
-    sbtc-balance: (unwrap-panic (contract-call?
-      'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
-      get-balance current-contract)),
-  })
+    sbtc-balance: (unwrap-panic (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      get-balance current-contract
+    )),
+  }
+)
 
 (define-read-only (is-signature-used (h (buff 32)))
-  (is-some (map-get? used-pubkey-authorizations h)))
+  (is-some (map-get? used-pubkey-authorizations h))
+)
 
-(define-read-only (is-initialized) (var-get initialized))
+(define-read-only (is-initialized)
+  (var-get initialized)
+)
 
 (define-public (initialize (canonical principal))
   (begin
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set initialized true)
     (try! (contract-call? JING-CORE register canonical))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (set-owner-pubkey (pubkey (buff 33)))
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
-    (ok (var-set owner-pubkey pubkey))))
+    (ok (var-set owner-pubkey pubkey))
+  )
+)
 
 (define-public (set-keeper (new-keeper (optional principal)))
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
-    (ok (var-set keeper new-keeper))))
+    (ok (var-set keeper new-keeper))
+  )
+)
 
 (define-public (deposit-stx (amount uint))
   (begin
@@ -80,7 +95,9 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (stx-transfer? amount tx-sender current-contract))
     (try! (contract-call? JING-CORE log-deposit WSTX_TOKEN amount))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (deposit-sbtc (amount uint))
   (begin
@@ -88,55 +105,85 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (contract-call? SBTC_TOKEN transfer amount tx-sender current-contract none))
     (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (withdraw-stx (amount uint))
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-stx amount))
-      (try! (stx-transfer? amount current-contract OWNER))))
+      (try! (stx-transfer? amount current-contract OWNER))
+    ))
     (try! (contract-call? JING-CORE log-withdraw WSTX_TOKEN amount))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (withdraw-sbtc (amount uint))
   (begin
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-      (try! (contract-call? SBTC_TOKEN transfer amount current-contract OWNER none))))
+      (try! (contract-call? SBTC_TOKEN transfer amount current-contract OWNER none))
+    ))
     (try! (contract-call? JING-CORE log-withdraw SBTC_TOKEN amount))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (revoke-intent (target-hash (buff 32)))
   (begin
-    (asserts! (or (is-eq tx-sender OWNER)
-                  (is-eq (some tx-sender) (var-get keeper)))
-              ERR_NOT_OWNER)
-    (asserts! (is-none (map-get? used-pubkey-authorizations target-hash)) ERR_REPLAY)
+    (asserts!
+      (or
+        (is-eq tx-sender OWNER)
+        (is-eq (some tx-sender) (var-get keeper))
+      )
+      ERR_NOT_OWNER
+    )
+    (asserts! (is-none (map-get? used-pubkey-authorizations target-hash))
+      ERR_REPLAY
+    )
     (map-set used-pubkey-authorizations target-hash (var-get owner-pubkey))
     (try! (contract-call? JING-CORE log-revoke target-hash))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (cancel-jing-stx)
   (begin
-    (asserts! (or (is-eq tx-sender OWNER)
-                  (is-eq (some tx-sender) (var-get keeper)))
-              ERR_NOT_OWNER)
+    (asserts!
+      (or
+        (is-eq tx-sender OWNER)
+        (is-eq (some tx-sender) (var-get keeper))
+      )
+      ERR_NOT_OWNER
+    )
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))))
+      (try! (contract-call? JING-MARKET cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))
+    ))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET WSTX_TOKEN))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (cancel-jing-sbtc)
   (begin
-    (asserts! (or (is-eq tx-sender OWNER)
-                  (is-eq (some tx-sender) (var-get keeper)))
-              ERR_NOT_OWNER)
+    (asserts!
+      (or
+        (is-eq tx-sender OWNER)
+        (is-eq (some tx-sender) (var-get keeper))
+      )
+      ERR_NOT_OWNER
+    )
     (try! (as-contract? ((with-all-assets-unsafe))
-      (try! (contract-call? JING-MARKET cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))))
+      (try! (contract-call? JING-MARKET cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))
+    ))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
-    (ok true)))
+    (ok true)
+  )
+)
 
 (define-public (execute-jing-deposit
     (sig (buff 65))
@@ -144,31 +191,46 @@
     (amount uint)
     (limit-price uint)
     (auth-id uint)
-    (expiry uint))
-  (let (
-    (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+    (expiry uint)
+  )
+  (let ((msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
       action: "jing-deposit",
       side: side,
       amount: amount,
       limit-price: limit-price,
       auth-id: auth-id,
       expiry: expiry,
-    }))
-  )
-    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
+    })))
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
+      ERR_INVALID_SIDE
+    )
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
       (try! (as-contract? ((with-stx amount))
-        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price WSTX_TOKEN ASSET_WSTX))))
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price WSTX_TOKEN
+          ASSET_WSTX
+        ))
+      ))
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price SBTC_TOKEN ASSET_SBTC)))))
-    (try! (contract-call? JING-CORE log-jing-deposit
-      msg-hash
-      JING-MARKET
-      (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
-      (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
-      amount limit-price))
-    (ok msg-hash)))
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price SBTC_TOKEN
+          ASSET_SBTC
+        ))
+      ))
+    )
+    (try! (contract-call? JING-CORE log-jing-deposit msg-hash JING-MARKET
+      (if (is-eq side ASSET_WSTX)
+        WSTX_TOKEN
+        SBTC_TOKEN
+      )
+      (if (is-eq side ASSET_WSTX)
+        SBTC_TOKEN
+        WSTX_TOKEN
+      )
+      amount limit-price
+    ))
+    (ok msg-hash)
+  )
+)
 
 (define-public (execute-bitflow-swap
     (sig (buff 65))
@@ -176,37 +238,53 @@
     (amount uint)
     (limit-price uint)
     (auth-id uint)
-    (expiry uint))
+    (expiry uint)
+  )
   (begin
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
-    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
-    (let (
-      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
-        action: "bitflow-swap",
-        side: side,
-        amount: amount,
-        limit-price: limit-price,
-        auth-id: auth-id,
-        expiry: expiry,
-      }))
-      (min-out (derive-min-out side amount limit-price))
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
+      ERR_INVALID_SIDE
     )
-    (try! (verify-and-consume msg-hash sig expiry))
-    (let ((out (if (is-eq side ASSET_WSTX)
-                   (try! (as-contract? ((with-stx amount))
-                     (try! (contract-call? XYK_CORE
-                       swap-y-for-x XYK_POOL_SBTC_STX SBTC_TOKEN WSTX_TOKEN
-                       amount min-out))))
-                   (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-                     (try! (contract-call? XYK_CORE
-                       swap-x-for-y XYK_POOL_SBTC_STX SBTC_TOKEN WSTX_TOKEN
-                       amount min-out)))))))
-      (try! (contract-call? JING-CORE log-bitflow-swap
-        msg-hash
-        (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
-        (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
-        amount limit-price out))
-      (ok msg-hash)))))
+    (let (
+        (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+          action: "bitflow-swap",
+          side: side,
+          amount: amount,
+          limit-price: limit-price,
+          auth-id: auth-id,
+          expiry: expiry,
+        }))
+        (min-out (derive-min-out side amount limit-price))
+      )
+      (try! (verify-and-consume msg-hash sig expiry))
+      (let ((out (if (is-eq side ASSET_WSTX)
+          (try! (as-contract? ((with-stx amount))
+            (try! (contract-call? XYK_CORE swap-y-for-x XYK_POOL_SBTC_STX SBTC_TOKEN
+              WSTX_TOKEN amount min-out
+            ))
+          ))
+          (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
+            (try! (contract-call? XYK_CORE swap-x-for-y XYK_POOL_SBTC_STX SBTC_TOKEN
+              WSTX_TOKEN amount min-out
+            ))
+          ))
+        )))
+        (try! (contract-call? JING-CORE log-bitflow-swap msg-hash
+          (if (is-eq side ASSET_WSTX)
+            WSTX_TOKEN
+            SBTC_TOKEN
+          )
+          (if (is-eq side ASSET_WSTX)
+            SBTC_TOKEN
+            WSTX_TOKEN
+          )
+          amount limit-price out
+        ))
+        (ok msg-hash)
+      )
+    )
+  )
+)
 
 (define-public (execute-dlmm-swap
     (sig (buff 65))
@@ -214,65 +292,90 @@
     (amount uint)
     (limit-price uint)
     (auth-id uint)
-    (expiry uint))
+    (expiry uint)
+  )
   (begin
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
-    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
-    (let (
-      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
-        action: "dlmm-swap",
-        side: side,
-        amount: amount,
-        limit-price: limit-price,
-        auth-id: auth-id,
-        expiry: expiry,
-      }))
-      (min-out (derive-min-out side amount limit-price))
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
+      ERR_INVALID_SIDE
     )
-    (try! (verify-and-consume msg-hash sig expiry))
-    (let ((result (if (is-eq side ASSET_WSTX)
-                      (try! (as-contract? ((with-stx amount))
-                        (try! (contract-call?
-                          DLMM_ROUTER
-                          swap-x-for-y-simple-multi
-                          DLMM_POOL_STX_SBTC
-                          WSTX_TOKEN SBTC_TOKEN amount min-out))))
-                      (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-                        (try! (contract-call?
-                          DLMM_ROUTER
-                          swap-y-for-x-simple-multi
-                          DLMM_POOL_STX_SBTC
-                          WSTX_TOKEN SBTC_TOKEN amount min-out)))))))
-      (try! (contract-call? JING-CORE log-bitflow-swap
-        msg-hash
-        (if (is-eq side ASSET_WSTX) WSTX_TOKEN SBTC_TOKEN)
-        (if (is-eq side ASSET_WSTX) SBTC_TOKEN WSTX_TOKEN)
-        amount limit-price (get out result)))
-      (ok msg-hash)))))
-
+    (let (
+        (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+          action: "dlmm-swap",
+          side: side,
+          amount: amount,
+          limit-price: limit-price,
+          auth-id: auth-id,
+          expiry: expiry,
+        }))
+        (min-out (derive-min-out side amount limit-price))
+      )
+      (try! (verify-and-consume msg-hash sig expiry))
+      (let ((result (if (is-eq side ASSET_WSTX)
+          (try! (as-contract? ((with-stx amount))
+            (try! (contract-call? DLMM_ROUTER swap-x-for-y-simple-multi
+              DLMM_POOL_STX_SBTC WSTX_TOKEN SBTC_TOKEN amount min-out
+            ))
+          ))
+          (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
+            (try! (contract-call? DLMM_ROUTER swap-y-for-x-simple-multi
+              DLMM_POOL_STX_SBTC WSTX_TOKEN SBTC_TOKEN amount min-out
+            ))
+          ))
+        )))
+        (try! (contract-call? JING-CORE log-bitflow-swap msg-hash
+          (if (is-eq side ASSET_WSTX)
+            WSTX_TOKEN
+            SBTC_TOKEN
+          )
+          (if (is-eq side ASSET_WSTX)
+            SBTC_TOKEN
+            WSTX_TOKEN
+          )
+          amount limit-price (get out result)
+        ))
+        (ok msg-hash)
+      )
+    )
+  )
+)
 
 (define-private (verify-and-consume
     (msg-hash (buff 32))
     (sig (buff 65))
-    (expiry uint))
+    (expiry uint)
+  )
   (begin
-    (asserts! (or (is-eq tx-sender OWNER)
-                  (is-eq (some tx-sender) (var-get keeper)))
-              ERR_NOT_OWNER)
-    (asserts! (not (is-eq (var-get owner-pubkey) DEFAULT_PUBKEY)) ERR_PUBKEY_NOT_SET)
+    (asserts!
+      (or
+        (is-eq tx-sender OWNER)
+        (is-eq (some tx-sender) (var-get keeper))
+      )
+      ERR_NOT_OWNER
+    )
+    (asserts! (not (is-eq (var-get owner-pubkey) DEFAULT_PUBKEY))
+      ERR_PUBKEY_NOT_SET
+    )
     (asserts! (is-none (map-get? used-pubkey-authorizations msg-hash)) ERR_REPLAY)
     (asserts! (or (is-eq expiry u0) (< burn-block-height expiry)) ERR_EXPIRED)
     (let ((signer (unwrap! (secp256k1-recover? msg-hash sig) ERR_INVALID_SIGNATURE)))
       (asserts! (is-eq signer (var-get owner-pubkey)) ERR_INVALID_SIGNATURE)
       (map-set used-pubkey-authorizations msg-hash signer)
-      (ok true))))
+      (ok true)
+    )
+  )
+)
 
 (define-private (derive-min-out
     (side (string-ascii 128))
     (amount uint)
-    (limit-price uint))
+    (limit-price uint)
+  )
   (if (is-eq side ASSET_WSTX)
     (/ (* amount (* PRICE_PRECISION DECIMAL_FACTOR)) limit-price)
     (if (is-eq side ASSET_SBTC)
       (/ (* amount limit-price) (* PRICE_PRECISION DECIMAL_FACTOR))
-      u0)))
+      u0
+    )
+  )
+)

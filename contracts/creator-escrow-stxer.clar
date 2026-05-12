@@ -31,9 +31,7 @@
 ;; STXER OVERRIDE: 0 (mainnet: u4200).
 (define-constant ROUND_BURN_BLOCKS u0)
 
-(define-constant TERMS
-  u"By claiming this payment, creator grants UASU Inc. (a Delaware corporation, operating as JingSwap) a perpetual, irrevocable, royalty-free, worldwide, sublicensable license to use, display, distribute, and adapt the delivered content for marketing and advertising on any surface (landing page, X, YouTube, paid ads, future platforms). JingSwap credits the creator via their public X handle wherever the content is posted. Creator warrants the work is original and that creator has full rights to grant this license, and indemnifies UASU Inc. against any third-party claim arising from breach of these warranties. Creator waives moral rights to the fullest extent permitted by law. Creator retains copyright and may use the work in their own portfolio and channels. This license is governed by the laws of the State of Delaware, USA."
-)
+(define-constant TERMS u"By claiming this payment, creator grants UASU Inc. (a Delaware corporation, operating as JingSwap) a perpetual, irrevocable, royalty-free, worldwide, sublicensable license to use, display, distribute, and adapt the delivered content for marketing and advertising on any surface (landing page, X, YouTube, paid ads, future platforms). JingSwap credits the creator via their public X handle wherever the content is posted. Creator warrants the work is original and that creator has full rights to grant this license, and indemnifies UASU Inc. against any third-party claim arising from breach of these warranties. Creator waives moral rights to the fullest extent permitted by law. Creator retains copyright and may use the work in their own portfolio and channels. This license is governed by the laws of the State of Delaware, USA.")
 
 ;; ---------------------------------------------------------------
 ;; Errors
@@ -84,7 +82,7 @@
     pending: uint,
     creator-a: principal,
     creator-b: principal,
-    swept: bool
+    swept: bool,
   }
 )
 
@@ -98,7 +96,7 @@
     content-uri: (string-utf8 256),
     content-hash: (buff 32),
     status: uint,
-    veto-reason: (optional (string-utf8 256))
+    veto-reason: (optional (string-utf8 256)),
   }
 )
 
@@ -111,20 +109,30 @@
     owner: OWNER,
     usdcx: USDCX_TOKEN,
     review-window-burn-blocks: REVIEW_WINDOW_BURN_BLOCKS,
-    round-burn-blocks: ROUND_BURN_BLOCKS
+    round-burn-blocks: ROUND_BURN_BLOCKS,
   }
 )
 
-(define-read-only (get-current-round-id) (var-get current-round))
-(define-read-only (get-round (id uint)) (map-get? rounds { id: id }))
-(define-read-only (get-delivery (id uint)) (map-get? deliveries { id: id }))
-(define-read-only (get-burn-height) burn-block-height)
-(define-read-only (get-terms) TERMS)
+(define-read-only (get-current-round-id)
+  (var-get current-round)
+)
+(define-read-only (get-round (id uint))
+  (map-get? rounds { id: id })
+)
+(define-read-only (get-delivery (id uint))
+  (map-get? deliveries { id: id })
+)
+(define-read-only (get-burn-height)
+  burn-block-height
+)
+(define-read-only (get-terms)
+  TERMS
+)
 
 (define-read-only (get-escrow-balance)
-  (unwrap-panic (contract-call?
-    'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx
-    get-balance current-contract))
+  (unwrap-panic (contract-call? 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx get-balance
+    current-contract
+  ))
 )
 
 ;; ---------------------------------------------------------------
@@ -132,13 +140,24 @@
 ;; ---------------------------------------------------------------
 
 (define-private (is-creator-of
-    (round-data
-      { started-at: uint, ends-at: uint, per-video: uint, num-videos: uint,
-        deposited: uint, paid-out: uint, pending: uint,
-        creator-a: principal, creator-b: principal, swept: bool })
-    (who principal))
-  (or (is-eq who (get creator-a round-data))
-      (is-eq who (get creator-b round-data)))
+    (round-data {
+      started-at: uint,
+      ends-at: uint,
+      per-video: uint,
+      num-videos: uint,
+      deposited: uint,
+      paid-out: uint,
+      pending: uint,
+      creator-a: principal,
+      creator-b: principal,
+      swept: bool,
+    })
+    (who principal)
+  )
+  (or
+    (is-eq who (get creator-a round-data))
+    (is-eq who (get creator-b round-data))
+  )
 )
 
 ;; ---------------------------------------------------------------
@@ -149,7 +168,8 @@
     (creator-a principal)
     (creator-b principal)
     (per-video uint)
-    (num-videos uint))
+    (num-videos uint)
+  )
   (let (
       (prev-id (var-get current-round))
       (next-id (+ prev-id u1))
@@ -161,29 +181,30 @@
     (asserts! (> num-videos u0) ERR_AMOUNT_ZERO)
     (asserts! (is-eq (mod num-videos u2) u0) ERR_VIDEOS_NOT_EVEN)
     (asserts!
-      (or (is-eq prev-id u0)
-          (let ((prev-round
-                  (unwrap! (map-get? rounds { id: prev-id }) ERR_NO_ROUND)))
-            (and (>= now (get ends-at prev-round))
-                 (is-eq (get pending prev-round) u0))))
+      (or
+        (is-eq prev-id u0)
+        (let ((prev-round (unwrap! (map-get? rounds { id: prev-id }) ERR_NO_ROUND)))
+          (and
+            (>= now (get ends-at prev-round))
+            (is-eq (get pending prev-round) u0)
+          )
+        )
+      )
       ERR_ROUND_ACTIVE
     )
-    (try! (contract-call? USDCX_TOKEN transfer
-      deposit tx-sender current-contract none))
-    (map-set rounds { id: next-id }
-      {
-        started-at: now,
-        ends-at: (+ now ROUND_BURN_BLOCKS),
-        per-video: per-video,
-        num-videos: num-videos,
-        deposited: deposit,
-        paid-out: u0,
-        pending: u0,
-        creator-a: creator-a,
-        creator-b: creator-b,
-        swept: false
-      }
-    )
+    (try! (contract-call? USDCX_TOKEN transfer deposit tx-sender current-contract none))
+    (map-set rounds { id: next-id } {
+      started-at: now,
+      ends-at: (+ now ROUND_BURN_BLOCKS),
+      per-video: per-video,
+      num-videos: num-videos,
+      deposited: deposit,
+      paid-out: u0,
+      pending: u0,
+      creator-a: creator-a,
+      creator-b: creator-b,
+      swept: false,
+    })
     (print {
       event: "round-started",
       id: next-id,
@@ -193,7 +214,7 @@
       num-videos: num-videos,
       deposit: deposit,
       started-at: now,
-      ends-at: (+ now ROUND_BURN_BLOCKS)
+      ends-at: (+ now ROUND_BURN_BLOCKS),
     })
     (var-set current-round next-id)
     (ok next-id)
@@ -202,7 +223,8 @@
 
 (define-public (submit-delivery
     (content-uri (string-utf8 256))
-    (content-hash (buff 32)))
+    (content-hash (buff 32))
+  )
   (let (
       (round-id (var-get current-round))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
@@ -213,26 +235,22 @@
       (remaining (- (get deposited round-data) (get paid-out round-data)))
     )
     (asserts! (is-creator-of round-data tx-sender) ERR_NOT_CREATOR)
-    (asserts!
-      (<= (+ now REVIEW_WINDOW_BURN_BLOCKS) (get ends-at round-data))
+    (asserts! (<= (+ now REVIEW_WINDOW_BURN_BLOCKS) (get ends-at round-data))
       ERR_ROUND_ENDED
     )
-    (asserts!
-      (<= (* (+ (get pending round-data) u1) per-video) remaining)
+    (asserts! (<= (* (+ (get pending round-data) u1) per-video) remaining)
       ERR_OVER_CAPACITY
     )
-    (map-set deliveries { id: delivery-id }
-      {
-        round-id: round-id,
-        creator: tx-sender,
-        submitted-at: now,
-        review-ends-at: review-end,
-        content-uri: content-uri,
-        content-hash: content-hash,
-        status: STATUS_PENDING,
-        veto-reason: none
-      }
-    )
+    (map-set deliveries { id: delivery-id } {
+      round-id: round-id,
+      creator: tx-sender,
+      submitted-at: now,
+      review-ends-at: review-end,
+      content-uri: content-uri,
+      content-hash: content-hash,
+      status: STATUS_PENDING,
+      veto-reason: none,
+    })
     (map-set rounds { id: round-id }
       (merge round-data { pending: (+ (get pending round-data) u1) })
     )
@@ -244,17 +262,19 @@
       content-hash: content-hash,
       content-uri: content-uri,
       submitted-at: now,
-      review-ends-at: review-end
+      review-ends-at: review-end,
     })
     (var-set next-delivery-id (+ delivery-id u1))
     (ok delivery-id)
   )
 )
 
-(define-public (veto (delivery-id uint) (reason (string-utf8 256)))
+(define-public (veto
+    (delivery-id uint)
+    (reason (string-utf8 256))
+  )
   (let (
-      (delivery (unwrap! (map-get? deliveries { id: delivery-id })
-                          ERR_DELIVERY_NOT_FOUND))
+      (delivery (unwrap! (map-get? deliveries { id: delivery-id }) ERR_DELIVERY_NOT_FOUND))
       (round-id (get round-id delivery))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
       (now burn-block-height)
@@ -263,7 +283,10 @@
     (asserts! (is-eq (get status delivery) STATUS_PENDING) ERR_ALREADY_RESOLVED)
     (asserts! (< now (get review-ends-at delivery)) ERR_REVIEW_CLOSED)
     (map-set deliveries { id: delivery-id }
-      (merge delivery { status: STATUS_VETOED, veto-reason: (some reason) })
+      (merge delivery {
+        status: STATUS_VETOED,
+        veto-reason: (some reason),
+      })
     )
     (map-set rounds { id: round-id }
       (merge round-data { pending: (- (get pending round-data) u1) })
@@ -273,7 +296,7 @@
       id: delivery-id,
       round: round-id,
       creator: (get creator delivery),
-      reason: reason
+      reason: reason,
     })
     (ok true)
   )
@@ -281,10 +304,10 @@
 
 (define-public (lift-veto
     (delivery-id uint)
-    (amended-content-hash (optional (buff 32))))
+    (amended-content-hash (optional (buff 32)))
+  )
   (let (
-      (delivery (unwrap! (map-get? deliveries { id: delivery-id })
-                          ERR_DELIVERY_NOT_FOUND))
+      (delivery (unwrap! (map-get? deliveries { id: delivery-id }) ERR_DELIVERY_NOT_FOUND))
       (round-id (get round-id delivery))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
     )
@@ -304,16 +327,18 @@
       creator: (get creator delivery),
       original-content-hash: (get content-hash delivery),
       amended-content-hash: amended-content-hash,
-      original-veto-reason: (get veto-reason delivery)
+      original-veto-reason: (get veto-reason delivery),
     })
     (ok true)
   )
 )
 
-(define-public (release (delivery-id uint) (agree-to-terms bool))
+(define-public (release
+    (delivery-id uint)
+    (agree-to-terms bool)
+  )
   (let (
-      (delivery (unwrap! (map-get? deliveries { id: delivery-id })
-                          ERR_DELIVERY_NOT_FOUND))
+      (delivery (unwrap! (map-get? deliveries { id: delivery-id }) ERR_DELIVERY_NOT_FOUND))
       (round-id (get round-id delivery))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
       (now burn-block-height)
@@ -325,9 +350,13 @@
     (asserts! (is-eq tx-sender recipient) ERR_NOT_CREATOR)
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
     (asserts!
-      (or (is-eq status STATUS_AMENDED_APPROVED)
-          (and (is-eq status STATUS_PENDING)
-               (>= now (get review-ends-at delivery))))
+      (or
+        (is-eq status STATUS_AMENDED_APPROVED)
+        (and
+          (is-eq status STATUS_PENDING)
+          (>= now (get review-ends-at delivery))
+        )
+      )
       ERR_NOT_CLAIMABLE
     )
     (asserts! (>= remaining per-video) ERR_INSUFFICIENT_ESCROW)
@@ -337,12 +366,14 @@
     (map-set rounds { id: round-id }
       (merge round-data {
         paid-out: (+ (get paid-out round-data) per-video),
-        pending: (- (get pending round-data) u1)
+        pending: (- (get pending round-data) u1),
       })
     )
     (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX per-video))
-      (try! (contract-call? USDCX_TOKEN transfer
-        per-video current-contract recipient none))))
+      (try! (contract-call? USDCX_TOKEN transfer per-video current-contract recipient
+        none
+      ))
+    ))
     (print {
       event: "delivery-released",
       id: delivery-id,
@@ -350,7 +381,7 @@
       creator: recipient,
       amount: per-video,
       from-status: status,
-      terms-accepted: true
+      terms-accepted: true,
     })
     (ok true)
   )
@@ -358,20 +389,20 @@
 
 (define-public (expire (delivery-id uint))
   (let (
-      (delivery (unwrap! (map-get? deliveries { id: delivery-id })
-                          ERR_DELIVERY_NOT_FOUND))
+      (delivery (unwrap! (map-get? deliveries { id: delivery-id }) ERR_DELIVERY_NOT_FOUND))
       (round-id (get round-id delivery))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
       (now burn-block-height)
       (status (get status delivery))
     )
     (asserts!
-      (or (is-eq status STATUS_PENDING)
-          (is-eq status STATUS_AMENDED_APPROVED))
+      (or
+        (is-eq status STATUS_PENDING)
+        (is-eq status STATUS_AMENDED_APPROVED)
+      )
       ERR_NOT_CLAIMABLE
     )
-    (asserts!
-      (>= now (+ (get ends-at round-data) CLAIM_GRACE_BURN_BLOCKS))
+    (asserts! (>= now (+ (get ends-at round-data) CLAIM_GRACE_BURN_BLOCKS))
       ERR_ROUND_LIVE
     )
     (map-set deliveries { id: delivery-id }
@@ -385,7 +416,7 @@
       id: delivery-id,
       round: round-id,
       creator: (get creator delivery),
-      from-status: status
+      from-status: status,
     })
     (ok true)
   )
@@ -401,17 +432,19 @@
     (asserts! (>= now (get ends-at round-data)) ERR_ROUND_NOT_ENDED)
     (asserts! (not (get swept round-data)) ERR_ALREADY_SWEPT)
     (asserts! (is-eq (get pending round-data) u0) ERR_PENDING_DELIVERIES)
-    (map-set rounds { id: round-id }
-      (merge round-data { swept: true })
+    (map-set rounds { id: round-id } (merge round-data { swept: true }))
+    (and
+      (> remaining u0)
+      (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX remaining))
+        (try! (contract-call? USDCX_TOKEN transfer remaining current-contract OWNER
+          none
+        ))
+      ))
     )
-    (and (> remaining u0)
-         (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX remaining))
-           (try! (contract-call? USDCX_TOKEN transfer
-             remaining current-contract OWNER none)))))
     (print {
       event: "round-swept",
       id: round-id,
-      refund: remaining
+      refund: remaining,
     })
     (ok remaining)
   )

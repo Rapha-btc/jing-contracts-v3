@@ -6,8 +6,13 @@
 ;; returns the line's interest-bps so the snpl can stamp it onto the
 ;; loan record.
 
-(define-trait reserve-trait
-  (
-    (draw (uint) (response uint uint))
-    (notify-return (uint) (response bool uint))
-  ))
+(define-trait reserve-trait (
+  (draw
+    (uint)
+    (response uint uint)
+  )
+  (notify-return
+    (uint)
+    (response bool uint)
+  )
+))
