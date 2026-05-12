@@ -43,8 +43,12 @@
     owner: OWNER,
     pubkey: (var-get owner-pubkey),
     keeper: (var-get keeper),
-    sbtc-balance: (unwrap-panic (contract-call? SBTC_TOKEN get-balance current-contract)),
-    usdcx-balance: (unwrap-panic (contract-call? USDCX_TOKEN get-balance current-contract)),
+    sbtc-balance: (unwrap-panic (contract-call?
+      'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+      get-balance current-contract)),
+    usdcx-balance: (unwrap-panic (contract-call?
+      'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx
+      get-balance current-contract)),
   })
 
 (define-read-only (is-signature-used (h (buff 32)))
