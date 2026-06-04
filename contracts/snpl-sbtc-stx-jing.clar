@@ -131,6 +131,18 @@
   (contract-call? JING-MARKET get-token-x-deposit cycle current-contract)
 )
 
+;; True only when Jing holds none of our sBTC across both the current
+;; cycle AND the next one. `close-deposits` rolls small-share deposits to
+;; cycle+1 *before* `settle` advances current-cycle, so a current-cycle-only
+;; check reads zero while the deposit is still parked at cycle+1 (recoverable
+;; via cancel-swap once that cycle becomes current). Checking both cycles
+;; closes that window before repay/seize clears reserve outstanding.
+(define-private (fully-resolved)
+  (let ((cycle (contract-call? JING-MARKET get-current-cycle)))
+    (is-eq u0 (+ (our-sbtc-in-jing cycle) (our-sbtc-in-jing (+ cycle u1))))
+  )
+)
+
 ;; ---------- Initialization ----------
 
 ;; One-shot: deployer sets the borrower and reserve, and registers this
@@ -315,10 +327,7 @@
     (asserts! (is-eq tx-sender borrower-addr) ERR-NOT-BORROWER)
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
     (asserts! (is-eq reserve-addr (var-get current-reserve)) ERR-WRONG-RESERVE)
-    (asserts!
-      (is-eq u0 (our-sbtc-in-jing (contract-call? JING-MARKET get-current-cycle)))
-      ERR-NOT-FULLY-RESOLVED
-    )
+    (asserts! (fully-resolved) ERR-NOT-FULLY-RESOLVED)
     ;; Reconcile sBTC: borrower tops up shortfall, or refund excess (rare).
     (if is-shortfall
       (if (> delta u0)
@@ -384,10 +393,7 @@
     (asserts! (is-eq (get status loan) STATUS-OPEN) ERR-BAD-STATUS)
     (asserts! (is-eq reserve-addr (var-get current-reserve)) ERR-WRONG-RESERVE)
     (asserts! (>= burn-block-height (get deadline loan)) ERR-DEADLINE-NOT-REACHED)
-    (asserts!
-      (is-eq u0 (our-sbtc-in-jing (contract-call? JING-MARKET get-current-cycle)))
-      ERR-NOT-FULLY-RESOLVED
-    )
+    (asserts! (fully-resolved) ERR-NOT-FULLY-RESOLVED)
     (if (> stx-out u0)
       (try! (as-contract? ((with-stx stx-out))
         (try! (stx-transfer? stx-out current-contract reserve-addr))
