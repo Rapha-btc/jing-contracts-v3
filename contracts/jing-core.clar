@@ -26,6 +26,8 @@
 (define-constant ERR_HASH_MISMATCH (err u5006))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u5008))
 (define-constant ERR_PAUSED (err u5016))
+(define-constant ERR_NOT_PAUSED (err u5017))
+(define-constant ERR_NO_PENDING_OWNER (err u5018))
 
 ;; Burn blocks (~10 min each) that must elapse between pause and unpause.
 ;; Forces deliberation on resume -- a panic-pause can't be reversed within
@@ -42,6 +44,10 @@
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 
 (define-data-var contract-owner principal tx-sender)
+;; Two-step ownership: a proposed owner must accept before it takes effect,
+;; so a typo'd or unreachable address can't brick admin. `none` = nothing
+;; pending; the current owner cancels a nomination by proposing `none`.
+(define-data-var pending-owner (optional principal) none)
 
 ;; Approved canonical contract templates. Keyed by the canonical contract's
 ;; principal (a human-readable label like 'SP....jing-vault-v1) so events
@@ -324,6 +330,9 @@
 (define-public (unpause)
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    ;; Must actually be paused -- otherwise unpause would emit a misleading
+    ;; "unpaused" event when nothing was paused.
+    (asserts! (var-get paused) ERR_NOT_PAUSED)
     (asserts! (>= burn-block-height (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS))
       ERR_TIMELOCK_NOT_ELAPSED
     )
@@ -336,11 +345,40 @@
   )
 )
 
-(define-public (set-contract-owner (new-owner principal))
+;; Two-step ownership transfer. Step 1: the current owner nominates a
+;; successor (or passes `none` to cancel a pending nomination). Nothing
+;; changes until the nominee accepts, so a wrong/unreachable address can't
+;; lock out admin.
+(define-public (propose-owner (new-owner (optional principal)))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (ok (var-set contract-owner new-owner))
+    (var-set pending-owner new-owner)
+    (print {
+      event: "owner-proposed",
+      proposed-by: tx-sender,
+      pending-owner: new-owner,
+    })
+    (ok true)
   )
+)
+
+;; Step 2: the nominated owner accepts, completing the transfer. Only the
+;; pending owner can call this, which proves the address is reachable.
+(define-public (accept-owner)
+  (let ((pending (unwrap! (var-get pending-owner) ERR_NO_PENDING_OWNER)))
+    (asserts! (is-eq tx-sender pending) ERR_NOT_AUTHORIZED)
+    (var-set contract-owner pending)
+    (var-set pending-owner none)
+    (print {
+      event: "owner-accepted",
+      new-owner: pending,
+    })
+    (ok true)
+  )
+)
+
+(define-read-only (get-pending-owner)
+  (var-get pending-owner)
 )
 
 ;; ----- Contract registration (vaults, reserves, snpls) -----

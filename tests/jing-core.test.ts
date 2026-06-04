@@ -307,22 +307,37 @@ describe.skipIf(!remoteDataEnabled)("jing-core direct paths", function () {
   });
 
   // --- get-contract-owner read + ownership rotation ---
-  it("set-contract-owner: only old owner can transfer; new owner takes over the pause + initialize gates", function () {
+  it("propose/accept-owner: two-step transfer; new owner takes over the pause gate", function () {
     // Sanity: get-contract-owner exposes the current owner.
     expect(ro(JING_CORE, "get-contract-owner", [])).toBePrincipal(deployer);
 
-    // Non-owner rejected.
+    // Non-owner cannot propose.
     expect(
-      pub(JING_CORE, "set-contract-owner", [Cl.principal(wallet1)], wallet1)
+      pub(JING_CORE, "propose-owner", [Cl.some(Cl.principal(wallet1))], wallet1)
         .result,
     ).toBeErr(Cl.uint(5001));
 
-    // Owner transfers to wallet1.
+    // Owner proposes wallet1 -- ownership does NOT change yet.
     expect(
-      pub(JING_CORE, "set-contract-owner", [Cl.principal(wallet1)], deployer)
+      pub(JING_CORE, "propose-owner", [Cl.some(Cl.principal(wallet1))], deployer)
         .result,
     ).toBeOk(Cl.bool(true));
+    expect(ro(JING_CORE, "get-pending-owner", [])).toBeSome(
+      Cl.principal(wallet1),
+    );
+    expect(ro(JING_CORE, "get-contract-owner", [])).toBePrincipal(deployer);
+
+    // A non-pending principal cannot accept.
+    expect(pub(JING_CORE, "accept-owner", [], wallet2).result).toBeErr(
+      Cl.uint(5001),
+    );
+
+    // The nominee accepts -- now ownership flips and pending clears.
+    expect(pub(JING_CORE, "accept-owner", [], wallet1).result).toBeOk(
+      Cl.bool(true),
+    );
     expect(ro(JING_CORE, "get-contract-owner", [])).toBePrincipal(wallet1);
+    expect(ro(JING_CORE, "get-pending-owner", [])).toBeNone();
 
     // OLD owner can no longer pause (lost authority).
     expect(pub(JING_CORE, "pause", [], deployer).result).toBeErr(
@@ -332,14 +347,9 @@ describe.skipIf(!remoteDataEnabled)("jing-core direct paths", function () {
     // NEW owner can pause.
     expect(pub(JING_CORE, "pause", [], wallet1).result).toBeOk(Cl.bool(true));
 
-    // The market's initialize asserts tx-sender == jing-core.get-contract-owner.
-    // After the rotation, even if wallet1 (new owner) sets a verified
-    // contract, the deployer (who's the market's `operator`) can no longer
-    // initialize because the get-contract-owner gate fires (1011). We
-    // don't need to actually initialize here — the auth gate is sufficient
-    // to prove the read is wired through. Restore ownership so other
-    // tests that follow have the original owner.
-    pub(JING_CORE, "set-contract-owner", [Cl.principal(deployer)], wallet1);
+    // Restore ownership (two steps) so following tests keep the original owner.
+    pub(JING_CORE, "propose-owner", [Cl.some(Cl.principal(deployer))], wallet1);
+    pub(JING_CORE, "accept-owner", [], deployer);
     expect(ro(JING_CORE, "get-contract-owner", [])).toBePrincipal(deployer);
   });
 

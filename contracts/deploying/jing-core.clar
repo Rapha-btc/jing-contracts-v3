@@ -5,12 +5,16 @@
 (define-constant ERR_HASH_MISMATCH (err u5006))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u5008))
 (define-constant ERR_PAUSED (err u5016))
+(define-constant ERR_NOT_PAUSED (err u5017))
+(define-constant ERR_NO_PENDING_OWNER (err u5018))
 
 (define-constant TIMELOCK_BURN_BLOCKS u144)
 
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 
 (define-data-var contract-owner principal tx-sender)
+;; Two-step ownership: proposed owner must accept before it takes effect.
+(define-data-var pending-owner (optional principal) none)
 
 (define-map verified-contracts principal (buff 32))
 
@@ -105,16 +109,32 @@
 (define-public (unpause)
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (var-get paused) ERR_NOT_PAUSED)
     (asserts! (>= burn-block-height (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS))
               ERR_TIMELOCK_NOT_ELAPSED)
     (var-set paused false)
     (print { event: "unpaused", by: tx-sender })
     (ok true)))
 
-(define-public (set-contract-owner (new-owner principal))
+;; Two-step ownership transfer (propose -> accept) so a wrong/unreachable
+;; address can't brick admin. Propose `none` to cancel a pending nomination.
+(define-public (propose-owner (new-owner (optional principal)))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (ok (var-set contract-owner new-owner))))
+    (var-set pending-owner new-owner)
+    (print { event: "owner-proposed", proposed-by: tx-sender, pending-owner: new-owner })
+    (ok true)))
+
+(define-public (accept-owner)
+  (let ((pending (unwrap! (var-get pending-owner) ERR_NO_PENDING_OWNER)))
+    (asserts! (is-eq tx-sender pending) ERR_NOT_AUTHORIZED)
+    (var-set contract-owner pending)
+    (var-set pending-owner none)
+    (print { event: "owner-accepted", new-owner: pending })
+    (ok true)))
+
+(define-read-only (get-pending-owner)
+  (var-get pending-owner))
 
 (define-public (register (canonical principal))
   (let (
