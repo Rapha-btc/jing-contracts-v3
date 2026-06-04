@@ -53,6 +53,10 @@
 (define-constant ASSET-SBTC "sbtc-token")
 ;; The Jing market this snpl deposits into. v3 sBTC/STX, sBTC = token-x.
 (define-constant JING-MARKET .markets-sbtc-stx-jing)
+;; token-y on the v3 sBTC/STX market (native STX is denominated as wstx on
+;; jing-core's equity ledger). Passed to log-snpl-repay / log-snpl-seize so
+;; jing-core can reverse this snpl's token-y equity credit when a loan closes.
+(define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 ;; Sentinel. Pre-init the reserve var equals SAINT, which no real
 ;; contract can match; any borrow/repay/seize attempt fails the reserve
 ;; assert until `initialize` is called.
@@ -370,7 +374,7 @@
     )
     (var-set active-loan none)
     (try! (contract-call? .jing-core log-snpl-repay loan-id payoff lender-payoff fee
-      delta is-shortfall stx-out reserve-addr
+      delta is-shortfall stx-out reserve-addr WSTX
     ))
     (ok true)
   )
@@ -417,7 +421,7 @@
     )
     (var-set active-loan none)
     (try! (contract-call? .jing-core log-snpl-seize loan-id stx-out sbtc-balance
-      reserve-addr
+      reserve-addr WSTX
     ))
     (ok true)
   )

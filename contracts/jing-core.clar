@@ -1307,11 +1307,17 @@
     (fee-sbtc uint)
     (delta-sbtc uint)
     (is-shortfall bool)
-    (stx-released uint)
+    (token-y-released uint)
     (reserve principal)
+    (token-y principal)
   )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    ;; Loan closing: the STX that settlement credited as token-y equity now
+    ;; leaves the snpl, so reverse that credit. token-y is passed by the caller
+    ;; (jing-core stays token-agnostic). debit floors at the snpl's bucket (never
+    ;; underflows); an unsettled/cancelled loan released 0 -> debit u0 no-op.
+    (debit token-y contract-caller token-y-released)
     (print {
       event: "snpl-repay",
       snpl: contract-caller,
@@ -1321,7 +1327,8 @@
       fee-sbtc: fee-sbtc,
       delta-sbtc: delta-sbtc,
       is-shortfall: is-shortfall,
-      stx-released: stx-released,
+      token-y: token-y,
+      token-y-released: token-y-released,
       reserve: reserve,
     })
     (ok true)
@@ -1330,17 +1337,22 @@
 
 (define-public (log-snpl-seize
     (loan-id uint)
-    (stx-seized uint)
+    (token-y-seized uint)
     (sbtc-seized uint)
     (reserve principal)
+    (token-y principal)
   )
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    ;; Loan closing via seizure: reverse the token-y equity settlement credited.
+    ;; token-y passed by the caller; debit floors -> never underflows; 0 -> no-op.
+    (debit token-y contract-caller token-y-seized)
     (print {
       event: "snpl-seize",
       snpl: contract-caller,
       loan-id: loan-id,
-      stx-seized: stx-seized,
+      token-y: token-y,
+      token-y-seized: token-y-seized,
       sbtc-seized: sbtc-seized,
       reserve: reserve,
     })

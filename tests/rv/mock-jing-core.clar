@@ -246,11 +246,11 @@
     (loan-id uint)
     (payoff-sbtc uint) (lender-payoff-sbtc uint) (fee-sbtc uint)
     (delta-sbtc uint) (is-shortfall bool)
-    (stx-released uint) (reserve principal))
+    (token-y-released uint) (reserve principal) (token-y principal))
   (begin (asserts! true (err u0)) (ok true)))
 
 (define-public (log-snpl-seize
-    (loan-id uint) (stx-seized uint) (sbtc-seized uint) (reserve principal))
+    (loan-id uint) (token-y-seized uint) (sbtc-seized uint) (reserve principal) (token-y principal))
   (begin (asserts! true (err u0)) (ok true)))
 
 

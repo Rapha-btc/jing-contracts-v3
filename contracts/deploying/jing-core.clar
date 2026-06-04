@@ -696,9 +696,11 @@
     (loan-id uint)
     (payoff-sbtc uint) (lender-payoff-sbtc uint) (fee-sbtc uint)
     (delta-sbtc uint) (is-shortfall bool)
-    (stx-released uint) (reserve principal))
+    (token-y-released uint) (reserve principal) (token-y principal))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    ;; reverse the token-y equity settlement credited (caller passes token-y).
+    (debit token-y contract-caller token-y-released)
     (print { event: "snpl-repay",
              snpl: contract-caller,
              loan-id: loan-id,
@@ -707,18 +709,22 @@
              fee-sbtc: fee-sbtc,
              delta-sbtc: delta-sbtc,
              is-shortfall: is-shortfall,
-             stx-released: stx-released,
+             token-y: token-y,
+             token-y-released: token-y-released,
              reserve: reserve })
     (ok true)))
 
 (define-public (log-snpl-seize
-    (loan-id uint) (stx-seized uint) (sbtc-seized uint) (reserve principal))
+    (loan-id uint) (token-y-seized uint) (sbtc-seized uint) (reserve principal) (token-y principal))
   (begin
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    ;; reverse the token-y equity settlement credited (caller passes token-y).
+    (debit token-y contract-caller token-y-seized)
     (print { event: "snpl-seize",
              snpl: contract-caller,
              loan-id: loan-id,
-             stx-seized: stx-seized,
+             token-y: token-y,
+             token-y-seized: token-y-seized,
              sbtc-seized: sbtc-seized,
              reserve: reserve })
     (ok true)))
