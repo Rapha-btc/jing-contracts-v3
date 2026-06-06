@@ -166,6 +166,9 @@
       open: true,
     })
     (var-set next-rfq-id (+ id u1))
+    (try! (contract-call? .jing-core log-rfq-open id tx-sender sbtc-in min-usdc-out
+      (+ stacks-block-height ttl) (var-get token-x) (var-get token-y)
+    ))
     (ok id)
   )
 )
@@ -280,8 +283,9 @@
       ))
 
       (map-set rfqs id (merge rfq { open: false }))
-      ;; NOTE: add a (contract-call? .jing-core log-rfq-fill ...) here once a
-      ;; matching event sink exists, to mirror the batch-auction logging.
+      (try! (contract-call? .jing-core log-rfq-fill id client mm sbtc-in usdc-out
+        fee price (var-get token-x) (var-get token-y)
+      ))
       (ok {
         usdc-out: usdc-out,
         fee: fee,
@@ -314,12 +318,22 @@
       (try! (contract-call? x transfer sbtc-in current-contract (get client rfq) none))
     ))
     (map-set rfqs id (merge rfq { open: false }))
+    (try! (contract-call? .jing-core log-rfq-cancel id (get client rfq) sbtc-in
+      (var-get token-x) (var-get token-y)
+    ))
     (ok sbtc-in)
   )
 )
 
 ;; ---------------------------------------------------------------- admin
+;; `initialize` is a protocol-wide attestation about the token pair + oracle, so
+;; it must be made by jing-core's contract-owner (the multisig) -- NOT merely the
+;; operator. Without this gate, anyone deploying hash-matching bytecode at their
+;; own principal could `register` and write rfq-* events impersonating a real Jing
+;; market. The `register` call binds this deployment's bytecode to the verified
+;; `canonical` template hash. Mirrors markets-sbtc-{usdcx,stx}-jing.
 (define-public (initialize
+    (canonical principal)
     (x principal)
     (y principal)
     (feed (buff 32))
@@ -327,14 +341,16 @@
   )
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (is-eq tx-sender (contract-call? .jing-core get-contract-owner))
+      ERR_NOT_AUTHORIZED
+    )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
-    ;; PROD: mirror the batch market's jing-core canonical-registration
-    ;; attestation here so events can't be impersonated.
     (var-set token-x x)
     (var-set token-y y)
     (var-set oracle-feed feed)
     (var-set min-sbtc-in min-x)
     (var-set initialized true)
+    (try! (contract-call? .jing-core register canonical))
     (ok true)
   )
 )

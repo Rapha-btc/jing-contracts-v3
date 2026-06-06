@@ -125,3 +125,8 @@ epoch = "3.4"
 path = "contracts/creator-escrow-stxer.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.rfq-sbtc-usdcx-jing]
+path = "contracts/rfq/rfq-sbtc-usdcx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
