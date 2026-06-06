@@ -75,6 +75,7 @@
 (define-constant ERR_BELOW_MIN_OUT (err u2006))
 (define-constant ERR_BAD_AUTH (err u2007))     ;; signature didn't recover to the client
 (define-constant ERR_AUTH_EXPIRED (err u2008)) ;; client authorization past its deadline
+(define-constant ERR_ABOVE_MAX_OUT (err u2009)) ;; usdc-out exceeds the MM's ceiling (crazy-high Pyth)
 
 ;; ---------------------------------------------------------------- config
 (define-data-var initialized bool false)
@@ -181,9 +182,15 @@
 ;; client signed for can produce a sig that recovers to the client, which is what
 ;; stops a mempool watcher from sniping the winner's premium. `premium-bps` is the
 ;; MM's actual fill spread and must be <= the signed `max-premium-bps`.
+;;
+;; `max-usdc-out` is the MM's OWN ceiling (not signed -- the MM is tx-sender): it
+;; caps what the MM pays if Pyth prints crazy-high, mirroring the client's
+;; `min-usdc-out` floor against crazy-low. The client can't use a post-condition
+;; here (it isn't tx-sender), so both bounds live in the contract for symmetry.
 (define-public (fill-rfq
     (id uint)
     (premium-bps uint)
+    (max-usdc-out uint)
     (max-premium-bps uint)
     (auth-expiry uint)
     (sig (buff 65))
@@ -258,7 +265,8 @@
         (fee (/ (* usdc-out FEE_BPS) BPS_PRECISION))
         (client-receives (- usdc-out fee))
       )
-      (asserts! (>= usdc-out (get min-usdc-out rfq)) ERR_BELOW_MIN_OUT)
+      (asserts! (>= usdc-out (get min-usdc-out rfq)) ERR_BELOW_MIN_OUT) ;; client floor
+      (asserts! (<= usdc-out max-usdc-out) ERR_ABOVE_MAX_OUT)           ;; MM ceiling
 
       ;; MM (tx-sender) pays USDCx: fee -> treasury, rest -> client
       (and (> fee u0)

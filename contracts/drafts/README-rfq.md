@@ -142,14 +142,22 @@ This folder drafts **Option B**: see [`rfq-sbtc-usdcx-jing.clar`](./rfq-sbtc-usd
 > submits; here the **MM is the submitter** (being `tx-sender` *is* its authorization),
 > so the thing that needs signing is the **client's selection of the winner**.
 
-### Two protective floors — each where it belongs
+### Protective bounds — each where it belongs
 
-| Floor | Set where | Nature | Role |
+| Bound | Set where | Nature | Role |
 |---|---|---|---|
-| `min-usdc-out` | `open-rfq`, client-entered, **immutable** | absolute USDCx | LOOSE worst-case reservation ("never less than Y, period"). Set below expected, so normal drift never trips it — it only fires if Pyth prints something crazy-low. |
+| `min-usdc-out` | `open-rfq`, client-entered, **immutable** | absolute USDCx | client floor: LOOSE worst-case ("never less than Y, period"). Set below expected, so normal drift never trips it — fires only if Pyth prints crazy-**low**. |
+| `max-usdc-out` | `fill-rfq`, MM-entered (not signed) | absolute USDCx | MM ceiling: caps what the MM pays if Pyth prints crazy-**high**. The mirror image of the client floor. |
 | `max-premium-bps` | the **signed** authorization, per-auction | oracle-relative | pins the winning MM to the exact spread it quoted (`premium-bps <= this`). Drift-immune, so it never causes a spurious revert. |
 
-**Why this split (and why an absolute *signed* floor was wrong).** An absolute
+**The post-condition asymmetry.** The MM is `tx-sender`, so it *could* cap its
+USDCx outflow with a `willSendLte` post-condition — but the **client cannot**, since
+it isn't the tx-sender and can't constrain the MM's tx at all. That's why both
+absolute bounds live in the contract: `min-usdc-out` *must* (the client has no other
+lever), and `max-usdc-out` does too for symmetry + a clean `ERR_ABOVE_MAX_OUT` revert
+(the frontend can still attach the PC as belt-and-suspenders).
+
+**Why the spread is signed but the absolutes aren't.** An absolute
 `min-usdc-out` in the signature is computed from `mid_at_sign`, but the fill reads
 `mid_at_fill`. Between them Pyth drifts, so a benign BTC tick down would make the
 fill revert even though the MM honored its spread — it conflates the *spread* with
