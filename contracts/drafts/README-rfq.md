@@ -132,7 +132,9 @@ This folder drafts **Option B**: see [`rfq-sbtc-usdcx-jing.clar`](./rfq-sbtc-usd
   the chosen MM can produce a signature that recovers to the client; because
   `max-premium-bps` is signed, the MM is pinned to the spread it quoted (its actual
   fill `premium-bps` must be `<=` it). `market: current-contract` binds the signature
-  to this deployment, so it can't be replayed on another RFQ market.
+  to this deployment, so it can't be replayed on another RFQ market. The signed
+  `expiry` is a `stacks-block-height` deadline (same clock as the RFQ's own escrow
+  `expiry`, ~2s granularity for a short quote window) — no `u0` "never expires" sentinel.
 
 > **Why the signature is required (corrects an earlier draft note).** Without it,
 > `fill-rfq` would be permissionless and the **premium is the prize** — a mempool
@@ -169,9 +171,14 @@ premise of `Pyth ± premium` pricing.
 
 ### Fee
 
-`FEE_BPS` (0.10%) is taken **one-sided**, from the USDCx output only. RFQ is a single
-directional swap, so charging both sides would tax the same surface twice and leave
-the treasury holding dust in two tokens.
+`FEE_BPS` (0.10%) is taken **one-sided**, from the USDCx output only — so the client
+effectively bears it (receives `usdc_out − fee`) and the MM gets the full sBTC side.
+
+This is a **fee-incidence** choice, not a dust concern (a two-sided fee wouldn't strand
+anything — both halves would just go to the treasury as revenue in two tokens). The
+alternative, splitting the fee ~50/50 across the USDCx and sBTC legs, would share the
+burden between client and MM at the cost of one extra transfer. We deliberately keep it
+one-sided: the MM receives the entire sBTC side, and the fee comes out of the USDCx leg.
 
 ### Custody recap
 
