@@ -65,9 +65,11 @@ their bond.
 Client escrows sBTC and posts an intent to the backend relayer. MMs reply with
 `Pyth ± premium` quotes (off-chain). The relayer returns the top quotes; the
 client picks the winner and **SIP-018-signs an authorization** naming that MM and
-the floor it quoted (`min-usdc-out`). The winning MM submits the fill on-chain
+the spread it quoted (`max-premium-bps`). The winning MM submits the fill on-chain
 carrying that signature, which the contract verifies. (The on-chain-relevant
-signature is the **client's selection** — see the role-reversal note below.)
+signature is the **client's selection** — see the role-reversal note below.) An
+absolute `min-usdc-out` set by the client at `open-rfq` is the separate, loose
+catastrophe floor against a crazy oracle — see the two-floors section below.
 
 **Pros**
 - **Fast** — quotes are instant (off-chain); only the winning fill is one on-chain tx.
@@ -115,7 +117,7 @@ This folder drafts **Option B**: see [`rfq-sbtc-usdcx-jing.clar`](./rfq-sbtc-usd
 | Client calls 3–4 dealers | `open-rfq` escrows sBTC (+ `max-premium-bps`, `ttl`); relayer broadcasts the intent off-chain |
 | Round 1: dealers stream prices | MMs return `Pyth ± premium` quotes to the relayer (off-chain) |
 | Keep best 2 of 3–4 | relayer returns the top 2 to the client (pure UX; off-chain) |
-| Execute on the best | client **SIP-018-signs** an authorization naming the winning MM + `min-usdc-out`; that MM submits `fill-rfq` with the signature |
+| Execute on the best | client **SIP-018-signs** an authorization naming the winning MM + the quoted spread (`max-premium-bps`); that MM submits `fill-rfq` with the signature |
 | Dealer fades you (last look) | **eliminated** — an MM that no-shows just isn't the one who fills; the client re-signs for the runner-up or reclaims after expiry |
 
 ### Where MM selection and SIP-018 actually live
@@ -124,10 +126,13 @@ This folder drafts **Option B**: see [`rfq-sbtc-usdcx-jing.clar`](./rfq-sbtc-usd
   contract can't rank quotes it never sees. What the contract enforces is that the
   fill comes from the MM the client *chose*.
 - **SIP-018 is how that choice becomes enforceable.** The client signs
-  `{ market, rfq-id, winner, min-usdc-out, expiry }`. `fill-rfq` rebuilds that hash
+  `{ market, rfq-id, winner, max-premium-bps, expiry }`. `fill-rfq` rebuilds that hash
   (`build-auth-hash`), recovers the signer with `secp256k1-recover?` + `principal-of?`,
   and requires `signer == rfq.client`. Because `winner` is bound to `tx-sender`, only
-  the chosen MM can produce a signature that recovers to the client.
+  the chosen MM can produce a signature that recovers to the client; because
+  `max-premium-bps` is signed, the MM is pinned to the spread it quoted (its actual
+  fill `premium-bps` must be `<=` it). `market: current-contract` binds the signature
+  to this deployment, so it can't be replayed on another RFQ market.
 
 > **Why the signature is required (corrects an earlier draft note).** Without it,
 > `fill-rfq` would be permissionless and the **premium is the prize** — a mempool
@@ -137,15 +142,22 @@ This folder drafts **Option B**: see [`rfq-sbtc-usdcx-jing.clar`](./rfq-sbtc-usd
 > submits; here the **MM is the submitter** (being `tx-sender` *is* its authorization),
 > so the thing that needs signing is the **client's selection of the winner**.
 
-### Two protective floors (defense in depth)
+### Two protective floors — each where it belongs
 
 | Floor | Set where | Nature | Role |
 |---|---|---|---|
-| `max-premium-bps` | `open-rfq`, **immutable** | oracle-relative | structural "security min" — a fill can never price worse than N bps below live Pyth, regardless of what the client later signs |
-| `min-usdc-out` | the **signed** authorization | absolute USDCx | the precise floor = the winning quote, known only after the auction |
+| `min-usdc-out` | `open-rfq`, client-entered, **immutable** | absolute USDCx | LOOSE worst-case reservation ("never less than Y, period"). Set below expected, so normal drift never trips it — it only fires if Pyth prints something crazy-low. |
+| `max-premium-bps` | the **signed** authorization, per-auction | oracle-relative | pins the winning MM to the exact spread it quoted (`premium-bps <= this`). Drift-immune, so it never causes a spurious revert. |
 
-So there's no need for a separate absolute minimum at open time — `max-premium-bps`
-*is* the open-time security floor, and `min-usdc-out` is the tighter per-auction one.
+**Why this split (and why an absolute *signed* floor was wrong).** An absolute
+`min-usdc-out` in the signature is computed from `mid_at_sign`, but the fill reads
+`mid_at_fill`. Between them Pyth drifts, so a benign BTC tick down would make the
+fill revert even though the MM honored its spread — it conflates the *spread* with
+the *price level*. The spread belongs in a **relative** term (the signed
+`max-premium-bps`); the only thing worth pinning absolutely is a **loose
+catastrophe floor** against a crazy oracle, which the client sets once at open.
+The client otherwise accepts oracle drift between sign and fill — that is the whole
+premise of `Pyth ± premium` pricing.
 
 ### Fee
 

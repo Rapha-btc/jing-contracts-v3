@@ -18,14 +18,17 @@
 ;; fill must pre-escrow. The client escrows sBTC in `open-rfq` (it is selling it
 ;; anyway); the MM never locks capital until it wins and fills atomically.
 ;;
-;; Two protective floors, defense in depth:
-;;   - max-premium-bps  -- set at `open-rfq`, IMMUTABLE, oracle-relative. The
-;;                         structural safety net: a fill can never price worse
-;;                         than this many bps below live Pyth, whatever the
-;;                         client later signs. This is the "security min".
-;;   - min-usdc-out     -- in the SIGNED authorization, absolute USDCx units. The
-;;                         precise floor = the winning quote, known only after the
-;;                         auction. Belt on top of the max-premium-bps suspenders.
+;; Two protective floors, each where it belongs:
+;;   - min-usdc-out    -- ABSOLUTE, client-entered at `open-rfq`, IMMUTABLE. A
+;;                        LOOSE worst-case reservation ("never less than Y USDCx,
+;;                        period"). Set below expected so normal drift never trips
+;;                        it; it only fires if Pyth prints something crazy-low.
+;;   - max-premium-bps -- RELATIVE, in the SIGNED authorization, per-auction. Pins
+;;                        the winning MM to the exact spread it quoted: the fill's
+;;                        premium must be <= this. Drift-immune (all relative to
+;;                        live Pyth), so it never causes a spurious revert.
+;; The client accepts oracle drift between sign and fill -- that is the premise of
+;; `Pyth +/- premium` pricing; the loose absolute floor is the only hard backstop.
 ;;
 ;; Decimals (must match the deployed pair): sBTC = 8, USDCx = 6, Pyth = 8.
 ;;   usdc_mid = sbtc_in * pyth_price / (PRICE_PRECISION * DECIMAL_FACTOR)
@@ -92,7 +95,7 @@
   {
     client: principal,
     sbtc-in: uint,
-    max-premium-bps: uint, ;; immutable oracle-relative floor (the "security min")
+    min-usdc-out: uint,   ;; absolute worst-case floor, client-set at open (Pyth-crazy guard)
     expiry: uint,         ;; stacks-block-height after which it can be cancelled
     open: bool,
   }
@@ -113,7 +116,7 @@
 (define-read-only (build-auth-hash
     (rfq-id uint)
     (winner principal)
-    (min-usdc-out uint)
+    (max-premium-bps uint)
     (auth-expiry uint)
   )
   (sha256 (concat SIP018_MSG_PREFIX
@@ -122,7 +125,7 @@
         market: current-contract,
         rfq-id: rfq-id,
         winner: winner,
-        min-usdc-out: min-usdc-out,
+        max-premium-bps: max-premium-bps,
         expiry: auth-expiry,
       })))
     )))
@@ -140,7 +143,7 @@
 ;; Escrow sBTC and publish the RFQ. `ttl` is in blocks from now.
 (define-public (open-rfq
     (sbtc-in uint)
-    (max-premium-bps uint)
+    (min-usdc-out uint)
     (ttl uint)
     (x <ft-trait>)
     (x-name (string-ascii 128))
@@ -152,12 +155,12 @@
     (asserts! (is-eq (contract-of x) (var-get token-x)) ERR_WRONG_TRAIT)
     (asserts! (>= sbtc-in (var-get min-sbtc-in)) ERR_AMOUNT_TOO_SMALL)
     (asserts! (> sbtc-in u0) ERR_AMOUNT_TOO_SMALL)
-    (asserts! (<= max-premium-bps BPS_PRECISION) ERR_PREMIUM_TOO_HIGH)
+    (asserts! (> min-usdc-out u0) ERR_AMOUNT_TOO_SMALL)
     (try! (contract-call? x transfer sbtc-in tx-sender current-contract none))
     (map-set rfqs id {
       client: tx-sender,
       sbtc-in: sbtc-in,
-      max-premium-bps: max-premium-bps,
+      min-usdc-out: min-usdc-out,
       expiry: (+ stacks-block-height ttl),
       open: true,
     })
@@ -173,14 +176,15 @@
 ;; push and would almost always fail the staleness gate otherwise.
 ;;
 ;; MM is tx-sender, so it pays USDCx directly; the contract releases escrowed
-;; sBTC. The MM carries the client's SIP-018 authorization (`min-usdc-out`,
-;; `auth-expiry`, `sig`); only the MM the client signed for can produce a sig
-;; that recovers to the client, which is what stops a mempool watcher from
-;; sniping the winner's premium.
+;; sBTC. The MM carries the client's SIP-018 authorization (`max-premium-bps`,
+;; `auth-expiry`, `sig`) which pins it to the spread it quoted; only the MM the
+;; client signed for can produce a sig that recovers to the client, which is what
+;; stops a mempool watcher from sniping the winner's premium. `premium-bps` is the
+;; MM's actual fill spread and must be <= the signed `max-premium-bps`.
 (define-public (fill-rfq
     (id uint)
     (premium-bps uint)
-    (min-usdc-out uint)
+    (max-premium-bps uint)
     (auth-expiry uint)
     (sig (buff 65))
     (vaa (buff 8192))
@@ -202,10 +206,11 @@
     (asserts! (<= stacks-block-height (get expiry rfq)) ERR_EXPIRED)
     (asserts! (is-eq (contract-of x) (var-get token-x)) ERR_WRONG_TRAIT)
     (asserts! (is-eq (contract-of y) (var-get token-y)) ERR_WRONG_TRAIT)
-    (asserts! (<= premium-bps (get max-premium-bps rfq)) ERR_PREMIUM_TOO_HIGH)
-    (asserts! (or (is-eq auth-expiry u0) (< burn-block-height auth-expiry))
-      ERR_AUTH_EXPIRED
-    )
+    (asserts! (<= premium-bps max-premium-bps) ERR_PREMIUM_TOO_HIGH)
+    ;; auth-expiry is a stacks-block-height deadline -- same clock as the RFQ's
+    ;; own `expiry`, fine enough (~2s/block) for a short quote window. No u0
+    ;; "never expires" sentinel: every authorization must carry a real deadline.
+    (asserts! (< stacks-block-height auth-expiry) ERR_AUTH_EXPIRED)
 
     ;; Verify the client's SIP-018 authorization. `mm` (tx-sender) is folded into
     ;; the hash as the signed `winner`, so only the chosen MM yields a sig that
@@ -216,7 +221,7 @@
         (unwrap!
           (principal-of?
             (unwrap! (secp256k1-recover?
-              (build-auth-hash id mm min-usdc-out auth-expiry) sig)
+              (build-auth-hash id mm max-premium-bps auth-expiry) sig)
               ERR_BAD_AUTH
             ))
           ERR_BAD_AUTH
@@ -253,7 +258,7 @@
         (fee (/ (* usdc-out FEE_BPS) BPS_PRECISION))
         (client-receives (- usdc-out fee))
       )
-      (asserts! (>= usdc-out min-usdc-out) ERR_BELOW_MIN_OUT)
+      (asserts! (>= usdc-out (get min-usdc-out rfq)) ERR_BELOW_MIN_OUT)
 
       ;; MM (tx-sender) pays USDCx: fee -> treasury, rest -> client
       (and (> fee u0)
