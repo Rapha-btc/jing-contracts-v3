@@ -29,10 +29,13 @@
 (define-constant ERR_VIDEOS_NOT_EVEN (err u118))
 (define-constant ERR_OVER_CAPACITY (err u119))
 
+;; NOTE: u3 (AMENDED_APPROVED) is retired in this version -- veto fixes
+;; are now a creator-driven amend that returns the delivery to PENDING,
+;; so there is no separate owner-approved state. EXPIRED stays u4 so
+;; existing status decoders don't shift.
 (define-constant STATUS_PENDING u0)
 (define-constant STATUS_RELEASED u1)
 (define-constant STATUS_VETOED u2)
-(define-constant STATUS_AMENDED_APPROVED u3)
 (define-constant STATUS_EXPIRED u4)
 
 (define-data-var current-round uint u0)
@@ -50,6 +53,10 @@
     pending: uint,
     creator-a: principal,
     creator-b: principal,
+    ;; Payout destinations: creator-a/-b operate from their normal wallet
+    ;; (the admin) but their USDCx reward is sent to these wallets.
+    creator-a-wallet: principal,
+    creator-b-wallet: principal,
     swept: bool
   }
 )
@@ -101,7 +108,9 @@
     (round-data
       { started-at: uint, ends-at: uint, per-video: uint, num-videos: uint,
         deposited: uint, paid-out: uint, pending: uint,
-        creator-a: principal, creator-b: principal, swept: bool })
+        creator-a: principal, creator-b: principal,
+        creator-a-wallet: principal, creator-b-wallet: principal,
+        swept: bool })
     (who principal))
   (or (is-eq who (get creator-a round-data))
       (is-eq who (get creator-b round-data)))
@@ -109,7 +118,9 @@
 
 (define-public (start-round
     (creator-a principal)
+    (creator-a-wallet principal)
     (creator-b principal)
+    (creator-b-wallet principal)
     (per-video uint)
     (num-videos uint))
   (let (
@@ -143,6 +154,8 @@
         pending: u0,
         creator-a: creator-a,
         creator-b: creator-b,
+        creator-a-wallet: creator-a-wallet,
+        creator-b-wallet: creator-b-wallet,
         swept: false
       }
     )
@@ -151,6 +164,8 @@
       id: next-id,
       creator-a: creator-a,
       creator-b: creator-b,
+      creator-a-wallet: creator-a-wallet,
+      creator-b-wallet: creator-b-wallet,
       per-video: per-video,
       num-videos: num-videos,
       deposit: deposit,
@@ -175,10 +190,7 @@
       (remaining (- (get deposited round-data) (get paid-out round-data)))
     )
     (asserts! (is-creator-of round-data tx-sender) ERR_NOT_CREATOR)
-    (asserts!
-      (<= (+ now REVIEW_WINDOW_BURN_BLOCKS) (get ends-at round-data))
-      ERR_ROUND_ENDED
-    )
+    (asserts! (<= review-end (get ends-at round-data)) ERR_ROUND_ENDED)
     (asserts!
       (<= (* (+ (get pending round-data) u1) per-video) remaining)
       ERR_OVER_CAPACITY
@@ -241,32 +253,69 @@
   )
 )
 
-(define-public (lift-veto
+;; Creator: amend a vetoed delivery with the corrected work.
+;; The burden of a bad hash is on the creator. After OWNER vetoes (e.g.
+;; "wrong hash"), the creator fixes the work and calls `amend-delivery`
+;; with the corrected URI + hash. This is signed by the creator's own
+;; wallet (the corrected hash is creator-attested, not owner-attested)
+;; and returns the delivery to PENDING with a FRESH 48-hour review window
+;; so OWNER can re-review and, if still wrong, veto again. It is
+;; effectively a re-submission of the same slot, subject to the same
+;; round-end cutoff and budget-capacity checks as `submit-delivery`.
+(define-public (amend-delivery
     (delivery-id uint)
-    (amended-content-hash (optional (buff 32))))
+    (content-uri (string-utf8 256))
+    (content-hash (buff 32)))
   (let (
       (delivery (unwrap! (map-get? deliveries { id: delivery-id })
                           ERR_DELIVERY_NOT_FOUND))
       (round-id (get round-id delivery))
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
+      (now burn-block-height)
+      (review-end (+ now REVIEW_WINDOW_BURN_BLOCKS))
+      (per-video (get per-video round-data))
+      (remaining (- (get deposited round-data) (get paid-out round-data)))
+      (creator (get creator delivery))
     )
-    (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
+    ;; Only the creator who owns this delivery can amend it.
+    (asserts! (is-eq tx-sender creator) ERR_NOT_CREATOR)
+    ;; Only a vetoed delivery can be re-done.
     (asserts! (is-eq (get status delivery) STATUS_VETOED) ERR_NOT_VETOED)
+    ;; Cannot resurrect a delivery after OWNER has swept the round's budget.
     (asserts! (not (get swept round-data)) ERR_ALREADY_SWEPT)
+    ;; Same cutoff as submit: the fresh review window must complete before
+    ;; round-end so the post-round claim grace still applies.
+    (asserts! (<= review-end (get ends-at round-data)) ERR_ROUND_ENDED)
+    ;; Re-check budget capacity: other deliveries may have been released
+    ;; since the veto, eating into remaining budget. The veto decremented
+    ;; pending, so this slot is counted back in here.
+    (asserts!
+      (<= (* (+ (get pending round-data) u1) per-video) remaining)
+      ERR_OVER_CAPACITY
+    )
     (map-set deliveries { id: delivery-id }
-      (merge delivery { status: STATUS_AMENDED_APPROVED })
+      (merge delivery {
+        submitted-at: now,
+        review-ends-at: review-end,
+        content-uri: content-uri,
+        content-hash: content-hash,
+        status: STATUS_PENDING,
+        veto-reason: none
+      })
     )
     (map-set rounds { id: round-id }
       (merge round-data { pending: (+ (get pending round-data) u1) })
     )
     (print {
-      event: "veto-lifted",
+      event: "delivery-amended",
       id: delivery-id,
       round: round-id,
-      creator: (get creator delivery),
-      original-content-hash: (get content-hash delivery),
-      amended-content-hash: amended-content-hash,
-      original-veto-reason: (get veto-reason delivery)
+      creator: creator,
+      previous-veto-reason: (get veto-reason delivery),
+      content-hash: content-hash,
+      content-uri: content-uri,
+      submitted-at: now,
+      review-ends-at: review-end
     })
     (ok true)
   )
@@ -280,16 +329,21 @@
       (round-data (unwrap! (map-get? rounds { id: round-id }) ERR_NO_ROUND))
       (now burn-block-height)
       (status (get status delivery))
-      (recipient (get creator delivery))
+      (creator (get creator delivery))
+      ;; Pay the per-creator smart wallet, not the operating wallet.
+      (recipient (if (is-eq creator (get creator-a round-data))
+                   (get creator-a-wallet round-data)
+                   (get creator-b-wallet round-data)))
       (per-video (get per-video round-data))
       (remaining (- (get deposited round-data) (get paid-out round-data)))
     )
-    (asserts! (is-eq tx-sender recipient) ERR_NOT_CREATOR)
+    ;; The creator signs the claim from their normal wallet...
+    (asserts! (is-eq tx-sender creator) ERR_NOT_CREATOR)
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
+    ;; Claimable only once the review window has expired without veto.
     (asserts!
-      (or (is-eq status STATUS_AMENDED_APPROVED)
-          (and (is-eq status STATUS_PENDING)
-               (>= now (get review-ends-at delivery))))
+      (and (is-eq status STATUS_PENDING)
+           (>= now (get review-ends-at delivery)))
       ERR_NOT_CLAIMABLE
     )
     (asserts! (>= remaining per-video) ERR_INSUFFICIENT_ESCROW)
@@ -309,7 +363,8 @@
       event: "delivery-released",
       id: delivery-id,
       round: round-id,
-      creator: recipient,
+      creator: creator,
+      payout-wallet: recipient,
       amount: per-video,
       from-status: status,
       terms-accepted: true
@@ -327,11 +382,9 @@
       (now burn-block-height)
       (status (get status delivery))
     )
-    (asserts!
-      (or (is-eq status STATUS_PENDING)
-          (is-eq status STATUS_AMENDED_APPROVED))
-      ERR_NOT_CLAIMABLE
-    )
+    ;; Only an unclaimed PENDING slot blocks a sweep. (Standing VETOED
+    ;; deliveries already left `pending`, so they need no expiry.)
+    (asserts! (is-eq status STATUS_PENDING) ERR_NOT_CLAIMABLE)
     (asserts!
       (>= now (+ (get ends-at round-data) CLAIM_GRACE_BURN_BLOCKS))
       ERR_ROUND_LIVE
