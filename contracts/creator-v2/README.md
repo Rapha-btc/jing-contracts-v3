@@ -89,9 +89,9 @@ Timing (mainnet): `REVIEW_WINDOW = 288` burn blocks (~48h),
 
 | File | Purpose |
 |------|---------|
-| `creator-escrow-v2.clar` | The round-2 contract (mainnet timing). |
-| `../creator-escrow-v2-stxer.clar` | Stxer variant with shrunk timing (`REVIEW=2`, `GRACE=0`, `ROUND=4200`) so `veto`/`approve` stay reachable at submit height in a fork. |
-| `../../simulations/verify-creator-escrow-v2.js` | **Self-verifying** stxer harness — runs happy path + edge cases on a mainnet fork, fetches results via `getSimulationResult`, and asserts every `(ok …)`/`(err uX)` plus the USDCx payout deltas. Exits non-zero on any failure. |
+| `creator-escrow-v2.clar` | The round-2 contract (mainnet timing). **This is what the verifier deploys.** |
+| `../../simulations/verify-creator-escrow-v2.js` | **Self-verifying** stxer harness — deploys the REAL `creator-escrow-v2.clar` with mainnet timing (288/288/4200) on a fork, uses `addAdvanceBlocks(289)` / `(4200)` to cross the review window and round-end+grace, runs happy path + edge cases, fetches results via `getSimulationResult`, and asserts every `(ok …)`/`(err uX)` plus the USDCx payout deltas. Exits non-zero on any failure. |
+| `../creator-escrow-v2-stxer.clar` | **Legacy/redundant** shrunk-timing variant (`REVIEW=2`, `GRACE=0`). Pre-`addAdvanceBlocks` workaround — the verifier no longer uses it (it would simulate the wrong constants); only the two demo sims still reference it. Safe to delete once those are repointed. |
 | `../../simulations/simul-creator-escrow-v2.js` | Demo happy-path sim (prints a stxer URL). |
 | `../../simulations/simul-creator-escrow-v2-amend-approve.js` | Demo sim for the veto→amend and approve flows. |
 | `../../tests/creator-escrow-v2.test.ts` | Clarinet-SDK (vitest) unit suite against mainnet timing, using `simnet.mineEmptyBurnBlocks` to cross windows. |
@@ -104,13 +104,17 @@ npm test                             # local vitest suite (needs remote USDCx da
 npm run verify:creator-escrow-v2     # self-verifying stxer mainnet-fork harness
 ```
 
-The stxer harness is the authoritative end-to-end check: it asserts the
-real USDCx SIP-010 transfer lands in each creator's **real smart wallet**
-on a mainnet fork.
+The stxer harness is the authoritative end-to-end check: it deploys the
+**unmodified** `creator-escrow-v2.clar` (mainnet 288/288/4200 timing) and
+asserts the real USDCx SIP-010 transfer lands in each creator's **real
+smart wallet** on a mainnet fork. The 288-block review window is genuinely
+crossed via `addAdvanceBlocks`, so the exact constants destined for
+mainnet are what execute (no shrunk-timing stand-in).
 
-### Last verified run (real smart wallets)
+### Last verified run (real contract timing + real smart wallets)
 
-`31 passed, 0 failed` against the creators' actual smart wallets:
+`31 passed, 0 failed` against `creator-escrow-v2.clar` (288/288/4200) and
+the creators' actual smart wallets:
 - `creator-a-wallet = SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.studiosam-wallet` → received **$50** (2 videos)
 - `creator-b-wallet = SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.emmex-wallet` → received **$25** (1 video)
 - both operating wallets (`SP3C1YFP…` Sam, `SP2QVKZ2…` Emmexx) received **$0** — confirming payouts route to the smart wallet, not the signer.

@@ -8,11 +8,13 @@
 // asserts the USDCx payout deltas landed in the SMART WALLETS and not
 // the operating wallets. Exits non-zero if any assertion fails.
 //
-// Timing in the -stxer variant: REVIEW = 2, CLAIM_GRACE = 0, ROUND =
-// 4200. All steps run at the pinned tip until `addAdvanceBlocks`, so a
-// PENDING delivery is NOT claimable until we advance >= 2 burn blocks,
-// and `approve` (which requires now < review-ends-at) is reachable at
-// submit height.
+// Runs against the REAL contract with MAINNET timing (REVIEW = 288,
+// CLAIM_GRACE = 288, ROUND = 4200) -- no shrunk-timing variant. All
+// steps run at the pinned tip until `addAdvanceBlocks`, so a PENDING
+// delivery is NOT claimable until we advance past the 288-block review
+// window, and `approve` (which requires now < review-ends-at) is
+// reachable at submit height. This verifies the exact constants that
+// will be deployed to mainnet.
 //
 // Run: npx tsx simulations/verify-creator-escrow-v2.js
 import fs from "node:fs";
@@ -52,7 +54,7 @@ const CREATOR_B_WALLET = "SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.emmex-wallet
 const STRANGER = "SP000000000000000000002Q6VF78";
 
 const USDCX = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx";
-const CONTRACT_NAME = "creator-escrow-v2-stxer";
+const CONTRACT_NAME = "creator-escrow-v2";
 const CID = `${OWNER}.${CONTRACT_NAME}`;
 
 const P25 = 25_000_000; // $25 / video, USDCx is 6-decimal
@@ -72,7 +74,7 @@ const balOf = (addr) => `(contract-call? '${USDCX} get-balance '${addr})`;
 
 // ---- scenario builder with a parallel assertion plan ----
 const plan = [];
-const source = fs.readFileSync("./contracts/creator-escrow-v2-stxer.clar", "utf8");
+const source = fs.readFileSync("./contracts/creator-v2/creator-escrow-v2.clar", "utf8");
 const b = SimulationBuilder.new();
 
 function deploy() {
@@ -81,7 +83,7 @@ function deploy() {
     source_code: source,
     clarity_version: ClarityVersion.Clarity4,
   });
-  plan.push({ kind: "deploy", label: "deploy creator-escrow-v2-stxer" });
+  plan.push({ kind: "deploy", label: "deploy creator-escrow-v2 (mainnet timing)" });
 }
 // expect: exact decoded Clarity result string, e.g. "(ok u1)" / "(err u116)"
 function call(label, sender, fn, args, expect) {
@@ -146,8 +148,8 @@ call("amend d1 not-vetoed (RELEASED) -> ERR_NOT_VETOED", CREATOR_A, "amend-deliv
 call("amend d2 (Emmexx, corrected hash) -> (ok true)", CREATOR_B, "amend-delivery", [uintCV(2), stringUtf8CV(URI_2B), bufferCV(H2B)], "(ok true)");
 evalc("d2 after amend (PENDING, fresh window)", "(get-delivery u2)");
 
-// --- cross the 2-block review window ---
-advance(3);
+// --- cross the 288-block review window (mainnet timing) ---
+advance(289);
 
 call("approve d3 after window -> ERR_REVIEW_CLOSED", OWNER, "approve", [uintCV(3)], "(err u108)");
 call("release d2 (amended) -> (ok true)", CREATOR_B, "release", [uintCV(2), boolCV(true)], "(ok true)");
@@ -164,8 +166,10 @@ evalc("opB after", balOf(CREATOR_B), "B_after");
 call("sweep before round-end -> ERR_ROUND_NOT_ENDED", OWNER, "sweep", [uintCV(1)], "(err u105)");
 call("sweep by non-owner -> ERR_NOT_OWNER", CREATOR_A, "sweep", [uintCV(1)], "(err u100)");
 
-// --- advance past round-end (ROUND = 4200), then expire the abandoned slot ---
-advance(4201);
+// --- advance past round-end + claim grace (ROUND 4200 + GRACE 288),
+//     then expire the abandoned slot. Already +289, so +4200 more puts us
+//     well past ends-at + grace. ---
+advance(4200);
 call("expire d2 (RELEASED) -> ERR_NOT_CLAIMABLE", STRANGER, "expire", [uintCV(2)], "(err u116)");
 call("expire d4 (PENDING, abandoned) -> (ok true)", STRANGER, "expire", [uintCV(4)], "(ok true)");
 
