@@ -29,13 +29,15 @@
 (define-constant ERR_VIDEOS_NOT_EVEN (err u118))
 (define-constant ERR_OVER_CAPACITY (err u119))
 
-;; NOTE: u3 (AMENDED_APPROVED) is retired in this version -- veto fixes
-;; are now a creator-driven amend that returns the delivery to PENDING,
-;; so there is no separate owner-approved state. EXPIRED stays u4 so
-;; existing status decoders don't shift.
+;; u3 is STATUS_APPROVED: OWNER has reviewed a PENDING delivery and
+;; fast-tracked it, letting the creator `release` before the 48h review
+;; window elapses. (It replaces the old AMENDED_APPROVED meaning; veto
+;; fixes are now a creator-driven amend back to PENDING.) EXPIRED stays
+;; u4 so existing status decoders don't shift.
 (define-constant STATUS_PENDING u0)
 (define-constant STATUS_RELEASED u1)
 (define-constant STATUS_VETOED u2)
+(define-constant STATUS_APPROVED u3)
 (define-constant STATUS_EXPIRED u4)
 
 (define-data-var current-round uint u0)
@@ -321,6 +323,39 @@
   )
 )
 
+;; Owner: fast-track a delivery so the creator can release early.
+;; OWNER has reviewed the delivery and is satisfied, so the creator may
+;; `release` immediately instead of waiting out the 48h review window.
+;; Only a PENDING delivery can be approved; once approved it can no
+;; longer be vetoed (veto requires PENDING). The slot stays counted in
+;; `pending` until the creator releases (or it is expired).
+(define-public (approve (delivery-id uint))
+  (let (
+      (delivery (unwrap! (map-get? deliveries { id: delivery-id })
+                          ERR_DELIVERY_NOT_FOUND))
+      (round-id (get round-id delivery))
+      (now burn-block-height)
+    )
+    (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
+    (asserts! (is-eq (get status delivery) STATUS_PENDING) ERR_ALREADY_RESOLVED)
+    ;; Fast-track only while the review window is still open; once it has
+    ;; closed the delivery is already claimable via the PENDING path, so
+    ;; a late approve would be a no-op. Mirrors the `veto` time bound.
+    (asserts! (< now (get review-ends-at delivery)) ERR_REVIEW_CLOSED)
+    (map-set deliveries { id: delivery-id }
+      (merge delivery { status: STATUS_APPROVED })
+    )
+    (print {
+      event: "delivery-approved",
+      id: delivery-id,
+      round: round-id,
+      creator: (get creator delivery),
+      content-hash: (get content-hash delivery)
+    })
+    (ok true)
+  )
+)
+
 (define-public (release (delivery-id uint) (agree-to-terms bool))
   (let (
       (delivery (unwrap! (map-get? deliveries { id: delivery-id })
@@ -340,10 +375,12 @@
     ;; The creator signs the claim from their normal wallet...
     (asserts! (is-eq tx-sender creator) ERR_NOT_CREATOR)
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
-    ;; Claimable only once the review window has expired without veto.
+    ;; Claimable when OWNER has APPROVED it (fast-track, any time), or
+    ;; when it is still PENDING and its review window has expired.
     (asserts!
-      (and (is-eq status STATUS_PENDING)
-           (>= now (get review-ends-at delivery)))
+      (or (is-eq status STATUS_APPROVED)
+          (and (is-eq status STATUS_PENDING)
+               (>= now (get review-ends-at delivery))))
       ERR_NOT_CLAIMABLE
     )
     (asserts! (>= remaining per-video) ERR_INSUFFICIENT_ESCROW)
@@ -382,9 +419,14 @@
       (now burn-block-height)
       (status (get status delivery))
     )
-    ;; Only an unclaimed PENDING slot blocks a sweep. (Standing VETOED
-    ;; deliveries already left `pending`, so they need no expiry.)
-    (asserts! (is-eq status STATUS_PENDING) ERR_NOT_CLAIMABLE)
+    ;; An unclaimed PENDING or owner-APPROVED slot still counts in
+    ;; `pending` and blocks a sweep. (Standing VETOED deliveries already
+    ;; left `pending`, so they need no expiry.)
+    (asserts!
+      (or (is-eq status STATUS_PENDING)
+          (is-eq status STATUS_APPROVED))
+      ERR_NOT_CLAIMABLE
+    )
     (asserts!
       (>= now (+ (get ends-at round-data) CLAIM_GRACE_BURN_BLOCKS))
       ERR_ROUND_LIVE
