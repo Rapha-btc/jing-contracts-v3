@@ -131,6 +131,11 @@ path = "contracts/creator-v2/creator-escrow-v2.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.creator-escrow-v2-stxer]
+path = "contracts/creator-escrow-v2-stxer.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.rfq-sbtc-usdcx-jing]
 path = "contracts/rfq/rfq-sbtc-usdcx-jing.clar"
 clarity_version = 5

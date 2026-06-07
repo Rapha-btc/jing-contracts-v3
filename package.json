@@ -6,7 +6,10 @@
   "private": true,
   "scripts": {
     "test": "vitest run",
-    "sim:creator-escrow": "tsx simulations/simul-creator-escrow.js"
+    "sim:creator-escrow": "tsx simulations/simul-creator-escrow.js",
+    "sim:creator-escrow-v2": "tsx simulations/simul-creator-escrow-v2.js",
+    "sim:creator-escrow-v2-amend-approve": "tsx simulations/simul-creator-escrow-v2-amend-approve.js",
+    "verify:creator-escrow-v2": "tsx simulations/verify-creator-escrow-v2.js"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.16.0",
