@@ -107,6 +107,42 @@ Both gates are visible in the contract source and trip on the assertions
 in `execute-settlement`; they're meaningful defenses that just can't be
 provoked with mainnet-fork state.
 
+## RFQ sims (`rfq-sbtc-{usdcx,stx}-jing` — two-phase fix-price / fulfill)
+
+Self-verifying harnesses (`verify-rfq-sbtc-{usdcx,stx}-jing.js`). Each deploys an
+updated jing-core + the rfq under a throwaway owner, runs the scenarios, pulls
+the results back, and asserts every step's result code **plus** the payout
+deltas (client +net, MM +sBTC-in, treasury +fee, to the unit) **plus** on-chain
+`build-auth-hash` ≡ the JS-side SIP-018 hash. The client is a synthetic keypair
+so the harness signs the authorizations itself. **46 checks each, all green.**
+
+| | sBTC/USDCx | sBTC/STX | What it proves |
+|---|------------|----------|----------------|
+| `verify-rfq-sbtc-{usdcx,stx}-jing.js` | [✓ 46/46](https://stxer.xyz/simulations/mainnet/00265e5dce6d77e57fd082203caa4572) | [✓ 46/46](https://stxer.xyz/simulations/mainnet/16f9bb349ee3fc59d1a3e4bfbb0d6190) | Full happy path + every reachable guard (below). STX variant prices off TWO VAAs (BTC/USD ÷ STX/USD cross-rate) and pays native STX; USDCx is single-feed and pays a SIP-010. |
+
+Scenarios (both harnesses):
+
+- **Happy path** — `open-rfq` → `fix-price` (valid) → `fulfill`; asserts the three payout deltas + hash parity.
+- **fix-price guards** — `u2008` auth-expired · `u2007` bad-sig · `u2005` premium-too-high (under the signed spread floor) · `u2009` above-max-out (over the mid+20% fat-finger ceiling) · `u2006` below-min-out (clears the spread floor but under the client's absolute `min-stx-out`) · `u2011` already-fixed (second fix on a fixed rfq) · `u2003` expired (fix after `open-expiry`).
+- **fulfill guards** — `u2013` not-winner · `u2012` not-fixed (fulfill before any fix) · `u2001` rfq-not-found · `u2002` rfq-closed (act on a fulfilled rfq).
+- **reclaim** — `u2004` not-expired (too early), then ok after the `OPEN_TTL` (6 burn-block) advance.
+- **open-rfq guards** — `u1010` paused · `u1001` amount-too-small (both the `min-sbtc-in` floor and the zero `min-stx-out` guard).
+- **admin** — `u1011` not-authorized on all four operator setters (`set-treasury` / `set-paused` / `set-operator` / `set-min-sbtc-in`) from a non-operator · `u1018` already-initialized · `u1010` fix-while-paused · happy-path operator setters succeed.
+
+Ordering note: the two fixes that need a fresh Pyth read (rfq2's valid fix, rfq3)
+run **before** the `advance(7)`; every other guard short-circuits before the
+oracle call, so it's safe to assert post-advance.
+
+### RFQ gates verified by code review only (not mainnet-fork-reachable)
+
+| Gate | Reason not reachable with real VAAs |
+|------|-------------------------------------|
+| `u1005 ERR_STALE_PRICE` | Hermes only serves recent VAAs; a fix-price always `verify-and-update`s a fresh one, so publish-time clears `now - MAX_STALENESS (u80)`. |
+| `u1006 ERR_PRICE_UNCERTAIN` | Real Pyth `conf` stays well inside `price / MAX_CONF_RATIO (u50)`; needs a fabricated wide-conf VAA. |
+| `u1009 ERR_ZERO_PRICE` | No real feed returns a non-positive price; needs a fabricated VAA. |
+| `u1020 ERR_EXPO_MISMATCH` (stx) | Both BTC/USD and STX/USD use `expo = -8`, so `feed-x.expo == feed-y.expo` always with real VAAs. |
+| `u1019 ERR_WRONG_TRAIT` | Reachable by passing a non-`token-x` SIP-010 trait — added in a follow-up pass. |
+
 ## Notable findings from the runs
 
 ### Full lifecycle settlement (sbtc-usdcx)

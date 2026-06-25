@@ -273,3 +273,64 @@ export function buildIntentHashHex(details, chainId) {
 export function signIntent(messageHashHex, privateKey = TEST_INTENT_PRIVKEY) {
   return signMessageHashRsv({ messageHash: messageHashHex, privateKey });
 }
+
+// ============================================================================
+// RFQ SIP-018 helpers (rfq-sbtc-{usdcx,stx}-jing fix-price authorizations).
+//
+// Mirrors the contracts' `build-auth-hash`:
+//   sha256( "SIP018" ++ domainHash ++ sha256(consensusBuff(detailsTuple)) )
+// where domainHash = sha256(consensusBuff({ name:"jing-rfq", version:"1", chain-id }))
+// and detailsTuple = { market, rfq-id, winner, max-premium-bps, expiry }.
+// Clarity serializes tuple keys in canonical (sorted) order — match it exactly.
+// ============================================================================
+
+function getRfqDomainHash(chainId = MAINNET_CHAIN_ID) {
+  // alphabetic: chain-id < name < version
+  return cvSha256(tupleCV({
+    "chain-id": uintCV(chainId),
+    name: stringAsciiCV("jing-rfq"),
+    version: stringAsciiCV("1"),
+  }));
+}
+
+/**
+ * Off-chain mirror of the RFQ contracts' build-auth-hash. Returns the 32-byte
+ * message-hash HEX string for signMessageHashRsv / signIntent.
+ *
+ * @param {object} d
+ * @param {ClarityValue} d.market         contractPrincipalCV(DEPLOYER, marketName)
+ * @param {number|bigint} d.rfqId
+ * @param {ClarityValue} d.winner         principal CV of the MM (the fix-price sender)
+ * @param {number|bigint} d.maxPremiumBps
+ * @param {number|bigint} d.authExpiry
+ * @param {number} [chainId]              defaults to mainnet (1)
+ */
+export function buildRfqAuthHashHex(d, chainId) {
+  // alphabetic key order: expiry < market < max-premium-bps < rfq-id < winner
+  const details = tupleCV({
+    expiry: uintCV(d.authExpiry),
+    market: d.market,
+    "max-premium-bps": uintCV(d.maxPremiumBps),
+    "rfq-id": uintCV(d.rfqId),
+    winner: d.winner,
+  });
+  const composed = Buffer.concat([SIP018_PREFIX, getRfqDomainHash(chainId), cvSha256(details)]);
+  return sha256(composed).toString("hex");
+}
+
+/**
+ * Fetch a Pyth VAA AND its parsed price/expo from Hermes in one call. Unlike
+ * fetchPythVAA (which returns only the binary), this also returns the price the
+ * contract will read after verify-and-update, so the harness can compute an
+ * in-band `committed-out`. Default ts = now-30 (inside MAX_STALENESS=u80).
+ */
+export async function fetchPyth(feedHex, timestamp) {
+  const ts = timestamp ?? Math.floor(Date.now() / 1000) - 30;
+  const url = `${PYTH_HERMES_BASE}/v2/updates/price/${ts}?ids[]=${feedHex}`;
+  const r = await fetch(url, { headers: { accept: "application/json" } });
+  const d = await r.json();
+  const bin = d.binary?.data?.[0];
+  const p = d.parsed?.[0]?.price;
+  if (!bin || !p) throw new Error(`No Pyth data at ts=${ts} for ${feedHex.slice(0, 8)}...`);
+  return { vaa: bin, price: BigInt(p.price), expo: p.expo, publishTime: p.publish_time };
+}
