@@ -114,11 +114,11 @@ updated jing-core + the rfq under a throwaway owner, runs the scenarios, pulls
 the results back, and asserts every step's result code **plus** the payout
 deltas (client +net, MM +sBTC-in, treasury +fee, to the unit) **plus** on-chain
 `build-auth-hash` ≡ the JS-side SIP-018 hash. The client is a synthetic keypair
-so the harness signs the authorizations itself. **46 checks each, all green.**
+so the harness signs the authorizations itself. **47 checks each, all green.**
 
 | | sBTC/USDCx | sBTC/STX | What it proves |
 |---|------------|----------|----------------|
-| `verify-rfq-sbtc-{usdcx,stx}-jing.js` | [✓ 46/46](https://stxer.xyz/simulations/mainnet/00265e5dce6d77e57fd082203caa4572) | [✓ 46/46](https://stxer.xyz/simulations/mainnet/16f9bb349ee3fc59d1a3e4bfbb0d6190) | Full happy path + every reachable guard (below). STX variant prices off TWO VAAs (BTC/USD ÷ STX/USD cross-rate) and pays native STX; USDCx is single-feed and pays a SIP-010. |
+| `verify-rfq-sbtc-{usdcx,stx}-jing.js` | [✓ 47/47](https://stxer.xyz/simulations/mainnet/6c5cd356c1f2dcec7ba2e905419eaed7) | [✓ 47/47](https://stxer.xyz/simulations/mainnet/a05838f9a454f8c04dc49df23e493656) | Full happy path + every reachable guard (below). STX variant prices off TWO VAAs (BTC/USD ÷ STX/USD cross-rate) and pays native STX; USDCx is single-feed and pays a SIP-010. |
 
 Scenarios (both harnesses):
 
@@ -126,7 +126,7 @@ Scenarios (both harnesses):
 - **fix-price guards** — `u2008` auth-expired · `u2007` bad-sig · `u2005` premium-too-high (under the signed spread floor) · `u2009` above-max-out (over the mid+20% fat-finger ceiling) · `u2006` below-min-out (clears the spread floor but under the client's absolute `min-stx-out`) · `u2011` already-fixed (second fix on a fixed rfq) · `u2003` expired (fix after `open-expiry`).
 - **fulfill guards** — `u2013` not-winner · `u2012` not-fixed (fulfill before any fix) · `u2001` rfq-not-found · `u2002` rfq-closed (act on a fulfilled rfq).
 - **reclaim** — `u2004` not-expired (too early), then ok after the `OPEN_TTL` (6 burn-block) advance.
-- **open-rfq guards** — `u1010` paused · `u1001` amount-too-small (both the `min-sbtc-in` floor and the zero `min-stx-out` guard).
+- **open-rfq guards** — `u1010` paused · `u1001` amount-too-small (both the `min-sbtc-in` floor and the zero `min-stx-out` guard) · `u1019` wrong-trait (a conforming SIP-010 that isn't `token-x`).
 - **admin** — `u1011` not-authorized on all four operator setters (`set-treasury` / `set-paused` / `set-operator` / `set-min-sbtc-in`) from a non-operator · `u1018` already-initialized · `u1010` fix-while-paused · happy-path operator setters succeed.
 
 Ordering note: the two fixes that need a fresh Pyth read (rfq2's valid fix, rfq3)
@@ -141,7 +141,12 @@ oracle call, so it's safe to assert post-advance.
 | `u1006 ERR_PRICE_UNCERTAIN` | Real Pyth `conf` stays well inside `price / MAX_CONF_RATIO (u50)`; needs a fabricated wide-conf VAA. |
 | `u1009 ERR_ZERO_PRICE` | No real feed returns a non-positive price; needs a fabricated VAA. |
 | `u1020 ERR_EXPO_MISMATCH` (stx) | Both BTC/USD and STX/USD use `expo = -8`, so `feed-x.expo == feed-y.expo` always with real VAAs. |
-| `u1019 ERR_WRONG_TRAIT` | Reachable by passing a non-`token-x` SIP-010 trait — added in a follow-up pass. |
+
+(`u1019 ERR_WRONG_TRAIT` is now covered — see the open-rfq guards above. The
+stale-price gate `u1005` is also unreachable here: fix-price always
+`verify-and-update`s a VAA before reading, and pyth won't store an
+older-than-current price, so the read can't be forced stale on a fork — unlike
+the markets `settle` path, which reads a fork-stored price without refreshing.)
 
 ## Notable findings from the runs
 

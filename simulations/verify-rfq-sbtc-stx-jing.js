@@ -22,7 +22,7 @@ import {
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import {
   STX_DEPOSITOR_1, SBTC_DEPOSITOR_1,
-  SBTC_FQN, SBTC_ASSET_NAME, WSTX_FQN,
+  SBTC_FQN, SBTC_ASSET_NAME, WSTX_FQN, USDCX_FQN,
   BTC_USD_FEED_HEX, STX_USD_FEED_HEX,
   PYTH_STORAGE, PYTH_DECODER, WORMHOLE_CORE,
   fetchPyth, buildRfqAuthHashHex, signIntent,
@@ -247,6 +247,10 @@ async function main() {
   call("set-min-sbtc-in 0 -> ok", DEPLOYER, "set-min-sbtc-in", [uintCV(0)], null);
   call("open zero min-out -> ERR_AMOUNT_TOO_SMALL", CLIENT, "open-rfq",
     [uintCV(SBTC_IN), uintCV(0), pcv(SBTC_FQN), stringAsciiCV(SBTC_ASSET_NAME)], "(err u1001)");
+
+  // ---- wrong token trait (a conforming SIP-010 that isn't token-x = sBTC) ----
+  call("open wrong-trait (usdcx as x) -> ERR_WRONG_TRAIT", CLIENT, "open-rfq",
+    [uintCV(SBTC_IN), uintCV(minOut), pcv(USDCX_FQN), stringAsciiCV(SBTC_ASSET_NAME)], "(err u1019)");
 
   // ---- fix after open-expiry lapses -> ERR_EXPIRED (checked before the Pyth read) ----
   call("open rfq5 (for expired)", CLIENT, "open-rfq",
