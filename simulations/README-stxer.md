@@ -133,20 +133,27 @@ Ordering note: the two fixes that need a fresh Pyth read (rfq2's valid fix, rfq3
 run **before** the `advance(7)`; every other guard short-circuits before the
 oracle call, so it's safe to assert post-advance.
 
-### RFQ gates verified by code review only (not mainnet-fork-reachable)
+### RFQ oracle gates — covered by clarinet unit test (`tests/rfq-oracle-gates.test.ts`)
 
-| Gate | Reason not reachable with real VAAs |
-|------|-------------------------------------|
-| `u1005 ERR_STALE_PRICE` | Hermes only serves recent VAAs; a fix-price always `verify-and-update`s a fresh one, so publish-time clears `now - MAX_STALENESS (u80)`. |
-| `u1006 ERR_PRICE_UNCERTAIN` | Real Pyth `conf` stays well inside `price / MAX_CONF_RATIO (u50)`; needs a fabricated wide-conf VAA. |
-| `u1009 ERR_ZERO_PRICE` | No real feed returns a non-positive price; needs a fabricated VAA. |
-| `u1020 ERR_EXPO_MISMATCH` (stx) | Both BTC/USD and STX/USD use `expo = -8`, so `feed-x.expo == feed-y.expo` always with real VAAs. |
+The four Pyth sanity gates can't be provoked with real Hermes VAAs on a mainnet
+fork (fix-price always `verify-and-update`s a fresh VAA before reading, real
+feeds are positive / tight-conf / `expo = -8`, and pyth won't store an
+older-than-current price — unlike the markets `settle` path, which reads a
+fork-stored price without refreshing). So they're covered in a clarinet unit
+test instead: it deploys a **mock pyth-storage** (settable feed data) + a no-op
+mock oracle, patches the two hardcoded pyth refs in the rfq source to point at
+them (same `simnet.deployContract` patch trick as the markets queue-full test),
+injects crafted feed data, and asserts each gate. **7/7 green, both contracts.**
 
-(`u1019 ERR_WRONG_TRAIT` is now covered — see the open-rfq guards above. The
-stale-price gate `u1005` is also unreachable here: fix-price always
-`verify-and-update`s a VAA before reading, and pyth won't store an
-older-than-current price, so the read can't be forced stale on a fork — unlike
-the markets `settle` path, which reads a fork-stored price without refreshing.)
+| Gate | Injected feed | Markets |
+|------|---------------|---------|
+| `u1009 ERR_ZERO_PRICE` | `price = 0` | stx + usdcx |
+| `u1005 ERR_STALE_PRICE` | `publish-time = 1` (≪ `block-time − MAX_STALENESS`) | stx + usdcx |
+| `u1006 ERR_PRICE_UNCERTAIN` | `conf = price` (≥ `price / MAX_CONF_RATIO`) | stx + usdcx |
+| `u1020 ERR_EXPO_MISMATCH` | `feed-x.expo = −7` vs `feed-y.expo = −8` | stx only (dual-feed) |
+
+(`u1019 ERR_WRONG_TRAIT` is covered in the stxer harnesses — see the open-rfq
+guards above.)
 
 ## Notable findings from the runs
 
