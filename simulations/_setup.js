@@ -319,6 +319,40 @@ export function buildRfqAuthHashHex(d, chainId) {
 }
 
 /**
+ * v2 mirror of build-auth-hash in rfq-sbtc-stx-jing-v2 (signed-quote honesty
+ * design): tuple gains quoted-out + the TCA reference benchmark fields.
+ *
+ * @param {object} d
+ * @param {ClarityValue} d.market         contractPrincipalCV(DEPLOYER, marketName)
+ * @param {number|bigint} d.rfqId
+ * @param {ClarityValue} d.winner         principal CV of the MM (the fix-price sender)
+ * @param {number|bigint} d.quotedOut     client-signed exact STX amount (uSTX)
+ * @param {number|bigint} d.refPrice      declared venue price, STX-per-BTC x 1e8
+ * @param {number|bigint} d.refTimestamp  venue unix seconds
+ * @param {string} d.refVenue             e.g. "kraken-mid" (string-ascii 16)
+ * @param {number|bigint} d.maxPremiumBps
+ * @param {number|bigint} d.authExpiry
+ * @param {number} [chainId]              defaults to mainnet (1)
+ */
+export function buildRfqAuthHashHexV2(d, chainId) {
+  // alphabetic key order: expiry < market < max-premium-bps < quoted-out
+  //   < ref-price < ref-timestamp < ref-venue < rfq-id < winner
+  const details = tupleCV({
+    expiry: uintCV(d.authExpiry),
+    market: d.market,
+    "max-premium-bps": uintCV(d.maxPremiumBps),
+    "quoted-out": uintCV(d.quotedOut),
+    "ref-price": uintCV(d.refPrice),
+    "ref-timestamp": uintCV(d.refTimestamp),
+    "ref-venue": stringAsciiCV(d.refVenue),
+    "rfq-id": uintCV(d.rfqId),
+    winner: d.winner,
+  });
+  const composed = Buffer.concat([SIP018_PREFIX, getRfqDomainHash(chainId), cvSha256(details)]);
+  return sha256(composed).toString("hex");
+}
+
+/**
  * Fetch a Pyth VAA AND its parsed price/expo from Hermes in one call. Unlike
  * fetchPythVAA (which returns only the binary), this also returns the price the
  * contract will read after verify-and-update, so the harness can compute an

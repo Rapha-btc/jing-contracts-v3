@@ -35,6 +35,7 @@ declare -A SUTS=(
   ["vault-sbtc-stx"]="contracts/vault-sbtc-stx.clar"
   ["snpl-sbtc-stx-jing"]="contracts/snpl-sbtc-stx-jing.clar"
   ["reserve-sbtc-stx-jing"]="contracts/reserve-sbtc-stx-jing.clar"
+  ["rfq-sbtc-stx-jing-v2"]="contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
 )
 
 # Mainnet SIP-010 trait reference (must match the use-trait line in the
@@ -69,8 +70,64 @@ text = text.replace(
     "(use-trait ft-trait .sip-010-trait.sip-010-trait)"
 )
 
-# 2. Local mock-jing-core
+# 2. Local mock-jing-core. The v2-specific replace MUST run before the
+#    generic one, or `.jing-core-v2` would corrupt to `.mock-jing-core-v2`.
+text = text.replace(".jing-core-v2", ".mock-jing-core")
 text = text.replace(".jing-core", ".mock-jing-core")
+
+# RFQ-v2-only fuzz relaxations (no-ops for every other contract). See the
+# header of tests/rv/rfq-sbtc-stx-jing-v2.invariants.clar for the rationale.
+# (a) Disable the SIP-018 signature check: RV cannot produce valid secp256k1
+#     sigs; the stxer harness covers sig parity + auth reverts.
+text = text.replace(
+    """    (asserts!
+      (is-eq
+        (unwrap!
+          (principal-of?
+            (unwrap! (secp256k1-recover?
+              (build-auth-hash id mm quoted-out ref-price ref-timestamp ref-venue
+                max-premium-bps auth-expiry
+              ) sig)
+              ERR_BAD_AUTH
+            ))
+          ERR_BAD_AUTH
+        )
+        client
+      )
+      ERR_BAD_AUTH
+    )""",
+    "    (asserts! true ERR_BAD_AUTH)"
+)
+# (b) Disable the wall-clock reference checks (random uints never land in a
+#     120s window).
+text = text.replace(
+    "(asserts! (<= ref-timestamp stacks-block-time) ERR_BAD_REFERENCE)",
+    "(asserts! true ERR_BAD_REFERENCE)"
+)
+text = text.replace(
+    """    (asserts! (> ref-timestamp (- stacks-block-time MAX_REF_STALENESS))
+      ERR_STALE_PRICE
+    )""",
+    "    (asserts! true ERR_STALE_PRICE)"
+)
+# (c) Fixed native mid: simnet has no miner commits, get-native-price would
+#     always ERR_ZERO_PRICE and kill the fix path.
+text = text.replace(
+    "(oracle-price (try! (get-native-price)))",
+    "(oracle-price u34000000000000)"
+)
+# (d) Whitelist defaults to true under fuzz so any sender may attempt
+#     fix-price; set-mm-whitelist false still blocks, keeping the gate live.
+text = text.replace(
+    "(default-to false (map-get? whitelisted-mms mm))",
+    "(default-to true (map-get? whitelisted-mms mm))"
+)
+# (e) Pin the with-ft allowance asset name to the mock token so
+#     fulfill/reclaim can actually move escrow.
+text = text.replace(
+    "(with-ft (contract-of x) x-name sbtc-in)",
+    '(with-ft (contract-of x) "mock-ft" sbtc-in)'
+)
 
 
 # 3. Pre-initialize token-x and token-y data-vars to the same mock.

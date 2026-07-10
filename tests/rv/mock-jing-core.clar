@@ -254,3 +254,33 @@
   (begin (asserts! true (err u0)) (ok true)))
 
 
+
+(define-public (log-rfq-open
+    (rfq-id uint)
+    (client principal)
+    (x-in uint)
+    (min-y-out uint)
+    (expiry uint)
+    (token-x principal)
+    (token-y principal))
+  (begin (asserts! true (err u0)) (ok true)))
+
+(define-public (log-rfq-fill
+    (rfq-id uint)
+    (client principal)
+    (mm principal)
+    (x-in uint)
+    (y-out uint)
+    (y-fee uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal))
+  (begin (asserts! true (err u0)) (ok true)))
+
+(define-public (log-rfq-cancel
+    (rfq-id uint)
+    (client principal)
+    (x-in uint)
+    (token-x principal)
+    (token-y principal))
+  (begin (asserts! true (err u0)) (ok true)))

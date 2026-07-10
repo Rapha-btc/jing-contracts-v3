@@ -9,7 +9,17 @@ of mocks) and asserts state invariants after every step.
 ```
 markets-sbtc-usdcx-jing  -- 500 runs, 13 invariants, 0 failures
 markets-sbtc-stx-jing    -- 500 runs, 13 invariants, 0 failures
+rfq-sbtc-stx-jing-v2     -- 500 runs,  5 invariants, 0 failures
 ```
+
+rfq-v2 notes: the fuzz build relaxes the SIP-018 sig check, wall-clock ref
+checks, native price (fixed mid) and whitelist default (see the invariants
+file header) so RV can reach the lifecycle. Real movement: open-rfq x27 +
+reclaim x14 per 500-run sweep, so escrow conservation (invariant 1, 97
+checks) is exercised on live state. fix-price never succeeds under pure
+random args (committed/quoted must sit within 20bps of each other) -- that
+path is covered by the 72-assert stxer harness
+(simulations/verify-rfq-sbtc-stx-jing-v2.js) instead.
 
 The 13th invariant (`invariant-balance-eq-cycle-totals`) compares the
 contract's actual token balance against the sum of `cycle-totals`
