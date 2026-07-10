@@ -1,17 +1,22 @@
 ;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing
 
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
-(use-trait pyth-storage-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.storage-trait)
-(use-trait pyth-decoder-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.decoder-trait)
-(use-trait wormhole-core-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2.core-trait)
 
 (define-constant PRICE_PRECISION u100000000)
 (define-constant DECIMAL_FACTOR u100)
 (define-constant BPS_PRECISION u10000)
 (define-constant MAX_PREMIUM_BPS u2000)
 (define-constant FEE_BPS u10)
-(define-constant MAX_STALENESS u80)
-(define-constant MAX_CONF_RATIO u50)
+
+;; native BTC/STX price: miners collectively spend miner-spend-total sats per
+;; tenure to win the coinbase, so spend/coinbase is an on-chain price feed
+(define-constant COINBASE_USTX u500000000) ;; 500 STX, halves ~2030
+(define-constant NATIVE_PRICE_NUM (* u100 COINBASE_USTX PRICE_PRECISION))
+;; offsets in stacks blocks, spaced to likely land in distinct recent tenures
+(define-constant TENURE_SAMPLE_OFFSETS (list u1 u122 u244 u366 u488 u610))
+;; commits can exceed coinbase-only value (fees, competition), so cap > 10000
+(define-constant MIN_EFFICIENCY_BPS u5000)
+(define-constant MAX_EFFICIENCY_BPS u15000)
 
 (define-constant OPEN_TTL u6)
 
@@ -21,14 +26,12 @@
 (define-constant SAINT_FEED 0x0000000000000000000000000000000000000000000000000000000000000000)
 
 (define-constant ERR_AMOUNT_TOO_SMALL (err u1001))
-(define-constant ERR_STALE_PRICE (err u1005))
-(define-constant ERR_PRICE_UNCERTAIN (err u1006))
 (define-constant ERR_ZERO_PRICE (err u1009))
 (define-constant ERR_PAUSED (err u1010))
 (define-constant ERR_NOT_AUTHORIZED (err u1011))
 (define-constant ERR_ALREADY_INITIALIZED (err u1018))
 (define-constant ERR_WRONG_TRAIT (err u1019))
-(define-constant ERR_EXPO_MISMATCH (err u1020))
+(define-constant ERR_BAD_CALIBRATION (err u1021))
 (define-constant ERR_RFQ_NOT_FOUND (err u2001))
 (define-constant ERR_RFQ_CLOSED (err u2002))
 (define-constant ERR_EXPIRED (err u2003))
@@ -52,6 +55,9 @@
 (define-data-var oracle-feed-x (buff 32) SAINT_FEED)
 (define-data-var oracle-feed-y (buff 32) SAINT_FEED)
 (define-data-var min-sbtc-in uint u0)
+
+;; ratio of miner commits to coinbase-only value; ~10900 observed 2026-07
+(define-data-var commit-efficiency-bps uint u10000)
 
 (define-data-var next-rfq-id uint u0)
 
@@ -99,6 +105,44 @@
   (map-get? rfqs id)
 )
 
+(define-private (sample-spend
+    (offset uint)
+    (acc {
+      sum: uint,
+      n: uint,
+    })
+  )
+  (if (>= offset stacks-block-height)
+    acc
+    (match (get-tenure-info? miner-spend-total (- stacks-block-height offset))
+      spend {
+        sum: (+ (get sum acc) spend),
+        n: (+ (get n acc) u1),
+      }
+      acc
+    )
+  )
+)
+
+;; STX-per-BTC scaled by PRICE_PRECISION, same shape as the old pyth mid
+(define-read-only (get-native-price)
+  (let (
+      (samples (fold sample-spend TENURE_SAMPLE_OFFSETS {
+        sum: u0,
+        n: u0,
+      }))
+      (n (get n samples))
+    )
+    (asserts! (> n u0) ERR_ZERO_PRICE)
+    (let ((avg-spend (/ (get sum samples) n)))
+      (asserts! (> avg-spend u0) ERR_ZERO_PRICE)
+      (ok (/ (* NATIVE_PRICE_NUM (var-get commit-efficiency-bps))
+        (* BPS_PRECISION avg-spend)
+      ))
+    )
+  )
+)
+
 (define-read-only (get-next-rfq-id)
   (var-get next-rfq-id)
 )
@@ -142,11 +186,6 @@
     (max-premium-bps uint)
     (auth-expiry uint)
     (sig (buff 65))
-    (vaa-x (buff 8192))
-    (vaa-y (buff 8192))
-    (pyth-storage <pyth-storage-trait>)
-    (pyth-decoder <pyth-decoder-trait>)
-    (wormhole-core <wormhole-core-trait>)
   )
   (let (
       (rfq (unwrap! (map-get? rfqs id) ERR_RFQ_NOT_FOUND))
@@ -176,44 +215,8 @@
       ERR_BAD_AUTH
     )
 
-    (try! (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
-      verify-and-update-price-feeds vaa-x {
-      pyth-storage-contract: pyth-storage,
-      pyth-decoder-contract: pyth-decoder,
-      wormhole-core-contract: wormhole-core,
-    }))
-    (try! (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
-      verify-and-update-price-feeds vaa-y {
-      pyth-storage-contract: pyth-storage,
-      pyth-decoder-contract: pyth-decoder,
-      wormhole-core-contract: wormhole-core,
-    }))
     (let (
-        (feed-x (unwrap!
-          (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-x))
-          ERR_ZERO_PRICE
-        ))
-        (feed-y (unwrap!
-          (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-y))
-          ERR_ZERO_PRICE
-        ))
-        (price-x (to-uint (get price feed-x)))
-        (price-y (to-uint (get price feed-y)))
-        (min-freshness (- stacks-block-time MAX_STALENESS))
-      )
-    (asserts! (> price-x u0) ERR_ZERO_PRICE)
-    (asserts! (> price-y u0) ERR_ZERO_PRICE)
-    (asserts! (> (get publish-time feed-x) min-freshness) ERR_STALE_PRICE)
-    (asserts! (> (get publish-time feed-y) min-freshness) ERR_STALE_PRICE)
-    (asserts! (< (get conf feed-x) (/ price-x MAX_CONF_RATIO)) ERR_PRICE_UNCERTAIN)
-    (asserts! (< (get conf feed-y) (/ price-y MAX_CONF_RATIO)) ERR_PRICE_UNCERTAIN)
-    (asserts! (is-eq (get expo feed-x) (get expo feed-y)) ERR_EXPO_MISMATCH)
-
-
-    (let (
-        (oracle-price (/ (* price-x PRICE_PRECISION) price-y))
+        (oracle-price (try! (get-native-price)))
         (stx-mid (/ (* sbtc-in oracle-price) (* PRICE_PRECISION DECIMAL_FACTOR)))
         (floor (/ (* stx-mid (- BPS_PRECISION max-premium-bps)) BPS_PRECISION))
         (ceiling (/ (* stx-mid (+ BPS_PRECISION MAX_PREMIUM_BPS)) BPS_PRECISION))
@@ -243,7 +246,6 @@
         open-expiry: (get open-expiry rfq),
         oracle-price: oracle-price,
       })
-    )
     )
     )
   )
@@ -364,5 +366,15 @@
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
     (ok (var-set min-sbtc-in amount))
+  )
+)
+
+(define-public (set-commit-efficiency-bps (bps uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (and (>= bps MIN_EFFICIENCY_BPS) (<= bps MAX_EFFICIENCY_BPS))
+      ERR_BAD_CALIBRATION
+    )
+    (ok (var-set commit-efficiency-bps bps))
   )
 )
