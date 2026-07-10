@@ -140,3 +140,23 @@ epoch = "3.4"
 path = "contracts/rfq/rfq-sbtc-usdcx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.rfq-sbtc-stx-jing]
+path = "contracts/rfq/rfq-sbtc-stx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v2]
+path = "contracts/rfq/deploying/jing-core-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rfq-sbtc-stx-jing-v2]
+path = "contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rfq-mm-vault-jing]
+path = "contracts/rfq/rfq-mm-vault-jing.clar"
+clarity_version = 5
+epoch = "3.4"
