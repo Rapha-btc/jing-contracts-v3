@@ -6,6 +6,10 @@
 (define-constant DECIMAL_FACTOR u100)
 (define-constant BPS_PRECISION u10000)
 (define-constant MAX_PREMIUM_BPS u2000)
+(define-constant MAX_QUOTE_DRIFT_BPS u20)
+;; ref benchmark must be contemporaneous: closes the true-but-stale loophole,
+;; and keeps the drift band inside the vol window it was sized for
+(define-constant MAX_REF_STALENESS u120)
 (define-constant FEE_BPS u10)
 
 ;; native BTC/STX price: miners collectively spend miner-spend-total sats per
@@ -26,6 +30,7 @@
 (define-constant SAINT_FEED 0x0000000000000000000000000000000000000000000000000000000000000000)
 
 (define-constant ERR_AMOUNT_TOO_SMALL (err u1001))
+(define-constant ERR_STALE_PRICE (err u1005))
 (define-constant ERR_ZERO_PRICE (err u1009))
 (define-constant ERR_PAUSED (err u1010))
 (define-constant ERR_NOT_AUTHORIZED (err u1011))
@@ -44,6 +49,9 @@
 (define-constant ERR_ALREADY_FIXED (err u2011))
 (define-constant ERR_NOT_FIXED (err u2012))
 (define-constant ERR_NOT_WINNER (err u2013))
+(define-constant ERR_QUOTE_DRIFT (err u2014))
+(define-constant ERR_NOT_WHITELISTED (err u2015))
+(define-constant ERR_BAD_REFERENCE (err u2016))
 
 (define-data-var initialized bool false)
 (define-data-var operator principal tx-sender)
@@ -60,6 +68,8 @@
 (define-data-var commit-efficiency-bps uint u10000)
 
 (define-data-var next-rfq-id uint u0)
+
+(define-map whitelisted-mms principal bool)
 
 (define-map rfqs
   uint
@@ -86,6 +96,10 @@
 (define-read-only (build-auth-hash
     (rfq-id uint)
     (winner principal)
+    (quoted-out uint)
+    (ref-price uint)
+    (ref-timestamp uint)
+    (ref-venue (string-ascii 16))
     (max-premium-bps uint)
     (auth-expiry uint)
   )
@@ -95,6 +109,10 @@
         market: current-contract,
         rfq-id: rfq-id,
         winner: winner,
+        quoted-out: quoted-out,
+        ref-price: ref-price,
+        ref-timestamp: ref-timestamp,
+        ref-venue: ref-venue,
         max-premium-bps: max-premium-bps,
         expiry: auth-expiry,
       })))
@@ -103,6 +121,10 @@
 
 (define-read-only (get-rfq (id uint))
   (map-get? rfqs id)
+)
+
+(define-read-only (is-whitelisted-mm (mm principal))
+  (default-to false (map-get? whitelisted-mms mm))
 )
 
 (define-private (sample-spend
@@ -183,6 +205,10 @@
 (define-public (fix-price
     (id uint)
     (committed-out uint)
+    (quoted-out uint)
+    (ref-price uint)
+    (ref-timestamp uint)
+    (ref-venue (string-ascii 16))
     (max-premium-bps uint)
     (auth-expiry uint)
     (sig (buff 65))
@@ -194,18 +220,26 @@
       (sbtc-in (get sbtc-in rfq))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-whitelisted-mm mm) ERR_NOT_WHITELISTED)
     (asserts! (get open rfq) ERR_RFQ_CLOSED)
     (asserts! (is-none (get winner rfq)) ERR_ALREADY_FIXED)
     (asserts! (<= burn-block-height (get open-expiry rfq)) ERR_EXPIRED)
     (asserts! (<= max-premium-bps MAX_PREMIUM_BPS) ERR_PREMIUM_TOO_HIGH)
     (asserts! (< stacks-block-height auth-expiry) ERR_AUTH_EXPIRED)
+    (asserts! (> ref-price u0) ERR_BAD_REFERENCE)
+    (asserts! (<= ref-timestamp stacks-block-time) ERR_BAD_REFERENCE)
+    (asserts! (> ref-timestamp (- stacks-block-time MAX_REF_STALENESS))
+      ERR_STALE_PRICE
+    )
 
     (asserts!
       (is-eq
         (unwrap!
           (principal-of?
             (unwrap! (secp256k1-recover?
-              (build-auth-hash id mm max-premium-bps auth-expiry) sig)
+              (build-auth-hash id mm quoted-out ref-price ref-timestamp ref-venue
+                max-premium-bps auth-expiry
+              ) sig)
               ERR_BAD_AUTH
             ))
           ERR_BAD_AUTH
@@ -225,6 +259,18 @@
       (asserts! (>= committed-out floor) ERR_PREMIUM_TOO_HIGH)
       (asserts! (>= committed-out (get min-stx-out rfq)) ERR_BELOW_MIN_OUT)
       (asserts! (<= committed-out ceiling) ERR_ABOVE_MAX_OUT)
+      (asserts!
+        (>= (* committed-out BPS_PRECISION)
+          (* quoted-out (- BPS_PRECISION MAX_QUOTE_DRIFT_BPS))
+        )
+        ERR_QUOTE_DRIFT
+      )
+      (asserts!
+        (<= (* committed-out BPS_PRECISION)
+          (* quoted-out (+ BPS_PRECISION MAX_QUOTE_DRIFT_BPS))
+        )
+        ERR_QUOTE_DRIFT
+      )
 
       (map-set rfqs id (merge rfq {
         winner: (some mm),
@@ -238,6 +284,10 @@
         mm: mm,
         sbtc-in: sbtc-in,
         stx-out: committed-out,
+        quoted-out: quoted-out,
+        ref-price: ref-price,
+        ref-timestamp: ref-timestamp,
+        ref-venue: ref-venue,
         oracle-price: oracle-price,
         open-expiry: (get open-expiry rfq),
       })
@@ -366,6 +416,21 @@
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
     (ok (var-set min-sbtc-in amount))
+  )
+)
+
+(define-public (set-mm-whitelist
+    (mm principal)
+    (whitelisted bool)
+  )
+  (begin
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "rfq-mm-whitelist",
+      mm: mm,
+      whitelisted: whitelisted,
+    })
+    (ok (map-set whitelisted-mms mm whitelisted))
   )
 )
 
