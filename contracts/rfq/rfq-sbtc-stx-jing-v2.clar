@@ -27,7 +27,6 @@
 (define-constant SIP018_MSG_PREFIX 0x534950303138)
 
 (define-constant SAINT 'SP000000000000000000002Q6VF78)
-(define-constant SAINT_FEED 0x0000000000000000000000000000000000000000000000000000000000000000)
 
 (define-constant ERR_AMOUNT_TOO_SMALL (err u1001))
 (define-constant ERR_STALE_PRICE (err u1005))
@@ -60,8 +59,6 @@
 
 (define-data-var token-x principal SAINT)
 (define-data-var token-y principal SAINT)
-(define-data-var oracle-feed-x (buff 32) SAINT_FEED)
-(define-data-var oracle-feed-y (buff 32) SAINT_FEED)
 (define-data-var min-sbtc-in uint u0)
 
 ;; ratio of miner commits to coinbase-only value; ~10900 observed 2026-07
@@ -227,6 +224,7 @@
     (asserts! (<= max-premium-bps MAX_PREMIUM_BPS) ERR_PREMIUM_TOO_HIGH)
     (asserts! (< stacks-block-height auth-expiry) ERR_AUTH_EXPIRED)
     (asserts! (> ref-price u0) ERR_BAD_REFERENCE)
+    (asserts! (> (len ref-venue) u0) ERR_BAD_REFERENCE)
     (asserts! (<= ref-timestamp stacks-block-time) ERR_BAD_REFERENCE)
     (asserts! (> ref-timestamp (- stacks-block-time MAX_REF_STALENESS))
       ERR_STALE_PRICE
@@ -370,8 +368,6 @@
     (canonical principal)
     (x principal)
     (y principal)
-    (feed-x (buff 32))
-    (feed-y (buff 32))
     (min-x uint)
   )
   (begin
@@ -382,8 +378,6 @@
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set token-x x)
     (var-set token-y y)
-    (var-set oracle-feed-x feed-x)
-    (var-set oracle-feed-y feed-y)
     (var-set min-sbtc-in min-x)
     (var-set initialized true)
     (try! (contract-call? .jing-core-v2 register canonical))
