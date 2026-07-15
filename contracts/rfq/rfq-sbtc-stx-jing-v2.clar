@@ -16,11 +16,28 @@
 ;; tenure to win the coinbase, so spend/coinbase is an on-chain price feed
 (define-constant COINBASE_USTX u500000000) ;; 500 STX, halves ~2030
 (define-constant NATIVE_PRICE_NUM (* u100 COINBASE_USTX PRICE_PRECISION))
-;; offsets in stacks blocks, spaced to likely land in distinct recent tenures
-(define-constant TENURE_SAMPLE_OFFSETS (list u1 u122 u244 u366 u488 u610))
-;; commits can exceed coinbase-only value (fees, competition), so cap > 10000
-(define-constant MIN_EFFICIENCY_BPS u5000)
-(define-constant MAX_EFFICIENCY_BPS u15000)
+;; offsets in stacks blocks, spaced to likely land in distinct recent tenures.
+;; 48 samples every ~3 tenures span ~141 tenures (~1 day): per-tenure commit
+;; noise is autocorrelated over hours, so a day-wide spread is what tames the
+;; tails (3.5mo of mainnet commits: worst dev vs CEX mid tightens from
+;; -40%/+54% with 6 consecutive tenures to -23%/+30% with this design)
+(define-constant TENURE_SAMPLE_OFFSETS (list
+  u1 u367 u733 u1099 u1465 u1831 u2197 u2563
+  u2929 u3295 u3661 u4027 u4393 u4759 u5125 u5491
+  u5857 u6223 u6589 u6955 u7321 u7687 u8053 u8419
+  u8785 u9151 u9517 u9883 u10249 u10615 u10981 u11347
+  u11713 u12079 u12445 u12811 u13177 u13543 u13909 u14275
+  u14641 u15007 u15373 u15739 u16105 u16471 u16837 u17203
+))
+;; Fat-finger band: committed-out must land within [stx-mid/2, stx-mid*2] of
+;; the native mid. Sized as a DECIMAL-SLIP catcher, not a price check (that is
+;; the client's signature + the FE screen): 3.5mo backtest worst-case usage
+;; was [0.77x, 1.30x], so ~2x margin each side -- never expected to trip.
+;; B2B recourse (whitelisted, KYB'd MMs) covers everything finer-grained.
+;; The operator can disable it (set-band-enabled) if miner-commit behavior
+;; ever degrades; disabling also skips the oracle read entirely, so a broken
+;; get-native-price can never brick fix-price.
+(define-constant BAND_DIVISOR u2)
 
 (define-constant OPEN_TTL u6)
 
@@ -35,7 +52,6 @@
 (define-constant ERR_NOT_AUTHORIZED (err u1011))
 (define-constant ERR_ALREADY_INITIALIZED (err u1018))
 (define-constant ERR_WRONG_TRAIT (err u1019))
-(define-constant ERR_BAD_CALIBRATION (err u1021))
 (define-constant ERR_RFQ_NOT_FOUND (err u2001))
 (define-constant ERR_RFQ_CLOSED (err u2002))
 (define-constant ERR_EXPIRED (err u2003))
@@ -61,8 +77,8 @@
 (define-data-var token-y principal SAINT)
 (define-data-var min-sbtc-in uint u0)
 
-;; ratio of miner commits to coinbase-only value; ~10900 observed 2026-07
-(define-data-var commit-efficiency-bps uint u10000)
+;; fat-finger band on by default; operator kill-switch (see BAND_DIVISOR note)
+(define-data-var band-enabled bool true)
 
 (define-data-var next-rfq-id uint u0)
 
@@ -155,9 +171,10 @@
     (asserts! (> n u0) ERR_ZERO_PRICE)
     (let ((avg-spend (/ (get sum samples) n)))
       (asserts! (> avg-spend u0) ERR_ZERO_PRICE)
-      (ok (/ (* NATIVE_PRICE_NUM (var-get commit-efficiency-bps))
-        (* BPS_PRECISION avg-spend)
-      ))
+      ;; efficiency fixed at 1.0: miners run ~109% of coinbase-only value, but
+      ;; inside a 2x band that calibration question is noise, and a knob is
+      ;; one more admin surface (superseded by set-band-enabled)
+      (ok (/ NATIVE_PRICE_NUM avg-spend))
     )
   )
 )
@@ -247,16 +264,23 @@
       ERR_BAD_AUTH
     )
 
+    ;; fat-finger band: hardcoded [mid/2, mid*2] around the 1-day native mid.
+    ;; max-premium-bps stays in the signed tuple as TCA metadata only. When
+    ;; the band is off the oracle is never read (u0 recorded), so a degraded
+    ;; miner-commit feed cannot brick fix-price.
     (let (
-        (oracle-price (try! (get-native-price)))
+        (band-on (var-get band-enabled))
+        (oracle-price (if band-on (try! (get-native-price)) u0))
         (stx-mid (/ (* sbtc-in oracle-price) (* PRICE_PRECISION DECIMAL_FACTOR)))
-        (floor (/ (* stx-mid (- BPS_PRECISION max-premium-bps)) BPS_PRECISION))
-        (ceiling (/ (* stx-mid (+ BPS_PRECISION MAX_PREMIUM_BPS)) BPS_PRECISION))
       )
-      (asserts! (> oracle-price u0) ERR_ZERO_PRICE)
-      (asserts! (>= committed-out floor) ERR_PREMIUM_TOO_HIGH)
+      (asserts! (or (not band-on) (> oracle-price u0)) ERR_ZERO_PRICE)
+      (asserts! (or (not band-on) (>= committed-out (/ stx-mid BAND_DIVISOR)))
+        ERR_PREMIUM_TOO_HIGH
+      )
       (asserts! (>= committed-out (get min-stx-out rfq)) ERR_BELOW_MIN_OUT)
-      (asserts! (<= committed-out ceiling) ERR_ABOVE_MAX_OUT)
+      (asserts! (or (not band-on) (<= committed-out (* stx-mid BAND_DIVISOR)))
+        ERR_ABOVE_MAX_OUT
+      )
       (asserts!
         (>= (* committed-out BPS_PRECISION)
           (* quoted-out (- BPS_PRECISION MAX_QUOTE_DRIFT_BPS))
@@ -265,7 +289,7 @@
       )
       (asserts!
         (<= (* committed-out BPS_PRECISION)
-          (* quoted-out (+ BPS_PRECISION MAX_QUOTE_DRIFT_BPS))
+          (* quoted-out BPS_PRECISION)
         )
         ERR_QUOTE_DRIFT
       )
@@ -428,12 +452,20 @@
   )
 )
 
-(define-public (set-commit-efficiency-bps (bps uint))
+;; Kill-switch for the fat-finger band (e.g. miner-commit behavior degrades
+;; or get-native-price starts erroring). Two-way and event-logged: the flip
+;; is public, so a desk quietly trading band-off is publicly auditable.
+(define-public (set-band-enabled (enabled bool))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
-    (asserts! (and (>= bps MIN_EFFICIENCY_BPS) (<= bps MAX_EFFICIENCY_BPS))
-      ERR_BAD_CALIBRATION
-    )
-    (ok (var-set commit-efficiency-bps bps))
+    (print {
+      event: "rfq-band-enabled",
+      enabled: enabled,
+    })
+    (ok (var-set band-enabled enabled))
   )
+)
+
+(define-read-only (get-band-enabled)
+  (var-get band-enabled)
 )
