@@ -258,6 +258,19 @@ async function main() {
   call("set-operator by non-op -> ERR_NOT_AUTHORIZED", CLIENT, "set-operator",
     [standardPrincipalCV(CLIENT)], "(err u1011)");
   call("set-min-sbtc-in by non-op -> ERR_NOT_AUTHORIZED", CLIENT, "set-min-sbtc-in", [uintCV(1)], "(err u1011)");
+
+  // ============ coinbase flip (halving-reversal guard, no redeploy) ============
+  call("set-coinbase by non-op -> ERR_NOT_AUTHORIZED", CLIENT, "set-coinbase-ustx",
+    [uintCV(1_000_000_000)], "(err u1011)");
+  call("set-coinbase invalid value -> ERR_BAD_COINBASE", DEPLOYER, "set-coinbase-ustx",
+    [uintCV(123_456)], "(err u1021)");
+  evalc("native price at 500-coinbase", "(get-native-price)", "NATIVE_500");
+  call("set-coinbase 1000 STX -> ok", DEPLOYER, "set-coinbase-ustx",
+    [uintCV(1_000_000_000)], "(ok true)");
+  evalc("native price at 1000-coinbase", "(get-native-price)", "NATIVE_1000");
+  call("set-coinbase back to 500 STX -> ok", DEPLOYER, "set-coinbase-ustx",
+    [uintCV(500_000_000)], "(ok true)");
+  evalc("coinbase readback", "(get-coinbase-ustx)", "COINBASE");
   // ============ band kill-switch (rfq 5): blocked -> off -> through -> back on ============
   call("open rfq5 (band kill-switch)", CLIENT, "open-rfq", openArgs(), "(ok u5)");
   call("fix rfq5 3x mid, band ON -> ERR_ABOVE_MAX_OUT", MM, "fix-price", fixArgs(5, cWild, cWild, sigWild5), "(err u2009)");
@@ -349,6 +362,10 @@ async function main() {
   // probe price vs main-run price sanity (tips may differ slightly)
   const ratio = Number(uintFrom(cap.NATIVE)) / Number(nativePrice);
   assert("probe vs main native price within 5%", ratio > 0.95 && ratio < 1.05, `(ratio ${ratio.toFixed(4)})`);
+  // coinbase flip: same spend samples divided into 2x the coinbase -> 2x mid
+  const r2 = Number(uintFrom(cap.NATIVE_1000)) / Number(uintFrom(cap.NATIVE_500));
+  assert("native price doubles at 1000-coinbase", r2 > 1.98 && r2 < 2.02, `(ratio ${r2.toFixed(4)})`);
+  assert("coinbase restored to 500 STX", String(cap.COINBASE) === "u500000000", `(${cap.COINBASE})`);
 
   const deltas = [
     ["client STX +net", cap.C_STX_1, cap.C_STX_0, clientReceives],

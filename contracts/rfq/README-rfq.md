@@ -34,6 +34,21 @@ client-side brake. Constraint this creates: any backend path that recomputes
 committed-out at fix time must round DOWN or echo the signed quoted-out
 verbatim - one uSTX of round-up now reverts.
 
+### Decision: coinbase is an operator data-var, not a constant (2026-07-15)
+
+The oracle divides miner spend by the tenure coinbase. That number is a
+CONSENSUS parameter, not a market one: it halved to 500 STX in April 2026,
+and if it were ever restored to 1000 STX a hardcoded constant would misprice
+the native mid 2x -- honest quotes would sit exactly at the band edge and
+every fix would revert until a redeploy. `set-coinbase-ustx` (operator-only,
+event-logged `rfq-coinbase-set`) flips it instead. The value whitelist is
+EXACTLY {u500000000, u1000000000}: any other input dies ERR_BAD_COINBASE
+(u1021), so the flip can track consensus but can never become a price
+calibration knob (same philosophy as deleting the efficiency knob). A wrong
+flip is a 2x error -- publicly visible in the event log, bounded by the band,
+and reversible with one tx. The next scheduled halving (~2030, 250 STX) will
+need a source change; do not pre-authorize values consensus has not shipped.
+
 ### Decision: `max-premium-bps` removed from v2 (2026-07-15)
 
 The field stopped being enforced when the relative premium band was replaced
