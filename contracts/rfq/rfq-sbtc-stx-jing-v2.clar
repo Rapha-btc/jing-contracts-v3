@@ -12,9 +12,13 @@
 (define-constant FEE_BPS u10)
 
 ;; native BTC/STX price: miners collectively spend miner-spend-total sats per
-;; tenure to win the coinbase, so spend/coinbase is an on-chain price feed
-(define-constant COINBASE_USTX u500000000) ;; 500 STX, halves ~2030
-(define-constant NATIVE_PRICE_NUM (* u100 COINBASE_USTX PRICE_PRECISION))
+;; tenure to win the coinbase, so spend/coinbase is an on-chain price feed.
+;; The coinbase is a DATA-VAR, not a constant: it halved to 500 STX in April
+;; 2026, but if consensus ever restores 1000 STX the oracle would misprice 2x
+;; and the band would revert honest fixes -- the operator flips the value
+;; (set-coinbase-ustx) instead of redeploying. Restricted to the two
+;; legitimate consensus values; NOT a calibration knob.
+(define-data-var coinbase-ustx uint u500000000)
 ;; offsets in stacks blocks, spaced to likely land in distinct recent tenures.
 ;; 48 samples every ~3 tenures span ~141 tenures (~1 day): per-tenure commit
 ;; noise is autocorrelated over hours, so a day-wide spread is what tames the
@@ -51,6 +55,7 @@
 (define-constant ERR_NOT_AUTHORIZED (err u1011))
 (define-constant ERR_ALREADY_INITIALIZED (err u1018))
 (define-constant ERR_WRONG_TRAIT (err u1019))
+(define-constant ERR_BAD_COINBASE (err u1021))
 (define-constant ERR_RFQ_NOT_FOUND (err u2001))
 (define-constant ERR_RFQ_CLOSED (err u2002))
 (define-constant ERR_EXPIRED (err u2003))
@@ -171,7 +176,7 @@
       ;; efficiency fixed at 1.0: miners run ~109% of coinbase-only value, but
       ;; inside a 2x band that calibration question is noise, and a knob is
       ;; one more admin surface (superseded by set-band-enabled)
-      (ok (/ NATIVE_PRICE_NUM avg-spend))
+      (ok (/ (* u100 (var-get coinbase-ustx) PRICE_PRECISION) avg-spend))
     )
   )
 )
@@ -458,6 +463,28 @@
     })
     (ok (var-set band-enabled enabled))
   )
+)
+
+;; Track the consensus coinbase without redeploying: the oracle divides miner
+;; spend by this. Only the two legitimate consensus values are accepted, so
+;; this cannot drift into a calibration knob; the flip is event-logged and
+;; publicly auditable like the band switch.
+(define-public (set-coinbase-ustx (ustx uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (or (is-eq ustx u500000000) (is-eq ustx u1000000000))
+      ERR_BAD_COINBASE
+    )
+    (print {
+      event: "rfq-coinbase-set",
+      coinbase-ustx: ustx,
+    })
+    (ok (var-set coinbase-ustx ustx))
+  )
+)
+
+(define-read-only (get-coinbase-ustx)
+  (var-get coinbase-ustx)
 )
 
 (define-read-only (get-band-enabled)
