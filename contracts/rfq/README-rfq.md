@@ -1,4 +1,170 @@
-# RFQ market for sBTC ⇄ USDCx — design notes
+# RFQ markets - current state (2026-07-14)
+
+**Ship candidate: `rfq-sbtc-stx-jing-v2.clar`** (native miner-commit oracle,
+1-day window, hardcoded wide fat-finger band, operator kill-switch) settled
+through **`rfq-mm-vault-jing.clar`** (owner/operator STX-float vault).
+`rfq-sbtc-stx-jing-v3.clar` (no oracle at all) stays in the repo as the
+measured alternative. Everything below the "historical design notes" marker
+is the original Pyth-era USDCx design doc, kept for context.
+
+## The price-protection stack (v2, final)
+
+A client is protected by four layers; each catches a different failure:
+
+| Layer | Set by | Catches |
+|---|---|---|
+| SIP-018 signature over exact `quoted-out` (+ ref-price/venue/timestamp, <=120s fresh) | client | anything the client did not agree to |
+| Drift band: committed-out in **[quoted*(1 - 20bps), quoted]** - rounding shave tolerated below, ZERO overpay above | contract | below: MM shaving after the client signed; above: a buggy/fat-fingered operator draining the vault into an overpaid fill (the client would happily keep it - nothing client-side caps the upside) |
+| `min-stx-out` set at `open-rfq` | client | commitments below the client's own floor |
+| **Fat-finger band: committed-out within [mid/2, mid*2] of the native mid** | contract, hardcoded | decimal-slip / unit-confusion errors that corrupted BOTH the signature and min-stx-out (a lying frontend produces a client who signs their own disaster) |
+
+The band is deliberately a DECIMAL-SLIP catcher, not a price check. Real fat
+fingers are 10x-class errors (shifted decimals, uSTX/STX confusion, swapped
+legs); everything finer-grained is covered by the layers above plus B2B
+recourse - every principal that can fix a price is a whitelisted, KYB'd
+business, so a 5% error gets unwound by a phone call, not by code.
+
+### Decision: drift band is asymmetric (2026-07-15)
+
+The upper drift bound was `quoted*(1 + 20bps)`; it is now exactly `quoted`.
+An MM never legitimately overpays - the +20bps slack only existed for
+rounding symmetry, and the party it exposed was the VAULT (owner float,
+operator hot key): the client signs "at least this," so overpayment has no
+client-side brake. Constraint this creates: any backend path that recomputes
+committed-out at fix time must round DOWN or echo the signed quoted-out
+verbatim - one uSTX of round-up now reverts.
+
+### Decision: `max-premium-bps` removed from v2 (2026-07-15)
+
+The field stopped being enforced when the relative premium band was replaced
+by the hardcoded [mid/2, mid*2] band (a premium band derived from the noisy
+miner-commit oracle would revert honest fixes on sticky-commit days). It
+briefly survived as signed TCA metadata; it is now DELETED from `fix-price`,
+`build-auth-hash`, and the vault proxy, because a client-signed knob is set
+by whatever frontend the client is looking at - the exact adversary the
+hardcoded bounds exist for. Design rule: client-SIGNED parameters express
+preferences (`min-stx-out`), hardcoded CONSTANTS express integrity bounds the
+frontend must not be able to negotiate away (20bps drift, 2x band, 120s
+freshness). Consequences:
+
+- The v2 SIP-018 tuple is now `{market, rfq-id, winner, quoted-out,
+  ref-price, ref-timestamp, ref-venue, expiry}` - it DIVERGES from the USDCx
+  market and v3, which keep the field. FE/BE signing for v2 must drop it.
+- `ERR_PREMIUM_TOO_HIGH (err u2005)` now fires ONLY for the fat-finger band
+  floor (committed-out < mid/2), no longer for a premium-cap violation.
+
+## The native oracle and why the band is shaped this way
+
+`get-native-price` derives STX/BTC from what miners collectively spend to win
+the 500 STX coinbase (`get-tenure-info? miner-spend-total`). It samples **48
+tenures spread over ~1 day** (offsets every ~366 stacks blocks). Findings from
+3.5 months of mainnet commits (the faktory-dao mining observatory table),
+~11,800 evaluation points vs Kraken STX/BTC:
+
+- 6 consecutive tenures (the original design): deviation ran **-40%/+54%**.
+  On 2026-07-14 it read +52% vs market (miners paying 158% of coinbase value;
+  commits are sticky when STX/BTC slides) - a premium-derived band would have
+  reverted every honest fix that day.
+- Sample COUNT is what tames the tails, not just window length: 6 samples
+  spread over a day is WORSE than 6 consecutive; 48 over a day tightens the
+  worst case to ~[-23%, +30%], close to the full-144 average at a third of
+  the cost.
+- Cost of the 48 reads, measured on a mainnet fork (position-corrected):
+  ~710k runtime (0.014% of a block) + 145 read_count (~1% of a block).
+  Cost was never the issue; false reverts were.
+- Worst honest band usage in the backtest: quote at [0.77x, 1.30x] of the
+  native mid, vs limits [0.5x, 2x]. Efficiency is fixed at 1.0 (the
+  calibration knob is deleted - noise inside a 2x band), which shifts usage
+  ~9% toward the ceiling; live 2026-07-14 an honest quote sits at ~1.39x.
+  The monitor should watch the ceiling side.
+
+## The kill-switch (`set-band-enabled`)
+
+Operator-only, two-way, event-logged (`rfq-band-enabled`) - a desk trading
+band-off is publicly auditable. When OFF the oracle is **never read** (not
+just ignored): a degraded miner-commit feed erroring inside `get-native-price`
+can therefore never brick `fix-price`. `fixed-oracle-price` records `u0` for
+band-off fixes.
+
+Residual band-trip scenario: a >~50% intraday STX/BTC move with sticky
+commits. The backend should auto-disable BEFORE that bites:
+
+> **Backend monitor (TODO)**: read `get-native-price` + CEX mid every few
+> minutes; if native/market leaves ~[0.55, 1.7] (honest quote approaching a
+> limit), fire `set-band-enabled false` from the operator key; re-enable with
+> hysteresis (back inside ~[0.7, 1.4] for an hour).
+> `simulations/verify-native-price-rfq-v2.js` is this exact check as a
+> runnable probe (exit 2 = threshold crossed).
+
+## The vault (`rfq-mm-vault-jing`)
+
+The vault IS the on-chain MM: clients sign the VAULT PRINCIPAL as the SIP-018
+winner. Owner (Yguazu cold-ish wallet) deposits the STX float and is the only
+withdrawal destination; operator (backend hot key) can only proxy fix/fulfill.
+Re-cut against v2: no Pyth traits, and since v2's fix-price moves no funds the
+`as-contract?` allowance at fix is EMPTY - a leaked operator key cannot leak a
+single uSTX at fix, and at fulfill the allowance is exactly the
+`fixed-stx-out` already locked on-chain.
+
+### Decision: vault registers into jing-core-v2 at initialize (2026-07-15)
+
+`initialize` gained a `canonical` param, a core-owner gate, and
+`(try! (contract-call? .jing-core-v2 register canonical))` - the same clone
+protection as the market, and the vault needs it MORE: `register` only
+hash-checks source, and a byte-identical vault clone is fully live for its
+deployer WITHOUT initialize (owner defaults to tx-sender), configured with a
+hostile owner/operator. The hash check forces the clone to ship the
+core-owner gate its deployer cannot pass, so it can never land in
+`registered-contracts`. `is-registered` is therefore the flag the FE/backend
+must check before presenting any vault principal as the SIP-018 winner.
+Deploy-order consequence: `set-verified-contract(vault)` must run BEFORE
+vault `initialize`, or the inner register dies at ERR_NOT_VERIFIED (u5005).
+
+## v3 - the bandless alternative (shelved, kept)
+
+`rfq-sbtc-stx-jing-v3.clar` deletes the oracle entirely: signature + drift +
+min-stx-out only, fat-finger screen in the frontend. Fully tested (see
+matrix). Revisit if the MM set ever goes beyond KYB'd relationship parties -
+in that world "recourse is baked into the relationship" stops holding, and
+note that if both a banded and a bandless market are DEPLOYED TOGETHER the
+band protects nobody: a malicious frontend simply routes victims to the
+bandless one. One market or nothing.
+
+## Test matrix (all mainnet-fork sims + property fuzzing)
+
+Re-validated 2026-07-15 after the max-premium-bps removal + asymmetric drift
+band (results below are from the post-change source):
+
+| Suite | Result |
+|---|---|
+| `verify-rfq-sbtc-stx-jing-v2.js` | **77/77 (2026-07-15)** - all prior coverage plus the new drift boundaries: overpay by 1 uSTX reverts (u2014), fix at the exact -20bps lower boundary passes; band blocked -> switch off -> 3x-mid fix through -> re-enable -> blocked again; oracle-skip verified; JS/on-chain build-auth-hash parity on the new 8-field tuple |
+| `verify-rfq-mm-vault-jing.js` | **35/35 (2026-07-15)** on the new tuple/arity + registry-at-initialize: init before set-verified dies at inner ERR_NOT_VERIFIED (u5005), 3-arg initialize registers, is-registered reads true; vault-signed fix stolen by an EOA dies at whitelist; operator-only fix/fulfill; owner-only withdrawals; full drain |
+| RV fuzzing (v2) | **500 runs, 4 invariants, 0 failures (2026-07-15)** - escrow conservation x121, next-id-unused x127, operator-not-burn x126, rfq-state-consistent x126; re-run on the post-removal source |
+| `verify-rfq-sbtc-stx-jing-v3.js` | 70/70 (pre-change) - v3 keeps max-premium-bps + the symmetric drift band; suite repointed at buildRfqAuthHashHexV3, not re-run (v3 is shelved) |
+| `cost-rfq-v2-vs-v3.js` | oracle marginal cost measured; run with `ORDER=v3first` to cancel the shared-core positional artifact |
+
+## Deploy checklist
+
+1. Deploy `jing-core-v2`, `rfq-sbtc-stx-jing-v2`, `rfq-mm-vault-jing` (same
+   deployer - relative `.refs`), Clarity 5.
+2. `jing-core-v2.set-verified-contract(market)` + market `initialize`.
+3. `set-mm-whitelist` the **vault principal** (not the backend key).
+4. `jing-core-v2.set-verified-contract(vault)`, THEN vault
+   `initialize(canonical = vault, owner = Yguazu wallet, operator = backend
+   hot key)` - order matters, initialize registers into the core. Owner
+   deposits the STX float.
+5. Backend: repoint `rfq-sbtc-stx-jing-template.ts` (fix-price arity 8, no
+   max-premium-bps, signed tuple is the new 8-field shape), band
+   auto-disable monitor, FE pre-sign screen (check the quote against an
+   INDEPENDENT price source - a different venue than the one that built the
+   quote, and not Pyth, whose free access dies 2026-07-31), BE pre-fix
+   sanity check on a separate code path from the FE. FE/backend must check
+   `jing-core-v2.is-registered(vault)` before presenting a vault principal
+   as the SIP-018 winner.
+
+---
+
+# Historical design notes: RFQ market for sBTC ⇄ USDCx (Pyth era)
 
 A competitive **Request-for-Quote** layer where the client runs a short auction and
 market makers (MMs) compete to give the best price. Price is quoted as

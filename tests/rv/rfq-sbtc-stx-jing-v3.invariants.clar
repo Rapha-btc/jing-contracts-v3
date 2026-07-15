@@ -1,12 +1,13 @@
 ;; ============================================================================
-;; RENDEZVOUS INVARIANTS for rfq-sbtc-stx-jing-v2
+;; RENDEZVOUS INVARIANTS for rfq-sbtc-stx-jing-v3
 ;; ============================================================================
-;; Fuzz-build relaxations (tests/rv/build.sh), so RV can reach the lifecycle:
+;; v3 has no on-chain price oracle: fat-finger screening lives in the signing
+;; frontend; on-chain protections are the client sig, the 20bps drift band and
+;; the client-set min-stx-out. Fuzz-build relaxations (tests/rv/build.sh):
 ;;   - SIP-018 sig check disabled (the stxer harness covers sig parity and
 ;;     the auth reverts deterministically)
 ;;   - ref-timestamp no-future/freshness asserts disabled (wall-clock windows
 ;;     are meaningless against RV's random uints)
-;;   - get-native-price replaced by a fixed mid (simnet has no miner commits)
 ;;   - whitelist default flipped to true (any sender may attempt fix-price;
 ;;     set-mm-whitelist false still blocks, so the gate stays exercised)
 ;;   - with-ft asset name pinned to "mock-ft" so fulfill/reclaim can move
@@ -15,7 +16,9 @@
 ;; What RV actually exercises: open-rfq (escrow in), reclaim after OPEN_TTL
 ;; (escrow out; simnet burn height advances 1 per call so 6 calls = expiry),
 ;; operator setters, pause, whitelist flips. fix-price/fulfill fire when
-;; random args satisfy band + drift + funds constraints (rare but reachable).
+;; random args satisfy drift + funds constraints (rare but reachable; with
+;; the band gone the drift check is the only numeric gate, so fixes land
+;; whenever committed and quoted sit within 20bps of each other).
 ;; The crown invariant is escrow conservation: actual token balance vs the
 ;; sum of open rfq escrows -- any state/funds desync trips it.
 ;; ============================================================================
@@ -64,7 +67,7 @@
 ;; ============================================================================
 ;; INVARIANT 3: per-rfq state consistency
 ;; ============================================================================
-;; For every rfq: winner/fixed-stx-out/fixed-oracle-price are set atomically
+;; For every rfq: winner/fixed-stx-out/fixed-ref-price are set atomically
 ;; (all some or all none); escrow and client floor are positive; and any
 ;; fixed amount honors the client's min-stx-out.
 
@@ -73,7 +76,7 @@
     (match (map-get? rfqs id)
       rfq (and
         (is-eq (is-some (get winner rfq)) (is-some (get fixed-stx-out rfq)))
-        (is-eq (is-some (get winner rfq)) (is-some (get fixed-oracle-price rfq)))
+        (is-eq (is-some (get winner rfq)) (is-some (get fixed-ref-price rfq)))
         (> (get sbtc-in rfq) u0)
         (> (get min-stx-out rfq) u0)
         (match (get fixed-stx-out rfq)
@@ -90,7 +93,7 @@
 ;; INVARIANT 4: operator is never the burn principal
 ;; ============================================================================
 ;; set-operator takes any principal from the current operator; burning it
-;; would brick pause/whitelist/calibration forever.
+;; would brick pause/whitelist forever.
 
 (define-read-only (invariant-operator-not-burn)
   (not (is-eq (var-get operator) 'SP000000000000000000002Q6VF78)))

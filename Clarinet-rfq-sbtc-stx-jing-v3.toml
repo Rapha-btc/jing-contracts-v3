@@ -1,0 +1,43 @@
+# RV-only manifest for fuzzing rfq-sbtc-stx-jing-v3.
+#
+# Minimal contract set: v3 has no oracle at all (no Pyth, no native
+# miner-commit price), so there are no mainnet requirements and no remote
+# data. The SUT is built from production source with the rewrites in
+# tests/rv/build.sh (mock trait/token/core, sig + wall-clock checks relaxed,
+# whitelist default true).
+#
+# Run:
+#   bash tests/rv/build.sh rfq-sbtc-stx-jing-v3
+#   npx rv . rfq-sbtc-stx-jing-v3 invariant --runs=500 --bail
+[project]
+name = "jing-contracts-v3-rv-rfq-v3"
+description = "RV-only manifest for fuzzing rfq-sbtc-stx-jing-v3"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Order matters for the simnet deploy plan: traits, then mocks, then SUT.
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rfq-sbtc-stx-jing-v3]
+path = "tests/rv/.build/rfq-sbtc-stx-jing-v3.clar"
+clarity_version = 5
+epoch = "3.4"

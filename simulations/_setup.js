@@ -321,6 +321,8 @@ export function buildRfqAuthHashHex(d, chainId) {
 /**
  * v2 mirror of build-auth-hash in rfq-sbtc-stx-jing-v2 (signed-quote honesty
  * design): tuple gains quoted-out + the TCA reference benchmark fields.
+ * max-premium-bps was DELETED from v2 on 2026-07-15 (see README-rfq.md) --
+ * for v3, which keeps the field, use buildRfqAuthHashHexV3.
  *
  * @param {object} d
  * @param {ClarityValue} d.market         contractPrincipalCV(DEPLOYER, marketName)
@@ -330,11 +332,32 @@ export function buildRfqAuthHashHex(d, chainId) {
  * @param {number|bigint} d.refPrice      declared venue price, STX-per-BTC x 1e8
  * @param {number|bigint} d.refTimestamp  venue unix seconds
  * @param {string} d.refVenue             e.g. "kraken-mid" (string-ascii 16)
- * @param {number|bigint} d.maxPremiumBps
  * @param {number|bigint} d.authExpiry
  * @param {number} [chainId]              defaults to mainnet (1)
  */
 export function buildRfqAuthHashHexV2(d, chainId) {
+  // alphabetic key order: expiry < market < quoted-out < ref-price
+  //   < ref-timestamp < ref-venue < rfq-id < winner
+  const details = tupleCV({
+    expiry: uintCV(d.authExpiry),
+    market: d.market,
+    "quoted-out": uintCV(d.quotedOut),
+    "ref-price": uintCV(d.refPrice),
+    "ref-timestamp": uintCV(d.refTimestamp),
+    "ref-venue": stringAsciiCV(d.refVenue),
+    "rfq-id": uintCV(d.rfqId),
+    winner: d.winner,
+  });
+  const composed = Buffer.concat([SIP018_PREFIX, getRfqDomainHash(chainId), cvSha256(details)]);
+  return sha256(composed).toString("hex");
+}
+
+/**
+ * v3 mirror of build-auth-hash in rfq-sbtc-stx-jing-v3 (bandless alternative):
+ * same tuple as v2 PLUS max-premium-bps, which v3 keeps as signed TCA
+ * metadata. Params as buildRfqAuthHashHexV2 plus d.maxPremiumBps.
+ */
+export function buildRfqAuthHashHexV3(d, chainId) {
   // alphabetic key order: expiry < market < max-premium-bps < quoted-out
   //   < ref-price < ref-timestamp < ref-venue < rfq-id < winner
   const details = tupleCV({

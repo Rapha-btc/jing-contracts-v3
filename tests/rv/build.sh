@@ -36,6 +36,7 @@ declare -A SUTS=(
   ["snpl-sbtc-stx-jing"]="contracts/snpl-sbtc-stx-jing.clar"
   ["reserve-sbtc-stx-jing"]="contracts/reserve-sbtc-stx-jing.clar"
   ["rfq-sbtc-stx-jing-v2"]="contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
+  ["rfq-sbtc-stx-jing-v3"]="contracts/rfq/rfq-sbtc-stx-jing-v3.clar"
 )
 
 # Mainnet SIP-010 trait reference (must match the use-trait line in the
@@ -78,7 +79,28 @@ text = text.replace(".jing-core", ".mock-jing-core")
 # RFQ-v2-only fuzz relaxations (no-ops for every other contract). See the
 # header of tests/rv/rfq-sbtc-stx-jing-v2.invariants.clar for the rationale.
 # (a) Disable the SIP-018 signature check: RV cannot produce valid secp256k1
-#     sigs; the stxer harness covers sig parity + auth reverts.
+#     sigs; the stxer harness covers sig parity + auth reverts. Two shapes:
+#     v2 dropped max-premium-bps from build-auth-hash (2026-07-15), v3 keeps
+#     it -- each replace no-ops on the other contract.
+text = text.replace(
+    """    (asserts!
+      (is-eq
+        (unwrap!
+          (principal-of?
+            (unwrap! (secp256k1-recover?
+              (build-auth-hash id mm quoted-out ref-price ref-timestamp ref-venue
+                auth-expiry
+              ) sig)
+              ERR_BAD_AUTH
+            ))
+          ERR_BAD_AUTH
+        )
+        client
+      )
+      ERR_BAD_AUTH
+    )""",
+    "    (asserts! true ERR_BAD_AUTH)"
+)
 text = text.replace(
     """    (asserts!
       (is-eq
@@ -111,10 +133,11 @@ text = text.replace(
     "    (asserts! true ERR_STALE_PRICE)"
 )
 # (c) Fixed native mid: simnet has no miner commits, get-native-price would
-#     always ERR_ZERO_PRICE and kill the fix path.
+#     always ERR_ZERO_PRICE and kill the fix path. Keeps the band-enabled
+#     branch live so RV still exercises the kill-switch.
 text = text.replace(
-    "(oracle-price (try! (get-native-price)))",
-    "(oracle-price u34000000000000)"
+    "(oracle-price (if band-on (try! (get-native-price)) u0))",
+    "(oracle-price (if band-on u34000000000000 u0))"
 )
 # (d) Whitelist defaults to true under fuzz so any sender may attempt
 #     fix-price; set-mm-whitelist false still blocks, keeping the gate live.

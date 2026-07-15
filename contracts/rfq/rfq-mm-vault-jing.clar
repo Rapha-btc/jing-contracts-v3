@@ -51,14 +51,29 @@
 )
 
 ;; ---------------------------------------------------------------- admin
-;; One-shot: hand ownership to Yguazu + set the backend operator.
-(define-public (initialize (new-owner principal) (new-operator principal))
+;; One-shot: hand ownership to Yguazu + set the backend operator, and
+;; register into jing-core-v2 (same clone protection as the market: register
+;; hash-checks the caller against the verified canonical, so a byte-identical
+;; clone is forced to ship this core-owner gate -- which its deployer cannot
+;; pass -- and can never land in the registry. A vault clone is live for its
+;; deployer WITHOUT initialize (owner defaults to tx-sender), so the registry
+;; flag is what the FE/backend checks before presenting this principal as the
+;; SIP-018 winner).
+(define-public (initialize
+    (canonical principal)
+    (new-owner principal)
+    (new-operator principal)
+  )
   (begin
     (asserts! (is-owner) ERR_NOT_AUTHORIZED)
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+    (asserts! (is-eq contract-caller (contract-call? .jing-core-v2 get-contract-owner))
+      ERR_NOT_AUTHORIZED
+    )
     (var-set initialized true)
     (var-set owner new-owner)
     (var-set operator new-operator)
+    (try! (contract-call? .jing-core-v2 register canonical))
     (ok true)
   )
 )

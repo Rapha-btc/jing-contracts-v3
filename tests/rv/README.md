@@ -9,8 +9,17 @@ of mocks) and asserts state invariants after every step.
 ```
 markets-sbtc-usdcx-jing  -- 500 runs, 13 invariants, 0 failures
 markets-sbtc-stx-jing    -- 500 runs, 13 invariants, 0 failures
-rfq-sbtc-stx-jing-v2     -- 500 runs,  5 invariants, 0 failures
+rfq-sbtc-stx-jing-v2     -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
+rfq-sbtc-stx-jing-v3     -- 500 runs,  4 invariants, 0 failures
 ```
+
+rfq-v3 notes: same relaxations as v2 minus the fixed native mid (v3 has no
+oracle to mock). The calibration invariant is gone with the efficiency knob;
+the remaining 4 held with real movement (escrow conservation x119). Sig
+parity + auth/band reverts live in the 70-assert stxer harness
+(simulations/verify-rfq-sbtc-stx-jing-v3.js), which also pins the two
+design-decision positives: a signed 25%-under and 25%-over quote both fix
+fine (no floor/ceiling in v3).
 
 rfq-v2 notes: the fuzz build relaxes the SIP-018 sig check, wall-clock ref
 checks, native price (fixed mid) and whitelist default (see the invariants
