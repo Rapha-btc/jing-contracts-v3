@@ -1,12 +1,22 @@
+;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-mm-safe-v2
+;; jing-mm-safe ported to the Pyth-free v2 RFQ market (rfq-sbtc-stx-jing-v2):
+;;   - fix-rfq: arity 8 (quoted-out + ref benchmark fields; NO max-premium-bps,
+;;     NO VAAs/Pyth traits) with an EMPTY as-contract? allowance -- v2 fix-price
+;;     moves no funds, so a leaked rfq-operator key cannot leak a uSTX at fix
+;;   - fulfill-rfq: same shape, retargeted; STX allowance = the fixed-stx-out
+;;     already locked on-chain
+;;   - onboard registers against the jing-mm-safe-v2 canonical
+;; Everything else is byte-identical to the deployed jing-mm-safe.
+;; Deploy: Clarity 5, account 0; fakfun-wallet-core
+;; set-verified-contract('SPV9K21....jing-mm-safe-v2, none) before per-user
+;; onboards. Market rfq-sbtc-stx-jing-v2 must be live first (hard ref).
+
 (use-trait gas-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.gas-station-trait.gas-station-trait)
 (use-trait dual-stacking-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.xbtc-sbtc-swap-v2.enroll-trait)
 
 (use-trait sip-010-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 (use-trait sip-009-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.nft-trait.nft-trait)
 
-(use-trait pyth-storage-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.storage-trait)
-(use-trait pyth-decoder-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.decoder-trait)
-(use-trait wormhole-core-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2.core-trait)
 
 (impl-trait 'SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.pillar-wallet-trait.pillar-wallet-trait)
 
@@ -37,7 +47,6 @@
 (define-constant err-rfq-not-fixed (err u4027))
 (define-constant err-fatal-owner-not-admin (err u9999))
 
-(define-constant PYTH-FEE-ALLOWANCE u10000)
 
 (define-constant INACTIVITY-PERIOD u52560)
 (define-constant MAX-CONFIG-COOLDOWN u4032)
@@ -1383,22 +1392,20 @@
 (define-public (fix-rfq
     (id uint)
     (committed-out uint)
-    (max-premium-bps uint)
+    (quoted-out uint)
+    (ref-price uint)
+    (ref-timestamp uint)
+    (ref-venue (string-ascii 16))
     (auth-expiry uint)
     (sig (buff 65))
-    (vaa-x (buff 8192))
-    (vaa-y (buff 8192))
-    (pyth-storage <pyth-storage-trait>)
-    (pyth-decoder <pyth-decoder-trait>)
-    (wormhole-core <wormhole-core-trait>)
   )
   (begin
     (asserts! (is-rfq-authorized) err-unauthorised)
-    (try! (as-contract? ((with-stx PYTH-FEE-ALLOWANCE))
+    (try! (as-contract? ()
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing fix-price
-        id committed-out max-premium-bps auth-expiry sig vaa-x vaa-y
-        pyth-storage pyth-decoder wormhole-core
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2 fix-price
+        id committed-out quoted-out ref-price ref-timestamp ref-venue
+        auth-expiry sig
       ))
     ))
     (update-activity)
@@ -1414,7 +1421,7 @@
   )
   (let (
       (rfq (unwrap!
-        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing
+        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2
           get-rfq id
         )
         err-rfq-not-found
@@ -1424,7 +1431,7 @@
     (asserts! (is-rfq-authorized) err-unauthorised)
     (try! (as-contract? ((with-stx stx-out))
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing fulfill
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2 fulfill
         id x x-name
       ))
     ))
@@ -1467,7 +1474,7 @@
       (try! (contract-call?
         'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
         register-wallet
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-mm-safe
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-mm-safe-v2
       ))
     ))
     (try! (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
