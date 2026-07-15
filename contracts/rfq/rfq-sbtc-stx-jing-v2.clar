@@ -5,7 +5,6 @@
 (define-constant PRICE_PRECISION u100000000)
 (define-constant DECIMAL_FACTOR u100)
 (define-constant BPS_PRECISION u10000)
-(define-constant MAX_PREMIUM_BPS u2000)
 (define-constant MAX_QUOTE_DRIFT_BPS u20)
 ;; ref benchmark must be contemporaneous: closes the true-but-stale loophole,
 ;; and keeps the drift band inside the vol window it was sized for
@@ -113,7 +112,6 @@
     (ref-price uint)
     (ref-timestamp uint)
     (ref-venue (string-ascii 16))
-    (max-premium-bps uint)
     (auth-expiry uint)
   )
   (sha256 (concat SIP018_MSG_PREFIX
@@ -126,7 +124,6 @@
         ref-price: ref-price,
         ref-timestamp: ref-timestamp,
         ref-venue: ref-venue,
-        max-premium-bps: max-premium-bps,
         expiry: auth-expiry,
       })))
     )))
@@ -223,7 +220,6 @@
     (ref-price uint)
     (ref-timestamp uint)
     (ref-venue (string-ascii 16))
-    (max-premium-bps uint)
     (auth-expiry uint)
     (sig (buff 65))
   )
@@ -238,7 +234,6 @@
     (asserts! (get open rfq) ERR_RFQ_CLOSED)
     (asserts! (is-none (get winner rfq)) ERR_ALREADY_FIXED)
     (asserts! (<= burn-block-height (get open-expiry rfq)) ERR_EXPIRED)
-    (asserts! (<= max-premium-bps MAX_PREMIUM_BPS) ERR_PREMIUM_TOO_HIGH)
     (asserts! (< stacks-block-height auth-expiry) ERR_AUTH_EXPIRED)
     (asserts! (> ref-price u0) ERR_BAD_REFERENCE)
     (asserts! (> (len ref-venue) u0) ERR_BAD_REFERENCE)
@@ -253,7 +248,7 @@
           (principal-of?
             (unwrap! (secp256k1-recover?
               (build-auth-hash id mm quoted-out ref-price ref-timestamp ref-venue
-                max-premium-bps auth-expiry
+                auth-expiry
               ) sig)
               ERR_BAD_AUTH
             ))
@@ -265,9 +260,8 @@
     )
 
     ;; fat-finger band: hardcoded [mid/2, mid*2] around the 1-day native mid.
-    ;; max-premium-bps stays in the signed tuple as TCA metadata only. When
-    ;; the band is off the oracle is never read (u0 recorded), so a degraded
-    ;; miner-commit feed cannot brick fix-price.
+    ;; When the band is off the oracle is never read (u0 recorded), so a
+    ;; degraded miner-commit feed cannot brick fix-price.
     (let (
         (band-on (var-get band-enabled))
         (oracle-price (if band-on (try! (get-native-price)) u0))
