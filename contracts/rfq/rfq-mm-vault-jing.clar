@@ -18,13 +18,15 @@
 ;; Backend change required: quote/fix flows must present the VAULT principal as
 ;; the mm identity, and fix.post/fulfill.post call fix-rfq/fulfill-rfq here.
 ;;
-;; Deploy: Clarity 5, same deployer as rfq-sbtc-stx-jing (relative .refs), then
-;; `initialize` once to hand ownership to Yguazu + set the backend operator.
+;; Targets rfq-sbtc-stx-jing-v2 (native miner-commit band + kill-switch; no
+;; Pyth, so fix moves NO funds from the vault -- the as-contract? allowance
+;; at fix is empty).
+;;
+;; Deploy: Clarity 5, same deployer as rfq-sbtc-stx-jing-v2 (relative .refs),
+;; then `initialize` once to hand ownership to Yguazu + set the backend
+;; operator. The vault principal must be whitelisted via set-mm-whitelist.
 
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
-(use-trait pyth-storage-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.storage-trait)
-(use-trait pyth-decoder-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.decoder-trait)
-(use-trait wormhole-core-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2.core-trait)
 
 ;; ---------------------------------------------------------------- errors
 (define-constant ERR_NOT_AUTHORIZED (err u3001))
@@ -32,10 +34,6 @@
 (define-constant ERR_RFQ_NOT_FOUND (err u3003))
 (define-constant ERR_NOT_FIXED (err u3004))
 (define-constant ERR_ZERO_AMOUNT (err u3005))
-
-;; uSTX the vault may spend during fix-price (the in-tx Pyth refresh fee; the
-;; backend's own post-condition uses the same 10_000 bound).
-(define-constant PYTH_FEE_ALLOWANCE u10000)
 
 ;; ---------------------------------------------------------------- config
 (define-data-var initialized bool false)
@@ -114,25 +112,25 @@
 ;; ---------------------------------------------------------------- desk ops
 ;; Proxy fix-price. Inside as-contract? tx-sender = the vault, so the RFQ
 ;; contract records THIS contract as winner (the client must have signed the
-;; vault principal as the SIP-018 winner). No STX moves except the Pyth fee.
+;; vault principal as the SIP-018 winner). v2 fix-price moves no funds, so
+;; the allowance list is empty -- a compromised operator key cannot make fix
+;; leak a single uSTX.
 (define-public (fix-rfq
     (id uint)
     (committed-out uint)
-    (max-premium-bps uint)
+    (quoted-out uint)
+    (ref-price uint)
+    (ref-timestamp uint)
+    (ref-venue (string-ascii 16))
     (auth-expiry uint)
     (sig (buff 65))
-    (vaa-x (buff 8192))
-    (vaa-y (buff 8192))
-    (pyth-storage <pyth-storage-trait>)
-    (pyth-decoder <pyth-decoder-trait>)
-    (wormhole-core <wormhole-core-trait>)
   )
   (begin
     (asserts! (is-authorized) ERR_NOT_AUTHORIZED)
-    (try! (as-contract? ((with-stx PYTH_FEE_ALLOWANCE))
-      (try! (contract-call? .rfq-sbtc-stx-jing fix-price
-        id committed-out max-premium-bps auth-expiry sig vaa-x vaa-y
-        pyth-storage pyth-decoder wormhole-core
+    (try! (as-contract? ()
+      (try! (contract-call? .rfq-sbtc-stx-jing-v2 fix-price
+        id committed-out quoted-out ref-price ref-timestamp ref-venue
+        auth-expiry sig
       ))
     ))
     (ok id)
@@ -148,12 +146,12 @@
     (x-name (string-ascii 128))
   )
   (let (
-      (rfq (unwrap! (contract-call? .rfq-sbtc-stx-jing get-rfq id) ERR_RFQ_NOT_FOUND))
+      (rfq (unwrap! (contract-call? .rfq-sbtc-stx-jing-v2 get-rfq id) ERR_RFQ_NOT_FOUND))
       (stx-out (unwrap! (get fixed-stx-out rfq) ERR_NOT_FIXED))
     )
     (asserts! (is-authorized) ERR_NOT_AUTHORIZED)
     (try! (as-contract? ((with-stx stx-out))
-      (try! (contract-call? .rfq-sbtc-stx-jing fulfill id x x-name))
+      (try! (contract-call? .rfq-sbtc-stx-jing-v2 fulfill id x x-name))
     ))
     (ok stx-out)
   )
