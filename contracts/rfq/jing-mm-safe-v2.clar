@@ -47,6 +47,7 @@
 (define-constant err-rfq-not-found (err u4026))
 (define-constant err-rfq-not-fixed (err u4027))
 (define-constant err-rfq-disabled (err u4028))
+(define-constant err-no-pending-operator (err u4029))
 (define-constant err-fatal-owner-not-admin (err u9999))
 
 
@@ -1370,6 +1371,19 @@
 
 (define-data-var rfq-operator principal tx-sender)
 
+;; Operator rotation is timelocked: without it, a compromised admin could
+;; rotate the operator to its own key and drive fix/fulfill immediately -- a
+;; veto-free STX bleed that bypasses the pending-operations timelock. The
+;; cooldown (wallet cooldown-period, capped at MAX-CONFIG-COOLDOWN) gives the
+;; honest owner a window to notice and re-propose/cancel.
+(define-data-var pending-rfq-operator
+  (optional {
+    operator: principal,
+    proposed-at: uint,
+  })
+  none
+)
+
 ;; Admin kill-switch for the RFQ desk. The admin cannot DRIVE fix/fulfill (see
 ;; is-rfq-authorized) but can HALT them instantly -- e.g. if the rfq-operator
 ;; hot key is suspected compromised -- without waiting to rotate the operator.
@@ -1379,6 +1393,10 @@
   (var-get rfq-operator)
 )
 
+(define-read-only (get-pending-rfq-operator)
+  (var-get pending-rfq-operator)
+)
+
 (define-read-only (get-rfq-enabled)
   (var-get rfq-enabled)
 )
@@ -1386,18 +1404,54 @@
 ;; RFQ is operable ONLY by the rfq-operator, NOT the admin. The admin is already
 ;; all-powerful via the (timelocked, veto-able) transfer path; letting it also
 ;; drive fix/fulfill would give a compromised admin a fast, veto-free STX bleed
-;; that bypasses that timelock. Least privilege: admin governs (owns
-;; set-rfq-operator + set-rfq-enabled), operator operates.
+;; that bypasses that timelock. Least privilege: admin governs (owns the
+;; timelocked propose/confirm-rfq-operator + set-rfq-enabled), operator
+;; operates.
 (define-private (is-rfq-authorized)
   (is-eq contract-caller (var-get rfq-operator))
 )
 
-(define-public (set-rfq-operator (new-operator principal))
+(define-public (propose-rfq-operator (new-operator principal))
   (begin
     (try! (is-admin-calling tx-sender))
-    (var-set rfq-operator new-operator)
+    (var-set pending-rfq-operator (some {
+      operator: new-operator,
+      proposed-at: burn-block-height,
+    }))
     (update-activity)
-    (print { event: "set-rfq-operator", operator: new-operator })
+    (print { event: "propose-rfq-operator", operator: new-operator })
+    (ok true)
+  )
+)
+
+(define-public (cancel-rfq-operator)
+  (begin
+    (try! (is-admin-calling tx-sender))
+    (asserts! (is-some (var-get pending-rfq-operator)) err-no-pending-operator)
+    (var-set pending-rfq-operator none)
+    (update-activity)
+    (print { event: "cancel-rfq-operator" })
+    (ok true)
+  )
+)
+
+(define-public (confirm-rfq-operator)
+  (let (
+      (pending (unwrap! (var-get pending-rfq-operator) err-no-pending-operator))
+      (wallet-cooldown (get cooldown-period (var-get wallet-config)))
+      (effective-cooldown (if (> wallet-cooldown MAX-CONFIG-COOLDOWN)
+        MAX-CONFIG-COOLDOWN
+        wallet-cooldown
+      ))
+    )
+    (try! (is-admin-calling tx-sender))
+    (asserts! (>= burn-block-height (+ (get proposed-at pending) effective-cooldown))
+      err-in-cooldown
+    )
+    (var-set rfq-operator (get operator pending))
+    (var-set pending-rfq-operator none)
+    (update-activity)
+    (print { event: "confirm-rfq-operator", operator: (get operator pending) })
     (ok true)
   )
 )
