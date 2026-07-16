@@ -76,10 +76,13 @@
 (define-constant ERR_CLIENT_NOT_WHITELISTED (err u2017))
 (define-constant ERR_NO_PENDING_CLIENT (err u2018))
 (define-constant ERR_CLIENT_IN_COOLDOWN (err u2019))
+(define-constant ERR_NO_PENDING_MM (err u2020))
+(define-constant ERR_MM_IN_COOLDOWN (err u2021))
 
-;; Burn blocks (~1 day) between proposing and confirming a client whitelist
-;; ADD. See propose-client-whitelist for the threat this closes.
+;; Burn blocks (~1 day) between proposing and confirming a whitelist ADD.
+;; See propose-client-whitelist / propose-mm-whitelist for the threats closed.
 (define-constant CLIENT_WHITELIST_COOLDOWN u144)
+(define-constant MM_WHITELIST_COOLDOWN u144)
 
 (define-data-var initialized bool false)
 (define-data-var operator principal tx-sender)
@@ -105,8 +108,9 @@
 
 (define-map whitelisted-mms principal bool)
 (define-map whitelisted-clients principal bool)
-;; client -> burn height it was proposed at (two-step whitelist ADD)
+;; principal -> burn height it was proposed at (two-step whitelist ADDs)
 (define-map pending-clients principal uint)
+(define-map pending-mms principal uint)
 
 (define-map rfqs
   uint
@@ -168,6 +172,10 @@
 
 (define-read-only (get-pending-client (client principal))
   (map-get? pending-clients client)
+)
+
+(define-read-only (get-pending-mm (mm principal))
+  (map-get? pending-mms mm)
 )
 
 (define-read-only (get-client-admin)
@@ -441,11 +449,13 @@
     (var-set min-sbtc-in min-x)
     (var-set client-admin new-client-admin)
     (var-set initialized true)
-    ;; genesis clients (friedger + the fast-pool rewards address), seeded in
-    ;; the gated one-shot initialize. Auditable up front, so they bypass the
-    ;; two-step cooldown that protects RUNTIME additions.
+    ;; genesis whitelists, seeded in the gated one-shot initialize: clients
+    ;; (friedger + the fast-pool rewards address) and the Yguazu desk safe as
+    ;; MM. Auditable up front, so they bypass the two-step cooldowns that
+    ;; protect RUNTIME additions.
     (map-set whitelisted-clients 'SP3KJBWTS3K562BF5NXWG5JC8W90HEG7WPYH5B97X true)
     (map-set whitelisted-clients 'SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP true)
+    (map-set whitelisted-mms 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.yguazu-stx-safe true)
     (try! (contract-call? .jing-core-v2 register canonical))
     (ok true)
   )
@@ -481,18 +491,69 @@
   )
 )
 
-(define-public (set-mm-whitelist
-    (mm principal)
-    (whitelisted bool)
+;; MM whitelist, gated to the operator. Mirrors the client two-step: ADDING an
+;; MM is propose -> cooldown -> confirm, so a compromised operator cannot
+;; whitelist an attacker MM and weaponize it in one block; the cooldown gives
+;; the honest parties a window to see the proposal event and react. Cancel is
+;; a VETO held by BOTH keys (operator and client-admin). REMOVING an MM is
+;; instant -- the protective direction.
+(define-public (propose-mm-whitelist (mm principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (map-set pending-mms mm burn-block-height)
+    (print {
+      event: "rfq-mm-proposed",
+      mm: mm,
+      proposed-at: burn-block-height,
+    })
+    (ok true)
   )
+)
+
+(define-public (cancel-mm-whitelist (mm principal))
+  (begin
+    (asserts!
+      (or
+        (is-eq tx-sender (var-get operator))
+        (is-eq tx-sender (var-get client-admin))
+      )
+      ERR_NOT_AUTHORIZED
+    )
+    (asserts! (is-some (map-get? pending-mms mm)) ERR_NO_PENDING_MM)
+    (map-delete pending-mms mm)
+    (print {
+      event: "rfq-mm-canceled",
+      mm: mm,
+    })
+    (ok true)
+  )
+)
+
+(define-public (confirm-mm-whitelist (mm principal))
+  (let ((proposed-at (unwrap! (map-get? pending-mms mm) ERR_NO_PENDING_MM)))
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (>= burn-block-height (+ proposed-at MM_WHITELIST_COOLDOWN))
+      ERR_MM_IN_COOLDOWN
+    )
+    (map-delete pending-mms mm)
+    (print {
+      event: "rfq-mm-whitelist",
+      mm: mm,
+      whitelisted: true,
+    })
+    (ok (map-set whitelisted-mms mm true))
+  )
+)
+
+(define-public (revoke-mm-whitelist (mm principal))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
     (print {
       event: "rfq-mm-whitelist",
       mm: mm,
-      whitelisted: whitelisted,
+      whitelisted: false,
     })
-    (ok (map-set whitelisted-mms mm whitelisted))
+    (ok (map-set whitelisted-mms mm false))
   )
 )
 
