@@ -56,6 +56,8 @@
 (define-constant ERR_ALREADY_INITIALIZED (err u1018))
 (define-constant ERR_WRONG_TRAIT (err u1019))
 (define-constant ERR_BAD_COINBASE (err u1021))
+(define-constant ERR_NOT_CLIENT_ADMIN (err u1022))
+(define-constant ERR_SAME_ADMIN (err u1023))
 (define-constant ERR_RFQ_NOT_FOUND (err u2001))
 (define-constant ERR_RFQ_CLOSED (err u2002))
 (define-constant ERR_EXPIRED (err u2003))
@@ -71,10 +73,19 @@
 (define-constant ERR_QUOTE_DRIFT (err u2014))
 (define-constant ERR_NOT_WHITELISTED (err u2015))
 (define-constant ERR_BAD_REFERENCE (err u2016))
+(define-constant ERR_CLIENT_NOT_WHITELISTED (err u2017))
 
 (define-data-var initialized bool false)
 (define-data-var operator principal tx-sender)
 (define-data-var treasury principal tx-sender)
+
+;; SEPARATE authority for the CLIENT whitelist, deliberately NOT the operator.
+;; The operator whitelists MMs and can flip the band; if it could also
+;; whitelist clients, a single operator compromise could self-mint a fake
+;; client and, with the band off, drain a winning MM safe. Splitting this role
+;; onto a colder key means a compromised operator cannot forge the client side.
+;; Enforced != operator at initialize and on every rotation (ERR_SAME_ADMIN).
+(define-data-var client-admin principal tx-sender)
 (define-data-var paused bool false)
 
 (define-data-var token-x principal SAINT)
@@ -87,6 +98,7 @@
 (define-data-var next-rfq-id uint u0)
 
 (define-map whitelisted-mms principal bool)
+(define-map whitelisted-clients principal bool)
 
 (define-map rfqs
   uint
@@ -140,6 +152,14 @@
 
 (define-read-only (is-whitelisted-mm (mm principal))
   (default-to false (map-get? whitelisted-mms mm))
+)
+
+(define-read-only (is-whitelisted-client (client principal))
+  (default-to false (map-get? whitelisted-clients client))
+)
+
+(define-read-only (get-client-admin)
+  (var-get client-admin)
 )
 
 (define-private (sample-spend
@@ -196,6 +216,7 @@
       (open-expiry (+ burn-block-height OPEN_TTL))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-whitelisted-client tx-sender) ERR_CLIENT_NOT_WHITELISTED)
     (asserts! (is-eq (contract-of x) (var-get token-x)) ERR_WRONG_TRAIT)
     (asserts! (> sbtc-in (var-get min-sbtc-in)) ERR_AMOUNT_TOO_SMALL)
     (asserts! (> min-stx-out u0) ERR_AMOUNT_TOO_SMALL)
@@ -392,6 +413,7 @@
     (x principal)
     (y principal)
     (min-x uint)
+    (new-client-admin principal)
   )
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
@@ -399,9 +421,13 @@
       ERR_NOT_AUTHORIZED
     )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+    ;; the client-admin MUST be a different key than the operator, so a
+    ;; compromised operator can never also forge/whitelist a client
+    (asserts! (not (is-eq new-client-admin (var-get operator))) ERR_SAME_ADMIN)
     (var-set token-x x)
     (var-set token-y y)
     (var-set min-sbtc-in min-x)
+    (var-set client-admin new-client-admin)
     (var-set initialized true)
     (try! (contract-call? .jing-core-v2 register canonical))
     (ok true)
@@ -425,6 +451,8 @@
 (define-public (set-operator (new-operator principal))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    ;; keep the operator and client-admin as two distinct keys at all times
+    (asserts! (not (is-eq new-operator (var-get client-admin))) ERR_SAME_ADMIN)
     (ok (var-set operator new-operator))
   )
 )
@@ -448,6 +476,38 @@
       whitelisted: whitelisted,
     })
     (ok (map-set whitelisted-mms mm whitelisted))
+  )
+)
+
+;; CLIENT whitelist, gated to the client-admin (NOT the operator). open-rfq is
+;; permissioned: only whitelisted clients can open an RFQ, so a compromised
+;; operator cannot self-mint a fake client to weaponize a winning MM safe.
+(define-public (set-client-whitelist
+    (client principal)
+    (whitelisted bool)
+  )
+  (begin
+    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
+    (print {
+      event: "rfq-client-whitelist",
+      client: client,
+      whitelisted: whitelisted,
+    })
+    (ok (map-set whitelisted-clients client whitelisted))
+  )
+)
+
+;; Rotate the client-admin. Only the current client-admin can hand off the
+;; role, and it can never be set to the operator (keeps the two keys distinct).
+(define-public (set-client-admin (new-client-admin principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
+    (asserts! (not (is-eq new-client-admin (var-get operator))) ERR_SAME_ADMIN)
+    (print {
+      event: "rfq-client-admin-set",
+      client-admin: new-client-admin,
+    })
+    (ok (var-set client-admin new-client-admin))
   )
 )
 
