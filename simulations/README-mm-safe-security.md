@@ -23,7 +23,11 @@ contract principal**.
 - **Not stuck.** The full 100,001 STX and the full ~1 BTC were withdrawn back
   to an external wallet on the fork; the safe returned to its exact
   pre-funding balance for both assets.
-- **Residual risk is key custody**, plus a bounded RFQ-hot-key risk (below).
+- **Residual risks:** (1) cold owner-key custody; (2) a **high-severity
+  STX-only** risk if the RFQ operator key `SPV9K21…` is compromised — it is
+  also the market operator, so it can disable the fat-finger band and, via a
+  self-controlled (permissionless) client, drain the safe's **full STX
+  balance**. This does **not** reach the safe's sBTC. See the FINDING section.
 
 ## Live on-chain state audited (mainnet tip)
 
@@ -91,12 +95,16 @@ Every public function that moves value or changes control, and its gate:
 **RFQ (the desk's trading surface):**
 - `fix-rfq` — rfq-operator or admin; **moves no funds** (empty `as-contract?`
   allowance). A leaked rfq-operator key cannot leak a uSTX at fix.
-- `fulfill-rfq` — rfq-operator or admin; STX out is **bounded to the on-chain
-  `fixed-stx-out`** locked by a client-signed quote, itself capped by the
-  market's fat-finger band (`[mid/2, mid*2]`) and the client's signature. A
-  leaked rfq-operator key cannot arbitrarily transfer funds; worst case, with
-  a colluding client, is trading at up to the band edge. See
-  `verify-jing-mm-safe-v2.js` for the leaked-operator containment proof.
+- `fulfill-rfq` — rfq-operator or admin; STX out is bounded to the on-chain
+  `fixed-stx-out` locked by a **client-signed** quote. A leaked rfq-operator
+  key cannot *arbitrarily transfer* funds (no `stx-transfer` / `sip010`
+  path — those revert `u4001`), and it can never touch the safe's **sBTC**
+  (empty `as-contract?` allowance at fix; only `with-stx` at fulfill; escrowed
+  sBTC flows *into* the safe). **But the STX-loss bound is NOT the fat-finger
+  band — see the operator-compromise finding below.** The client signature is
+  the true price bound, and that bound is only as strong as the client side is
+  unforgeable. See `verify-jing-mm-safe-v2.js` for the leaked-operator
+  containment proof (what the key still cannot do).
 - `set-rfq-operator` — **admin only**.
 
 **Stacking (locks STX in PoX; ownership stays with the safe):**
@@ -122,9 +130,82 @@ Every public function that moves value or changes control, and its gate:
   now reverts.
 
 **Conclusion:** there is no public path by which a party holding neither the
-owner key nor the passkey can remove value. The rfq-operator hot key is the
-only always-online key and it is confined to `fix-rfq` / `fulfill-rfq` /
-economically-bounded RFQ settlement.
+owner key nor the passkey nor the RFQ operator key can remove value. Custody
+of the cold owner key is the primary risk. The RFQ operator hot key is the
+only always-online key; it cannot arbitrarily transfer funds or touch the
+safe's sBTC, but it carries a **material STX-loss risk documented below** that
+is larger than a naive reading of the fat-finger band suggests.
+
+## FINDING — RFQ operator / market operator key compromise (STX)
+
+**Severity: high (STX only). Status: unmitigated as deployed; mitigations
+proposed below.**
+
+The `yguazu-mm-safe` RFQ operator key and the `rfq-sbtc-stx-jing-v2` **market
+operator** are the **same key** (`SPV9K21…`, verified on-chain: the safe's
+`rfq-operator` var and the market's `operator` var decode to the same
+principal). That key therefore holds two powers at once:
+
+1. **Market operator** — can `set-band-enabled false`, `set-mm-whitelist`,
+   `set-min-sbtc-in`, `set-paused`, `set-treasury` on the market.
+2. **Safe RFQ operator** — can drive the safe's `fix-rfq` / `fulfill-rfq`.
+
+Combined with the fact that **clients are permissionless** (anyone may call
+`open-rfq`; there is no client whitelist — only MMs are whitelisted), a single
+compromise of `SPV9K21…` enables a **full drain of the safe's STX balance**:
+
+1. As market operator, `set-band-enabled false`. With the band off, `fix-price`
+   skips the oracle entirely — the `[mid/2, mid*2]` fat-finger checks are all
+   short-circuited. The only remaining caps on `committed-out` are
+   `>= min-stx-out` and the ±20 bps drift-vs-signed-quote band.
+2. As an attacker-controlled **client** (a throwaway EOA), `open-rfq` with
+   **1 sat** (`min-sbtc-in` is currently `u0`) and sign a `quoted-out` equal to
+   the safe's entire STX balance.
+3. As RFQ operator, `fix-rfq` then `fulfill-rfq` through the safe → the safe
+   pays out its **full STX balance** for 1 sat of sBTC.
+
+Why the fat-finger band is not the real bound: the check
+`committed-out <= quoted-out` (client-signed) always holds, band or no band —
+so the safe never pays more than *some client signed for*. The security of the
+STX therefore rests entirely on the client side being **unforgeable and
+honest**, which today it is not (self-client is trivial). The `[mid/2, mid*2]`
+band only bounds loss when it is **on**, and the same key that trades can turn
+it off.
+
+**Scope limits (what still holds):**
+- **STX only.** `fix-rfq` moves nothing (empty allowance) and `fulfill-rfq`
+  carries only `with-stx`; the safe's sBTC inventory is never payable through
+  the RFQ path and can only leave via `sip010-transfer` /
+  `sbtc-initiate-withdrawal`, which `SPV9K21…` cannot call. Keeping value in
+  the safe as **sBTC rather than STX** is materially safer against this vector.
+- **No arbitrary transfer.** The drain is purely through trade mechanics; the
+  operator key still cannot `stx-transfer` out (`u4001`).
+- **Cold-key sever (a race).** `set-rfq-operator` is admin-only, so the cold
+  owner key can rotate the safe's RFQ operator away from a compromised key —
+  but only if it acts before the attacker fires.
+
+**Mitigations (proposed, not yet applied):**
+- **Whitelist clients, managed by a key that is NOT the market operator.**
+  If only approved clients can `open-rfq`, the self-client forge is closed and
+  the drain requires colluding with, or compromising the key of, a real
+  whitelisted client. Critical: the client-whitelist authority must sit on a
+  separate key (cold admin / governance) — if it is operator-gated like
+  `set-mm-whitelist`, the compromised operator simply self-whitelists and the
+  control is void. This is the highest-leverage fix because the client
+  signature is the true price bound.
+- **Separate the band / market-operator authority from the RFQ operator that
+  signs fixes.** If the band kill-switch lives on a different (or colder) key,
+  a compromised trading key cannot disable the band, so even a compromised or
+  colluding client is capped at the `2x` fat-finger edge instead of unbounded.
+- **Keep only working STX inventory in the safe** (bulk STX cold; hold reserve
+  as sBTC, which this vector cannot reach), and **monitor** the public
+  `rfq-band-enabled` and `rfq-fix` events for anomalies, auto-rotating the RFQ
+  operator on a band-off or oversized-fix signal.
+
+With client whitelisting (separate manager) plus band-authority separation, a
+drain would require compromising the RFQ operator **and** corrupting a real
+whitelisted client, and would still be capped at the `2x` band of that
+client's own deposit.
 
 ## Fork test — `verify-yguazu-mm-safe-security.js`
 
