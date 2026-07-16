@@ -1,15 +1,16 @@
-;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-mm-safe-v2
-;; jing-mm-safe ported to the Pyth-free v2 RFQ market (rfq-sbtc-stx-jing-v2):
-;;   - fix-rfq: arity 8 (quoted-out + ref benchmark fields; NO max-premium-bps,
-;;     NO VAAs/Pyth traits) with an EMPTY as-contract? allowance -- v2 fix-price
-;;     moves no funds, so a leaked rfq-operator key cannot leak a uSTX at fix
-;;   - fulfill-rfq: same shape, retargeted; STX allowance = the fixed-stx-out
-;;     already locked on-chain
-;;   - onboard registers against the jing-mm-safe-v2 canonical
+;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-stx-safe
+;; (this source file is jing-mm-safe-v2.clar; the BE deploys it under the name
+;; jing-stx-safe.) STX-side MM desk safe for the sBTC<->STX RFQ, retargeted to
+;; the client-whitelist market rfq-sbtc-stx-jing-v2-2:
+;;   - fix-rfq / fulfill-rfq call into rfq-sbtc-stx-jing-v2-2 (arity 8; EMPTY
+;;     as-contract? allowance at fix; with-stx = fixed-stx-out at fulfill)
+;;   - RFQ is operable ONLY by the rfq-operator, NOT the admin; the admin holds
+;;     a kill-switch (set-rfq-enabled) to halt fix/fulfill instantly
+;;   - onboard registers against the jing-stx-safe canonical (its own singleton)
 ;; Everything else is byte-identical to the deployed jing-mm-safe.
 ;; Deploy: Clarity 5, account 0; fakfun-wallet-core
-;; set-verified-contract('SPV9K21....jing-mm-safe-v2, none) before per-user
-;; onboards. Market rfq-sbtc-stx-jing-v2 must be live first (hard ref).
+;; set-verified-contract('SPV9K21....jing-stx-safe, none) before onboard.
+;; Market rfq-sbtc-stx-jing-v2-2 must be live first (hard ref).
 
 (use-trait gas-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.gas-station-trait.gas-station-trait)
 (use-trait dual-stacking-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.xbtc-sbtc-swap-v2.enroll-trait)
@@ -45,6 +46,7 @@
 (define-constant err-limit-not-hit (err u4025))
 (define-constant err-rfq-not-found (err u4026))
 (define-constant err-rfq-not-fixed (err u4027))
+(define-constant err-rfq-disabled (err u4028))
 (define-constant err-fatal-owner-not-admin (err u9999))
 
 
@@ -1366,17 +1368,28 @@
   )
 )
 
-(define-data-var rfq-operator principal 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22)
+(define-data-var rfq-operator principal tx-sender)
+
+;; Admin kill-switch for the RFQ desk. The admin cannot DRIVE fix/fulfill (see
+;; is-rfq-authorized) but can HALT them instantly -- e.g. if the rfq-operator
+;; hot key is suspected compromised -- without waiting to rotate the operator.
+(define-data-var rfq-enabled bool true)
 
 (define-read-only (get-rfq-operator)
   (var-get rfq-operator)
 )
 
+(define-read-only (get-rfq-enabled)
+  (var-get rfq-enabled)
+)
+
+;; RFQ is operable ONLY by the rfq-operator, NOT the admin. The admin is already
+;; all-powerful via the (timelocked, veto-able) transfer path; letting it also
+;; drive fix/fulfill would give a compromised admin a fast, veto-free STX bleed
+;; that bypasses that timelock. Least privilege: admin governs (owns
+;; set-rfq-operator + set-rfq-enabled), operator operates.
 (define-private (is-rfq-authorized)
-  (or
-    (is-eq contract-caller (var-get rfq-operator))
-    (is-some (map-get? admins contract-caller))
-  )
+  (is-eq contract-caller (var-get rfq-operator))
 )
 
 (define-public (set-rfq-operator (new-operator principal))
@@ -1385,6 +1398,16 @@
     (var-set rfq-operator new-operator)
     (update-activity)
     (print { event: "set-rfq-operator", operator: new-operator })
+    (ok true)
+  )
+)
+
+(define-public (set-rfq-enabled (enabled bool))
+  (begin
+    (try! (is-admin-calling tx-sender))
+    (var-set rfq-enabled enabled)
+    (update-activity)
+    (print { event: "set-rfq-enabled", enabled: enabled })
     (ok true)
   )
 )
@@ -1401,9 +1424,10 @@
   )
   (begin
     (asserts! (is-rfq-authorized) err-unauthorised)
+    (asserts! (var-get rfq-enabled) err-rfq-disabled)
     (try! (as-contract? ()
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2 fix-price
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2 fix-price
         id committed-out quoted-out ref-price ref-timestamp ref-venue
         auth-expiry sig
       ))
@@ -1421,7 +1445,7 @@
   )
   (let (
       (rfq (unwrap!
-        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2
+        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2
           get-rfq id
         )
         err-rfq-not-found
@@ -1429,9 +1453,10 @@
       (stx-out (unwrap! (get fixed-stx-out rfq) err-rfq-not-fixed))
     )
     (asserts! (is-rfq-authorized) err-unauthorised)
+    (asserts! (var-get rfq-enabled) err-rfq-disabled)
     (try! (as-contract? ((with-stx stx-out))
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2 fulfill
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2 fulfill
         id x x-name
       ))
     ))
@@ -1474,7 +1499,7 @@
       (try! (contract-call?
         'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
         register-wallet
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-mm-safe-v2
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-stx-safe
       ))
     ))
     (try! (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
