@@ -1,16 +1,21 @@
-;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-stx-safe
+;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.yguazu-stx-safe
 ;; (this source file is jing-mm-safe-v2.clar; the BE deploys it under the name
-;; jing-stx-safe.) STX-side MM desk safe for the sBTC<->STX RFQ, retargeted to
-;; the client-whitelist market rfq-sbtc-stx-jing-v2-2:
-;;   - fix-rfq / fulfill-rfq call into rfq-sbtc-stx-jing-v2-2 (arity 8; EMPTY
+;; yguazu-stx-safe, and the deploy-name is baked in below -- the onboard
+;; register-wallet self-ref and this header both say yguazu-stx-safe.)
+;; STX-side MM desk safe for the sBTC<->STX RFQ on the two-step-client-
+;; whitelist market rfq-sbtc-stx-jing-v2-3:
+;;   - fix-rfq / fulfill-rfq call into rfq-sbtc-stx-jing-v2-3 (arity 8; EMPTY
 ;;     as-contract? allowance at fix; with-stx = fixed-stx-out at fulfill)
 ;;   - RFQ is operable ONLY by the rfq-operator, NOT the admin; the admin holds
 ;;     a kill-switch (set-rfq-enabled) to halt fix/fulfill instantly
-;;   - onboard registers against the jing-stx-safe canonical (its own singleton)
+;;   - rfq-operator is PRESET to SP3SPS... (BE mnemonic account 3) so the desk
+;;     operates right after onboard; rotation is TIMELOCKED (propose ->
+;;     cooldown -> confirm, admin-only, cancelable)
+;;   - onboard registers against the yguazu-stx-safe canonical (its own singleton)
 ;; Everything else is byte-identical to the deployed jing-mm-safe.
 ;; Deploy: Clarity 5, account 0; fakfun-wallet-core
-;; set-verified-contract('SPV9K21....jing-stx-safe, none) before onboard.
-;; Market rfq-sbtc-stx-jing-v2-2 must be live first (hard ref).
+;; set-verified-contract('SPV9K21....yguazu-stx-safe, none) before onboard.
+;; Market rfq-sbtc-stx-jing-v2-3 must be live first (hard ref).
 
 (use-trait gas-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.gas-station-trait.gas-station-trait)
 (use-trait dual-stacking-trait 'SP2PABAF9FTAJYNFZH93XENAJ8FVY99RRM50D2JG9.xbtc-sbtc-swap-v2.enroll-trait)
@@ -1369,7 +1374,7 @@
   )
 )
 
-(define-data-var rfq-operator principal tx-sender)
+(define-data-var rfq-operator principal 'SP3SPSJDYGHF0ARGV1TNS0HX6JEP7T1J684QY7JVZ)
 
 ;; Operator rotation is timelocked: without it, a compromised admin could
 ;; rotate the operator to its own key and drive fix/fulfill immediately -- a
@@ -1481,7 +1486,7 @@
     (asserts! (var-get rfq-enabled) err-rfq-disabled)
     (try! (as-contract? ()
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2 fix-price
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3 fix-price
         id committed-out quoted-out ref-price ref-timestamp ref-venue
         auth-expiry sig
       ))
@@ -1499,7 +1504,7 @@
   )
   (let (
       (rfq (unwrap!
-        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2
+        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3
           get-rfq id
         )
         err-rfq-not-found
@@ -1510,7 +1515,7 @@
     (asserts! (var-get rfq-enabled) err-rfq-disabled)
     (try! (as-contract? ((with-stx stx-out))
       (try! (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-2 fulfill
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3 fulfill
         id x x-name
       ))
     ))
@@ -1553,7 +1558,7 @@
       (try! (contract-call?
         'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
         register-wallet
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-stx-safe
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.yguazu-stx-safe
       ))
     ))
     (try! (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-wallet-core
