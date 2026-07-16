@@ -1,11 +1,84 @@
-# RFQ markets - current state (2026-07-14)
+# RFQ markets - current state (2026-07-16)
 
-**Ship candidate: `rfq-sbtc-stx-jing-v2.clar`** (native miner-commit oracle,
-1-day window, hardcoded wide fat-finger band, operator kill-switch) settled
-through **`rfq-mm-vault-jing.clar`** (owner/operator STX-float vault).
+**Ship candidate: `rfq-sbtc-stx-jing-v2.clar` deployed as
+`rfq-sbtc-stx-jing-v2-3`** (native miner-commit oracle, 1-day window,
+hardcoded wide fat-finger band, operator kill-switch, TWO-STEP whitelists on
+both sides - see the v2-3 section below) settled through
+**`jing-mm-safe-v2.clar` deployed as `yguazu-stx-safe`** (passkey MM desk
+safe; supersedes the vault path). The never-initialized
+`rfq-sbtc-stx-jing-v2-2` + `jing-stx-safe` pair stays orphaned on-chain.
 `rfq-sbtc-stx-jing-v3.clar` (no oracle at all) stays in the repo as the
 measured alternative. Everything below the "historical design notes" marker
 is the original Pyth-era USDCx design doc, kept for context.
+
+## v2-3: two-step whitelists + the yguazu desk safe (2026-07-16)
+
+The market has two governance keys: the **operator** (V9 deployer for now;
+can be rotated to a multisig via `set-operator`) and the **client-admin** (a
+separate cold key, designated once at `initialize` and self-rotating after
+that - the operator can never touch it). v2-2 already split the roles so a
+compromised operator cannot self-mint a fake client. v2-3 closes the
+remaining collusion: a compromised client-admin whitelisting an attacker
+taker that a compromised rfq-operator then fixes against, bleeding a winning
+MM safe within the band in a single block.
+
+**Market (`rfq-sbtc-stx-jing-v2-3`) delta vs v2-2:**
+
+- `set-client-whitelist` / `set-mm-whitelist` are REMOVED. Adding is
+  two-step: `propose-client-whitelist` (client-admin) / `propose-mm-whitelist`
+  (operator) -> `u144` burn-block cooldown -> `confirm-*-whitelist` (same key
+  that proposes). A pending principal is NOT whitelisted.
+- `cancel-*-whitelist` is a VETO held by BOTH keys (client-admin AND
+  operator) - the cooldown only protects if an honest key can react.
+- `revoke-*-whitelist` (removal) stays INSTANT - the protective direction.
+- `initialize` seeds the genesis whitelists (auditable up front, so they
+  bypass the runtime cooldown): clients friedger
+  `SP3KJBWTS3K562BF5NXWG5JC8W90HEG7WPYH5B97X` + fast-pool rewards
+  `SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP`, and the desk safe
+  `SPV9K21....yguazu-stx-safe` as MM (no bootstrap cooldown for our own desk).
+- New errors: `u2018`/`u2019` (client no-pending / in-cooldown),
+  `u2020`/`u2021` (MM), getters `get-pending-client` / `get-pending-mm`.
+
+**Safe (`yguazu-stx-safe`, source `jing-mm-safe-v2.clar`) delta vs the
+deployed `jing-stx-safe`:**
+
+- `set-rfq-operator` is REMOVED. Rotation is `propose-rfq-operator` (admin)
+  -> cooldown (wallet `cooldown-period` u144, capped at MAX-CONFIG-COOLDOWN)
+  -> `confirm-rfq-operator` (admin); `cancel-rfq-operator` clears. Errors:
+  `u4012` in-cooldown, `u4029` no-pending. Without this, a compromised admin
+  could rotate the operator to its own key and drive fix/fulfill immediately
+  - a veto-free STX bleed bypassing the pending-operations timelock.
+- `rfq-operator` is PRESET to `SP3SPS...` (BE mnemonic account 3), so the
+  desk operates right after onboard; the deployer (V9) holds NO RFQ power.
+- The deploy name is baked into the source (header + the onboard
+  `register-wallet 'SPV9K21....yguazu-stx-safe` self-ref); the BE template is
+  the comment-stripped file with zero transforms.
+- Unchanged: RFQ is operator-only (admin fix -> u4001), instant admin
+  kill-switch `set-rfq-enabled` (u4028), leaked-operator containment.
+
+**Validation:** `simulations/verify-yguazu-stx-safe.js` - **93/93
+(2026-07-16)**, deploys the EXACT faktory-dao template strings on a pinned
+mainnet fork: genesis seeds, full two-step matrices on both whitelists +
+operator rotation (early-confirm, dual-veto cancel, no-pending errors,
+post-cooldown confirms), and the money path driven by the ROTATED operator
+(fix moves 0 uSTX, fulfill deltas exact), kill-switch both ways, instant
+revoke re-blocks opens.
+https://stxer.xyz/simulations/mainnet/598d8318fc9a6808aa4e3f312466fee3
+Simulator caveats are documented in the harness header: the native oracle
+cannot sample synthesized tenures (post-advance fixes run band-OFF, the
+exact degraded-oracle scenario the kill-switch exists for), and advanced
+blocks stamp burn-tenure time, so post-cooldown quotes sign a measured ref.
+
+**Ops flow (faktory-dao BE, pushed c8d99c6):** deploy-contract
+`rfq-sbtc-stx-jing-v2-3` -> confirm -> deploy-contract `yguazu-stx-safe` ->
+init-rfq-v2 `verify-market` -> `init-market {clientAdmin}` (seeds genesis,
+desk is MM-ready) -> set-verified-contract(safe) -> /v2/onboard. Future
+clients: client-admin cold key propose/confirm on-chain. Future MMs:
+init-rfq-v2 `propose-mm` / `confirm-mm` (u144 apart).
+
+**QUEUED (not built):** email + Telegram alerts to Rapha when
+`propose-client-whitelist` (market) or `propose-rfq-operator` (safe) fires -
+the timelock tripwires that make the cooldowns actionable.
 
 ## The price-protection stack (v2, final)
 
@@ -156,6 +229,7 @@ band (results below are from the post-change source):
 | `verify-rfq-mm-vault-jing.js` | **35/35 (2026-07-15)** on the new tuple/arity + registry-at-initialize: init before set-verified dies at inner ERR_NOT_VERIFIED (u5005), 3-arg initialize registers, is-registered reads true; vault-signed fix stolen by an EOA dies at whitelist; operator-only fix/fulfill; owner-only withdrawals; full drain |
 | RV fuzzing (v2) | **500 runs, 4 invariants, 0 failures (2026-07-15)** - escrow conservation x121, next-id-unused x127, operator-not-burn x126, rfq-state-consistent x126; re-run on the post-removal source |
 | `verify-rfq-sbtc-stx-jing-v3.js` | 70/70 (pre-change) - v3 keeps max-premium-bps + the symmetric drift band; suite repointed at buildRfqAuthHashHexV3, not re-run (v3 is shelved) |
+| `verify-yguazu-stx-safe.js` | **93/93 (2026-07-16)** - the v2-3 + yguazu-stx-safe stack, deployed from the exact BE template strings; see the v2-3 section above |
 | `cost-rfq-v2-vs-v3.js` | oracle marginal cost measured; run with `ORDER=v3first` to cancel the shared-core positional artifact |
 
 ## Deploy checklist
