@@ -74,6 +74,12 @@
 (define-constant ERR_NOT_WHITELISTED (err u2015))
 (define-constant ERR_BAD_REFERENCE (err u2016))
 (define-constant ERR_CLIENT_NOT_WHITELISTED (err u2017))
+(define-constant ERR_NO_PENDING_CLIENT (err u2018))
+(define-constant ERR_CLIENT_IN_COOLDOWN (err u2019))
+
+;; Burn blocks (~1 day) between proposing and confirming a client whitelist
+;; ADD. See propose-client-whitelist for the threat this closes.
+(define-constant CLIENT_WHITELIST_COOLDOWN u144)
 
 (define-data-var initialized bool false)
 (define-data-var operator principal tx-sender)
@@ -99,6 +105,8 @@
 
 (define-map whitelisted-mms principal bool)
 (define-map whitelisted-clients principal bool)
+;; client -> burn height it was proposed at (two-step whitelist ADD)
+(define-map pending-clients principal uint)
 
 (define-map rfqs
   uint
@@ -156,6 +164,10 @@
 
 (define-read-only (is-whitelisted-client (client principal))
   (default-to false (map-get? whitelisted-clients client))
+)
+
+(define-read-only (get-pending-client (client principal))
+  (map-get? pending-clients client)
 )
 
 (define-read-only (get-client-admin)
@@ -429,6 +441,11 @@
     (var-set min-sbtc-in min-x)
     (var-set client-admin new-client-admin)
     (var-set initialized true)
+    ;; genesis clients (friedger + the fast-pool rewards address), seeded in
+    ;; the gated one-shot initialize. Auditable up front, so they bypass the
+    ;; two-step cooldown that protects RUNTIME additions.
+    (map-set whitelisted-clients 'SP3KJBWTS3K562BF5NXWG5JC8W90HEG7WPYH5B97X true)
+    (map-set whitelisted-clients 'SP21YTSM60CAY6D011EZVEVNKXVW8FVZE198XEFFP true)
     (try! (contract-call? .jing-core-v2 register canonical))
     (ok true)
   )
@@ -482,18 +499,73 @@
 ;; CLIENT whitelist, gated to the client-admin (NOT the operator). open-rfq is
 ;; permissioned: only whitelisted clients can open an RFQ, so a compromised
 ;; operator cannot self-mint a fake client to weaponize a winning MM safe.
-(define-public (set-client-whitelist
-    (client principal)
-    (whitelisted bool)
+;;
+;; ADDING a client is a two-step with a cooldown: a compromised client-admin
+;; colluding with a compromised rfq-operator could otherwise whitelist an
+;; attacker taker and bleed a winning MM safe within the band in one block.
+;; The cooldown gives the honest parties a window to see the proposal event
+;; and react (either key can cancel; revoke, pause, safe kill-switch).
+;; REMOVING a client is instant -- that is the protective direction.
+(define-public (propose-client-whitelist (client principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
+    (map-set pending-clients client burn-block-height)
+    (print {
+      event: "rfq-client-proposed",
+      client: client,
+      proposed-at: burn-block-height,
+    })
+    (ok true)
   )
+)
+
+;; Canceling a pending add is a VETO, so BOTH keys hold it: the client-admin
+;; (changed its mind) and the operator (spotted a proposal it doesn't trust).
+;; Confirming stays client-admin-only.
+(define-public (cancel-client-whitelist (client principal))
+  (begin
+    (asserts!
+      (or
+        (is-eq tx-sender (var-get client-admin))
+        (is-eq tx-sender (var-get operator))
+      )
+      ERR_NOT_CLIENT_ADMIN
+    )
+    (asserts! (is-some (map-get? pending-clients client)) ERR_NO_PENDING_CLIENT)
+    (map-delete pending-clients client)
+    (print {
+      event: "rfq-client-canceled",
+      client: client,
+    })
+    (ok true)
+  )
+)
+
+(define-public (confirm-client-whitelist (client principal))
+  (let ((proposed-at (unwrap! (map-get? pending-clients client) ERR_NO_PENDING_CLIENT)))
+    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
+    (asserts! (>= burn-block-height (+ proposed-at CLIENT_WHITELIST_COOLDOWN))
+      ERR_CLIENT_IN_COOLDOWN
+    )
+    (map-delete pending-clients client)
+    (print {
+      event: "rfq-client-whitelist",
+      client: client,
+      whitelisted: true,
+    })
+    (ok (map-set whitelisted-clients client true))
+  )
+)
+
+(define-public (revoke-client-whitelist (client principal))
   (begin
     (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
     (print {
       event: "rfq-client-whitelist",
       client: client,
-      whitelisted: whitelisted,
+      whitelisted: false,
     })
-    (ok (map-set whitelisted-clients client whitelisted))
+    (ok (map-set whitelisted-clients client false))
   )
 )
 
