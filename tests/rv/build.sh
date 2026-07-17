@@ -145,6 +145,16 @@ text = text.replace(
     "(default-to false (map-get? whitelisted-mms mm))",
     "(default-to true (map-get? whitelisted-mms mm))"
 )
+# (d2) Same for the CLIENT whitelist (added 2026-07-16, 2-of-2 cosigner flow
+#     as of 5619c26): without the flip open-rfq is unreachable for RV's
+#     random senders (genesis seeds live inside the skipped initialize()),
+#     which would silently turn the escrow-conservation invariant vacuous.
+#     revoke-client-whitelist (map-set false) still blocks, keeping the gate
+#     live; propose/confirm/cancel/rotation paths are fuzzed on top.
+text = text.replace(
+    "(default-to false (map-get? whitelisted-clients client))",
+    "(default-to true (map-get? whitelisted-clients client))"
+)
 # (e) Pin the with-ft allowance asset name to the mock token so
 #     fulfill/reclaim can actually move escrow.
 text = text.replace(
