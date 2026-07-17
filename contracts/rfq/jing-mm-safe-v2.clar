@@ -11,6 +11,12 @@
 ;;   - rfq-operator is PRESET to SP3SPS... (BE mnemonic account 3) so the desk
 ;;     operates right after onboard; rotation is TIMELOCKED (propose ->
 ;;     cooldown -> confirm, admin-only, cancelable)
+;;   - fulfill is SPLIT from fix: fulfill-rfq is gated to a SEPARATE
+;;     fulfill-operator (held outside the BE, e.g. signed from the frontend by
+;;     its owner), so the BE hot key can price/fix but can never move the
+;;     safe's STX out via fulfill. PRESET the fulfill key at deploy like the
+;;     rfq-operator; rotation mirrors the same timelocked pattern and the two
+;;     roles are asserted distinct at every rotation.
 ;;   - onboard registers against the yguazu-stx-safe canonical (its own singleton)
 ;; Everything else is byte-identical to the deployed jing-mm-safe.
 ;; Deploy: Clarity 5, account 0; fakfun-wallet-core
@@ -53,6 +59,7 @@
 (define-constant err-rfq-not-fixed (err u4027))
 (define-constant err-rfq-disabled (err u4028))
 (define-constant err-no-pending-operator (err u4029))
+(define-constant err-same-operator (err u4030))
 (define-constant err-fatal-owner-not-admin (err u9999))
 
 
@@ -1389,6 +1396,23 @@
   none
 )
 
+;; SEPARATE role for fulfill: the rfq-operator (BE hot key) can FIX -- commit
+;; a price -- but only the fulfill-operator can FULFILL, i.e. actually pay the
+;; safe's STX out. Splitting the two means a compromised BE cannot complete a
+;; bleed on its own: fix binds a price, but the STX only moves when the
+;; fulfill key (held by its owner, signing from the frontend) releases it.
+;; PRESET at deploy like the rfq-operator (placeholder until the fulfill key
+;; exists); rotation is admin-driven and timelocked, mirroring rfq-operator.
+(define-data-var fulfill-operator principal 'SP3KBT5RA54JZ4N5JJYRF11QSRFR91GDMRP8VNRK7) ;; 2 operators rfq and fulfill operators configured perhaps at onboard instead so it is byte identical - Rapha MM deploying safe implementation
+
+(define-data-var pending-fulfill-operator
+  (optional {
+    operator: principal,
+    proposed-at: uint,
+  })
+  none
+)
+
 ;; Admin kill-switch for the RFQ desk. The admin cannot DRIVE fix/fulfill (see
 ;; is-rfq-authorized) but can HALT them instantly -- e.g. if the rfq-operator
 ;; hot key is suspected compromised -- without waiting to rotate the operator.
@@ -1400,6 +1424,14 @@
 
 (define-read-only (get-pending-rfq-operator)
   (var-get pending-rfq-operator)
+)
+
+(define-read-only (get-fulfill-operator)
+  (var-get fulfill-operator)
+)
+
+(define-read-only (get-pending-fulfill-operator)
+  (var-get pending-fulfill-operator)
 )
 
 (define-read-only (get-rfq-enabled)
@@ -1414,6 +1446,10 @@
 ;; operates.
 (define-private (is-rfq-authorized)
   (is-eq contract-caller (var-get rfq-operator))
+)
+
+(define-private (is-fulfill-authorized)
+  (is-eq contract-caller (var-get fulfill-operator))
 )
 
 (define-public (propose-rfq-operator (new-operator principal))
@@ -1453,10 +1489,67 @@
     (asserts! (>= burn-block-height (+ (get proposed-at pending) effective-cooldown))
       err-in-cooldown
     )
+    ;; fix and fulfill must stay on distinct keys
+    (asserts! (not (is-eq (get operator pending) (var-get fulfill-operator)))
+      err-same-operator
+    )
     (var-set rfq-operator (get operator pending))
     (var-set pending-rfq-operator none)
     (update-activity)
     (print { event: "confirm-rfq-operator", operator: (get operator pending) })
+    (ok true)
+  )
+)
+
+;; Fulfill-operator rotation mirrors the rfq-operator's timelocked pattern:
+;; instant rotation would let a compromised admin route fulfill to itself and
+;; release the safe's STX for any already-fixed RFQ without a veto window.
+(define-public (propose-fulfill-operator (new-operator principal))
+  (begin
+    (try! (is-admin-calling tx-sender))
+    (var-set pending-fulfill-operator (some {
+      operator: new-operator,
+      proposed-at: burn-block-height,
+    }))
+    (update-activity)
+    (print { event: "propose-fulfill-operator", operator: new-operator })
+    (ok true)
+  )
+)
+
+(define-public (cancel-fulfill-operator)
+  (begin
+    (try! (is-admin-calling tx-sender))
+    (asserts! (is-some (var-get pending-fulfill-operator)) err-no-pending-operator)
+    (var-set pending-fulfill-operator none)
+    (update-activity)
+    (print { event: "cancel-fulfill-operator" })
+    (ok true)
+  )
+)
+
+(define-public (confirm-fulfill-operator)
+  (let (
+      (pending (unwrap! (var-get pending-fulfill-operator) err-no-pending-operator))
+      (wallet-cooldown (get cooldown-period (var-get wallet-config)))
+      (effective-cooldown (if (> wallet-cooldown MAX-CONFIG-COOLDOWN)
+        MAX-CONFIG-COOLDOWN
+        wallet-cooldown
+      ))
+      (fill-operator (get operator pending))
+    )
+    (try! (is-admin-calling tx-sender))
+    (asserts! (>= burn-block-height (+ (get proposed-at pending) effective-cooldown))
+      err-in-cooldown
+    )
+    ;; fix and fulfill must stay on distinct keys
+    (asserts! (not (is-eq fill-operator (var-get rfq-operator)))
+      err-same-operator
+    )
+    (var-set fulfill-operator fill-operator)
+    (var-set pending-fulfill-operator none)
+    (update-activity)
+    (print { event: "confirm-fulfill-operator", operator: fill-operator })
     (ok true)
   )
 )
@@ -1511,7 +1604,8 @@
       ))
       (stx-out (unwrap! (get fixed-stx-out rfq) err-rfq-not-fixed))
     )
-    (asserts! (is-rfq-authorized) err-unauthorised)
+    ;; fulfill-operator ONLY -- the rfq-operator (BE) can fix but not pay out
+    (asserts! (is-fulfill-authorized) err-unauthorised)
     (asserts! (var-get rfq-enabled) err-rfq-disabled)
     (try! (as-contract? ((with-stx stx-out))
       (try! (contract-call?

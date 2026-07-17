@@ -58,6 +58,7 @@
 (define-constant ERR_BAD_COINBASE (err u1021))
 (define-constant ERR_NOT_CLIENT_ADMIN (err u1022))
 (define-constant ERR_SAME_ADMIN (err u1023))
+(define-constant ERR_NOT_CLIENT_COSIGNER (err u1024))
 (define-constant ERR_RFQ_NOT_FOUND (err u2001))
 (define-constant ERR_RFQ_CLOSED (err u2002))
 (define-constant ERR_EXPIRED (err u2003))
@@ -75,13 +76,13 @@
 (define-constant ERR_BAD_REFERENCE (err u2016))
 (define-constant ERR_CLIENT_NOT_WHITELISTED (err u2017))
 (define-constant ERR_NO_PENDING_CLIENT (err u2018))
-(define-constant ERR_CLIENT_IN_COOLDOWN (err u2019))
 (define-constant ERR_NO_PENDING_MM (err u2020))
 (define-constant ERR_MM_IN_COOLDOWN (err u2021))
 
-;; Burn blocks (~1 day) between proposing and confirming a whitelist ADD.
-;; See propose-client-whitelist / propose-mm-whitelist for the threats closed.
-(define-constant CLIENT_WHITELIST_COOLDOWN u144)
+;; Burn blocks (~1 day) between proposing and confirming an MM whitelist ADD.
+;; See propose-mm-whitelist for the threats closed. Client ADDs have no
+;; cooldown: they are a 2-of-2 across client-admin + client-cosigner instead
+;; (see propose-client-whitelist).
 (define-constant MM_WHITELIST_COOLDOWN u144)
 
 (define-data-var initialized bool false)
@@ -95,6 +96,16 @@
 ;; onto a colder key means a compromised operator cannot forge the client side.
 ;; Enforced != operator at initialize and on every rotation (ERR_SAME_ADMIN).
 (define-data-var client-admin principal tx-sender)
+;; SECOND factor for client whitelisting: the client-admin PROPOSES, the
+;; client-cosigner CONFIRMS. Expected to be a passkey-held key (hardware-backed
+;; on a separate device, e.g. a passkey wallet), so whitelisting a client
+;; requires two independent keys in one flow -- this 2-of-2 replaces the time
+;; cooldown that runtime client ADDs previously carried: a compromise of any
+;; single key (operator, client-admin, or cosigner) can no longer whitelist a
+;; client, and onboarding is instant instead of ~24h. Guard alerts still fire
+;; on the propose event. Kept distinct from BOTH the operator and client-admin
+;; at initialize and on every rotation (ERR_SAME_ADMIN).
+(define-data-var client-cosigner principal tx-sender)
 (define-data-var paused bool false)
 
 (define-data-var token-x principal SAINT)
@@ -180,6 +191,10 @@
 
 (define-read-only (get-client-admin)
   (var-get client-admin)
+)
+
+(define-read-only (get-client-cosigner)
+  (var-get client-cosigner)
 )
 
 (define-private (sample-spend
@@ -434,6 +449,7 @@
     (y principal)
     (min-x uint)
     (new-client-admin principal)
+    (new-client-cosigner principal)
   )
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
@@ -442,12 +458,16 @@
     )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     ;; the client-admin MUST be a different key than the operator, so a
-    ;; compromised operator can never also forge/whitelist a client
+    ;; compromised operator can never also forge/whitelist a client; the
+    ;; cosigner MUST differ from both, so client whitelisting is a true 2-of-2
     (asserts! (not (is-eq new-client-admin (var-get operator))) ERR_SAME_ADMIN)
+    (asserts! (not (is-eq new-client-cosigner (var-get operator))) ERR_SAME_ADMIN)
+    (asserts! (not (is-eq new-client-cosigner new-client-admin)) ERR_SAME_ADMIN)
     (var-set token-x x)
     (var-set token-y y)
     (var-set min-sbtc-in min-x)
     (var-set client-admin new-client-admin)
+    (var-set client-cosigner new-client-cosigner)
     (var-set initialized true)
     ;; genesis whitelists, seeded in the gated one-shot initialize: clients
     ;; (friedger + the fast-pool rewards address) and the Yguazu desk safe as
@@ -561,11 +581,14 @@
 ;; permissioned: only whitelisted clients can open an RFQ, so a compromised
 ;; operator cannot self-mint a fake client to weaponize a winning MM safe.
 ;;
-;; ADDING a client is a two-step with a cooldown: a compromised client-admin
-;; colluding with a compromised rfq-operator could otherwise whitelist an
-;; attacker taker and bleed a winning MM safe within the band in one block.
-;; The cooldown gives the honest parties a window to see the proposal event
-;; and react (either key can cancel; revoke, pause, safe kill-switch).
+;; ADDING a client is a 2-of-2 across two independent keys: the client-admin
+;; PROPOSES and the client-cosigner (a passkey-held key on separate hardware)
+;; CONFIRMS. A compromised client-admin colluding with a compromised
+;; rfq-operator could otherwise whitelist an attacker taker and bleed a
+;; winning MM safe within the band in one block -- under the 2-of-2 that now
+;; additionally requires the cosigner passkey, so no cooldown is imposed and
+;; KYB'd clients onboard instantly. The propose event still trips the guard
+;; alerts, and any of the three keys can veto a pending add.
 ;; REMOVING a client is instant -- that is the protective direction.
 (define-public (propose-client-whitelist (client principal))
   (begin
@@ -580,14 +603,16 @@
   )
 )
 
-;; Canceling a pending add is a VETO, so BOTH keys hold it: the client-admin
-;; (changed its mind) and the operator (spotted a proposal it doesn't trust).
-;; Confirming stays client-admin-only.
+;; Canceling a pending add is a VETO, so ALL THREE keys hold it: the
+;; client-admin (changed its mind), the cosigner (refuses to co-sign), and
+;; the operator (spotted a proposal it doesn't trust). Confirming is
+;; cosigner-only -- the second factor.
 (define-public (cancel-client-whitelist (client principal))
   (begin
     (asserts!
       (or
         (is-eq tx-sender (var-get client-admin))
+        (is-eq tx-sender (var-get client-cosigner))
         (is-eq tx-sender (var-get operator))
       )
       ERR_NOT_CLIENT_ADMIN
@@ -602,12 +627,12 @@
   )
 )
 
+;; Second factor: only the cosigner can turn a pending add into a whitelist.
+;; No cooldown -- the 2-of-2 (admin proposed, cosigner confirms) is the gate.
 (define-public (confirm-client-whitelist (client principal))
-  (let ((proposed-at (unwrap! (map-get? pending-clients client) ERR_NO_PENDING_CLIENT)))
-    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
-    (asserts! (>= burn-block-height (+ proposed-at CLIENT_WHITELIST_COOLDOWN))
-      ERR_CLIENT_IN_COOLDOWN
-    )
+  (begin
+    (asserts! (is-some (map-get? pending-clients client)) ERR_NO_PENDING_CLIENT)
+    (asserts! (is-eq tx-sender (var-get client-cosigner)) ERR_NOT_CLIENT_COSIGNER)
     (map-delete pending-clients client)
     (print {
       event: "rfq-client-whitelist",
@@ -618,9 +643,16 @@
   )
 )
 
+;; Removing is protective, so EITHER client-side key can do it instantly.
 (define-public (revoke-client-whitelist (client principal))
   (begin
-    (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
+    (asserts!
+      (or
+        (is-eq tx-sender (var-get client-admin))
+        (is-eq tx-sender (var-get client-cosigner))
+      )
+      ERR_NOT_CLIENT_ADMIN
+    )
     (print {
       event: "rfq-client-whitelist",
       client: client,
@@ -631,16 +663,33 @@
 )
 
 ;; Rotate the client-admin. Only the current client-admin can hand off the
-;; role, and it can never be set to the operator (keeps the two keys distinct).
+;; role, and it can never collapse onto the operator or the cosigner (keeps
+;; the three keys distinct).
 (define-public (set-client-admin (new-client-admin principal))
   (begin
     (asserts! (is-eq tx-sender (var-get client-admin)) ERR_NOT_CLIENT_ADMIN)
     (asserts! (not (is-eq new-client-admin (var-get operator))) ERR_SAME_ADMIN)
+    (asserts! (not (is-eq new-client-admin (var-get client-cosigner))) ERR_SAME_ADMIN)
     (print {
       event: "rfq-client-admin-set",
       client-admin: new-client-admin,
     })
     (ok (var-set client-admin new-client-admin))
+  )
+)
+
+;; Rotate the cosigner (e.g. new passkey device). Cosigner-only handoff,
+;; never onto the operator or the client-admin.
+(define-public (set-client-cosigner (new-client-cosigner principal))
+  (begin
+    (asserts! (is-eq tx-sender (var-get client-cosigner)) ERR_NOT_CLIENT_COSIGNER)
+    (asserts! (not (is-eq new-client-cosigner (var-get operator))) ERR_SAME_ADMIN)
+    (asserts! (not (is-eq new-client-cosigner (var-get client-admin))) ERR_SAME_ADMIN)
+    (print {
+      event: "rfq-client-cosigner-set",
+      client-cosigner: new-client-cosigner,
+    })
+    (ok (var-set client-cosigner new-client-cosigner))
   )
 )
 
