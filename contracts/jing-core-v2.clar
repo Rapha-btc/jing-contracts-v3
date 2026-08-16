@@ -435,6 +435,13 @@
     (y-unfilled uint)
     (x-fee uint)
     (y-fee uint)
+    ;; Taker rebates withheld at deposit time and paid out to the opposite
+    ;; side's filled depositors in this settlement. Reported separately from
+    ;; the fee because the treasury never receives them: they stay inside the
+    ;; pool and raise what the makers are paid. An indexer that reads only
+    ;; x-cleared/y-cleared understates maker proceeds by exactly this amount.
+    (x-rebate uint)
+    (y-rebate uint)
     (x-is-binding bool)
     (token-x principal)
     (token-y principal))
@@ -451,6 +458,7 @@
       x-cleared: x-cleared, y-cleared: y-cleared,
       x-unfilled: x-unfilled, y-unfilled: y-unfilled,
       x-fee: x-fee, y-fee: y-fee,
+      x-rebate: x-rebate, y-rebate: y-rebate,
       binding-side: (if x-is-binding "x" "y"),
     })
     (ok true)))
