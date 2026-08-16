@@ -10,6 +10,22 @@
 
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
+;; Taker rebate. A batch auction has no book to sit on, so nothing rewards the
+;; depositors who escrow early and wait out the window - yet they are the only
+;; reason a `swap` caller can clear immediately. This charges the taker (the
+;; `swap` caller, who deposits and settles in one tx) an extra 20 bps and pays
+;; it to the OPPOSITE side's filled depositors, pro rata. Resting depositors
+;; still pay only FEE_BPS.
+;;
+;; 20 rather than 25: a Bitflow LP earns 25 bps but is filled at whatever the
+;; curve reached, so that yield is payment for impermanent loss. A maker here
+;; fills only inside their own limit and carries none, so 20 bps IL-free is the
+;; better risk-adjusted side of the trade. Matching 25 would price us as though
+;; we were selling the same thing. See README-maker-economics.md.
+;;
+;; Taker therefore pays 30 bps all-in (10 protocol + 20 to makers) against
+;; Bitflow's 50, before slippage - which the auction does not have at all.
+(define-constant TAKER_REBATE_BPS u20)
 (define-constant BPS_PRECISION u10000)
 (define-constant MIN_SHARE_BPS u20)
 
@@ -79,6 +95,13 @@
 (define-data-var caller-token-x-rolled uint u0)
 
 (define-data-var settle-clearing-price uint u0)
+
+;; Rebate parked by `swap` before it settles, denominated in the token the
+;; taker deposited. `swap` is atomic (deposit -> close -> settle in one tx), so
+;; either settlement consumes this or the whole tx reverts and it is never
+;; stranded. Settlement zeroes both on the way out.
+(define-data-var pending-rebate-x uint u0)
+(define-data-var pending-rebate-y uint u0)
 
 (define-map token-y-deposits
   { cycle: uint, depositor: principal }
@@ -630,10 +653,25 @@
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128))
   (deposit-x bool))
-  (begin
-    (try! (if deposit-x
-            (deposit-token-x amount limit-price tx-trait tx-name)
-            (deposit-token-y amount limit-price ty-trait ty-name)))
+  ;; The taker pays TAKER_REBATE_BPS on top of FEE_BPS. It is taken off the
+  ;; deposit here rather than at settlement so the maths stays inside the
+  ;; existing pro-rata machinery: the taker is credited for `net` only, and the
+  ;; withheld slice is handed to the other side's filled depositors below.
+  (let (
+    (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+    (net (- amount rebate))
+  )
+    (asserts! (> net u0) ERR_DEPOSIT_TOO_SMALL)
+    (if deposit-x
+      (begin
+        (and (> rebate u0)
+          (try! (contract-call? tx-trait transfer rebate tx-sender current-contract none)))
+        (var-set pending-rebate-x rebate)
+        (try! (deposit-token-x net limit-price tx-trait tx-name)))
+      (begin
+        (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
+        (var-set pending-rebate-y rebate)
+        (try! (deposit-token-y net limit-price ty-trait ty-name))))
     (try! (close-deposits))
     (settle-with-refresh vaa-x vaa-y pyth-storage pyth-decoder wormhole-core
                          tx-trait tx-name ty-trait ty-name)))
@@ -726,8 +764,16 @@
     (var-set settle-token-x-cleared token-x-clearing)
     (var-set settle-total-token-y total-token-y)
     (var-set settle-total-token-x total-token-x)
-    (var-set settle-token-x-after-fee (- token-x-clearing token-x-fee))
-    (var-set settle-token-y-after-fee (- token-y-clearing token-y-fee))
+    ;; The taker's rebate rides along with the pool it is paid out of: token-x
+    ;; the taker sent is what token-y depositors receive, so adding it here
+    ;; splits it across exactly the makers who filled, in proportion to their
+    ;; fill. Zeroed immediately so a later settlement cannot pay it twice.
+    (var-set settle-token-x-after-fee
+      (+ (- token-x-clearing token-x-fee) (var-get pending-rebate-x)))
+    (var-set settle-token-y-after-fee
+      (+ (- token-y-clearing token-y-fee) (var-get pending-rebate-y)))
+    (var-set pending-rebate-x u0)
+    (var-set pending-rebate-y u0)
     (try! (contract-call? .jing-core log-settlement
             cycle oracle-price oracle-price
             token-x-clearing token-y-clearing
