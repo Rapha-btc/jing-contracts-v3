@@ -186,6 +186,10 @@
   )
 )
 
+;; `vaa` is keeper-supplied oracle data for the market's maker gate, NOT part
+;; of the signed intent: VAAs go stale in minutes, so the keeper attaches the
+;; freshest one at execution time. It cannot influence what was authorized -
+;; only whether the market classifies the deposit against a fresh price.
 (define-public (execute-jing-deposit
     (sig (buff 65))
     (side (string-ascii 128))
@@ -193,6 +197,7 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint)
+    (vaa (buff 8192))
   )
   (let ((msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
       action: "jing-deposit",
@@ -208,12 +213,12 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_SBTC)
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price SBTC_TOKEN
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price vaa SBTC_TOKEN
           ASSET_SBTC
         ))
       ))
       (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))
-        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price vaa
           USDCX_TOKEN ASSET_USDCX
         ))
       ))
