@@ -1,6 +1,3 @@
-(use-trait pyth-storage-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.storage-trait)
-(use-trait pyth-decoder-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.decoder-trait)
-(use-trait wormhole-core-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2.core-trait)
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 
 (define-constant CANCEL_THRESHOLD u42)
@@ -578,12 +575,15 @@
           token-y-received: (var-get caller-token-y-received),
           token-x-rolled: (var-get caller-token-x-rolled) })))
 
+;; The Pyth execution plan is hard-coded rather than taken as trait arguments.
+;; pyth-governance-v3 already validates whatever is passed, so this buys no
+;; extra safety against a malicious caller. It buys independence from what Pyth
+;; changes underneath: nothing a caller supplies can steer which contracts this
+;; market talks to. If Pyth rotates the storage, decoder or wormhole contract,
+;; this market is redeployed deliberately instead of silently following.
 (define-public (settle-with-refresh
   (vaa-x (buff 8192))
   (vaa-y (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
   (begin
@@ -592,15 +592,15 @@
     (try! (contract-call?
       'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
       verify-and-update-price-feeds vaa-x
-      { pyth-storage-contract: pyth-storage,
-        pyth-decoder-contract: pyth-decoder,
-        wormhole-core-contract: wormhole-core }))
+      { pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
+        pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
+        wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4 }))
     (try! (contract-call?
       'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
       verify-and-update-price-feeds vaa-y
-      { pyth-storage-contract: pyth-storage,
-        pyth-decoder-contract: pyth-decoder,
-        wormhole-core-contract: wormhole-core }))
+      { pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
+        pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
+        wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4 }))
     (let (
       (feed-x (unwrap! (contract-call?
         'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
@@ -633,23 +633,16 @@
 (define-public (close-and-settle-with-refresh
   (vaa-x (buff 8192))
   (vaa-y (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
   (begin
     (try! (close-deposits))
-    (settle-with-refresh vaa-x vaa-y pyth-storage pyth-decoder wormhole-core
-                         tx-trait tx-name ty-trait ty-name)))
+    (settle-with-refresh vaa-x vaa-y tx-trait tx-name ty-trait ty-name)))
 
 (define-public (swap
   (amount uint) (limit-price uint)
   (vaa-x (buff 8192))
   (vaa-y (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128))
   (deposit-x bool))
@@ -673,8 +666,7 @@
         (var-set pending-rebate-y rebate)
         (try! (deposit-token-y net limit-price ty-trait ty-name))))
     (try! (close-deposits))
-    (settle-with-refresh vaa-x vaa-y pyth-storage pyth-decoder wormhole-core
-                         tx-trait tx-name ty-trait ty-name)))
+    (settle-with-refresh vaa-x vaa-y tx-trait tx-name ty-trait ty-name)))
 
 (define-public (cancel-cycle)
   (let (

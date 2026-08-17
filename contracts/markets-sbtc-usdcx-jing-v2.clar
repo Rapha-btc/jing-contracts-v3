@@ -1,8 +1,5 @@
 ;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing fork
 
-(use-trait pyth-storage-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.storage-trait)
-(use-trait pyth-decoder-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2.decoder-trait)
-(use-trait wormhole-core-trait 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2.core-trait)
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 
 (define-constant CANCEL_THRESHOLD u42)
@@ -12,6 +9,7 @@
 
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
+(define-constant TAKER_REBATE_BPS u20)
 (define-constant BPS_PRECISION u10000)
 (define-constant MIN_SHARE_BPS u20)
 
@@ -63,6 +61,8 @@
 (define-data-var settle-token-x-cleared uint u0)
 (define-data-var settle-total-token-y uint u0)
 (define-data-var settle-total-token-x uint u0)
+(define-data-var pending-rebate-x uint u0)
+(define-data-var pending-rebate-y uint u0)
 (define-data-var settle-token-x-after-fee uint u0)
 (define-data-var settle-token-y-after-fee uint u0)
 (define-data-var bumped-token-y-principal principal tx-sender)
@@ -244,7 +244,7 @@
         (map-set token-y-deposit-limits tx-sender limit-price)
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) amount) }))
-        (try! (contract-call? .jing-core log-deposit-y
+        (try! (contract-call? .jing-core-v2 log-deposit-y
                 tx-sender amount amount limit-price cycle
                 (some smallest-who) smallest-amount
                 (var-get token-x) tok-y))
@@ -259,7 +259,7 @@
           (map-set token-y-depositor-list cycle
             (unwrap-panic (as-max-len? (append depositors tx-sender) u50)))
           true)
-        (try! (contract-call? .jing-core log-deposit-y
+        (try! (contract-call? .jing-core-v2 log-deposit-y
                 tx-sender (+ existing amount) amount limit-price cycle
                 none u0
                 (var-get token-x) tok-y))
@@ -300,7 +300,7 @@
         (map-set token-x-deposit-limits tx-sender limit-price)
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) amount) }))
-        (try! (contract-call? .jing-core log-deposit-x
+        (try! (contract-call? .jing-core-v2 log-deposit-x
                 tx-sender amount amount limit-price cycle
                 (some smallest-who) smallest-amount
                 tok-x (var-get token-y)))
@@ -315,7 +315,7 @@
           (map-set token-x-depositor-list cycle
             (unwrap-panic (as-max-len? (append depositors tx-sender) u50)))
           true)
-        (try! (contract-call? .jing-core log-deposit-x
+        (try! (contract-call? .jing-core-v2 log-deposit-x
                 tx-sender (+ existing amount) amount limit-price cycle
                 none u0
                 tok-x (var-get token-y)))
@@ -341,7 +341,7 @@
     (map-set token-y-depositor-list cycle (filter not-eq-bumped-token-y (get-token-y-depositors cycle)))
     (map-set cycle-totals cycle
       (merge totals { total-token-y: (- (get total-token-y totals) amount) }))
-    (try! (contract-call? .jing-core log-refund-y
+    (try! (contract-call? .jing-core-v2 log-refund-y
             caller amount cycle (var-get token-x) tok-y))
     (ok amount)))
 
@@ -365,7 +365,7 @@
     (map-set token-x-depositor-list cycle (filter not-eq-bumped-token-x (get-token-x-depositors cycle)))
     (map-set cycle-totals cycle
       (merge totals { total-token-x: (- (get total-token-x totals) amount) }))
-    (try! (contract-call? .jing-core log-refund-x
+    (try! (contract-call? .jing-core-v2 log-refund-x
             caller amount cycle tok-x (var-get token-y)))
     (ok amount)))
 
@@ -376,7 +376,7 @@
     (asserts! (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
               ERR_NOTHING_TO_WITHDRAW)
     (map-set token-y-deposit-limits tx-sender limit-price)
-    (try! (contract-call? .jing-core log-set-limit-y
+    (try! (contract-call? .jing-core-v2 log-set-limit-y
             tx-sender limit-price (var-get token-x) (var-get token-y)))
     (ok true)))
 
@@ -387,7 +387,7 @@
     (asserts! (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
               ERR_NOTHING_TO_WITHDRAW)
     (map-set token-x-deposit-limits tx-sender limit-price)
-    (try! (contract-call? .jing-core log-set-limit-x
+    (try! (contract-call? .jing-core-v2 log-set-limit-x
             tx-sender limit-price (var-get token-x) (var-get token-y)))
     (ok true)))
 
@@ -414,7 +414,7 @@
           (filter not-eq-bumped-token-y (get-token-y-depositors cycle)))
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (- total-token-y amount) }))
-        (try! (contract-call? .jing-core log-small-share-roll-y
+        (try! (contract-call? .jing-core-v2 log-small-share-roll-y
                 depositor cycle amount (var-get token-x) (var-get token-y)))
         (ok true))
       (ok true))))
@@ -442,7 +442,7 @@
           (filter not-eq-bumped-token-x (get-token-x-depositors cycle)))
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (- total-token-x amount) }))
-        (try! (contract-call? .jing-core log-small-share-roll-x
+        (try! (contract-call? .jing-core-v2 log-small-share-roll-x
                 depositor cycle amount (var-get token-x) (var-get token-y)))
         (ok true))
       (ok true))))
@@ -471,7 +471,7 @@
           (filter not-eq-bumped-token-y (get-token-y-depositors cycle)))
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (- (get total-token-y totals) amount) }))
-        (try! (contract-call? .jing-core log-limit-roll-y
+        (try! (contract-call? .jing-core-v2 log-limit-roll-y
                 depositor cycle amount limit clearing (var-get token-x) (var-get token-y)))
         (ok true))
       (ok true))))
@@ -500,7 +500,7 @@
           (filter not-eq-bumped-token-x (get-token-x-depositors cycle)))
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (- (get total-token-x totals) amount) }))
-        (try! (contract-call? .jing-core log-limit-roll-x
+        (try! (contract-call? .jing-core-v2 log-limit-roll-x
                 depositor cycle amount limit clearing (var-get token-x) (var-get token-y)))
         (ok true))
       (ok true))))
@@ -517,7 +517,7 @@
     (map filter-small-token-y-depositor (get-token-y-depositors cycle))
     (map filter-small-token-x-depositor (get-token-x-depositors cycle))
     (var-set deposits-closed-block stacks-block-height)
-    (try! (contract-call? .jing-core log-close-deposits
+    (try! (contract-call? .jing-core-v2 log-close-deposits
             cycle stacks-block-height elapsed (var-get token-x) (var-get token-y)))
     (ok true)))
 
@@ -552,11 +552,14 @@
           token-y-received: (var-get caller-token-y-received),
           token-x-rolled: (var-get caller-token-x-rolled) })))
 
+;; The Pyth execution plan is hard-coded rather than taken as trait arguments.
+;; pyth-governance-v3 already validates whatever is passed, so this buys no
+;; extra safety against a malicious caller. It buys independence from what Pyth
+;; changes underneath: nothing a caller supplies can steer which contracts this
+;; market talks to. If Pyth rotates the storage, decoder or wormhole contract,
+;; this market is redeployed deliberately instead of silently following.
 (define-public (settle-with-refresh
   (vaa (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
   (begin
@@ -565,9 +568,9 @@
     (try! (contract-call?
       'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
       verify-and-update-price-feeds vaa
-      { pyth-storage-contract: pyth-storage,
-        pyth-decoder-contract: pyth-decoder,
-        wormhole-core-contract: wormhole-core }))
+      { pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
+        pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
+        wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4 }))
     (let (
       (feed-data (unwrap! (contract-call?
         'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
@@ -596,32 +599,40 @@
 
 (define-public (close-and-settle-with-refresh
   (vaa (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
   (begin
     (try! (close-deposits))
-    (settle-with-refresh vaa pyth-storage pyth-decoder wormhole-core
-                         tx-trait tx-name ty-trait ty-name)))
+    (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name)))
 
 (define-public (swap
   (amount uint) (limit-price uint)
   (vaa (buff 8192))
-  (pyth-storage <pyth-storage-trait>)
-  (pyth-decoder <pyth-decoder-trait>)
-  (wormhole-core <wormhole-core-trait>)
   (tx-trait <ft-trait>) (tx-name (string-ascii 128))
   (ty-trait <ft-trait>) (ty-name (string-ascii 128))
   (deposit-x bool))
-  (begin
-    (try! (if deposit-x
-            (deposit-token-x amount limit-price tx-trait tx-name)
-            (deposit-token-y amount limit-price ty-trait ty-name)))
+  ;; The taker pays TAKER_REBATE_BPS on top of FEE_BPS. It is taken off the
+  ;; deposit here rather than at settlement so the maths stays inside the
+  ;; existing pro-rata machinery: the taker is credited for `net` only, and the
+  ;; withheld slice is handed to the other side's filled depositors below.
+  (let (
+    (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+    (net (- amount rebate))
+  )
+    (asserts! (> net u0) ERR_DEPOSIT_TOO_SMALL)
+    (if deposit-x
+      (begin
+        (and (> rebate u0)
+          (try! (contract-call? tx-trait transfer rebate tx-sender current-contract none)))
+        (var-set pending-rebate-x rebate)
+        (try! (deposit-token-x net limit-price tx-trait tx-name)))
+      (begin
+        (and (> rebate u0)
+          (try! (contract-call? ty-trait transfer rebate tx-sender current-contract none)))
+        (var-set pending-rebate-y rebate)
+        (try! (deposit-token-y net limit-price ty-trait ty-name))))
     (try! (close-deposits))
-    (settle-with-refresh vaa pyth-storage pyth-decoder wormhole-core
-                         tx-trait tx-name ty-trait ty-name)))
+    (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name)))
 
 (define-public (cancel-cycle)
   (let (
@@ -643,7 +654,7 @@
     (map roll-token-x-depositor (get-token-x-depositors cycle))
     (roll-depositor-lists cycle)
     (advance-cycle)
-    (try! (contract-call? .jing-core log-cancel-cycle
+    (try! (contract-call? .jing-core-v2 log-cancel-cycle
             cycle merged-x merged-y
             (var-get token-x) (var-get token-y)))
     (ok true)))
@@ -680,6 +691,9 @@
       (token-x-fee (/ (* token-x-clearing FEE_BPS) BPS_PRECISION))
       (token-y-unfilled (- total-token-y token-y-clearing))
       (token-x-unfilled (- total-token-x token-x-clearing))
+      ;; Bound here because the vars are zeroed below, before the log call.
+      (rebate-x (var-get pending-rebate-x))
+      (rebate-y (var-get pending-rebate-y))
     )
     (asserts! (and (>= total-token-y (var-get min-token-y-deposit))
                    (>= total-token-x (var-get min-token-x-deposit))) ERR_NOTHING_TO_SETTLE)
@@ -702,13 +716,20 @@
     (var-set settle-token-x-cleared token-x-clearing)
     (var-set settle-total-token-y total-token-y)
     (var-set settle-total-token-x total-token-x)
-    (var-set settle-token-x-after-fee (- token-x-clearing token-x-fee))
-    (var-set settle-token-y-after-fee (- token-y-clearing token-y-fee))
-    (try! (contract-call? .jing-core log-settlement
+    ;; The taker's rebate rides along with the pool it is paid out of: token-x
+    ;; the taker sent is what token-y depositors receive, so adding it here
+    ;; splits it across exactly the makers who filled, in proportion to their
+    ;; fill. Zeroed immediately so a later settlement cannot pay it twice.
+    (var-set settle-token-x-after-fee (+ (- token-x-clearing token-x-fee) rebate-x))
+    (var-set settle-token-y-after-fee (+ (- token-y-clearing token-y-fee) rebate-y))
+    (var-set pending-rebate-x u0)
+    (var-set pending-rebate-y u0)
+    (try! (contract-call? .jing-core-v2 log-settlement
             cycle oracle-price oracle-price
             token-x-clearing token-y-clearing
             token-x-unfilled token-y-unfilled
             token-x-fee token-y-fee
+            rebate-x rebate-y
             token-x-is-binding
             (var-get token-x) (var-get token-y)))
     (ok true))))
@@ -750,7 +771,7 @@
       (begin
         (map-delete token-y-deposit-limits depositor)
         true))
-    (try! (contract-call? .jing-core log-distribute-y-depositor
+    (try! (contract-call? .jing-core-v2 log-distribute-y-depositor
             depositor cycle my-token-x-received my-token-y-cleared my-token-y-unfilled
             (var-get token-x) (var-get token-y)))
     (ok unwrapped)))
@@ -792,7 +813,7 @@
       (begin
         (map-delete token-x-deposit-limits depositor)
         true))
-    (try! (contract-call? .jing-core log-distribute-x-depositor
+    (try! (contract-call? .jing-core-v2 log-distribute-x-depositor
             depositor cycle my-token-y-received my-token-x-cleared my-token-x-unfilled
             (var-get token-x) (var-get token-y)))
     (ok unwrapped)))
@@ -825,7 +846,7 @@
       (try! (as-contract? ((with-ft (contract-of tx-trait) tx-name token-x-dust))
         (try! (contract-call? tx-trait transfer token-x-dust current-contract (var-get treasury) none))))
       true)
-    (try! (contract-call? .jing-core log-sweep-dust
+    (try! (contract-call? .jing-core-v2 log-sweep-dust
             acc-token-x-rol acc-token-y-rol
             token-x-dust token-x-payout-dust token-x-roll-dust
             token-y-dust token-y-payout-dust token-y-roll-dust
@@ -839,7 +860,7 @@
   (feed (buff 32)))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
-    (asserts! (is-eq tx-sender (contract-call? .jing-core get-contract-owner))
+    (asserts! (is-eq tx-sender (contract-call? .jing-core-v2 get-contract-owner))
               ERR_NOT_AUTHORIZED)
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (var-set token-x x)
@@ -848,7 +869,7 @@
     (var-set min-token-y-deposit min-y)
     (var-set oracle-feed feed)
     (var-set initialized true)
-    (try! (contract-call? .jing-core register canonical))
+    (try! (contract-call? .jing-core-v2 register canonical))
     (ok true)))
 
 (define-public (set-treasury (new-treasury principal))
