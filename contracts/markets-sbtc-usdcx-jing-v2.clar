@@ -46,6 +46,10 @@
 (define-constant ERR_LIMIT_REQUIRED (err u1017))
 (define-constant ERR_ALREADY_INITIALIZED (err u1018))
 (define-constant ERR_WRONG_TRAIT (err u1019))
+;; u1020 reserved: ERR_EXPO_MISMATCH on the two-feed sbtc-stx market
+(define-constant ERR_NOTHING_FILLED (err u1021))
+(define-constant ERR_MUST_USE_SWAP (err u1022))
+(define-constant ERR_PARTIAL_FILL (err u1023))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -208,7 +212,99 @@
     (map-delete token-y-depositor-list cycle)
     (map-delete token-x-depositor-list cycle)))
 
-(define-public (deposit-token-y
+;; --- Maker / taker ----------------------------------------------------------
+;;
+;; Role is decided by entry point, not by a stored flag. `swap` is the taker
+;; path: deposit, close and settle in one tx, paying TAKER_REBATE_BPS for the
+;; immediate fill. The public deposit functions are the maker path: they refuse
+;; any deposit that would cross live resting size on the other side, so the
+;; only way to be filled in the same tx is to pay for it. Crossing means both
+;; halves hold at the stored oracle price: the depositor's own limit is live,
+;; AND the opposite side has at least one resting deposit whose limit is live.
+;; Limits follow the settlement filters: y-limits are ceilings (a bid is live
+;; while price <= limit), x-limits are floors (an offer is live while
+;; price >= limit).
+;;
+;; The check reads only the OPPOSITE side. Reading your own side would let you
+;; seed a dust maker deposit and walk real size in for free - for the same
+;; reason the check also applies to top-ups of an existing deposit.
+;;
+;; Classification runs against a FRESH price. Each gated call carries a Pyth
+;; VAA (the platform's frontend supplies it; the depositor only pays gas):
+;; the market refreshes storage, then classifies, and reverts ERR_STALE_PRICE
+;; if what is stored is still older than MAX_STALENESS - so a replayed old
+;; VAA cannot fake freshness. Same window as settlement: the VAA is fetched
+;; at broadcast, so like `swap` the tx must land within MAX_STALENESS of the
+;; publish-time or it reverts and is retried with a fresh one.
+;;
+;; When the opposite side has no resting entries at all, no crossing is
+;; possible at any price: the VAA is ignored (pass 0x) so an empty book
+;; bootstraps - and exits always work - without a live oracle. Cancels never
+;; read the price at all.
+;; The frontend predicts the gate by calling would-take-as-x/-y with the
+;; price from the SAME Hermes payload whose VAA it will attach - never a
+;; stored price, which can disagree with the VAA and mispredict.
+(define-private (fresh-classification-price (vaa (buff 8192)))
+  (begin
+    (try! (contract-call?
+      'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
+      verify-and-update-price-feeds vaa
+      { pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
+        pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
+        wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4 }))
+    (let (
+      (feed-data (unwrap! (contract-call?
+        'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
+        get-price (var-get oracle-feed)) ERR_ZERO_PRICE))
+      (min-freshness (- stacks-block-time MAX_STALENESS))
+    )
+      (asserts! (> (get publish-time feed-data) min-freshness) ERR_STALE_PRICE)
+      (asserts! (> (get price feed-data) 0) ERR_ZERO_PRICE)
+      (ok (to-uint (get price feed-data))))))
+
+;; Resting size only counts as live when it is at least the market minimum.
+;; Fresh deposits always are, but pro-rata roll remainders and small-share
+;; rolls land in the next cycle below min with their limits intact - and if
+;; that dust classified the other side, one live dust entry would block every
+;; maker deposit opposite it while being too small for any FOK swap to clear.
+;; Sub-min dust still settles normally; it is just invisible to the gate.
+(define-private (live-bid-fold
+  (depositor principal) (acc { price: uint, found: bool }))
+  (if (get found acc)
+    acc
+    (let ((amount (get-token-y-deposit (var-get current-cycle) depositor)))
+      (if (and (> amount u0)
+               (>= amount (var-get min-token-y-deposit))
+               (<= (get price acc) (get-token-y-limit depositor)))
+        (merge acc { found: true })
+        acc))))
+
+(define-private (live-offer-fold
+  (depositor principal) (acc { price: uint, found: bool }))
+  (if (get found acc)
+    acc
+    (let ((amount (get-token-x-deposit (var-get current-cycle) depositor)))
+      (if (and (> amount u0)
+               (>= amount (var-get min-token-x-deposit))
+               (>= (get price acc) (get-token-x-limit depositor)))
+        (merge acc { found: true })
+        acc))))
+
+(define-read-only (would-take-as-x (price uint) (limit uint))
+  (and (> price u0)
+       (>= price limit)
+       (get found (fold live-bid-fold
+                        (get-token-y-depositors (var-get current-cycle))
+                        { price: price, found: false }))))
+
+(define-read-only (would-take-as-y (price uint) (limit uint))
+  (and (> price u0)
+       (<= price limit)
+       (get found (fold live-offer-fold
+                        (get-token-x-depositors (var-get current-cycle))
+                        { price: price, found: false }))))
+
+(define-private (deposit-token-y-core
   (amount uint) (limit-price uint)
   (t <ft-trait>) (asset-name (string-ascii 128)))
   (let (
@@ -265,7 +361,19 @@
                 (var-get token-x) tok-y))
         (ok amount)))))
 
-(define-public (deposit-token-x
+(define-public (deposit-token-y
+  (amount uint) (limit-price uint)
+  (vaa (buff 8192))
+  (t <ft-trait>) (asset-name (string-ascii 128)))
+  (begin
+    (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
+      (asserts! (not (would-take-as-y (try! (fresh-classification-price vaa))
+                                      limit-price))
+                ERR_MUST_USE_SWAP)
+      true)
+    (deposit-token-y-core amount limit-price t asset-name)))
+
+(define-private (deposit-token-x-core
   (amount uint) (limit-price uint)
   (t <ft-trait>) (asset-name (string-ascii 128)))
   (let (
@@ -321,6 +429,18 @@
                 tok-x (var-get token-y)))
         (ok amount)))))
 
+(define-public (deposit-token-x
+  (amount uint) (limit-price uint)
+  (vaa (buff 8192))
+  (t <ft-trait>) (asset-name (string-ascii 128)))
+  (begin
+    (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
+      (asserts! (not (would-take-as-x (try! (fresh-classification-price vaa))
+                                      limit-price))
+                ERR_MUST_USE_SWAP)
+      true)
+    (deposit-token-x-core amount limit-price t asset-name)))
+
 (define-public (cancel-token-y-deposit
   (t <ft-trait>) (asset-name (string-ascii 128)))
   (let (
@@ -369,23 +489,36 @@
             caller amount cycle tok-x (var-get token-y)))
     (ok amount)))
 
-(define-public (set-token-y-limit (limit-price uint))
+;; Same gate as the deposits: without it, a depositor could enter with a dead
+;; limit (passing the maker gate) and then retarget the limit into the live
+;; range - a crossing position built without ever touching `swap`.
+(define-public (set-token-y-limit (limit-price uint) (vaa (buff 8192)))
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
               ERR_NOTHING_TO_WITHDRAW)
+    (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
+      (asserts! (not (would-take-as-y (try! (fresh-classification-price vaa))
+                                      limit-price))
+                ERR_MUST_USE_SWAP)
+      true)
     (map-set token-y-deposit-limits tx-sender limit-price)
     (try! (contract-call? .jing-core-v2 log-set-limit-y
             tx-sender limit-price (var-get token-x) (var-get token-y)))
     (ok true)))
 
-(define-public (set-token-x-limit (limit-price uint))
+(define-public (set-token-x-limit (limit-price uint) (vaa (buff 8192)))
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
               ERR_NOTHING_TO_WITHDRAW)
+    (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
+      (asserts! (not (would-take-as-x (try! (fresh-classification-price vaa))
+                                      limit-price))
+                ERR_MUST_USE_SWAP)
+      true)
     (map-set token-x-deposit-limits tx-sender limit-price)
     (try! (contract-call? .jing-core-v2 log-set-limit-x
             tx-sender limit-price (var-get token-x) (var-get token-y)))
@@ -625,14 +758,32 @@
         (and (> rebate u0)
           (try! (contract-call? tx-trait transfer rebate tx-sender current-contract none)))
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x net limit-price tx-trait tx-name)))
+        (try! (deposit-token-x-core net limit-price tx-trait tx-name)))
       (begin
         (and (> rebate u0)
           (try! (contract-call? ty-trait transfer rebate tx-sender current-contract none)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y net limit-price ty-trait ty-name))))
+        (try! (deposit-token-y-core net limit-price ty-trait ty-name))))
     (try! (close-deposits))
-    (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name)))
+    ;; Fill-or-kill. The 20 bps buys full immediate execution, so a swap that
+    ;; would fill nothing (limit rolled out, nothing live resting) or only
+    ;; partially (rolled remainder would rest as an unwanted maker position,
+    ;; with the rebate overpaid on the unfilled part) reverts instead. Swap is
+    ;; atomic, so the parked rebate unwinds with it rather than being gifted
+    ;; to the other side. A taker who wants to rest the remainder swaps the
+    ;; absorbable size, then maker-deposits the rest in a second tx.
+    (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
+      (asserts! (> (if deposit-x
+                     (get token-y-received result)
+                     (get token-x-received result))
+                   u0)
+                ERR_NOTHING_FILLED)
+      (asserts! (is-eq (if deposit-x
+                         (get token-x-rolled result)
+                         (get token-y-rolled result))
+                       u0)
+                ERR_PARTIAL_FILL)
+      (ok result))))
 
 (define-public (cancel-cycle)
   (let (
