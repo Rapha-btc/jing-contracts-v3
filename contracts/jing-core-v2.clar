@@ -463,6 +463,64 @@
     })
     (ok true)))
 
+;; RFQ event stream, mirrored verbatim from the deployed mainnet jing-core-v2
+;; so the local rfq-* contracts resolve against the same interface.
+(define-public (log-rfq-open
+    (rfq-id uint)
+    (client principal)
+    (x-in uint)
+    (min-y-out uint)
+    (expiry uint)
+    (token-x principal)
+    (token-y principal))
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "rfq-open",
+      market: contract-caller,
+      token-x: token-x, token-y: token-y,
+      rfq-id: rfq-id, client: client,
+      x-in: x-in, min-y-out: min-y-out, expiry: expiry,
+    })
+    (ok true)))
+
+(define-public (log-rfq-fill
+    (rfq-id uint)
+    (client principal)
+    (mm principal)
+    (x-in uint)
+    (y-out uint)
+    (y-fee uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal))
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "rfq-fill",
+      market: contract-caller,
+      token-x: token-x, token-y: token-y,
+      rfq-id: rfq-id, client: client, mm: mm,
+      x-in: x-in, y-out: y-out, y-fee: y-fee, price: price,
+    })
+    (ok true)))
+
+(define-public (log-rfq-cancel
+    (rfq-id uint)
+    (client principal)
+    (x-in uint)
+    (token-x principal)
+    (token-y principal))
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "rfq-cancel",
+      market: contract-caller,
+      token-x: token-x, token-y: token-y,
+      rfq-id: rfq-id, client: client, x-in: x-in,
+    })
+    (ok true)))
+
 (define-public (log-distribute-x-depositor
     (depositor principal)
     (cycle uint)
