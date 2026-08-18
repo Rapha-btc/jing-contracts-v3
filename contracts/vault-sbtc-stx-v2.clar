@@ -239,6 +239,66 @@
   )
 )
 
+;; Taker path into the Jing market: the market's `swap` is fill-or-kill, so
+;; this either clears the vault's full `amount` inside `limit-price` in one tx
+;; or reverts whole. The market charges TAKER_REBATE_BPS out of `amount`
+;; (rebate plus net deposit sum to exactly `amount`), so the asset allowance
+;; below is the total outlay. As with execute-jing-deposit, `vaa` is
+;; keeper-supplied oracle freshness, not part of the signed intent.
+(define-public (execute-jing-swap
+    (sig (buff 65))
+    (side (string-ascii 128))
+    (amount uint)
+    (limit-price uint)
+    (auth-id uint)
+    (expiry uint)
+    (vaa (buff 8192))
+  )
+  (let ((msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+      action: "jing-swap",
+      side: side,
+      amount: amount,
+      limit-price: limit-price,
+      auth-id: auth-id,
+      expiry: expiry,
+    })))
+    (asserts! (> limit-price u0) ERR_INVALID_PRICE)
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
+      ERR_INVALID_SIDE
+    )
+    (try! (verify-and-consume msg-hash sig expiry))
+    (let ((result (if (is-eq side ASSET_WSTX)
+        (try! (as-contract? ((with-stx amount))
+          (try! (contract-call? JING-MARKET swap amount limit-price vaa
+            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX false
+          ))
+        ))
+        (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
+          (try! (contract-call? JING-MARKET swap amount limit-price vaa
+            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX true
+          ))
+        ))
+      )))
+      (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-MARKET
+        (if (is-eq side ASSET_WSTX)
+          WSTX_TOKEN
+          SBTC_TOKEN
+        )
+        (if (is-eq side ASSET_WSTX)
+          SBTC_TOKEN
+          WSTX_TOKEN
+        )
+        amount limit-price
+        (if (is-eq side ASSET_WSTX)
+          (get token-x-received result)
+          (get token-y-received result)
+        )
+      ))
+      (ok msg-hash)
+    )
+  )
+)
+
 (define-public (execute-bitflow-swap
     (sig (buff 65))
     (side (string-ascii 128))

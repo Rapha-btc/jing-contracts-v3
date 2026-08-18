@@ -187,6 +187,38 @@
     })
     (ok true)))
 
+;; Taker execution on a Jing market (the market's fill-or-kill `swap`). Same
+;; equity accounting as a bitflow swap - assets leave and return in one tx -
+;; with its own event name so indexers can split venue flow.
+(define-public (log-jing-swap
+    (msg-hash (buff 32))
+    (market principal)
+    (token-in principal)
+    (token-out principal)
+    (amount uint)
+    (limit-price uint)
+    (out uint))
+
+  (begin
+    (try! (check-not-paused))
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (debit token-in contract-caller amount)
+    (credit token-out contract-caller out)
+    (print {
+      event: "vault-jing-swap",
+      vault: contract-caller,
+      market: market,
+      msg-hash: msg-hash,
+      token-in: token-in,
+      token-out: token-out,
+      amount: amount,
+      limit-price: limit-price,
+      out: out,
+      equity-in: (get-token-equity token-in contract-caller),
+      equity-out: (get-token-equity token-out contract-caller),
+    })
+    (ok true)))
+
 (define-public (log-bitflow-swap
     (msg-hash (buff 32))
     (token-in principal)
