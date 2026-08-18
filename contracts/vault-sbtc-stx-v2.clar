@@ -9,7 +9,7 @@
 (define-constant WSTX_TOKEN 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 
 (define-constant JING-MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v2)
-(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v2)
+(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v3)
 (define-constant JING-VAULT-AUTH 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth)
 
 (define-constant XYK_CORE 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2)
@@ -237,16 +237,17 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
       (try! (as-contract? ((with-stx (+ amount PYTH_FEE_BUDGET)))
-        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price vaa WSTX_TOKEN
-          ASSET_WSTX
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price vaa
+          WSTX_TOKEN ASSET_WSTX
         ))
       ))
-      (try! (as-contract? (
+      (try! (as-contract?
+        (
           (with-ft SBTC_TOKEN ASSET_SBTC amount)
           (with-stx PYTH_FEE_BUDGET)
         )
-        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price vaa SBTC_TOKEN
-          ASSET_SBTC
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price vaa
+          SBTC_TOKEN ASSET_SBTC
         ))
       ))
     )
@@ -295,16 +296,17 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (let ((result (if (is-eq side ASSET_WSTX)
         (try! (as-contract? ((with-stx (+ amount PYTH_FEE_BUDGET)))
-          (try! (contract-call? JING-MARKET swap amount limit-price vaa
-            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX false
+          (try! (contract-call? JING-MARKET swap amount limit-price vaa SBTC_TOKEN
+            ASSET_SBTC WSTX_TOKEN ASSET_WSTX false
           ))
         ))
-        (try! (as-contract? (
+        (try! (as-contract?
+          (
             (with-ft SBTC_TOKEN ASSET_SBTC amount)
             (with-stx PYTH_FEE_BUDGET)
           )
-          (try! (contract-call? JING-MARKET swap amount limit-price vaa
-            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX true
+          (try! (contract-call? JING-MARKET swap amount limit-price vaa SBTC_TOKEN
+            ASSET_SBTC WSTX_TOKEN ASSET_WSTX true
           ))
         ))
       )))
@@ -321,8 +323,7 @@
         (if (is-eq side ASSET_WSTX)
           (get token-x-received result)
           (get token-y-received result)
-        )
-      ))
+        )))
       (ok msg-hash)
     )
   )
@@ -350,17 +351,17 @@
     (vaa (buff 8192))
   )
   (let (
-    (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
-      action: "jing-reprice",
-      side: side,
-      amount: amount,
-      limit-price: limit-price,
-      auth-id: auth-id,
-      expiry: expiry,
-    }))
-    (cycle (contract-call? JING-MARKET get-current-cycle))
-    (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
-  )
+      (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+        action: "jing-reprice",
+        side: side,
+        amount: amount,
+        limit-price: limit-price,
+        auth-id: auth-id,
+        expiry: expiry,
+      }))
+      (cycle (contract-call? JING-MARKET get-current-cycle))
+      (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+    )
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
       ERR_INVALID_SIDE
@@ -381,7 +382,8 @@
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
           ))
         ))
-        (try! (as-contract? (
+        (try! (as-contract?
+          (
             (with-ft SBTC_TOKEN ASSET_SBTC rebate)
             (with-stx PYTH_FEE_BUDGET)
           )
@@ -390,10 +392,13 @@
           ))
         ))
       )))
-      (if (> (if (is-eq side ASSET_WSTX)
-               (get token-x-received result)
-               (get token-y-received result)
-             ) u0)
+      (if (>
+          (if (is-eq side ASSET_WSTX)
+            (get token-x-received result)
+            (get token-y-received result)
+          )
+          u0
+        )
         (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-MARKET
           (if (is-eq side ASSET_WSTX)
             WSTX_TOKEN
@@ -407,8 +412,7 @@
           (if (is-eq side ASSET_WSTX)
             (get token-x-received result)
             (get token-y-received result)
-          )
-        ))
+          )))
         true
       )
       (ok msg-hash)
