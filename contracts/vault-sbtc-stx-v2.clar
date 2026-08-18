@@ -39,6 +39,17 @@
 (define-constant TAKER_REBATE_BPS u20)
 (define-constant BPS_PRECISION u10000)
 
+;; Budget for Pyth's oracle update fee. Every market entry point that
+;; carries a VAA routes through pyth-oracle-v4 verify-and-update-price-feeds,
+;; which pulls a per-updated-feed STX fee from tx-sender - the vault, inside
+;; as-contract?. Without an explicit with-stx allowance the fee transfer
+;; aborts the whole call whenever the vault is the first to submit its VAA
+;; (the fee is zero only when the feeds were already refreshed). Current
+;; mainnet fee is 1 uSTX per feed (2 feeds on this market); u10 leaves
+;; governance headroom. The vault must hold at least this much free STX for
+;; the jing-deposit / jing-swap / crossing-reprice paths to work.
+(define-constant PYTH_FEE_BUDGET u10)
+
 (define-constant DEFAULT_PUBKEY 0x000000000000000000000000000000000000000000000000000000000000000000)
 
 (define-data-var owner-pubkey (buff 33) DEFAULT_PUBKEY)
@@ -225,12 +236,15 @@
     )
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
-      (try! (as-contract? ((with-stx amount))
+      (try! (as-contract? ((with-stx (+ amount PYTH_FEE_BUDGET)))
         (try! (contract-call? JING-MARKET deposit-token-y amount limit-price vaa WSTX_TOKEN
           ASSET_WSTX
         ))
       ))
-      (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
+      (try! (as-contract? (
+          (with-ft SBTC_TOKEN ASSET_SBTC amount)
+          (with-stx PYTH_FEE_BUDGET)
+        )
         (try! (contract-call? JING-MARKET deposit-token-x amount limit-price vaa SBTC_TOKEN
           ASSET_SBTC
         ))
@@ -280,12 +294,15 @@
     )
     (try! (verify-and-consume msg-hash sig expiry))
     (let ((result (if (is-eq side ASSET_WSTX)
-        (try! (as-contract? ((with-stx amount))
+        (try! (as-contract? ((with-stx (+ amount PYTH_FEE_BUDGET)))
           (try! (contract-call? JING-MARKET swap amount limit-price vaa
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX false
           ))
         ))
-        (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
+        (try! (as-contract? (
+            (with-ft SBTC_TOKEN ASSET_SBTC amount)
+            (with-stx PYTH_FEE_BUDGET)
+          )
           (try! (contract-call? JING-MARKET swap amount limit-price vaa
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX true
           ))
@@ -359,12 +376,15 @@
     )
     (try! (verify-and-consume msg-hash sig expiry))
     (let ((result (if (is-eq side ASSET_WSTX)
-        (try! (as-contract? ((with-stx rebate))
+        (try! (as-contract? ((with-stx (+ rebate PYTH_FEE_BUDGET)))
           (try! (contract-call? JING-MARKET reprice-or-swap-token-y limit-price vaa
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
           ))
         ))
-        (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC rebate))
+        (try! (as-contract? (
+            (with-ft SBTC_TOKEN ASSET_SBTC rebate)
+            (with-stx PYTH_FEE_BUDGET)
+          )
           (try! (contract-call? JING-MARKET reprice-or-swap-token-x limit-price vaa
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
           ))
