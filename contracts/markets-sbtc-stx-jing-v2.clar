@@ -552,6 +552,83 @@
             tx-sender limit-price (var-get token-x) (var-get token-y)))
     (ok true)))
 
+;; --- Reprice with take-through -----------------------------------------------
+;;
+;; set-token-*-limit refuses a limit that crosses live resting size
+;; (ERR_MUST_USE_SWAP): a maker must not become a taker for free. These are the
+;; paid versions of the same move. If the new limit does NOT cross (or nothing
+;; live rests opposite), they are exactly set-token-*-limit: the limit moves
+;; and the deposit keeps resting. If it DOES cross, the caller's whole resting
+;; deposit turns taker on the spot with `swap`'s economics: TAKER_REBATE_BPS
+;; is charged on the resting amount (transferred fresh, on top of what already
+;; rests, so the resting size itself is what settles), the cycle closes and
+;; settles in this tx, and the fill is all-or-nothing - the caller must clear
+;; 100% or the whole tx reverts, reprice included, and the old limit stands.
+;; The same VAA drives classification and settlement, so the price that says
+;; "you cross" is the price the fill happens at.
+
+(define-public (reprice-or-swap-token-y
+  (limit-price uint)
+  (vaa (buff 8192))
+  (tx-trait <ft-trait>) (tx-name (string-ascii 128))
+  (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
+  (let (
+    (cycle (var-get current-cycle))
+    (amount (get-token-y-deposit cycle tx-sender))
+  )
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
+    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
+    (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
+    (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
+    (map-set token-y-deposit-limits tx-sender limit-price)
+    (try! (contract-call? .jing-core-v2 log-set-limit-y
+            tx-sender limit-price (var-get token-x) (var-get token-y)))
+    (if (and (> (len (get-token-x-depositors cycle)) u0)
+             (would-take-as-y (try! (fresh-classification-price vaa)) limit-price))
+      (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
+        (and (> rebate u0)
+          (try! (stx-transfer? rebate tx-sender current-contract)))
+        (var-set pending-rebate-y rebate)
+        (try! (close-deposits))
+        (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
+          (asserts! (> (get token-x-received result) u0) ERR_NOTHING_FILLED)
+          (asserts! (is-eq (get token-y-rolled result) u0) ERR_PARTIAL_FILL)
+          (ok result)))
+      (ok { token-x-received: u0, token-y-rolled: u0,
+            token-y-received: u0, token-x-rolled: u0 }))))
+
+(define-public (reprice-or-swap-token-x
+  (limit-price uint)
+  (vaa (buff 8192))
+  (tx-trait <ft-trait>) (tx-name (string-ascii 128))
+  (ty-trait <ft-trait>) (ty-name (string-ascii 128)))
+  (let (
+    (cycle (var-get current-cycle))
+    (amount (get-token-x-deposit cycle tx-sender))
+  )
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
+    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
+    (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
+    (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
+    (map-set token-x-deposit-limits tx-sender limit-price)
+    (try! (contract-call? .jing-core-v2 log-set-limit-x
+            tx-sender limit-price (var-get token-x) (var-get token-y)))
+    (if (and (> (len (get-token-y-depositors cycle)) u0)
+             (would-take-as-x (try! (fresh-classification-price vaa)) limit-price))
+      (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
+        (and (> rebate u0)
+          (try! (contract-call? tx-trait transfer rebate tx-sender current-contract none)))
+        (var-set pending-rebate-x rebate)
+        (try! (close-deposits))
+        (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
+          (asserts! (> (get token-y-received result) u0) ERR_NOTHING_FILLED)
+          (asserts! (is-eq (get token-x-rolled result) u0) ERR_PARTIAL_FILL)
+          (ok result)))
+      (ok { token-x-received: u0, token-y-rolled: u0,
+            token-y-received: u0, token-x-rolled: u0 }))))
+
 (define-private (filter-small-token-y-depositor (depositor principal))
   (let (
     (cycle (var-get current-cycle))
