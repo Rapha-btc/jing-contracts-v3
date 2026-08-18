@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   Cl,
@@ -143,6 +144,16 @@ function setupMarket() {
   ).toBeOk(Cl.bool(true));
 }
 
+// jing-vault-auth's build-intent-hash binds `vault: contract-caller` (the
+// M2 fix), so calling the read-only from a wallet produces a WALLET-bound
+// hash the vault can never verify. Rebuild the SIP-018 hash in TypeScript
+// with the vault principal bound explicitly (same approach as the v2 suite).
+const SIP018_MSG_PREFIX = "534950303138";
+
+function sha256hex(hex: string): string {
+  return createHash("sha256").update(Buffer.from(hex, "hex")).digest("hex");
+}
+
 function buildIntentHash(details: {
   action: string;
   side: string;
@@ -151,11 +162,13 @@ function buildIntentHash(details: {
   authId: number;
   expiry: number;
 }): string {
-  const r = simnet.callReadOnlyFn(
-    VAULT_AUTH,
-    "build-intent-hash",
-    [
+  const domain = cvToJSON(
+    simnet.callReadOnlyFn(VAULT_AUTH, "get-domain-hash", [], deployer).result,
+  ).value.replace(/^0x/, "");
+  const inner = sha256hex(
+    Cl.serialize(
       Cl.tuple({
+        vault: Cl.principal(`${deployer}.${VAULT}`),
         action: Cl.stringAscii(details.action),
         side: Cl.stringAscii(details.side),
         amount: Cl.uint(details.amount),
@@ -163,10 +176,9 @@ function buildIntentHash(details: {
         "auth-id": Cl.uint(details.authId),
         expiry: Cl.uint(details.expiry),
       }),
-    ],
-    deployer,
+    ),
   );
-  return cvToJSON(r.result).value.replace(/^0x/, "");
+  return sha256hex(SIP018_MSG_PREFIX + domain + inner);
 }
 
 function signRsv(messageHash: string, privateKey: string): string {
@@ -470,6 +482,7 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx", function () {
   it("execute-jing-deposit (STX): valid signature → market deposit; replay rejected", function () {
     setupVault();
     setupMarket();
+    pub(VAULT, "set-keeper", [Cl.some(Cl.principal(wallet3))], deployer);
     pub(VAULT, "deposit-stx", [Cl.uint(STX_500)], deployer);
 
     const intent = {
@@ -501,6 +514,7 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx", function () {
   it("execute-jing-deposit (sBTC): valid signature → market deposit", function () {
     setupVault();
     setupMarket();
+    pub(VAULT, "set-keeper", [Cl.some(Cl.principal(wallet3))], deployer);
     fundSbtc(deployer, SBTC_10K);
     pub(VAULT, "deposit-sbtc", [Cl.uint(SBTC_10K)], deployer);
 
@@ -534,6 +548,7 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx", function () {
   it("execute-jing-deposit: ERR_INVALID_SIGNATURE when signed by wrong key", function () {
     setupVault();
     setupMarket();
+    pub(VAULT, "set-keeper", [Cl.some(Cl.principal(wallet3))], deployer);
     pub(VAULT, "deposit-stx", [Cl.uint(STX_500)], deployer);
 
     const intent = {
@@ -599,16 +614,19 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx", function () {
   it("execute-jing-deposit: ERR_EXPIRED when expiry < current stacks-block-height", function () {
     setupVault();
     setupMarket();
+    pub(VAULT, "set-keeper", [Cl.some(Cl.principal(wallet3))], deployer);
     pub(VAULT, "deposit-stx", [Cl.uint(STX_500)], deployer);
 
-    const currentHeight = Number(simnet.blockHeight ?? simnet.burnBlockHeight);
+    // Expiry is measured against burn-block-height (wall-clock-stable
+    // windows, part of the verify-and-consume hardening). expiry = 1 is in
+    // the past for any live burn height; expiry = 0 means no expiry.
     const intent = {
       action: "jing-deposit",
       side: ASSET_WSTX,
       amount: STX_100,
       limitPrice: 5_000_000_000_000,
       authId: 500,
-      expiry: currentHeight,
+      expiry: 1,
     };
     const msgHash = buildIntentHash(intent);
     const sig = signRsv(msgHash, DEPLOYER_PRIVKEY);

@@ -18,6 +18,14 @@ contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4"
 [[project.requirements]]
 contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4"
 
+# Named explicitly now that the markets hard-code the execution plan instead of
+# accepting it as trait arguments.
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4"
+
 [[project.requirements]]
 contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2"
 
@@ -91,8 +99,18 @@ path = "contracts/markets-sbtc-stx-jing.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.markets-sbtc-stx-jing-v2]
+path = "contracts/markets-sbtc-stx-jing-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.markets-sbtc-usdcx-jing]
 path = "contracts/markets-sbtc-usdcx-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-usdcx-jing-v2]
+path = "contracts/markets-sbtc-usdcx-jing-v2.clar"
 clarity_version = 5
 epoch = "3.4"
 
@@ -147,7 +165,12 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.jing-core-v2]
-path = "contracts/rfq/deploying/jing-core-v2.clar"
+path = "contracts/jing-core-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v3]
+path = "contracts/jing-core-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 

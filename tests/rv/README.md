@@ -4,13 +4,68 @@
 tx sequences against the production contract source (with a small set
 of mocks) and asserts state invariants after every step.
 
-## Status: working, both markets pass 500-run sweeps clean
+## Status: working, all targets pass 500-run sweeps clean
 
 ```
-markets-sbtc-usdcx-jing  -- 500 runs, 13 invariants, 0 failures
-markets-sbtc-stx-jing    -- 500 runs, 13 invariants, 0 failures
-rfq-sbtc-stx-jing-v2     -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
-rfq-sbtc-stx-jing-v3     -- 500 runs,  4 invariants, 0 failures
+markets-sbtc-usdcx-jing     -- 500 runs, 13 invariants, 0 failures
+markets-sbtc-stx-jing       -- 500 runs, 13 invariants, 0 failures
+markets-sbtc-stx-jing-v2    -- 500 runs, 14 invariants, 0 failures (2026-08-18)
+vault-sbtc-stx-v2           -- 500 runs,  3 invariants, 0 failures (2026-08-18)
+rfq-sbtc-stx-jing-v2        -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
+rfq-sbtc-stx-jing-v3        -- 500 runs,  4 invariants, 0 failures
+```
+
+### v2 targets (maker/taker split), added 2026-08-18
+
+`markets-sbtc-stx-jing-v2` reuses the 13 v1 invariants plus a 14th,
+`invariant-pending-rebates-zero-at-rest`: the `pending-rebate-{x,y}`
+scratch vars are set only inside the atomic taker paths (swap /
+reprice-or-swap crossing branch) and reset by execute-settlement, so no
+committed state may ever leave a nonzero pending rebate behind.
+
+**Fuzz relaxation (build.sh section 2c):** the maker gate and
+reprice-or-swap call `fresh-classification-price` on a hard-coded Pyth
+plan; RV's random vaa buffers can never pass wormhole verification, which
+would freeze the book one-sided (every deposit into a non-empty opposite
+book reverts) and starve the lifecycle. The build replaces
+`(try! (fresh-classification-price vaa))` with a fixed sane BTC/STX cross
+(u32000000000000, ~0.32 STX/sat x 1e8) so classification stays REAL
+against random limits: both gate outcomes and both reprice branches are
+reachable. The crossing branches still revert at settle-with-refresh
+(its own Pyth path is untouched), so settle stays out of RV scope exactly
+as documented for v1. Same relaxation family as the rfq-v2 fuzz build.
+
+Real movement in the 500-run sweep (successful state mutations):
+`reprice-or-swap-token-x` x60 / `-y` x20 (the new v2 surface),
+`deposit-token-x` x44 / `-y` x31, `close-deposits` x51, `cancel-cycle`
+x50, `set-token-x-limit` x59 / `-y` x13, `cancel-token-y-deposit` x23,
+operator setters ~20. The 14 invariants checked 25-45 times each on that
+moving state, zero failures. (`settle*`/`swap`/`close-and-settle*` x0:
+Pyth-gated, out of scope. `cancel-token-x-deposit` had 0 successes in
+this seed run — covered deterministically by the clarinet suite.)
+
+`vault-sbtc-stx-v2` reuses the 3 structural vault invariants
+(initialized-monotonic, replay-map-monotonic, balance-ok); 154-174 checks
+each, zero failures. Build rewrites the vault's ABSOLUTE
+`'SPV9K21....{markets-sbtc-stx-jing-v2, jing-core-v2, jing-vault-auth}`
+refs to local mocks (build.sh section 2a — MUST run before the generic
+`.jing-core*` / `.markets-*` replaces, whose patterns are substrings and
+would corrupt the names). The v2 manifests point the `mock-jing-core` /
+`mock-jing-market` contract NAMES at v2 mock FILES:
+`mock-jing-core-v2.clar` (regenerated from the local core source, now
+`jing-core-v3.clar` — the v2 market calls log-* fns the v1 core lacks) and `mock-jing-market-v2.clar`
+(vaa-carrying deposit/set-limit signatures, reprice/swap returning the
+result tuple, `get-taker-rebate-bps` = u20 so the v2 vault's initialize
+rebate assert passes).
+
+Run:
+
+```bash
+bash tests/rv/build.sh markets-sbtc-stx-jing-v2
+npx rv . markets-sbtc-stx-jing-v2 invariant --runs=500
+
+bash tests/rv/build.sh vault-sbtc-stx-v2
+npx rv . vault-sbtc-stx-v2 invariant --runs=500
 ```
 
 rfq-v3 notes: same relaxations as v2 minus the fixed native mid (v3 has no

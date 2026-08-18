@@ -1,0 +1,75 @@
+# RV-only manifest for fuzzing vault-sbtc-stx-v2.
+#
+# The v2 vault hardcodes ABSOLUTE mainnet principals for its jing stack
+# (markets-sbtc-stx-jing-v2, jing-core-v2, jing-vault-auth) plus the same
+# sBTC/wstx/xyk/DLMM refs as v1. The build rewrites all of them to local
+# mocks (tests/rv/build.sh section 2b). The mock-jing-market NAME points
+# at the mock-jing-market-v2.clar FILE (v2 signatures: vaa on deposits and
+# set-limits, reprice-or-swap + swap returning the result tuple, and
+# get-taker-rebate-bps = u20 so the v2 initialize rebate assert passes).
+#
+# Run:
+#   bash tests/rv/build.sh vault-sbtc-stx-v2
+#   npx rv . vault-sbtc-stx-v2 invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-vault-stx-v2"
+description = "RV-only manifest for fuzzing vault-sbtc-stx-v2"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Order matters: traits, mocks, then SUT.
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-vault-auth]
+path = "tests/rv/mock-jing-vault-auth.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-market]
+path = "tests/rv/mock-jing-market-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-pool]
+path = "tests/rv/mock-dlmm-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-router]
+path = "tests/rv/mock-dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-pool]
+path = "tests/rv/mock-xyk-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-core]
+path = "tests/rv/mock-xyk-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.vault-sbtc-stx-v2]
+path = "tests/rv/.build/vault-sbtc-stx-v2.clar"
+clarity_version = 5
+epoch = "3.4"

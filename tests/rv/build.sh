@@ -30,6 +30,8 @@ mkdir -p "$OUT"
 declare -A SUTS=(
   ["markets-sbtc-usdcx-jing"]="contracts/markets-sbtc-usdcx-jing.clar"
   ["markets-sbtc-stx-jing"]="contracts/markets-sbtc-stx-jing.clar"
+  ["markets-sbtc-stx-jing-v2"]="contracts/markets-sbtc-stx-jing-v2.clar"
+  ["vault-sbtc-stx-v2"]="contracts/vault-sbtc-stx-v2.clar"
   ["jing-core"]="contracts/jing-core.clar"
   ["vault-sbtc-usdcx"]="contracts/vault-sbtc-usdcx.clar"
   ["vault-sbtc-stx"]="contracts/vault-sbtc-stx.clar"
@@ -71,10 +73,56 @@ text = text.replace(
     "(use-trait ft-trait .sip-010-trait.sip-010-trait)"
 )
 
+# 2a. v2 vault ABSOLUTE mainnet refs. MUST run before BOTH the generic
+#     `.jing-core*` replaces below (whose `.jing-core-v2` pattern is a
+#     substring of the absolute principal and would corrupt it first) and
+#     the generic `.markets-sbtc-*-jing` replaces in section 6 (which
+#     would corrupt the `-v2` contract names to `...mock-jing-market-v2`).
+#     The v2 per-target manifests point the mock-jing-market /
+#     mock-jing-core contract NAMES at the *-v2.clar mock FILES, so these
+#     rewrites keep the same local names as the v1 builds.
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v2",
+    ".mock-jing-market"
+)
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v2",
+    ".mock-jing-market"
+)
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v3",
+    ".mock-jing-core"
+)
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v2",
+    ".mock-jing-core"
+)
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth",
+    ".mock-jing-vault-auth"
+)
+
 # 2. Local mock-jing-core. The v2-specific replace MUST run before the
 #    generic one, or `.jing-core-v2` would corrupt to `.mock-jing-core-v2`.
+text = text.replace(".jing-core-v3", ".mock-jing-core")
 text = text.replace(".jing-core-v2", ".mock-jing-core")
 text = text.replace(".jing-core", ".mock-jing-core")
+
+# 2c. markets-v2 fuzz relaxation (no-op elsewhere): fixed classification
+#     mid in place of the Pyth verify-and-read. RV's random vaa buffers
+#     can never pass wormhole verification, so without this the maker
+#     gate and reprice-or-swap would make every deposit into a non-empty
+#     opposite book revert, freezing the book one-sided and starving the
+#     lifecycle invariants. A fixed sane BTC/STX cross (~0.32 STX/sat,
+#     1e8-scaled) keeps classification REAL against random limits: both
+#     gate outcomes (pass and ERR_MUST_USE_SWAP) and both reprice
+#     branches stay reachable. The crossing branches still revert at
+#     settle-with-refresh (its own Pyth path is untouched), so settle
+#     remains out of RV scope exactly as documented for v1.
+text = text.replace(
+    "(try! (fresh-classification-price vaa))",
+    "u32000000000000"
+)
 
 # RFQ-v2-only fuzz relaxations (no-ops for every other contract). See the
 # header of tests/rv/rfq-sbtc-stx-jing-v2.invariants.clar for the rationale.

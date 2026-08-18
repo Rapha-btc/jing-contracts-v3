@@ -295,6 +295,68 @@ root `README.md` Coverage matrix.
   clears" companion would need to drive a known oracle-cleared price
   and put the vault's limit on the wrong side of it.
 
+## v2 pair (markets-sbtc-stx-jing-v2 + vault-sbtc-stx-v2) — self-verifying harnesses
+
+Coverage for the maker/taker-split v2 stack, added 2026-08-18. Both are
+verify-style harnesses (deploy, run, pull results, assert every step's
+result code) in the rfq-harness mold. Both deploy under a THROWAWAY
+deployer so reruns never collide with live SPV9K21 contracts.
+
+| Harness | Result | What it proves |
+|---|---|---|
+| `verify-markets-sbtc-stx-jing-v2.js` | [✓ 22/22](https://stxer.xyz/simulations/mainnet/db6849b2028477335de3bab5bb960bf3) | Registry init on a fresh jing-core-v2 · `get-taker-rebate-bps` = u20 · maker gate (`u1022` on crossing deposit AND on `set-token-x-limit` retarget) · `reprice-or-swap-token-x`: plain retarget (zero tuple, limit map updated), guards (`u1017`/`u1008`), crossing conversion FOK with exact maker payout (resting − fee + rebate = 2002 sats on a 2k offer) and rebate pulled FRESH from the repricer's wallet · oversize crossing → `u1023` with the limit retarget UNWOUND · third-party taker `swap` FOK against the rolled book. |
+| `verify-vault-sbtc-stx-v2.js` | [✓ 29/29](https://stxer.xyz/simulations/mainnet/e0bfd3e6c8db29e4be26c0c1ef86872b) | Full v2 stack (core + vault-auth + market + vault, vault's absolute refs repointed to the throwaway) · initialize rebate-parity gate: ok vs real market, `u6023` vs a `TAKER_REBATE_BPS u21` twin · signed jing-deposit + replay (`u6003`) · `cancel-jing-sbtc` under the EMPTY `as-contract? ()` allowance with exact refund · jing-reprice plain + `u6022` amount mismatch · **jing-swap FOK paying Pyth's oracle fee out of `PYTH_FEE_BUDGET`** (the vault is first to refresh the feeds, so the fee is nonzero — regression for the bug below) · bitflow xyk swap real fill · DLMM path (pool empty on current forks → accepts the pool-side `u2003`). |
+
+### v2 clarinet suites (mainnet-remote-data vitest)
+
+| Suite | Result | Notes |
+|---|---|---|
+| `tests/markets-sbtc-stx-jing-v2.test.ts` | 27/27 | Maker-gate truth table + top-ups + set-limit gates, full reprice-or-swap coverage (plain / guards / crossing FOK / oversize u1023 / **rebate-rounds-to-zero dust crossing** — the documented PC-unvetoable edge), Hermes swap trio on the production contract, cancel-after-roll regression ported from v1, cycle clock + same-depositor parity. Multi-step VAA tests run against a **staleness-patched twin** deployed at test time (`MAX_STALENESS u80 -> u1000000000`): each simnet call mines a block (+30s), and fork-tip lag gives a real VAA an unpredictable ~3-call budget, so gate matrices on the production constant were structurally flaky. The freshness gate itself stays proven by the production-contract swap trio + the settle-refresh sims. |
+| `tests/vault-sbtc-stx-v2.test.ts` | 41/41 | Runtime-deploys the vault with its three `'SPV9K21...` refs rewritten to the local deployer. All v1 cases ported + v2 surface: jing-swap (both sides, Hermes), jing-reprice (plain / crossing / u6022 / u6006 / replay), initialize `u6023` via a rebate-patched twin, both EMPTY-allowance cancels with balance assertions, TS-side SIP-018 hash builder with explicit vault binding (parity-asserted against the on-chain builder), hash distinctness across all 5 action strings, **and the Pyth-fee regression test that found the allowance bug below**. |
+| `tests/vault-sbtc-stx.test.ts` (v1) | 22/22 | Repaired 2026-08-18: the suite predated the M2 vault-binding in `build-intent-hash` (hash helper produced wallet-bound hashes -> u6002), the verify-and-consume sender gate (wallet3 submissions -> u6001; now registered as keeper first), and the burn-block-height expiry switch. Test-only fixes, no contract changes. |
+
+### Findings from the v2 harness work (2026-08-18)
+
+1. **Pyth-fee allowance bug in both v2 vaults (found by the clarinet suite,
+   fixed same day).** Every v2 market entry point that carries a VAA routes
+   through `pyth-oracle-v4 verify-and-update-price-feeds`, which pulls a
+   per-updated-feed STX fee from `tx-sender` — the vault, inside
+   `as-contract?`. The original allowances (`with-ft amount` / `with-stx
+   amount`) had no headroom for it, so any `execute-jing-deposit` /
+   `execute-jing-swap` / crossing `execute-jing-reprice` where the vault was
+   FIRST to submit its VAA aborted on allowance violation (err u128 / u0 /
+   Pyth's u3001 depending on side and balances). It stayed hidden whenever
+   the feeds were already refreshed (fee = 0). Fix: `PYTH_FEE_BUDGET u10`
+   added to each affected allowance (`+ amount` on the native-STX side).
+   The usdcx vault additionally needs a few uSTX topped up by plain
+   transfer, since it has no deposit-stx.
+
+2. **The v2 stack CANNOT register against the live jing-core-v2.** The local
+   `jing-core-v2.clar` has the 14-param `log-settlement` (x-rebate/y-rebate
+   added for the maker/taker split); the DEPLOYED core has the 12-param
+   version. Deploying `markets-sbtc-stx-jing-v2` at SPV9K21 fails analysis
+   with `expecting 12 arguments, got 14`
+   ([evidence session](https://stxer.xyz/simulations/mainnet/145d6eafc7eb1d49e18b5bfb33e11f1a)).
+   **RESOLVED in source (same day): `contracts/jing-core-v3.clar` created
+   (identical content, deploys under the new name); both v2 markets'
+   relative refs and both v2 vaults' `JING-CORE` constants repointed to
+   `jing-core-v3`. All suites + harnesses re-verified green on the v3
+   stack. The old `contracts/jing-core-v2.clar` remains for the rfq/safe
+   contracts that reference the DEPLOYED core.**
+
+3. **`swap` FOK is caller-scoped — and tops up your own maker position.**
+   The settlement result tuple is built from `caller-token-*` vars, so a
+   dead maker resting on the same side does NOT break third-party takers.
+   But a taker who IS the resting same-side maker has their deposit merged
+   and their limit overwritten live: the FOK then applies to the WHOLE
+   merged position (observed as `u1023` in the harness until the taker
+   became a third principal). Correct semantics, worth knowing for MM ops.
+
+4. **Unfilled maker size rolls forward as LIVE resting liquidity.** A
+   partially-consumed live bid re-rests in the next cycle at its old limit;
+   "oversize" taker scenarios must exceed rolled + fresh size, not just
+   fresh size.
+
 ## Recent security-relevant contract changes
 
 ### M2: vault-binding in SIP-018 intent hashes

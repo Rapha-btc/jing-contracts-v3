@@ -1,0 +1,71 @@
+# RV-only manifest for fuzzing markets-sbtc-stx-jing-v2 (maker/taker split).
+#
+# Same shape as Clarinet-markets-sbtc-stx-jing.toml with two v2 deltas:
+#   - mock-jing-core NAME points at the mock-jing-core-v2.clar FILE
+#     (generated from jing-core-v2.clar; the v2 market calls log-* fns the
+#     v1 core does not have).
+#   - The fuzz build replaces the maker gate's fresh-classification-price
+#     with a fixed BTC/STX mid so two-sided books are reachable under
+#     random vaa buffers (see tests/rv/build.sh section 2c). settle/swap
+#     still revert at the untouched Pyth settle path, same scope as v1.
+#
+# Run:
+#   bash tests/rv/build.sh markets-sbtc-stx-jing-v2
+#   npx rv . markets-sbtc-stx-jing-v2 invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-stx-v2"
+description = "RV-only manifest for fuzzing markets-sbtc-stx-jing-v2"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# Pyth contracts hardcoded in the v2 settle/swap execution plan. RV won't
+# reach a successful settle (random vaa fails wormhole verification) but
+# the contract must type-check.
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3"
+
+[[project.requirements]]
+contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4"
+
+[repl.remote_data]
+enabled = true
+api_url = 'https://api.hiro.so'
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Order matters for the simnet deploy plan: traits, then mocks, then SUT.
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v2]
+path = "tests/rv/.build/markets-sbtc-stx-jing-v2.clar"
+clarity_version = 5
+epoch = "3.4"
