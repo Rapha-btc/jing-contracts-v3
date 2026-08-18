@@ -10,6 +10,13 @@
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
 (define-constant TAKER_REBATE_BPS u20)
+
+;; Exposed so integrating vaults can assert their mirrored rebate constant
+;; matches at initialize time, refusing to register against a market whose
+;; taker economics drifted from their template.
+(define-read-only (get-taker-rebate-bps)
+  TAKER_REBATE_BPS
+)
 (define-constant BPS_PRECISION u10000)
 (define-constant MIN_SHARE_BPS u20)
 

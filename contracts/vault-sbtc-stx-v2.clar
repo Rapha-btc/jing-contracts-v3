@@ -30,6 +30,14 @@
 (define-constant ERR_INVALID_PRICE (err u6013))
 (define-constant ERR_ALREADY_INITIALIZED (err u6020))
 (define-constant ERR_PUBKEY_NOT_SET (err u6021))
+(define-constant ERR_AMOUNT_MISMATCH (err u6022))
+(define-constant ERR_REBATE_MISMATCH (err u6023))
+
+;; Mirror of the market's taker economics, used only to size the allowance
+;; for execute-jing-reprice: the reprice's crossing path pulls exactly this
+;; rebate from the vault, nothing else.
+(define-constant TAKER_REBATE_BPS u20)
+(define-constant BPS_PRECISION u10000)
 
 (define-constant DEFAULT_PUBKEY 0x000000000000000000000000000000000000000000000000000000000000000000)
 
@@ -71,6 +79,10 @@
 (define-public (initialize (canonical principal))
   (begin
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+    (asserts!
+      (is-eq (contract-call? JING-MARKET get-taker-rebate-bps) TAKER_REBATE_BPS)
+      ERR_REBATE_MISMATCH
+    )
     (var-set initialized true)
     (try! (contract-call? JING-CORE register canonical))
     (ok true)
@@ -162,7 +174,7 @@
       )
       ERR_NOT_OWNER
     )
-    (try! (as-contract? ((with-all-assets-unsafe))
+    (try! (as-contract? ()
       (try! (contract-call? JING-MARKET cancel-token-y-deposit WSTX_TOKEN ASSET_WSTX))
     ))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET WSTX_TOKEN))
@@ -179,7 +191,7 @@
       )
       ERR_NOT_OWNER
     )
-    (try! (as-contract? ((with-all-assets-unsafe))
+    (try! (as-contract? ()
       (try! (contract-call? JING-MARKET cancel-token-x-deposit SBTC_TOKEN ASSET_SBTC))
     ))
     (try! (contract-call? JING-CORE log-cancel JING-MARKET SBTC_TOKEN))
@@ -294,6 +306,91 @@
           (get token-y-received result)
         )
       ))
+      (ok msg-hash)
+    )
+  )
+)
+
+;; Reprice the vault's RESTING Jing position; if the new limit crosses live
+;; resting size, the market turns it taker on the spot (fill-or-kill, the
+;; whole tx reverts on anything short of a 100% fill). The signed intent's
+;; `amount` must equal the vault's current resting deposit on `side` - so a
+;; keeper cannot execute a stale intent after the position grew or was partly
+;; rolled; the owner re-signs against the new size instead. The allowance is
+;; exactly the taker rebate: that is all the crossing path may pull from the
+;; vault (the resting size itself already sits on the market). The plain
+;; reprice path moves no assets at all. Equity is logged only when the swap
+;; actually happened, debiting resting size plus rebate - the vault's true
+;; total outlay for the conversion, since the resting deposit was never
+;; debited on the way in.
+(define-public (execute-jing-reprice
+    (sig (buff 65))
+    (side (string-ascii 128))
+    (amount uint)
+    (limit-price uint)
+    (auth-id uint)
+    (expiry uint)
+    (vaa (buff 8192))
+  )
+  (let (
+    (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
+      action: "jing-reprice",
+      side: side,
+      amount: amount,
+      limit-price: limit-price,
+      auth-id: auth-id,
+      expiry: expiry,
+    }))
+    (cycle (contract-call? JING-MARKET get-current-cycle))
+    (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+  )
+    (asserts! (> limit-price u0) ERR_INVALID_PRICE)
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
+      ERR_INVALID_SIDE
+    )
+    (asserts! (> amount u0) ERR_NO_FUNDS)
+    (asserts!
+      (is-eq amount
+        (if (is-eq side ASSET_WSTX)
+          (contract-call? JING-MARKET get-token-y-deposit cycle current-contract)
+          (contract-call? JING-MARKET get-token-x-deposit cycle current-contract)
+        ))
+      ERR_AMOUNT_MISMATCH
+    )
+    (try! (verify-and-consume msg-hash sig expiry))
+    (let ((result (if (is-eq side ASSET_WSTX)
+        (try! (as-contract? ((with-stx rebate))
+          (try! (contract-call? JING-MARKET reprice-or-swap-token-y limit-price vaa
+            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
+          ))
+        ))
+        (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC rebate))
+          (try! (contract-call? JING-MARKET reprice-or-swap-token-x limit-price vaa
+            SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
+          ))
+        ))
+      )))
+      (if (> (if (is-eq side ASSET_WSTX)
+               (get token-x-received result)
+               (get token-y-received result)
+             ) u0)
+        (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-MARKET
+          (if (is-eq side ASSET_WSTX)
+            WSTX_TOKEN
+            SBTC_TOKEN
+          )
+          (if (is-eq side ASSET_WSTX)
+            SBTC_TOKEN
+            WSTX_TOKEN
+          )
+          (+ amount rebate) limit-price
+          (if (is-eq side ASSET_WSTX)
+            (get token-x-received result)
+            (get token-y-received result)
+          )
+        ))
+        true
+      )
       (ok msg-hash)
     )
   )

@@ -23,6 +23,13 @@
 ;; Taker therefore pays 30 bps all-in (10 protocol + 20 to makers) against
 ;; Bitflow's 50, before slippage - which the auction does not have at all.
 (define-constant TAKER_REBATE_BPS u20)
+
+;; Exposed so integrating vaults can assert their mirrored rebate constant
+;; matches at initialize time, refusing to register against a market whose
+;; taker economics drifted from their template.
+(define-read-only (get-taker-rebate-bps)
+  TAKER_REBATE_BPS
+)
 (define-constant BPS_PRECISION u10000)
 (define-constant MIN_SHARE_BPS u20)
 
