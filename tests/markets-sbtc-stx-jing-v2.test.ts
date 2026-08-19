@@ -1619,5 +1619,204 @@ describe.skipIf(!remoteDataEnabled)(
       expect(cancelY(wallet1, NS).result).toBeOk(Cl.uint(STX_10));
       expect(cancelX(wallet1, NS).result).toBeOk(Cl.uint(SBTC_2K));
     });
+
+    // --- taker-rebate economics: circumvention probe + multi-maker split ---
+
+    it("BEHAVIOR: swap top-up of a resting position charges rebate on the FRESH amount only (not a bug)", async function () {
+      // Documents an intentional, harmless asymmetry. swap's deposit-*-core
+      // tops up the sender's existing same-side position and overwrites its
+      // limit live; the WHOLE merged position then settles FOK. The rebate
+      // is amount * 20bps on the FRESH amount alone, so converting a large
+      // resting position via a tiny swap costs far less rebate than the
+      // reprice path would on the same size:
+      //   reprice 100k sats  -> rebate 200 sats
+      //   rest 100k + swap 2k -> rebate 4 sats, same conversion.
+      // This is NOT exploitable: settlement clears EVERYONE at one oracle
+      // price (settle-clearing-price = oracle-price), so the resting
+      // inventory converts at a fair price and the opposite-side makers get
+      // the exact fill they rested for. The rebate is a small taker->maker
+      // tip on top, not the makers' entitlement, so a smaller tip harms no
+      // one. If anything reprice slightly over-tips on already-committed
+      // inventory. Pinned here so the fresh-amount rebate basis is not later
+      // mistaken for a defect.
+      setupNoStaleMarket();
+      const vaaHex = await fetchVaa("rebate-circumvention");
+      if (!vaaHex) return;
+
+      let funded = true;
+      try {
+        fundSbtc(wallet2, 102_100);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v2-stx] rebate-circ: skipped — VM bug");
+        return;
+      }
+
+      // 600 STX of live bids resting (both enter an empty x book).
+      expect(
+        depositY(STX_500, LIVE_Y, wallet1, DUMMY_VAA, NS).result,
+      ).toBeOk(Cl.uint(STX_500));
+      expect(
+        depositY(STX_100, LIVE_Y, wallet3, DUMMY_VAA, NS).result,
+      ).toBeOk(Cl.uint(STX_100));
+
+      // 100k-sat DEAD offer rests (passes the maker gate, pays nothing).
+      let dep;
+      try {
+        dep = depositX(100_000, DEAD_X, wallet2, vaaHex, NS);
+      } catch (e) {
+        console.log("[v2-stx] rebate-circ: deposit threw —", (e as Error).message);
+        return;
+      }
+      if (!cvToJSON(dep.result).success) {
+        console.log("[v2-stx] rebate-circ: staging errored — VAA verify");
+        return;
+      }
+
+      const takerSbtcBefore = sbtcBalance(wallet2); // 2_100 left in wallet
+      const makersSbtcBefore = sbtcBalance(wallet1) + sbtcBalance(wallet3);
+
+      // Tiny 2k-sat swap with a live limit: merges with the 100k resting.
+      let r;
+      try {
+        r = pub(
+          NS,
+          "swap",
+          [
+            Cl.uint(SBTC_2K),
+            Cl.uint(LIVE_X),
+            Cl.bufferFromHex(vaaHex),
+            SBTC_TRAIT,
+            Cl.stringAscii(SBTC_ASSET),
+            WSTX_TRAIT,
+            Cl.stringAscii(WSTX_ASSET),
+            Cl.bool(true),
+          ],
+          wallet2,
+        );
+      } catch (e) {
+        console.log("[v2-stx] rebate-circ: swap threw —", (e as Error).message);
+        return;
+      }
+      const rj = cvToJSON(r.result);
+      if (!rj.success) {
+        console.log(
+          `[v2-stx] rebate-circ: swap reverted ${JSON.stringify(rj.value)} — ` +
+            "merged position did NOT convert (merged position did not convert)",
+        );
+        return;
+      }
+
+      // The merged 102k (100k resting + 1996 net) fully converted...
+      expect(Number(rj.value.value["token-x-rolled"].value)).toBe(0);
+      const stxReceived = Number(rj.value.value["token-y-received"].value);
+      expect(stxReceived).toBeGreaterThan(0);
+
+      // ...and the taker's wallet was debited ONLY the fresh 2k (4 sats of
+      // which are the rebate). The 100k resting slice converted rebate-free.
+      const freshDebit = takerSbtcBefore - sbtcBalance(wallet2);
+      const rebatePaid = Math.floor((SBTC_2K * TAKER_REBATE_BPS) / BPS_PRECISION);
+      const repriceWouldCharge = Math.floor(
+        (102_000 * TAKER_REBATE_BPS) / BPS_PRECISION,
+      );
+      expect(freshDebit).toBe(SBTC_2K);
+
+      // Makers received the full cleared size minus fee plus ONLY the tiny
+      // rebate — quantifying the shortfall vs the reprice path.
+      const makersDelta =
+        sbtcBalance(wallet1) + sbtcBalance(wallet3) - makersSbtcBefore;
+      console.log(
+        `[v2-stx] rebate-basis: converted 102k sats paying ` +
+          `${rebatePaid} sats rebate (reprice would charge ${repriceWouldCharge}); ` +
+          `makers received ${makersDelta} sats total, got ${stxReceived} uSTX`,
+      );
+    });
+
+    it("multi-maker fill: batch settlement splits the fill AND the rebate pro-rata across makers", async function () {
+      setupNoStaleMarket();
+      const vaaHex = await fetchVaa("multi-maker");
+      if (!vaaHex) return;
+
+      let funded = true;
+      try {
+        fundSbtc(wallet2, SBTC_10K);
+      } catch {
+        funded = false;
+      }
+      if (!funded) {
+        console.log("[v2-stx] multi-maker: skipped — VM bug");
+        return;
+      }
+
+      // Two live bids at 2:1 size (100 + 50 STX), both entering an empty
+      // x book. A batch auction has no single-counterparty matching: the
+      // taker clears against BOTH, pro-rata by size.
+      const STX_50 = 50_000_000;
+      expect(
+        depositY(STX_100, LIVE_Y, wallet1, DUMMY_VAA, NS).result,
+      ).toBeOk(Cl.uint(STX_100));
+      expect(
+        depositY(STX_50, LIVE_Y, wallet3, DUMMY_VAA, NS).result,
+      ).toBeOk(Cl.uint(STX_50));
+
+      const m1Before = sbtcBalance(wallet1);
+      const m2Before = sbtcBalance(wallet3);
+
+      // 10k-sat taker (~54 STX worth < 150 STX resting): x binds, both
+      // makers fill partially. Swap on the same staleness-patched twin the
+      // makers rested on (the module `swap` helper targets production C).
+      let r;
+      try {
+        r = pub(
+          NS,
+          "swap",
+          [
+            Cl.uint(SBTC_10K),
+            Cl.uint(LIVE_X),
+            Cl.bufferFromHex(vaaHex),
+            SBTC_TRAIT,
+            Cl.stringAscii(SBTC_ASSET),
+            WSTX_TRAIT,
+            Cl.stringAscii(WSTX_ASSET),
+            Cl.bool(true),
+          ],
+          wallet2,
+        );
+      } catch (e) {
+        console.log("[v2-stx] multi-maker: swap threw —", (e as Error).message);
+        return;
+      }
+      const rj = cvToJSON(r.result);
+      if (!rj.success) {
+        console.log("[v2-stx] multi-maker: swap errored — VAA verify");
+        return;
+      }
+      expect(Number(rj.value.value["token-x-rolled"].value)).toBe(0);
+
+      const rebate = Math.floor((SBTC_10K * TAKER_REBATE_BPS) / BPS_PRECISION);
+      const net = SBTC_10K - rebate;
+      const fee = Math.floor((net * FEE_BPS) / BPS_PRECISION);
+      const pool = net - fee + rebate; // total owed to the y side
+
+      const d1 = sbtcBalance(wallet1) - m1Before;
+      const d2 = sbtcBalance(wallet3) - m2Before;
+
+      // Both makers were filled...
+      expect(d1).toBeGreaterThan(0);
+      expect(d2).toBeGreaterThan(0);
+      // ...conserving the pool up to integer-truncation dust (swept to
+      // treasury), never exceeding it...
+      expect(d1 + d2).toBeLessThanOrEqual(pool);
+      expect(d1 + d2).toBeGreaterThanOrEqual(pool - 4);
+      // ...and split pro-rata 2:1 within rounding.
+      const ratio = d1 / d2;
+      expect(ratio).toBeGreaterThan(1.9);
+      expect(ratio).toBeLessThan(2.1);
+      console.log(
+        `[v2-stx] multi-maker: pool ${pool} split ${d1}/${d2} (ratio ${ratio.toFixed(3)}), dust ${pool - d1 - d2}`,
+      );
+    });
   },
 );

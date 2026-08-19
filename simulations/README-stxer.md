@@ -314,6 +314,26 @@ deployer so reruns never collide with live SPV9K21 contracts.
 | `tests/markets-sbtc-stx-jing-v2.test.ts` | 27/27 | Maker-gate truth table + top-ups + set-limit gates, full reprice-or-swap coverage (plain / guards / crossing FOK / oversize u1023 / **rebate-rounds-to-zero dust crossing** — the documented PC-unvetoable edge), Hermes swap trio on the production contract, cancel-after-roll regression ported from v1, cycle clock + same-depositor parity. Multi-step VAA tests run against a **staleness-patched twin** deployed at test time (`MAX_STALENESS u80 -> u1000000000`): each simnet call mines a block (+30s), and fork-tip lag gives a real VAA an unpredictable ~3-call budget, so gate matrices on the production constant were structurally flaky. The freshness gate itself stays proven by the production-contract swap trio + the settle-refresh sims. |
 | `tests/vault-sbtc-stx-v2.test.ts` | 41/41 | Runtime-deploys the vault with its three `'SPV9K21...` refs rewritten to the local deployer. All v1 cases ported + v2 surface: jing-swap (both sides, Hermes), jing-reprice (plain / crossing / u6022 / u6006 / replay), initialize `u6023` via a rebate-patched twin, both EMPTY-allowance cancels with balance assertions, TS-side SIP-018 hash builder with explicit vault binding (parity-asserted against the on-chain builder), hash distinctness across all 5 action strings, **and the Pyth-fee regression test that found the allowance bug below**. |
 | `tests/vault-sbtc-stx.test.ts` (v1) | 22/22 | Repaired 2026-08-18: the suite predated the M2 vault-binding in `build-intent-hash` (hash helper produced wallet-bound hashes -> u6002), the verify-and-consume sender gate (wallet3 submissions -> u6001; now registered as keeper first), and the burn-block-height expiry switch. Test-only fixes, no contract changes. |
+| `tests/jing-core-v3.test.ts` | 21/21 | Admin/registry surface of the fresh core: two-step `propose-owner`/`accept-owner` (full handover, `u5018` no-pending, `u5001` wrong-acceptor, "proposing does not transfer authority"), `pause`/`unpause` with the new `ERR_NOT_PAUSED` (u5017) guard + 144-burn-block timelock (`u5008`), per-function pause gating verified against source (`log-deposit` -> u5016 while paused; `log-withdraw`/snpl logs deliberately un-gated), registry hash gates (`u5005`/`u5006`/`u5003`/`u5002` via runtime helper contracts), equity ledger credit/debit with the over-withdraw floor, and the ported snpl equity debits. |
+
+### Taker-rebate economics (2026-08-18)
+
+Two scenarios the earlier suite left implicit, both now pinned in
+`markets-sbtc-stx-jing-v2.test.ts`:
+
+- **Multi-maker pro-rata split** — a batch auction has no 1:1 matching; one
+  taker clears against ALL opposite-side makers pro-rata. Two makers at
+  100/50 STX, 10k-sat taker: pool split 6660/3330 (exactly 2:1), conserved
+  to 1-sat treasury dust.
+- **Rebate basis is the FRESH amount** — swap tops up a resting same-side
+  position and converts the merged size, charging rebate on the fresh slice
+  only (rest 100k + swap 2k -> 4-sat rebate vs 200 via reprice on the same
+  size). Reviewed and judged **not a bug**: settlement clears everyone at
+  one oracle price (`settle-clearing-price = oracle-price`), so the resting
+  inventory converts at a fair price and opposite makers get the fill they
+  rested for; the rebate is a small taker->maker tip on top, not an
+  entitlement. Documented so the fresh-amount basis is not later mistaken
+  for a defect. No contract change.
 
 ### Findings from the v2 harness work (2026-08-18)
 
