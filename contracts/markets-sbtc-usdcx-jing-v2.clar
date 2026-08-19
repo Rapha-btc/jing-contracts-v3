@@ -57,6 +57,7 @@
 (define-constant ERR_NOTHING_FILLED (err u1021))
 (define-constant ERR_MUST_USE_SWAP (err u1022))
 (define-constant ERR_PARTIAL_FILL (err u1023))
+(define-constant ERR_HAS_RESTING_POSITION (err u1024))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -1274,11 +1275,29 @@
   ;; deposit here rather than at settlement so the maths stays inside the
   ;; existing pro-rata machinery: the taker is credited for `net` only, and the
   ;; withheld slice is handed to the other side's filled depositors below.
+  ;;
+  ;; `swap` opens a NEW taker position only. If the caller already rests size
+  ;; on that side, deposit-*-core would merge into it and overwrite its limit,
+  ;; silently converting non-crossing maker inventory into a taker fill that
+  ;; paid rebate on the fresh slice alone. Rather than price that merge, it is
+  ;; refused: the caller either reprices the resting position (which charges
+  ;; 20 bps on the whole of it) or cancels it first and swaps the total.
   (let (
       (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
       (net (- amount rebate))
+      (cycle (var-get current-cycle))
     )
     (asserts! (> net u0) ERR_DEPOSIT_TOO_SMALL)
+    (asserts!
+      (is-eq
+        (if deposit-x
+          (get-token-x-deposit cycle tx-sender)
+          (get-token-y-deposit cycle tx-sender)
+        )
+        u0
+      )
+      ERR_HAS_RESTING_POSITION
+    )
     (if deposit-x
       (begin
         (and
