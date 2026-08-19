@@ -1,8 +1,13 @@
 # markets-sbtc-stx-jing-v2
 
-Working notes for the v2 auction market. Two changes are in the contract; the
-oracle question is researched but **not** implemented, because the answer turned
-out to be "do nothing yet". Measurements are from **2026-08-16**.
+Working notes for the v2 auction market: the maker/taker split, the taker
+rebate, and every path a participant can take through a cycle. The oracle
+question (section 2) is researched but **not** implemented, because the answer
+turned out to be "do nothing yet". Oracle measurements are from **2026-08-16**;
+sections 1 and 3 reflect the contract as of **2026-08-19**.
+
+The sBTC/USDCx market is the same code with SIP-010 on both sides instead of
+native STX - everything here applies to it unchanged.
 
 ---
 
@@ -62,24 +67,38 @@ distribution that is pro-rata over the whole side — the machinery has no hook
 for that, and adding one is a lot of surface for 10 bps. Withholding up front
 keeps every downstream calculation untouched.
 
-### Known wart
+### Known wart — RESOLVED by fill-or-kill
 
-The rebate is charged on the caller's **full deposit**, not on the portion that
-actually fills. If a `swap` only partially clears, the remainder rolls to the
-next cycle having already paid the taker rate — and if it then sits as a resting
-maker, it paid taker pricing for maker behaviour.
+*Original concern:* the rebate is charged on the caller's full deposit, not the
+portion that fills, so a partially-clearing `swap` would roll the remainder to
+the next cycle having already paid taker pricing for what became maker
+behaviour.
 
-`swap` is documented for the case where the other side already has enough
-liquidity, so this should be the exception. But it is a real unfairness, and the
-honest fix is to charge on `filled` rather than `amount`. Left as-is because it
-costs a rewrite of the distribution path. **Decide before deploying.**
+*Resolution:* `swap` is now **fill-or-kill**. A swap that would fill nothing
+reverts `ERR_NOTHING_FILLED (u1021)` and one that would only partially fill
+reverts `ERR_PARTIAL_FILL (u1023)`; the parked rebate unwinds with the
+transaction. There is no longer a path where a taker-priced deposit rests as a
+maker, so charging on `amount` is now equivalent to charging on `filled`. A
+taker who wants the remainder to rest swaps the absorbable size, then
+maker-deposits the rest in a second tx.
+
+The companion gap — merging into your own resting position to convert it while
+paying rebate on the fresh slice only — is closed by
+`ERR_HAS_RESTING_POSITION (u1024)`. See section 3.
 
 ### Status
 
-`clarinet check` → 44 contracts checked, 0 errors. Not committed, not deployed,
-**no tests written yet** — the existing 35-test suite for v1 does not cover the
-rebate, and the invariant "makers receive strictly more when a cycle is
-taker-initiated" is the one worth writing first.
+`clarinet check` → 23 contracts, 0 errors. Not deployed (the v2 stack needs
+`jing-core-v3`: the deployed `jing-core-v2` has the 12-param `log-settlement`
+and rejects the 14-param v2 call with "expecting 12 arguments, got 14").
+
+**Fully tested as of 2026-08-19** — 113/113 clarinet across the four suites, RV
+500-run fuzz clean (14 market + 3 vault invariants), stxer mainnet-fork
+harnesses 22/22 (market) and 29/29 (vault). The rebate specifically:
+single-maker payout asserted to the sat (`net - fee + rebate`), multi-maker
+pro-rata split, FOK reverts unwinding the rebate, the dust case where the
+rebate rounds to zero, and the `u1024` merge refusal. See
+`simulations/README-stxer.md` for the coverage matrix and session links.
 
 ---
 
@@ -216,6 +235,96 @@ Two things to do that are not code:
    20-minute answer.*
 
 ---
+
+---
+
+## 3. Participant paths — what to call, when, and what it costs
+
+Added 2026-08-19 alongside the `ERR_HAS_RESTING_POSITION (u1024)` guard. Every
+route in and out of a cycle, and the maker/taker line each one sits on.
+
+### The rule
+
+The **maker gate** (`would-take-as-x` / `would-take-as-y`) is what separates the
+two roles. Any path that would leave you crossing live resting size on the
+other side is refused with `ERR_MUST_USE_SWAP (u1022)`, except the two paths
+that deliberately charge for crossing: `swap` and `reprice-or-swap`.
+
+- **maker** — escrows early, waits out the window, pays `FEE_BPS u10`, and
+  *receives* a pro-rata share of any taker rebate that cycle.
+- **taker** — `swap` or a crossing `reprice-or-swap`; forces immediate
+  settlement and pays `TAKER_REBATE_BPS u20` on top of the fee.
+
+### Entering with no position
+
+| Call | Crossing? | Result |
+|---|---|---|
+| `deposit-token-x` / `-y` | no (`u1022` if it would) | Rests as a maker |
+| `swap` | yes, that is the point | Deposits, closes and settles in one tx. **Fill-or-kill**: 100% or the whole tx reverts (`u1021` nothing filled, `u1023` partial). Pays 20 bps. |
+
+### You already rest size on that side
+
+| Call | Crossing? | Result | Cost |
+|---|---|---|---|
+| `deposit-token-x` / `-y` (top-up) | no (`u1022`) | Adds size: `existing + amount`, overwrites the limit | fee only |
+| `set-token-x-limit` / `-y` | no (`u1022`) | Retargets the limit, **aborts** rather than trade | free |
+| `reprice-or-swap-token-x` / `-y` | yes | Retargets; if it crosses, converts FOK **on the whole resting size** | 20 bps on the resting size |
+| `cancel-token-x-deposit` / `-y` | n/a | Full refund, out of the cycle | free |
+| `close-and-settle-with-refresh` (permissionless) | n/a | Your resting size fills **as a maker** at the batch clearing price | fee only, **earns** rebate |
+| `swap` | — | **Refused, `u1024`** | — |
+
+### Why `swap` refuses a caller with a resting position
+
+`deposit-*-core` merges into an existing same-side position (`existing +
+amount`) and overwrites its limit. Left unguarded, `swap` would silently
+re-flag non-crossing maker inventory as a taker fill while charging rebate on
+the fresh slice alone — rest 100k sats, swap 2k, convert the lot for 4 sats of
+rebate where a `reprice` of that same 100k charges 200. The merge is refused
+rather than priced, so `swap` means one thing: **a new taker position, filled
+100% or not at all**.
+
+### The escape hatches, ranked by cost
+
+A holder of resting size who wants it converted has three routes, cheapest
+first:
+
+1. **`close-and-settle-with-refresh` on the market** (permissionless — a
+   keeper can call it directly from its own EOA, no vault wrapper needed). The
+   position fills as a **maker**: pays the fee, *collects* a share of any taker
+   rebate. Caveat: it only fills if the clearing price satisfies the limit and
+   there is opposite-side size; otherwise it rolls to the next cycle. Cheap but
+   batch-timed.
+2. **`reprice-or-swap`** — immediate conversion, 20 bps on the resting size.
+   Buy immediacy when you cannot wait for the batch.
+3. **`cancel` then `swap`** — same 20 bps, two transactions, and you lose your
+   queue slot. Only worth it if you also want to change size.
+
+### Vault / keeper implications
+
+The v2 vaults need **no contract change** for any of this. `execute-jing-swap`
+now surfaces `u1024` when the vault already rests on that side; the keeper
+should treat it as a routing signal, not an error:
+
+- want the batch price → call `close-and-settle-with-refresh` on the **market**
+  directly (permissionless, vault untouched)
+- need it now → `execute-jing-reprice` with a crossing limit
+- want out → `cancel-jing-sbtc` / `cancel-jing-stx` (free, empty `as-contract? ()`
+  allowance)
+
+### Regression coverage
+
+`tests/markets-sbtc-stx-jing-v2.test.ts`:
+
+- `swap refuses a caller who already rests size on that side` — asserts
+  `u1024`, then that **nothing moved** (position, limit, wallet balance and
+  cycle all unchanged), then that cancel-then-swap fills clean.
+- `maker gate: crossing deposit reverts ERR_MUST_USE_SWAP, non-crossing
+  variants pass`, `...applies to top-ups`, `...applies to set-token-*-limit` —
+  the `u1022` matrix.
+- `multi-maker fill: batch settlement splits the fill AND the rebate pro-rata`
+  — one taker clears against ALL opposite makers pro-rata (100/50 STX makers
+  split 6660/3330 = exactly 2:1, 1-sat treasury dust). A batch auction has no
+  1:1 matching.
 
 ## Open questions
 

@@ -102,6 +102,7 @@ const DEAD_Y = 1; // never live bid
 
 const ERR_MUST_USE_SWAP = 1022;
 const ERR_PARTIAL_FILL = 1023;
+const ERR_HAS_RESTING_POSITION = 1024;
 
 function pub(contract: string, fn: string, args: any[], sender: string) {
   return simnet.callPublicFn(contract, fn, args, sender);
@@ -1620,72 +1621,91 @@ describe.skipIf(!remoteDataEnabled)(
       expect(cancelX(wallet1, NS).result).toBeOk(Cl.uint(SBTC_2K));
     });
 
-    // --- taker-rebate economics: circumvention probe + multi-maker split ---
+    // --- taker-rebate economics: merge-rebate parity + multi-maker split ---
 
-    it("BEHAVIOR: swap top-up of a resting position charges rebate on the FRESH amount only (not a bug)", async function () {
-      // Documents an intentional, harmless asymmetry. swap's deposit-*-core
-      // tops up the sender's existing same-side position and overwrites its
-      // limit live; the WHOLE merged position then settles FOK. The rebate
-      // is amount * 20bps on the FRESH amount alone, so converting a large
-      // resting position via a tiny swap costs far less rebate than the
-      // reprice path would on the same size:
-      //   reprice 100k sats  -> rebate 200 sats
-      //   rest 100k + swap 2k -> rebate 4 sats, same conversion.
-      // This is NOT exploitable: settlement clears EVERYONE at one oracle
-      // price (settle-clearing-price = oracle-price), so the resting
-      // inventory converts at a fair price and the opposite-side makers get
-      // the exact fill they rested for. The rebate is a small taker->maker
-      // tip on top, not the makers' entitlement, so a smaller tip harms no
-      // one. If anything reprice slightly over-tips on already-committed
-      // inventory. Pinned here so the fresh-amount rebate basis is not later
-      // mistaken for a defect.
+    it("swap refuses a caller who already rests size on that side (ERR_HAS_RESTING_POSITION)", async function () {
+      // swap opens a NEW taker position only. Without this guard,
+      // deposit-*-core would merge the fresh amount into the caller's resting
+      // position and overwrite its limit, silently converting non-crossing
+      // maker inventory into a taker fill that paid rebate on the fresh slice
+      // alone (rest 100k + swap 2k -> 4 sats of rebate, vs 200 that a reprice
+      // of the same 100k charges). Refused rather than priced: the caller
+      // reprices the resting position, or cancels it and swaps the total.
       setupNoStaleMarket();
-      const vaaHex = await fetchVaa("rebate-circumvention");
+      const vaaHex = await fetchVaa("swap-has-resting");
       if (!vaaHex) return;
 
       let funded = true;
       try {
-        fundSbtc(wallet2, 102_100);
+        fundSbtc(wallet2, 103_000);
       } catch {
         funded = false;
       }
       if (!funded) {
-        console.log("[v2-stx] rebate-circ: skipped — VM bug");
+        console.log("[v2-stx] swap-has-resting: skipped — VM bug");
         return;
       }
 
-      // 600 STX of live bids resting (both enter an empty x book).
+      // Live bid resting on the far side so a swap could otherwise fill.
       expect(
         depositY(STX_500, LIVE_Y, wallet1, DUMMY_VAA, NS).result,
       ).toBeOk(Cl.uint(STX_500));
-      expect(
-        depositY(STX_100, LIVE_Y, wallet3, DUMMY_VAA, NS).result,
-      ).toBeOk(Cl.uint(STX_100));
 
-      // 100k-sat DEAD offer rests (passes the maker gate, pays nothing).
+      // Caller rests a 100k-sat DEAD offer (maker, pays nothing).
       let dep;
       try {
         dep = depositX(100_000, DEAD_X, wallet2, vaaHex, NS);
       } catch (e) {
-        console.log("[v2-stx] rebate-circ: deposit threw —", (e as Error).message);
+        console.log("[v2-stx] swap-has-resting: deposit threw —", (e as Error).message);
         return;
       }
       if (!cvToJSON(dep.result).success) {
-        console.log("[v2-stx] rebate-circ: staging errored — VAA verify");
+        console.log("[v2-stx] swap-has-resting: staging errored — VAA verify");
         return;
       }
 
-      const takerSbtcBefore = sbtcBalance(wallet2); // 2_100 left in wallet
-      const makersSbtcBefore = sbtcBalance(wallet1) + sbtcBalance(wallet3);
+      const balBefore = sbtcBalance(wallet2);
+      const cycle = Number(cvToJSON(ro(NS, "get-current-cycle", [])).value);
 
-      // Tiny 2k-sat swap with a live limit: merges with the 100k resting.
+      // Swapping on the same side is refused outright.
+      const blocked = pub(
+        NS,
+        "swap",
+        [
+          Cl.uint(SBTC_2K),
+          Cl.uint(LIVE_X),
+          Cl.bufferFromHex(vaaHex),
+          SBTC_TRAIT,
+          Cl.stringAscii(SBTC_ASSET),
+          WSTX_TRAIT,
+          Cl.stringAscii(WSTX_ASSET),
+          Cl.bool(true),
+        ],
+        wallet2,
+      );
+      expect(blocked.result).toBeErr(Cl.uint(ERR_HAS_RESTING_POSITION));
+
+      // Nothing moved: position, limit, wallet and cycle all untouched.
+      expect(sbtcBalance(wallet2)).toBe(balBefore);
+      expect(
+        ro(NS, "get-token-x-deposit", [Cl.uint(cycle), Cl.principal(wallet2)]),
+      ).toBeUint(100_000);
+      expect(ro(NS, "get-token-x-limit", [Cl.principal(wallet2)])).toBeUint(
+        DEAD_X,
+      );
+      expect(ro(NS, "get-current-cycle", [])).toBeUint(cycle);
+      expect(ro(NS, "get-cycle-phase", [])).toBeUint(0);
+
+      // The documented escape hatch: cancel the resting position (free), then
+      // swap the whole size as a clean new taker.
+      expect(cancelX(wallet2, NS).result).toBeOk(Cl.uint(100_000));
       let r;
       try {
         r = pub(
           NS,
           "swap",
           [
-            Cl.uint(SBTC_2K),
+            Cl.uint(SBTC_10K),
             Cl.uint(LIVE_X),
             Cl.bufferFromHex(vaaHex),
             SBTC_TRAIT,
@@ -1697,40 +1717,17 @@ describe.skipIf(!remoteDataEnabled)(
           wallet2,
         );
       } catch (e) {
-        console.log("[v2-stx] rebate-circ: swap threw —", (e as Error).message);
+        console.log("[v2-stx] swap-has-resting: retry threw —", (e as Error).message);
         return;
       }
       const rj = cvToJSON(r.result);
       if (!rj.success) {
-        console.log(
-          `[v2-stx] rebate-circ: swap reverted ${JSON.stringify(rj.value)} — ` +
-            "merged position did NOT convert (merged position did not convert)",
-        );
+        console.log("[v2-stx] swap-has-resting: retry errored — VAA verify");
         return;
       }
-
-      // The merged 102k (100k resting + 1996 net) fully converted...
       expect(Number(rj.value.value["token-x-rolled"].value)).toBe(0);
-      const stxReceived = Number(rj.value.value["token-y-received"].value);
-      expect(stxReceived).toBeGreaterThan(0);
-
-      // ...and the taker's wallet was debited ONLY the fresh 2k (4 sats of
-      // which are the rebate). The 100k resting slice converted rebate-free.
-      const freshDebit = takerSbtcBefore - sbtcBalance(wallet2);
-      const rebatePaid = Math.floor((SBTC_2K * TAKER_REBATE_BPS) / BPS_PRECISION);
-      const repriceWouldCharge = Math.floor(
-        (102_000 * TAKER_REBATE_BPS) / BPS_PRECISION,
-      );
-      expect(freshDebit).toBe(SBTC_2K);
-
-      // Makers received the full cleared size minus fee plus ONLY the tiny
-      // rebate — quantifying the shortfall vs the reprice path.
-      const makersDelta =
-        sbtcBalance(wallet1) + sbtcBalance(wallet3) - makersSbtcBefore;
       console.log(
-        `[v2-stx] rebate-basis: converted 102k sats paying ` +
-          `${rebatePaid} sats rebate (reprice would charge ${repriceWouldCharge}); ` +
-          `makers received ${makersDelta} sats total, got ${stxReceived} uSTX`,
+        "[v2-stx] swap-has-resting: merge refused u1024; cancel-then-swap fills clean",
       );
     });
 
