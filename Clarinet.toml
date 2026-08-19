@@ -174,6 +174,43 @@ path = "contracts/jing-core-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
+# Coverage-instrumented copy of vault-sbtc-stx-v2: identical source with the
+# SPV9K21 principal prefix rewritten to relative refs and the Bitflow venues
+# rewritten to the RV mocks (the wstx facade's is-standard rejects simnet's
+# mixed ST/SM principals), so the manifest deploys it against the local jing
+# stack and lcov can measure it. The unit suite drives THIS copy; a sync-guard
+# test fails if it drifts from the canonical.
+[contracts.vault-sbtc-stx-v2-testable]
+path = "contracts/test/vault-sbtc-stx-v2-testable.clar"
+clarity_version = 5
+epoch = "3.4"
+
+# RV mock venues, promoted into the manifest for the testable vault above.
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-core]
+path = "tests/rv/mock-xyk-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-pool]
+path = "tests/rv/mock-xyk-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-router]
+path = "tests/rv/mock-dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-pool]
+path = "tests/rv/mock-dlmm-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.rfq-sbtc-stx-jing-v2]
 path = "contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
 clarity_version = 5

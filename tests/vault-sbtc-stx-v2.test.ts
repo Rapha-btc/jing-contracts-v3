@@ -87,7 +87,7 @@ const DEPLOYER_PUBKEY = publicKeyToHex(privateKeyToPublic(DEPLOYER_PRIVKEY));
 const WALLET1_PRIVKEY =
   "7287ba251d44a4d3fd9276c88ce34c5c52a038955511cccaf77e61068649c17801";
 
-const VAULT_NAME = "vault-sbtc-stx-v2";
+const VAULT_NAME = "vault-sbtc-stx-v2-testable";
 const BAD_REBATE_NAME = "vault-v2-badrebate";
 const VAULT = `${deployer}.${VAULT_NAME}`;
 const JING_CORE = "jing-core-v3";
@@ -156,9 +156,14 @@ function patchedSource(mutate?: (s: string) => string): string {
 
 function deployVault(
   name: string = VAULT_NAME,
-  source: string = patchedSource(),
+  source?: string,
 ): string {
-  simnet.deployContract(name, source, { clarityVersion: 5 }, deployer);
+  // The canonical vault is deployed from the manifest as
+  // vault-sbtc-stx-v2-testable (so clarinet's coverage instruments it);
+  // only mutants and extra copies are deployed at runtime.
+  if (name !== VAULT_NAME || source !== undefined) {
+    simnet.deployContract(name, source ?? patchedSource(), { clarityVersion: 5 }, deployer);
+  }
   return `${deployer}.${name}`;
 }
 
@@ -395,7 +400,7 @@ const PYTH_PLAN = Cl.tuple({
 // is batched into a single block instead.
 function vaultSetupTxs() {
   return [
-    tx.deployContract(VAULT_NAME, patchedSource(), { clarityVersion: 5 }, deployer),
+    // the vault itself is already deployed from the manifest
     tx.callPublicFn(
       JING_CORE,
       "set-verified-contract",
@@ -1463,6 +1468,28 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx-v2", function () {
     ).toBeErr(Cl.uint(6011));
   });
 
+  it("execute-dlmm-swap: ERR_INVALID_SIDE on bad side string", function () {
+    const vault = setupVault();
+
+    const intent: Intent = {
+      action: "dlmm-swap",
+      side: "garbage",
+      amount: SBTC_10K,
+      limitPrice: 5_000_000_000_000,
+      authId: 855,
+      expiry: 0,
+    };
+    const msgHash = buildIntentHash(vault, intent);
+    expect(
+      pub(
+        vault,
+        "execute-dlmm-swap",
+        ammArgs(signRsv(msgHash, DEPLOYER_PRIVKEY), intent),
+        deployer,
+      ).result,
+    ).toBeErr(Cl.uint(6011));
+  });
+
   // --- execute-dlmm-swap (DLMM stx-sbtc pool, layout x=wstx y=sBTC) ---
   it("execute-dlmm-swap (STX -> sBTC via DLMM router)", function () {
     const vault = setupVault();
@@ -1790,6 +1817,108 @@ describe.skipIf(!remoteDataEnabled)("vault-sbtc-stx-v2", function () {
     expect(ro(MARKET, "get-current-cycle", [])).toBeUint(preCycle + 1);
     console.log(
       `[v3-vault-stx-v2] jing-reprice-cross: took through, rebate ${rebate} sats`,
+    );
+  });
+
+  it("execute-jing-reprice: crossing limit turns the resting STX bid taker", async function () {
+    const vaaHex = await fetchVaa("jing-reprice-cross-y");
+    if (!vaaHex) return;
+
+    const stage: Intent = {
+      action: "jing-deposit",
+      side: ASSET_WSTX,
+      amount: STX_100,
+      limitPrice: DEAD_Y,
+      authId: 3030,
+      expiry: 0,
+    };
+    const stageHash = buildIntentHash(VAULT, stage);
+
+    const staged = simnet.mineBlock([
+      ...vaultSetupTxs(),
+      ...marketSetupTxs(),
+      // Rebate plus the Pyth fee budget must stay free in the vault after the
+      // resting deposit moves to the market.
+      tx.callPublicFn(VAULT, "deposit-stx", [Cl.uint(STX_100 * 2)], deployer),
+      // Vault rests a dead bid first (x book empty -> dummy VAA).
+      tx.callPublicFn(
+        VAULT,
+        "execute-jing-deposit",
+        jingArgs(signRsv(stageHash, DEPLOYER_PRIVKEY), stage),
+        deployer,
+      ),
+      // Maker offer on x, sized well past the vault's ~18.5k-sat bid value so
+      // the vault's crossing y side fills 100% (reprice-or-swap is
+      // fill-or-kill for the crossing side; the resting x side may roll).
+      // The y book holds only the vault's dead bid, so this deposit does not
+      // cross and the gate lets it through (real VAA required now).
+      fundSbtcTx(wallet1, SBTC_20K * 3),
+      tx.callPublicFn(
+        MARKET,
+        "deposit-token-x",
+        [
+          Cl.uint(SBTC_20K * 3),
+          Cl.uint(LIVE_X),
+          Cl.bufferFromHex(vaaHex),
+          SBTC_TRAIT,
+          Cl.stringAscii(SBTC_ASSET),
+        ],
+        wallet1,
+      ),
+    ]);
+    if (!allOk(staged, "jing-reprice-cross-y")) return;
+
+    const sbtcBefore = sbtcBalance(VAULT);
+    const stxBefore = Number(
+      cvToJSON(ro(VAULT, "get-status", [])).value["stx-balance"].value,
+    );
+    const preCycle = Number(cvToJSON(ro(MARKET, "get-current-cycle", [])).value);
+
+    const reprice: Intent = {
+      action: "jing-reprice",
+      side: ASSET_WSTX,
+      amount: STX_100,
+      limitPrice: LIVE_Y,
+      authId: 3031,
+      expiry: 0,
+    };
+    const repriceHash = buildIntentHash(VAULT, reprice);
+    const args = jingArgs(
+      signRsv(repriceHash, DEPLOYER_PRIVKEY),
+      reprice,
+      vaaHex,
+    );
+
+    let r;
+    try {
+      r = pub(VAULT, "execute-jing-reprice", args, deployer);
+    } catch (e) {
+      console.log(
+        "[v3-vault-stx-v2] jing-reprice-cross-y: threw -",
+        (e as Error).message,
+      );
+      return;
+    }
+    if (isStale(r.result)) {
+      console.log(
+        "[v3-vault-stx-v2] jing-reprice-cross-y: skipped - VAA aged out",
+      );
+      return;
+    }
+    expect(r.result).toBeOk(Cl.bufferFromHex(repriceHash));
+
+    // The crossing path pulls at most the taker rebate (plus the oracle fee)
+    // out of the vault's STX on top of the resting size, and the fill returns
+    // sBTC to the vault.
+    const rebate = Math.floor((STX_100 * TAKER_REBATE_BPS) / BPS_PRECISION);
+    const stxAfter = Number(
+      cvToJSON(ro(VAULT, "get-status", [])).value["stx-balance"].value,
+    );
+    expect(stxBefore - stxAfter).toBeGreaterThanOrEqual(rebate);
+    expect(sbtcBalance(VAULT)).toBeGreaterThan(sbtcBefore);
+    expect(ro(MARKET, "get-current-cycle", [])).toBeUint(preCycle + 1);
+    console.log(
+      `[v3-vault-stx-v2] jing-reprice-cross-y: took through, rebate ${rebate} uSTX`,
     );
   });
 
