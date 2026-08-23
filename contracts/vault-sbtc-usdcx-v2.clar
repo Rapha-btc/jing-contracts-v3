@@ -158,6 +158,21 @@
   )
 )
 
+;; Reclaim the uSTX kept here for Pyth fees. Unlike sBTC/USDCx, this STX is
+;; NOT vault equity -- it arrives via a plain STX transfer (there is no
+;; deposit-stx, so it was never log-deposit'd), so this path does NOT call
+;; log-withdraw. It is only the owner's escape valve for the gas float.
+(define-public (withdraw-stx (amount uint))
+  (begin
+    (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
+    (asserts! (> amount u0) ERR_NO_FUNDS)
+    (try! (as-contract? ((with-stx amount))
+      (try! (stx-transfer? amount current-contract OWNER))
+    ))
+    (ok true)
+  )
+)
+
 (define-public (revoke-intent (target-hash (buff 32)))
   (begin
     (asserts!

@@ -326,6 +326,25 @@ should treat it as a routing signal, not an error:
   split 6660/3330 = exactly 2:1, 1-sat treasury dust). A batch auction has no
   1:1 matching.
 
+### Pause freezes phase advance, not just money moves
+
+The `paused` flag now also gates `close-deposits`
+(`(asserts! (not (var-get paused)) ERR_PAUSED)`, u1010). Without this gate,
+pause was incomplete: the deposit and settle paths checked `paused`, but
+`close-deposits` had no caller gate and no pause check, so anyone could push a
+paused cycle from DEPOSIT into SETTLE. That is the one state transition that
+strands funds: once closed, `cancel-token-x/y-deposit` reverts `u1002`
+(deposit phase only) and `settle` reverts `u1010` (paused), so the operator's
+emergency exit — keep the cycle in DEPOSIT and let users pull their own escrow
+— is defeated. The only remaining escape, `cancel-cycle`, is locked for 42
+blocks, and an attacker can re-close the rolled cycle each time it reopens.
+
+The pause is meant to freeze the market whole. `close-deposits` is a state
+transition, so it obeys the freeze like every other mutating path. No fund
+loss either way (escrow always rolls forward and stays recoverable), but the
+gate keeps the emergency-exit invariant intact. The USDCx market carries the
+identical one-line gate.
+
 ## Open questions
 
 1. Charge the taker rebate on `filled` instead of `amount`? (see wart above)

@@ -1144,6 +1144,7 @@
       (elapsed (get-blocks-elapsed))
       (totals (get-cycle-totals cycle))
     )
+    (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_ALREADY_CLOSED)
     (asserts!
       (and
