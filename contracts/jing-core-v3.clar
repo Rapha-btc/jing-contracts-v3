@@ -679,6 +679,51 @@
   )
 )
 
+;; Auto-cross match: two RESTING deposits traded against each other at the
+;; out-of-range maker's limit (both legs leave escrow -> debit both equities).
+(define-public (log-match
+    (taker principal)
+    (maker principal)
+    (y-is-taker bool)
+    (x-traded uint)
+    (y-traded uint)
+    (price uint)
+    (mid uint)
+    (cycle uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (try! (check-not-paused))
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (if y-is-taker
+      (begin
+        (debit-if-not-registered token-y taker y-traded)
+        (debit-if-not-registered token-x maker x-traded)
+      )
+      (begin
+        (debit-if-not-registered token-x taker x-traded)
+        (debit-if-not-registered token-y maker y-traded)
+      )
+    )
+    (print {
+      event: "match",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      taker: taker,
+      maker: maker,
+      y-is-taker: y-is-taker,
+      x-traded: x-traded,
+      y-traded: y-traded,
+      price: price,
+      mid: mid,
+      cycle: cycle,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-settlement
     (cycle uint)
     (oracle-price uint)

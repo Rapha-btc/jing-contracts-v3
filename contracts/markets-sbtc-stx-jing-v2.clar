@@ -895,8 +895,9 @@
         (var-set pending-rebate-y rebate)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          (asserts! (> (get token-x-received result) u0) ERR_NOTHING_FILLED)
-          (asserts! (is-eq (get token-y-rolled result) u0) ERR_PARTIAL_FILL)
+          ;; the mid could not fill everything: walk the rolled opposite book
+          ;; with the remainder, then judge full fill on remaining escrow
+          (try! (cross-remainder-as-y limit-price tx-trait tx-name))
           (ok result)
         )
       )
@@ -945,8 +946,8 @@
         (var-set pending-rebate-x rebate)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          (asserts! (> (get token-y-received result) u0) ERR_NOTHING_FILLED)
-          (asserts! (is-eq (get token-x-rolled result) u0) ERR_PARTIAL_FILL)
+          (try! (cross-remainder-as-x limit-price tx-trait tx-name))
+
           (ok result)
         )
       )
@@ -1375,28 +1376,329 @@
     ;; to the other side. A taker who wants to rest the remainder swaps the
     ;; absorbable size, then maker-deposits the rest in a second tx.
     (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-      (asserts!
-        (>
-          (if deposit-x
-            (get token-y-received result)
-            (get token-x-received result)
-          )
-          u0
-        )
-        ERR_NOTHING_FILLED
-      )
-      (asserts!
-        (is-eq
-          (if deposit-x
-            (get token-x-rolled result)
-            (get token-y-rolled result)
-          )
-          u0
-        )
-        ERR_PARTIAL_FILL
+      ;; the mid could not fill everything: walk the rolled opposite book
+      ;; with the remainder, then judge full fill on remaining escrow
+      (if deposit-x
+        (try! (cross-remainder-as-x limit-price tx-trait tx-name))
+        (try! (cross-remainder-as-y limit-price tx-trait tx-name))
       )
       (ok result)
     )
+  )
+)
+
+;; --- Cross the swapper's remainder ------------------------------------------
+;; The batch clears everyone in range at the oracle mid, unchanged. When the
+;; SWAPPER (swap / reprice-or-swap) is left with a remainder after mid
+;; clearing, that remainder walks the opposite side's rolled book -
+;; orderbook-style, one fold - consuming every out-of-range maker whose limit
+;; the swapper's own limit reaches, each maker paid AT THEIR OWN LIMIT from
+;; the swapper's escrowed remainder. Passive depositors are untouched: their
+;; remainders roll exactly as before; only the active swapper crosses.
+;; Makers below min-deposit size are skipped (dust rests; no rounding-error
+;; fills). Fees: FEE_BPS off each leg to the treasury. No TAKER_REBATE on the
+;; crossed slice - flagged for review.
+
+;; One maker filled at `price` from the walker's escrowed remainder.
+(define-private (execute-fill
+    (cycle uint)
+    (y-who principal)
+    (y-amt uint)
+    (x-who principal)
+    (x-amt uint)
+    (price uint)
+    (mid uint)
+    (y-is-taker bool)
+    (t <ft-trait>)
+    (tx-name (string-ascii 128))
+    (log-cycle uint)
+  )
+  (let (
+      (x-from-y (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price))
+      (x-traded (if (> x-amt (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price))
+        (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price)
+        x-amt
+      ))
+      (y-traded (/ (* (if (> x-amt x-from-y)
+        x-from-y
+        x-amt
+      ) price
+      )
+        (* PRICE_PRECISION DECIMAL_FACTOR)
+      ))
+      (y-fee (/ (* y-traded FEE_BPS) BPS_PRECISION))
+      (x-fee (/ (* x-traded FEE_BPS) BPS_PRECISION))
+      ;; the crossed maker's rebate: 20 bps on the volume they fill, drawn
+      ;; from the share of the taker's pot that did NOT ride the mid pool
+      (reb-y (if y-is-taker
+        (let ((r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION)))
+          (if (> r (var-get pending-rebate-y))
+            (var-get pending-rebate-y)
+            r
+          ))
+        u0
+      ))
+      (reb-x (if y-is-taker
+        u0
+        (let ((r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION)))
+          (if (> r (var-get pending-rebate-x))
+            (var-get pending-rebate-x)
+            r
+          ))
+      ))
+      (totals (get-cycle-totals cycle))
+    )
+    (if (or (is-eq x-traded u0) (is-eq y-traded u0))
+      (ok false)
+      (begin
+        (var-set pending-rebate-y (- (var-get pending-rebate-y) reb-y))
+        (var-set pending-rebate-x (- (var-get pending-rebate-x) reb-x))
+        (try! (as-contract? ((with-stx (+ y-traded reb-y)))
+          (try! (stx-transfer? (+ (- y-traded y-fee) reb-y) current-contract
+            x-who
+          ))
+          (if (> y-fee u0)
+            (try! (stx-transfer? y-fee current-contract (var-get treasury)))
+            true
+          )
+        ))
+        (try! (as-contract? ((with-ft (contract-of t) tx-name (+ x-traded reb-x)))
+          (try! (contract-call? t transfer (+ (- x-traded x-fee) reb-x)
+            current-contract y-who none
+          ))
+          (if (> x-fee u0)
+            (try! (contract-call? t transfer x-fee current-contract
+              (var-get treasury) none
+            ))
+            true
+          )
+        ))
+        (if (is-eq (- y-amt y-traded) u0)
+          (begin
+            (map-delete token-y-deposits {
+              cycle: cycle,
+              depositor: y-who,
+            })
+            (map-delete token-y-deposit-limits y-who)
+            (var-set bumped-token-y-principal y-who)
+            (map-set token-y-depositor-list cycle
+              (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+            )
+          )
+          (map-set token-y-deposits {
+            cycle: cycle,
+            depositor: y-who,
+          }
+            (- y-amt y-traded)
+          )
+        )
+        (if (is-eq (- x-amt x-traded) u0)
+          (begin
+            (map-delete token-x-deposits {
+              cycle: cycle,
+              depositor: x-who,
+            })
+            (map-delete token-x-deposit-limits x-who)
+            (var-set bumped-token-x-principal x-who)
+            (map-set token-x-depositor-list cycle
+              (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+            )
+          )
+          (map-set token-x-deposits {
+            cycle: cycle,
+            depositor: x-who,
+          }
+            (- x-amt x-traded)
+          )
+        )
+        (map-set cycle-totals cycle
+          (merge totals {
+            total-token-y: (- (get total-token-y totals) y-traded),
+            total-token-x: (- (get total-token-x totals) x-traded),
+          })
+        )
+        (try! (contract-call? .jing-core-v3 log-match
+          (if y-is-taker
+            y-who
+            x-who
+          )
+          (if y-is-taker
+            x-who
+            y-who
+          ) y-is-taker x-traded y-traded price mid log-cycle (var-get token-x)
+          (var-get token-y)
+        ))
+        (ok true)
+      )
+    )
+  )
+)
+
+;; Walk one x-maker: consume it if the y-walker's remainder is live and the
+;; maker's limit is beyond mid but within the walker's tolerance.
+(define-private (walk-x-book-step
+    (maker principal)
+    (acc (response {
+      t: <ft-trait>,
+      name: (string-ascii 128),
+      taker: principal,
+      limit: uint,
+      mid: uint,
+      log-cycle: uint,
+    }
+      uint
+    ))
+  )
+  (match acc
+    st (let (
+        (cycle (var-get current-cycle))
+        (rem (get-token-y-deposit cycle (get taker st)))
+        (l (get-token-x-limit maker))
+        (m-amt (get-token-x-deposit cycle maker))
+      )
+      (if (or
+          (is-eq rem u0)
+          (is-eq maker (get taker st))
+          (< m-amt (var-get min-token-x-deposit))
+          (<= l (get mid st))
+          (> l (get limit st))
+        )
+        (ok st)
+        (begin
+          (try! (execute-fill cycle (get taker st) rem maker m-amt l
+            (get mid st) true (get t st) (get name st) (get log-cycle st)
+          ))
+          (ok st)
+        )
+      )
+    )
+    e (err e)
+  )
+)
+
+;; Walk one y-maker: mirror image for an x-walker selling down to bids.
+(define-private (walk-y-book-step
+    (maker principal)
+    (acc (response {
+      t: <ft-trait>,
+      name: (string-ascii 128),
+      taker: principal,
+      limit: uint,
+      mid: uint,
+      log-cycle: uint,
+    }
+      uint
+    ))
+  )
+  (match acc
+    st (let (
+        (cycle (var-get current-cycle))
+        (rem (get-token-x-deposit cycle (get taker st)))
+        (l (get-token-y-limit maker))
+        (m-amt (get-token-y-deposit cycle maker))
+      )
+      (if (or
+          (is-eq rem u0)
+          (is-eq maker (get taker st))
+          (< m-amt (var-get min-token-y-deposit))
+          (is-eq l u0)
+          (>= l (get mid st))
+          (< l (get limit st))
+        )
+        (ok st)
+        (begin
+          (try! (execute-fill cycle maker m-amt (get taker st) rem l
+            (get mid st) false (get t st) (get name st) (get log-cycle st)
+          ))
+          (ok st)
+        )
+      )
+    )
+    e (err e)
+  )
+)
+
+;; Cross the calling swapper's post-settlement remainder against the rolled
+;; opposite book, bounded by their own limit. Runs in the same tx as the
+;; settle; mid = the settlement's oracle price; events stamped with the
+;; settled cycle.
+(define-private (cross-remainder-as-y
+    (limit uint)
+    (t <ft-trait>)
+    (tx-name (string-ascii 128))
+  )
+  (begin
+    (try! (fold walk-x-book-step
+      (get-token-x-depositors (var-get current-cycle))
+      (ok {
+        t: t,
+        name: tx-name,
+        taker: tx-sender,
+        limit: limit,
+        mid: (var-get settle-clearing-price),
+        log-cycle: (- (var-get current-cycle) u1),
+      })
+    ))
+    ;; sweep: rounding crumbs the walk did not consume go back to the taker,
+    ;; pot zeroed so no stale value leaks into a later settlement's ride
+    (let (
+        (swapper tx-sender)
+        (left (var-get pending-rebate-y))
+      )
+      (and
+        (> left u0)
+        (try! (as-contract? ((with-stx left))
+          (try! (stx-transfer? left current-contract swapper))
+        ))
+      )
+      (var-set pending-rebate-y u0)
+    )
+    ;; the walker must end empty: swap flows are atomic, full fill or revert
+    (asserts!
+      (is-eq (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
+      ERR_PARTIAL_FILL
+    )
+    (ok true)
+  )
+)
+
+(define-private (cross-remainder-as-x
+    (limit uint)
+    (t <ft-trait>)
+    (tx-name (string-ascii 128))
+  )
+  (begin
+    (try! (fold walk-y-book-step
+      (get-token-y-depositors (var-get current-cycle))
+      (ok {
+        t: t,
+        name: tx-name,
+        taker: tx-sender,
+        limit: limit,
+        mid: (var-get settle-clearing-price),
+        log-cycle: (- (var-get current-cycle) u1),
+      })
+    ))
+    ;; sweep: rounding crumbs the walk did not consume go back to the taker,
+    ;; pot zeroed so no stale value leaks into a later settlement's ride
+    (let (
+        (swapper tx-sender)
+        (left (var-get pending-rebate-x))
+      )
+      (and
+        (> left u0)
+        (try! (as-contract? ((with-ft (contract-of t) tx-name left))
+          (try! (contract-call? t transfer left current-contract swapper none))
+        ))
+      )
+      (var-set pending-rebate-x u0)
+    )
+    ;; the walker must end empty: swap flows are atomic, full fill or revert
+    (asserts!
+      (is-eq (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
+      ERR_PARTIAL_FILL
+    )
+    (ok true)
   )
 )
 
@@ -1502,9 +1804,22 @@
           (token-x-fee (/ (* token-x-clearing FEE_BPS) BPS_PRECISION))
           (token-y-unfilled (- total-token-y token-y-clearing))
           (token-x-unfilled (- total-token-x token-x-clearing))
-          ;; Bound here because the vars are zeroed below, before the log call.
+          ;; Bound here because the vars are rewritten below, before the log.
           (rebate-x (var-get pending-rebate-x))
           (rebate-y (var-get pending-rebate-y))
+          ;; Only the taker's MID-FILLED share of the rebate rides the pool;
+          ;; the rest stays in pending-rebate-* (one division, then a
+          ;; subtraction, so ride + pending == rebate exactly) and is paid to
+          ;; the crossed makers during the remainder walk, each on the volume
+          ;; they fill. Whatever the walk does not consume refunds the taker.
+          (ride-x (if (> total-token-x u0)
+            (/ (* rebate-x token-x-clearing) total-token-x)
+            u0
+          ))
+          (ride-y (if (> total-token-y u0)
+            (/ (* rebate-y token-y-clearing) total-token-y)
+            u0
+          ))
         )
         (asserts!
           (and
@@ -1544,16 +1859,16 @@
         ;; splits it across exactly the makers who filled, in proportion to their
         ;; fill. Zeroed immediately so a later settlement cannot pay it twice.
         (var-set settle-token-x-after-fee
-          (+ (- token-x-clearing token-x-fee) rebate-x)
+          (+ (- token-x-clearing token-x-fee) ride-x)
         )
         (var-set settle-token-y-after-fee
-          (+ (- token-y-clearing token-y-fee) rebate-y)
+          (+ (- token-y-clearing token-y-fee) ride-y)
         )
-        (var-set pending-rebate-x u0)
-        (var-set pending-rebate-y u0)
+        (var-set pending-rebate-x (- rebate-x ride-x))
+        (var-set pending-rebate-y (- rebate-y ride-y))
         (try! (contract-call? .jing-core-v3 log-settlement cycle oracle-price
           oracle-price token-x-clearing token-y-clearing token-x-unfilled
-          token-y-unfilled token-x-fee token-y-fee rebate-x rebate-y
+          token-y-unfilled token-x-fee token-y-fee ride-x ride-y
           token-x-is-binding (var-get token-x) (var-get token-y)
         ))
         (ok true)
