@@ -39,6 +39,7 @@ declare -A SUTS=(
   ["reserve-sbtc-stx-jing"]="contracts/reserve-sbtc-stx-jing.clar"
   ["rfq-sbtc-stx-jing-v2"]="contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
   ["rfq-sbtc-stx-jing-v3"]="contracts/rfq/rfq-sbtc-stx-jing-v3.clar"
+  ["creator-bonus-jing"]="contracts/deploying/creator-bonus-jing.clar"
 )
 
 # Mainnet SIP-010 trait reference (must match the use-trait line in the
@@ -101,6 +102,51 @@ text = text.replace(
     "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth",
     ".mock-jing-vault-auth"
 )
+
+# 2b. creator-bonus-jing (no-ops elsewhere): the deployed escrow literal
+#     becomes the deterministic mock, the with-ft asset name is pinned to
+#     the mock token, and fund records every NEW delivery id in `rv-ids`
+#     so the invariants can scan the rows (Clarity cannot iterate a map).
+text = text.replace(
+    "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing",
+    ".mock-creator-escrow"
+)
+text = text.replace(
+    '(define-constant ASSET_USDCX "usdcx-token")',
+    '(define-constant ASSET_USDCX "mock-ft")'
+)
+if "creator-bonus-jing" in src_path:
+    # Fold ids into 0..99 so fund, claim and revoke collide on the same rows:
+    # with raw random uints a claim never lands on an id fund already used and
+    # the payout invariant stays vacuous. RV keeps ONE simnet across all runs,
+    # so the space must stay wide enough that rows going terminal (claimed or
+    # revoked) do not exhaust the RELEASED ids (id mod 5 = 1, 20 of them).
+    for fn, sig in (
+        ("fund", "(delivery-id uint) (amount uint) (reason (string-utf8 256))"),
+        ("revoke", "(delivery-id uint)"),
+        ("claim", "(delivery-id uint)"),
+    ):
+        head = "(define-public (%s %s)\n  (let (\n" % (fn, sig)
+        assert head in text, fn
+        text = text.replace(
+            head,
+            "(define-public (%s %s)\n  (let (\n      (delivery-id (mod delivery-id-raw u100))\n"
+            % (fn, sig.replace("(delivery-id uint)", "(delivery-id-raw uint)")),
+            1
+        )
+    text = text.replace(
+        "(define-constant OWNER tx-sender)",
+        "(define-data-var rv-ids (list 200 uint) (list))\n(define-constant OWNER tx-sender)",
+        1
+    )
+    text = text.replace(
+        "    (ok total)\n  )\n)",
+        "    (if (is-none existing)\n"
+        "      (var-set rv-ids (unwrap! (as-max-len? (append (var-get rv-ids) delivery-id) u200) ERR_AMOUNT_ZERO))\n"
+        "      true)\n"
+        "    (ok total)\n  )\n)",
+        1
+    )
 
 # 2. Local mock-jing-core. The v2-specific replace MUST run before the
 #    generic one, or `.jing-core-v2` would corrupt to `.mock-jing-core-v2`.

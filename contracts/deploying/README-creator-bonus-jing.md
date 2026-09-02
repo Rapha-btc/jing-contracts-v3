@@ -11,7 +11,7 @@ wallet gets paid. This contract adds money, never judgement.
 - Escrow read: `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing`
 - Token: `SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx` (6 decimals)
 - Status: draft, unaudited, not deployed. Clarinet check clean, stxer
-  mainnet-fork harness 45/45.
+  mainnet-fork harness 45/45, Rendezvous 500 runs x 4 invariants clean.
 
 ## Lifecycle per delivery id
 
@@ -92,3 +92,19 @@ creators' smart wallets and not their operating wallets, and that the
 contract ends empty.
 
 Last run: https://stxer.xyz/simulations/mainnet/e87f6dffafe8bfd776d7b697b8a6d219
+
+## Fuzzing (Rendezvous)
+
+```
+bash tests/rv/build.sh creator-bonus-jing
+npx rv . creator-bonus-jing invariant --runs=500 --bail
+```
+
+The fuzz build (see `tests/rv/README.md`) points the contract at a
+deterministic mock escrow and the repo's mock token, folds delivery ids into
+0..99, and records funded ids so four invariants can scan every row after
+each random call: the contract holds exactly the sum of pending pots, every
+row sits on a RELEASED delivery for its real creator, claimed pots land in
+the payout wallets and nowhere else, and `is-claimable` agrees with the row.
+Last sweep: 500 runs, fund x22 / claim x5 / revoke x4 succeeded on random
+input, 119-129 checks per invariant, zero failures.

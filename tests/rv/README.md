@@ -13,6 +13,28 @@ markets-sbtc-stx-jing-v2    -- 500 runs, 14 invariants, 0 failures (2026-08-18)
 vault-sbtc-stx-v2           -- 500 runs,  3 invariants, 0 failures (2026-08-18)
 rfq-sbtc-stx-jing-v2        -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
 rfq-sbtc-stx-jing-v3        -- 500 runs,  4 invariants, 0 failures
+creator-bonus-jing          -- 500 runs,  4 invariants, 0 failures (2026-09-02)
+```
+
+### creator-bonus-jing, added 2026-09-02
+
+Spot rewards on top of `creator-escrow-v2-jing`. The fuzz build swaps the
+deployed escrow literal for `mock-creator-escrow` (status = id mod 5,
+creator = wallet_1 or wallet_2 from id / 5, one round paying wallet_3 /
+wallet_4), USDCx for `mock-ft` with the with-ft asset name pinned, folds
+delivery ids into 0..99 so fund / claim / revoke collide on the same rows,
+and makes `fund` record each new id in `rv-ids` so the invariants can scan
+every row. Four invariants: conservation (contract balance = sum of pending
+pots), every row sits on a RELEASED delivery for its real creator, claimed
+pots land in wallet_3 / wallet_4 and nowhere else, and `is-claimable`
+agrees with the row. Real movement in the 500-run sweep: fund x22, claim
+x5, revoke x4; 119-129 checks per invariant, zero failures. Ids are folded
+because RV keeps one simnet across runs: with ten ids the two RELEASED ones
+went terminal in the first few calls and every later fund bounced u206.
+
+```bash
+bash tests/rv/build.sh creator-bonus-jing
+npx rv . creator-bonus-jing invariant --runs=500 --bail
 ```
 
 ### v2 targets (maker/taker split), added 2026-08-18

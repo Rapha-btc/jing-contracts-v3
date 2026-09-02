@@ -1,0 +1,40 @@
+# RV-only manifest for fuzzing creator-bonus-jing.
+#
+# The SUT is built from production source by tests/rv/build.sh: the deployed
+# escrow literal becomes .mock-creator-escrow (deterministic status/creator
+# per id), USDCx becomes .mock-ft, and fund records each new id in rv-ids so
+# the invariants can scan every row.
+#
+# Run:
+#   bash tests/rv/build.sh creator-bonus-jing
+#   npx rv . creator-bonus-jing invariant --runs=500 --bail
+[project]
+name = "jing-contracts-v3-rv-creator-bonus"
+description = "RV-only manifest for fuzzing creator-bonus-jing"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-creator-escrow]
+path = "tests/rv/mock-creator-escrow.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.creator-bonus-jing]
+path = "tests/rv/.build/creator-bonus-jing.clar"
+clarity_version = 5
+epoch = "3.4"
