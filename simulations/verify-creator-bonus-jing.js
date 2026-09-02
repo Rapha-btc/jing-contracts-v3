@@ -6,11 +6,12 @@
 // deliveries 1-11 exist, d4 is VETOED (round 1, swept), d8 is RELEASED
 // (round 3, Emmexx), next delivery id is 12, round 3 ends at burn 966510.
 //
-// Covers: owner/amount/existence guards on fund, top-up, claim gate on
-// RELEASED, wrong-creator claim, double claim, fund-after-claim, revoke
-// only on VETOED/EXPIRED, revoke refund, revoke guards, and the full
-// pending -> approved -> released -> claimed path on a fresh round 4
-// (escrow owner impersonated, whale funds it). Asserts USDCx lands in the
+// Covers: owner/amount/existence guards on fund, fund refused unless the
+// escrow delivery is RELEASED (vetoed, pending, approved all refused),
+// top-up, wrong-creator claim, double claim, fund/revoke after claim,
+// owner-discretion revoke on an unclaimed bonus with refund, and a fresh
+// round 4 (escrow owner impersonated, whale funds it) walked to RELEASED
+// before fund is accepted. Asserts USDCx lands in the
 // creators' SMART WALLETS and the bonus contract ends at zero balance.
 //
 // Run: npx tsx simulations/verify-creator-bonus-jing.js
@@ -109,6 +110,8 @@ evalc("escrow d8 (expect RELEASED u1)", escrowDelivery(D_RELEASED));
 call("fund by non-owner -> ERR_NOT_OWNER", STRANGER, "fund", [uintCV(D_RELEASED), uintCV(B10), reason("x")], "(err u200)");
 call("fund amount 0 -> ERR_AMOUNT_ZERO", WHALE, "fund", [uintCV(D_RELEASED), uintCV(0), reason("x")], "(err u204)");
 call("fund missing delivery -> ERR_DELIVERY_NOT_FOUND", WHALE, "fund", [uintCV(D_MISSING), uintCV(B10), reason("x")], "(err u202)");
+call("fund d4 (VETOED) -> ERR_NOT_RELEASED", WHALE, "fund", [uintCV(D_VETOED), uintCV(B3), reason("x")], "(err u207)");
+evalc("is-claimable d4 never funded (false)", `(is-claimable u${D_VETOED})`, "claimable_d4");
 
 // --- happy path on an already-RELEASED delivery (d8, Emmexx) ---
 call("fund d8 10 USDCx -> (ok u10000000)", WHALE, "fund", [uintCV(D_RELEASED), uintCV(B10), reason("spot: best cut of the month")], "(ok u10000000)");
@@ -120,19 +123,20 @@ call("claim d8 by stranger -> ERR_NOT_CREATOR", STRANGER, "claim", [uintCV(D_REL
 call("claim d8 by Emmexx -> (ok u15000000)", EMMEXX, "claim", [uintCV(D_RELEASED)], "(ok u15000000)");
 call("claim d8 again -> ERR_BONUS_NOT_PENDING", EMMEXX, "claim", [uintCV(D_RELEASED)], "(err u206)");
 call("fund d8 after claim -> ERR_BONUS_NOT_PENDING", WHALE, "fund", [uintCV(D_RELEASED), uintCV(B5), reason("x")], "(err u206)");
+call("revoke d8 after claim -> ERR_BONUS_NOT_PENDING", WHALE, "revoke", [uintCV(D_RELEASED)], "(err u206)");
 evalc("is-claimable d8 after claim (false)", `(is-claimable u${D_RELEASED})`, "claimable_d8_after");
 
-// --- revoke path on a VETOED delivery (d4, round 1 swept) ---
-call("fund d4 (VETOED) 3 -> (ok u3000000)", WHALE, "fund", [uintCV(D_VETOED), uintCV(B3), reason("funded before checking status")], "(ok u3000000)");
-evalc("is-claimable d4 (false)", `(is-claimable u${D_VETOED})`, "claimable_d4");
-call("claim d4 by Emmexx (VETOED) -> ERR_NOT_RELEASED", EMMEXX, "claim", [uintCV(D_VETOED)], "(err u207)");
-call("revoke d4 by non-owner -> ERR_NOT_OWNER", EMMEXX, "revoke", [uintCV(D_VETOED)], "(err u200)");
-call("revoke d7 (no bonus) -> ERR_NO_BONUS", WHALE, "revoke", [uintCV(D_NO_BONUS)], "(err u205)");
-call("revoke d4 -> (ok u3000000) refund", WHALE, "revoke", [uintCV(D_VETOED)], "(ok u3000000)");
-call("revoke d4 again -> ERR_BONUS_NOT_PENDING", WHALE, "revoke", [uintCV(D_VETOED)], "(err u206)");
-call("claim d4 after revoke -> ERR_BONUS_NOT_PENDING", EMMEXX, "claim", [uintCV(D_VETOED)], "(err u206)");
+// --- revoke at owner discretion on a RELEASED but unclaimed bonus (d7, Sam) ---
+call("fund d7 (RELEASED, Sam) 3 -> (ok u3000000)", WHALE, "fund", [uintCV(D_NO_BONUS), uintCV(B3), reason("spot, second thoughts")], "(ok u3000000)");
+call("revoke d7 by non-owner -> ERR_NOT_OWNER", SAM, "revoke", [uintCV(D_NO_BONUS)], "(err u200)");
+call("revoke d9 (never funded) -> ERR_NO_BONUS", WHALE, "revoke", [uintCV(9)], "(err u205)");
+call("revoke d7 -> (ok u3000000) refund", WHALE, "revoke", [uintCV(D_NO_BONUS)], "(ok u3000000)");
+call("revoke d7 again -> ERR_BONUS_NOT_PENDING", WHALE, "revoke", [uintCV(D_NO_BONUS)], "(err u206)");
+call("claim d7 after revoke -> ERR_BONUS_NOT_PENDING", SAM, "claim", [uintCV(D_NO_BONUS)], "(err u206)");
+call("fund d7 after revoke -> ERR_BONUS_NOT_PENDING", WHALE, "fund", [uintCV(D_NO_BONUS), uintCV(B3), reason("x")], "(err u206)");
+evalc("is-claimable d7 after revoke (false)", `(is-claimable u${D_NO_BONUS})`, "claimable_d7");
 
-// --- pending -> approved -> released -> claimed, on a fresh round 4 ---
+// --- fund is refused until RELEASED, on a fresh round 4 ---
 // Round 3 ends at burn 966510; tip is ~965211. Past it, the escrow owner can
 // start round 4. The whale tops the escrow owner up with USDCx first.
 advance(1400);
@@ -145,27 +149,21 @@ call("escrow: start-round 4 -> (ok u4)", ESCROW_OWNER, "start-round",
 call("escrow: Sam submits d12 -> (ok u12)", SAM, "submit-delivery",
   [stringUtf8CV("ipfs://round4-sam-1"), bufferCV(Buffer.alloc(32, 0x41))], "(ok u12)", ESCROW);
 
-call("fund d12 (PENDING) 7 -> (ok u7000000)", WHALE, "fund", [uintCV(D_NEW_SAM), uintCV(B7), reason("spot: round 4 opener")], "(ok u7000000)");
-evalc("is-claimable d12 while PENDING (false)", `(is-claimable u${D_NEW_SAM})`, "claimable_d12_pending");
-call("claim d12 while PENDING -> ERR_NOT_RELEASED", SAM, "claim", [uintCV(D_NEW_SAM)], "(err u207)");
-call("revoke d12 while PENDING -> ERR_STILL_CLAIMABLE", WHALE, "revoke", [uintCV(D_NEW_SAM)], "(err u208)");
+call("fund d12 while PENDING -> ERR_NOT_RELEASED", WHALE, "fund", [uintCV(D_NEW_SAM), uintCV(B7), reason("x")], "(err u207)");
 call("escrow: approve d12 -> (ok true)", ESCROW_OWNER, "approve", [uintCV(D_NEW_SAM)], "(ok true)", ESCROW);
-call("claim d12 while APPROVED -> ERR_NOT_RELEASED", SAM, "claim", [uintCV(D_NEW_SAM)], "(err u207)");
-call("revoke d12 while APPROVED -> ERR_STILL_CLAIMABLE", WHALE, "revoke", [uintCV(D_NEW_SAM)], "(err u208)");
+call("fund d12 while APPROVED -> ERR_NOT_RELEASED", WHALE, "fund", [uintCV(D_NEW_SAM), uintCV(B7), reason("x")], "(err u207)");
+call("claim d12 never funded -> ERR_NO_BONUS", SAM, "claim", [uintCV(D_NEW_SAM)], "(err u205)");
 call("escrow: Sam releases d12 -> (ok true)", SAM, "release", [uintCV(D_NEW_SAM), boolCV(true)], "(ok true)", ESCROW);
-evalc("is-claimable d12 after release (true)", `(is-claimable u${D_NEW_SAM})`, "claimable_d12_released");
+call("fund d12 after release 7 -> (ok u7000000)", WHALE, "fund", [uintCV(D_NEW_SAM), uintCV(B7), reason("spot: round 4 opener")], "(ok u7000000)");
+evalc("is-claimable d12 (true)", `(is-claimable u${D_NEW_SAM})`, "claimable_d12");
 call("claim d12 by Emmexx (wrong creator) -> ERR_NOT_CREATOR", EMMEXX, "claim", [uintCV(D_NEW_SAM)], "(err u201)");
 call("claim d12 by Sam -> (ok u7000000)", SAM, "claim", [uintCV(D_NEW_SAM)], "(ok u7000000)");
 
-// --- veto after funding, then revoke; amend does not resurrect a revoked bonus ---
+// --- vetoed delivery cannot be funded ---
 call("escrow: Emmexx submits d13 -> (ok u13)", EMMEXX, "submit-delivery",
   [stringUtf8CV("ipfs://round4-emmexx-1"), bufferCV(Buffer.alloc(32, 0x42))], "(ok u13)", ESCROW);
-call("fund d13 2 -> (ok u2000000)", WHALE, "fund", [uintCV(D_NEW_EMMEXX), uintCV(B2), reason("spot")], "(ok u2000000)");
 call("escrow: veto d13 -> (ok true)", ESCROW_OWNER, "veto", [uintCV(D_NEW_EMMEXX), stringUtf8CV("wrong hash")], "(ok true)", ESCROW);
-call("revoke d13 (VETOED) -> (ok u2000000)", WHALE, "revoke", [uintCV(D_NEW_EMMEXX)], "(ok u2000000)");
-call("escrow: Emmexx amends d13 -> (ok true)", EMMEXX, "amend-delivery",
-  [uintCV(D_NEW_EMMEXX), stringUtf8CV("ipfs://round4-emmexx-1b"), bufferCV(Buffer.alloc(32, 0x43))], "(ok true)", ESCROW);
-call("fund d13 after revoke -> ERR_BONUS_NOT_PENDING", WHALE, "fund", [uintCV(D_NEW_EMMEXX), uintCV(B2), reason("x")], "(err u206)");
+call("fund d13 (VETOED) -> ERR_NOT_RELEASED", WHALE, "fund", [uintCV(D_NEW_EMMEXX), uintCV(B2), reason("x")], "(err u207)");
 
 // --- final balances ---
 evalc("bonus contract balance (0)", "(get-balance)", "C_after");
@@ -235,11 +233,11 @@ async function main() {
 
   console.log("\n--- read-only gate checks ---");
   const bools = [
-    ["is-claimable d8 funded+released", captured.claimable_d8, "true"],
+    ["is-claimable d8 funded", captured.claimable_d8, "true"],
     ["is-claimable d8 after claim", captured.claimable_d8_after, "false"],
-    ["is-claimable d4 vetoed", captured.claimable_d4, "false"],
-    ["is-claimable d12 pending", captured.claimable_d12_pending, "false"],
-    ["is-claimable d12 released", captured.claimable_d12_released, "true"],
+    ["is-claimable d4 never funded", captured.claimable_d4, "false"],
+    ["is-claimable d7 after revoke", captured.claimable_d7, "false"],
+    ["is-claimable d12 funded after release", captured.claimable_d12, "true"],
   ];
   for (const [label, got, want] of bools) {
     const ok = got === want;
@@ -253,7 +251,7 @@ async function main() {
     ["Sam SMART wallet (+12.5 escrow d12, +7 bonus d12)", captured.SW_after, captured.SW_before, BigInt(PER_VIDEO + B7)],
     ["Emmexx OPERATING wallet (0)", captured.E_after, captured.E_before, 0n],
     ["Sam OPERATING wallet (0)", captured.S_after, captured.S_before, 0n],
-    // -15 (d8) -3 +3 (d4) -7 (d12) -2 +2 (d13) -60 (top-up to escrow owner)
+    // -15 (d8) -3 +3 (d7 revoked) -7 (d12) -60 (top-up to escrow owner)
     ["whale (-15 -7 -60)", captured.W_after, captured.W_before, -BigInt(B10 + B5 + B7 + TOPUP_ESCROW_OWNER)],
   ];
   for (const [label, after, before, want] of deltas) {

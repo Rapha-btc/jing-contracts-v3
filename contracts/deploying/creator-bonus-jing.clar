@@ -1,29 +1,29 @@
 ;; Title: creator-bonus-jing
 ;; Summary: Spot rewards on top of creator-escrow-v2-jing deliveries.
 ;; Description:
-;;   The owner picks a delivery already submitted to creator-escrow-v2-jing
-;;   and attaches a USDCx bonus to it. The creator unlocks that bonus only
-;;   once the escrow shows the delivery as RELEASED - accepted, terms signed,
-;;   base payment consumed. The escrow stays the single source of truth for
-;;   who the creator is, which wallet gets paid, and whether the work was
-;;   accepted; this contract adds money, never judgement.
+;;   A bonus is attributed after the fact, to work already accepted and
+;;   consumed: the owner can only fund a delivery that creator-escrow-v2-jing
+;;   shows as RELEASED (approved or window elapsed, terms signed, base
+;;   payment out). The escrow stays the single source of truth for who the
+;;   creator is and which wallet gets paid; this contract adds money, never
+;;   judgement.
 ;;
 ;;   Lifecycle per delivery id:
-;;     fund   owner   -> bonus pending (top-ups add to the same pot)
-;;     claim  creator -> escrow status must be RELEASED; pays the round's
-;;                       payout wallet for that creator, same as the escrow
-;;     revoke owner   -> only once the escrow delivery is VETOED or EXPIRED,
-;;                       i.e. it can no longer be released; refunds the owner
+;;     fund   owner   -> escrow status must be RELEASED; bonus pending
+;;                       (top-ups add to the same pot)
+;;     claim  creator -> pays the round's payout wallet for that creator,
+;;                       same as the escrow
+;;     revoke owner   -> any unclaimed bonus, at the owner's discretion;
+;;                       refunds the owner. RELEASED is terminal in the
+;;                       escrow, so there is no escrow state to wait for.
 
 (define-constant OWNER tx-sender)
 (define-constant ESCROW 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing)
 (define-constant USDCX_TOKEN 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
 (define-constant ASSET_USDCX "usdcx-token")
 
-;; Mirrors creator-escrow-v2-jing. Only these three are read here.
+;; Mirrors creator-escrow-v2-jing. Only this one is read here.
 (define-constant ESCROW_STATUS_RELEASED u1)
-(define-constant ESCROW_STATUS_VETOED u2)
-(define-constant ESCROW_STATUS_EXPIRED u4)
 
 (define-constant BONUS_PENDING u0)
 (define-constant BONUS_CLAIMED u1)
@@ -37,7 +37,6 @@
 (define-constant ERR_NO_BONUS (err u205))
 (define-constant ERR_BONUS_NOT_PENDING (err u206))
 (define-constant ERR_NOT_RELEASED (err u207))
-(define-constant ERR_STILL_CLAIMABLE (err u208))
 
 (define-map bonuses
   { delivery-id: uint }
@@ -66,17 +65,13 @@
   (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing get-delivery delivery-id)
 )
 
-;; True once the creator can call claim: bonus pending and the escrow
-;; delivery released. Frontends poll this instead of re-deriving the rule.
+;; True while a funded bonus is still unclaimed. Funding already required
+;; RELEASED, so this is the only gate left for the creator.
 (define-read-only (is-claimable (delivery-id uint))
-  (match (map-get? bonuses { delivery-id: delivery-id })
-    bonus
-      (and
-        (is-eq (get status bonus) BONUS_PENDING)
-        (match (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing get-delivery delivery-id)
-          delivery (is-eq (get status delivery) ESCROW_STATUS_RELEASED)
-          false))
-    false)
+  (is-eq
+    (default-to BONUS_CLAIMED
+      (get status (map-get? bonuses { delivery-id: delivery-id })))
+    BONUS_PENDING)
 )
 
 (define-read-only (get-balance)
@@ -87,8 +82,8 @@
 
 ;; --- owner ------------------------------------------------------------------
 
-;; Attach (or top up) a bonus on a delivery that exists in the escrow. The
-;; creator is snapshotted from the escrow so a later read cannot disagree
+;; Attach (or top up) a bonus on a delivery the escrow shows as RELEASED.
+;; The creator is snapshotted from the escrow so a later read cannot disagree
 ;; with who was rewarded. Funds move owner -> this contract now.
 (define-public (fund (delivery-id uint) (amount uint) (reason (string-utf8 256)))
   (let (
@@ -104,6 +99,7 @@
     )
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_AMOUNT_ZERO)
+    (asserts! (is-eq (get status delivery) ESCROW_STATUS_RELEASED) ERR_NOT_RELEASED)
     (asserts! (is-eq prior-status BONUS_PENDING) ERR_BONUS_NOT_PENDING)
     (try! (contract-call? USDCX_TOKEN transfer
       amount tx-sender current-contract none))
@@ -129,24 +125,15 @@
   )
 )
 
-;; Take the money back only when the escrow says the delivery can never be
-;; released: vetoed (and not amended back) or expired. While a delivery is
-;; pending or approved the creator can still earn it, so the bonus stays.
+;; Take an unclaimed bonus back. Owner's discretion: the delivery was
+;; already RELEASED when funded, so there is no escrow state to wait for.
 (define-public (revoke (delivery-id uint))
   (let (
       (bonus (unwrap! (map-get? bonuses { delivery-id: delivery-id }) ERR_NO_BONUS))
-      (delivery (unwrap! (contract-call? ESCROW get-delivery delivery-id)
-                          ERR_DELIVERY_NOT_FOUND))
-      (escrow-status (get status delivery))
       (amount (get amount bonus))
     )
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (is-eq (get status bonus) BONUS_PENDING) ERR_BONUS_NOT_PENDING)
-    (asserts!
-      (or (is-eq escrow-status ESCROW_STATUS_VETOED)
-          (is-eq escrow-status ESCROW_STATUS_EXPIRED))
-      ERR_STILL_CLAIMABLE
-    )
     (map-set bonuses { delivery-id: delivery-id }
       (merge bonus { status: BONUS_REVOKED })
     )
@@ -157,8 +144,7 @@
       event: "bonus-revoked",
       delivery-id: delivery-id,
       creator: (get creator bonus),
-      amount: amount,
-      escrow-status: escrow-status
+      amount: amount
     })
     (ok amount)
   )
@@ -166,11 +152,11 @@
 
 ;; --- creator ----------------------------------------------------------------
 
-;; Unlock the bonus. Same gate as the escrow's own payout, read live from the
-;; escrow: the delivery must be RELEASED, and the caller must be its creator.
-;; Pays the creator's payout wallet from the escrow round, so a creator who
-;; submits from one key and collects on another gets the bonus where the base
-;; payment went.
+;; Unlock the bonus. The caller must be the delivery's creator per the
+;; escrow. Pays the creator's payout wallet from the escrow round, so a
+;; creator who submits from one key and collects on another gets the bonus
+;; where the base payment went. No RELEASED check here: a bonus can only be
+;; funded on a RELEASED delivery and that status is terminal in the escrow.
 (define-public (claim (delivery-id uint))
   (let (
       (bonus (unwrap! (map-get? bonuses { delivery-id: delivery-id }) ERR_NO_BONUS))
@@ -186,7 +172,6 @@
     )
     (asserts! (is-eq tx-sender creator) ERR_NOT_CREATOR)
     (asserts! (is-eq (get status bonus) BONUS_PENDING) ERR_BONUS_NOT_PENDING)
-    (asserts! (is-eq (get status delivery) ESCROW_STATUS_RELEASED) ERR_NOT_RELEASED)
     (map-set bonuses { delivery-id: delivery-id }
       (merge bonus { status: BONUS_CLAIMED })
     )
