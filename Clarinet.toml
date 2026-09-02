@@ -43,6 +43,10 @@ contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
 [[project.requirements]]
 contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.sbtc-stx-0-jing-v2"
 
+# Deployed creator escrow the bonus contract reads deliveries from.
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing"
+
 # Bitflow xyk pool (vault-sbtc-stx execute-bitflow-swap path).
 [[project.requirements]]
 contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2"
@@ -223,5 +227,10 @@ epoch = "3.4"
 
 [contracts.rfq-mm-vault-jing]
 path = "contracts/rfq/rfq-mm-vault-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.creator-bonus-jing]
+path = "contracts/deploying/creator-bonus-jing.clar"
 clarity_version = 5
 epoch = "3.4"
