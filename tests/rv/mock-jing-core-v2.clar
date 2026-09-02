@@ -369,3 +369,19 @@
   )
   (begin (asserts! true (err u0)) (ok true)))
 
+
+;; Added 2026-09-02: the v2 market's remainder-cross walk logs every crossed
+;; fill through log-match (jing-core-v3). Stub, same signature, no auth.
+(define-public (log-match
+    (taker principal)
+    (maker principal)
+    (y-is-taker bool)
+    (x-traded uint)
+    (y-traded uint)
+    (price uint)
+    (mid uint)
+    (cycle uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin (asserts! true (err u0)) (ok true)))
