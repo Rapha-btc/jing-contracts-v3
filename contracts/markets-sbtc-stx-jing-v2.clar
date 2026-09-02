@@ -1653,6 +1653,41 @@
       )
       (var-set pending-rebate-y u0)
     )
+    ;; Integer division leaves the y-walker a residual after a partial maker
+    ;; fill (floor to sats and back): a few uSTX that cannot buy one unit
+    ;; from anyone the walk could touch. Below the side's min deposit it is
+    ;; unfillable dust by construction - refund it so the swap exits clean.
+    ;; At or above min it is a genuine partial fill and still reverts.
+    (let (
+        (swapper tx-sender)
+        (rem (get-token-y-deposit (var-get current-cycle) swapper))
+      )
+      (if (and (> rem u0) (< rem (var-get min-token-y-deposit)))
+        (begin
+          (try! (as-contract? ((with-stx rem))
+            (try! (stx-transfer? rem current-contract swapper))
+          ))
+          (map-delete token-y-deposits {
+            cycle: (var-get current-cycle),
+            depositor: swapper,
+          })
+          (map-delete token-y-deposit-limits swapper)
+          (var-set bumped-token-y-principal swapper)
+          (map-set token-y-depositor-list (var-get current-cycle)
+            (filter not-eq-bumped-token-y
+              (get-token-y-depositors (var-get current-cycle))
+            )
+          )
+          (map-set cycle-totals (var-get current-cycle)
+            (merge (get-cycle-totals (var-get current-cycle)) { total-token-y: (- (get total-token-y (get-cycle-totals (var-get current-cycle)))
+              rem
+            ) }
+            )
+          )
+        )
+        true
+      )
+    )
     ;; the walker must end empty: swap flows are atomic, full fill or revert
     (asserts!
       (is-eq (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
@@ -1692,6 +1727,38 @@
         ))
       )
       (var-set pending-rebate-x u0)
+    )
+    ;; mirror of the y-walker dust refund (the x walker rarely needs it -
+    ;; it clamps to the remainder exactly - but rounding safety is symmetric)
+    (let (
+        (swapper tx-sender)
+        (rem (get-token-x-deposit (var-get current-cycle) swapper))
+      )
+      (if (and (> rem u0) (< rem (var-get min-token-x-deposit)))
+        (begin
+          (try! (as-contract? ((with-ft (contract-of t) tx-name rem))
+            (try! (contract-call? t transfer rem current-contract swapper none))
+          ))
+          (map-delete token-x-deposits {
+            cycle: (var-get current-cycle),
+            depositor: swapper,
+          })
+          (map-delete token-x-deposit-limits swapper)
+          (var-set bumped-token-x-principal swapper)
+          (map-set token-x-depositor-list (var-get current-cycle)
+            (filter not-eq-bumped-token-x
+              (get-token-x-depositors (var-get current-cycle))
+            )
+          )
+          (map-set cycle-totals (var-get current-cycle)
+            (merge (get-cycle-totals (var-get current-cycle)) { total-token-x: (- (get total-token-x (get-cycle-totals (var-get current-cycle)))
+              rem
+            ) }
+            )
+          )
+        )
+        true
+      )
     )
     ;; the walker must end empty: swap flows are atomic, full fill or revert
     (asserts!
