@@ -72,6 +72,7 @@
 (define-constant ERR_MUST_USE_SWAP (err u1022))
 (define-constant ERR_PARTIAL_FILL (err u1023))
 (define-constant ERR_HAS_RESTING_POSITION (err u1024))
+(define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -897,7 +898,9 @@
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
           ;; the mid could not fill everything: walk the rolled opposite book
           ;; with the remainder, then judge full fill on remaining escrow
-          (try! (cross-remainder-as-y limit-price tx-trait tx-name))
+          (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
+            tx-trait tx-name
+          ))
           (ok result)
         )
       )
@@ -946,8 +949,9 @@
         (var-set pending-rebate-x rebate)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          (try! (cross-remainder-as-x limit-price tx-trait tx-name))
-
+          (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
+            tx-trait tx-name
+          ))
           (ok result)
         )
       )
@@ -1379,8 +1383,12 @@
       ;; the mid could not fill everything: walk the rolled opposite book
       ;; with the remainder, then judge full fill on remaining escrow
       (if deposit-x
-        (try! (cross-remainder-as-x limit-price tx-trait tx-name))
-        (try! (cross-remainder-as-y limit-price tx-trait tx-name))
+        (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
+          tx-trait tx-name
+        ))
+        (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
+          tx-trait tx-name
+        ))
       )
       (ok result)
     )
@@ -1411,38 +1419,37 @@
     (y-is-taker bool)
     (t <ft-trait>)
     (tx-name (string-ascii 128))
-    (log-cycle uint)
   )
   (let (
-      (x-from-y (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price))
-      (x-traded (if (> x-amt (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price))
-        (/ (* y-amt (* PRICE_PRECISION DECIMAL_FACTOR)) price)
-        x-amt
-      ))
-      (y-traded (/ (* (if (> x-amt x-from-y)
+      (scale (* PRICE_PRECISION DECIMAL_FACTOR))
+      ;; how much x the y side buys at `price`; clamp to the x side's size
+      (x-from-y (/ (* y-amt scale) price))
+      (x-traded (if (> x-amt x-from-y)
         x-from-y
         x-amt
-      ) price
-      )
-        (* PRICE_PRECISION DECIMAL_FACTOR)
       ))
+      ;; y actually spent for x-traded (floors; the walker's residual crumbs
+      ;; are handled in cross-remainder-as-*)
+      (y-traded (/ (* x-traded price) scale))
       (y-fee (/ (* y-traded FEE_BPS) BPS_PRECISION))
       (x-fee (/ (* x-traded FEE_BPS) BPS_PRECISION))
       ;; the crossed maker's rebate: 20 bps on the volume they fill, drawn
       ;; from the share of the taker's pot that did NOT ride the mid pool
       (reb-y (if y-is-taker
-        (let ((r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION)))
-          (if (> r (var-get pending-rebate-y))
-            (var-get pending-rebate-y)
+        (let ((r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION))
+              (pending-rey (var-get pending-rebate-y)))
+          (if (> r pending-rey)
+            pending-rey
             r
           ))
         u0
       ))
       (reb-x (if y-is-taker
         u0
-        (let ((r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION)))
-          (if (> r (var-get pending-rebate-x))
-            (var-get pending-rebate-x)
+        (let ((r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION))
+              (pending-rex (var-get pending-rebate-x)))
+          (if (> r pending-rex)
+            pending-rex
             r
           ))
       ))
@@ -1525,8 +1532,10 @@
           (if y-is-taker
             x-who
             y-who
-          ) y-is-taker x-traded y-traded price mid log-cycle (var-get token-x)
-          (var-get token-y)
+          ) y-is-taker x-traded y-traded price mid
+          ;; events stamp the cycle that just settled; the walk runs one later
+          (- cycle u1)
+          (var-get token-x) (var-get token-y)
         ))
         (ok true)
       )
@@ -1542,31 +1551,32 @@
       t: <ft-trait>,
       name: (string-ascii 128),
       taker: principal,
+      cycle: uint,
       limit: uint,
       mid: uint,
-      log-cycle: uint,
     }
       uint
     ))
   )
   (match acc
     st (let (
-        (cycle (var-get current-cycle))
-        (rem (get-token-y-deposit cycle (get taker st)))
+        (cycle (get cycle st))
+        (takr (get taker st))
+        (rem (get-token-y-deposit cycle takr))
         (l (get-token-x-limit maker))
         (m-amt (get-token-x-deposit cycle maker))
       )
       (if (or
           (is-eq rem u0)
-          (is-eq maker (get taker st))
+          (is-eq maker takr)
           (< m-amt (var-get min-token-x-deposit))
           (<= l (get mid st))
           (> l (get limit st))
         )
         (ok st)
         (begin
-          (try! (execute-fill cycle (get taker st) rem maker m-amt l
-            (get mid st) true (get t st) (get name st) (get log-cycle st)
+          (try! (execute-fill cycle takr rem maker m-amt l
+            (get mid st) true (get t st) (get name st)
           ))
           (ok st)
         )
@@ -1583,23 +1593,24 @@
       t: <ft-trait>,
       name: (string-ascii 128),
       taker: principal,
+      cycle: uint,
       limit: uint,
       mid: uint,
-      log-cycle: uint,
     }
       uint
     ))
   )
   (match acc
     st (let (
-        (cycle (var-get current-cycle))
-        (rem (get-token-x-deposit cycle (get taker st)))
+        (cycle (get cycle st))
+        (takr (get taker st))
+        (rem (get-token-x-deposit cycle takr))
         (l (get-token-y-limit maker))
         (m-amt (get-token-y-deposit cycle maker))
       )
       (if (or
           (is-eq rem u0)
-          (is-eq maker (get taker st))
+          (is-eq maker takr)
           (< m-amt (var-get min-token-y-deposit))
           (is-eq l u0)
           (>= l (get mid st))
@@ -1607,8 +1618,8 @@
         )
         (ok st)
         (begin
-          (try! (execute-fill cycle maker m-amt (get taker st) rem l
-            (get mid st) false (get t st) (get name st) (get log-cycle st)
+          (try! (execute-fill cycle maker m-amt takr rem l
+            (get mid st) false (get t st) (get name st)
           ))
           (ok st)
         )
@@ -1624,151 +1635,163 @@
 ;; settled cycle.
 (define-private (cross-remainder-as-y
     (limit uint)
+    (rolled uint)
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  (begin
-    (try! (fold walk-x-book-step
-      (get-token-x-depositors (var-get current-cycle))
-      (ok {
-        t: t,
-        name: tx-name,
-        taker: tx-sender,
-        limit: limit,
-        mid: (var-get settle-clearing-price),
-        log-cycle: (- (var-get current-cycle) u1),
-      })
-    ))
-    ;; sweep: rounding crumbs the walk did not consume go back to the taker,
-    ;; pot zeroed so no stale value leaks into a later settlement's ride
-    (let (
-        (swapper tx-sender)
-        (left (var-get pending-rebate-y))
-      )
-      (and
-        (> left u0)
-        (try! (as-contract? ((with-stx left))
-          (try! (stx-transfer? left current-contract swapper))
-        ))
-      )
-      (var-set pending-rebate-y u0)
+  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
+  ;; are read AFTER it, once the fold has spent the pot and the deposit.
+  (let (
+      (swapper tx-sender)
+      (cycle (var-get current-cycle))
+      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
+      ;; clearing may already have filled them in full; then the walk has
+      ;; nothing to spend and every step would just burn three map reads per
+      ;; rolled maker. Skip the fold; sweep and assert below still run.
+      (walked (and
+        (> rolled u0)
+        (begin
+          (try! (fold walk-x-book-step
+            (get-token-x-depositors cycle)
+            (ok {
+              t: t,
+              name: tx-name,
+              taker: swapper,
+              cycle: cycle,
+              limit: limit,
+              mid: (var-get settle-clearing-price),
+            })
+          ))
+          true
+        )
+      ))
+      ;; rounding crumbs the walk did not consume
+      (left (var-get pending-rebate-y))
+      ;; what the swapper still holds after the walk
+      (rem (get-token-y-deposit cycle swapper))
     )
+    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
+    ;; into a later settlement's ride
+    (and
+      (> left u0)
+      (try! (as-contract? ((with-stx left))
+        (try! (stx-transfer? left current-contract swapper))
+      ))
+    )
+    (var-set pending-rebate-y u0)
+    ;; the walker must end empty: swap flows are atomic, full fill or revert.
     ;; Integer division leaves the y-walker a residual after a partial maker
     ;; fill (floor to sats and back): a few uSTX that cannot buy one unit
     ;; from anyone the walk could touch. Below the side's min deposit it is
     ;; unfillable dust by construction - refund it so the swap exits clean.
-    ;; At or above min it is a genuine partial fill and still reverts.
-    (let (
-        (swapper tx-sender)
-        (rem (get-token-y-deposit (var-get current-cycle) swapper))
-      )
-      (if (and (> rem u0) (< rem (var-get min-token-y-deposit)))
-        (begin
-          (try! (as-contract? ((with-stx rem))
-            (try! (stx-transfer? rem current-contract swapper))
-          ))
-          (map-delete token-y-deposits {
-            cycle: (var-get current-cycle),
-            depositor: swapper,
+    ;; At or above min it is a genuine partial fill and reverts.
+    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
+    ;; clean full fill - rem u0 - passes here.)
+    (asserts! (< rem (var-get min-token-y-deposit)) ERR_PARTIAL_FILL)
+    (and
+      (> rem u0)
+      (begin
+        (try! (as-contract? ((with-stx rem))
+          (try! (stx-transfer? rem current-contract swapper))
+        ))
+        (map-delete token-y-deposits {
+          cycle: cycle,
+          depositor: swapper,
+        })
+        (map-delete token-y-deposit-limits swapper)
+        (var-set bumped-token-y-principal swapper)
+        (map-set token-y-depositor-list cycle
+          (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge (get-cycle-totals cycle) {
+            total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem),
           })
-          (map-delete token-y-deposit-limits swapper)
-          (var-set bumped-token-y-principal swapper)
-          (map-set token-y-depositor-list (var-get current-cycle)
-            (filter not-eq-bumped-token-y
-              (get-token-y-depositors (var-get current-cycle))
-            )
-          )
-          (map-set cycle-totals (var-get current-cycle)
-            (merge (get-cycle-totals (var-get current-cycle)) { total-token-y: (- (get total-token-y (get-cycle-totals (var-get current-cycle)))
-              rem
-            ) }
-            )
-          )
         )
         true
       )
     )
-    ;; the walker must end empty: swap flows are atomic, full fill or revert
-    (asserts!
-      (is-eq (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
-      ERR_PARTIAL_FILL
-    )
     (ok true)
   )
 )
-
 (define-private (cross-remainder-as-x
     (limit uint)
+    (rolled uint)
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  (begin
-    (try! (fold walk-y-book-step
-      (get-token-y-depositors (var-get current-cycle))
-      (ok {
-        t: t,
-        name: tx-name,
-        taker: tx-sender,
-        limit: limit,
-        mid: (var-get settle-clearing-price),
-        log-cycle: (- (var-get current-cycle) u1),
-      })
-    ))
-    ;; sweep: rounding crumbs the walk did not consume go back to the taker,
-    ;; pot zeroed so no stale value leaks into a later settlement's ride
-    (let (
-        (swapper tx-sender)
-        (left (var-get pending-rebate-x))
-      )
-      (and
-        (> left u0)
-        (try! (as-contract? ((with-ft (contract-of t) tx-name left))
-          (try! (contract-call? t transfer left current-contract swapper none))
-        ))
-      )
-      (var-set pending-rebate-x u0)
-    )
-    ;; mirror of the y-walker dust refund (the x walker rarely needs it -
-    ;; it clamps to the remainder exactly - but rounding safety is symmetric)
-    (let (
-        (swapper tx-sender)
-        (rem (get-token-x-deposit (var-get current-cycle) swapper))
-      )
-      (if (and (> rem u0) (< rem (var-get min-token-x-deposit)))
+  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
+  ;; are read AFTER it, once the fold has spent the pot and the deposit.
+  (let (
+      (swapper tx-sender)
+      (cycle (var-get current-cycle))
+      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
+      ;; clearing may already have filled them in full; then the walk has
+      ;; nothing to spend and every step would just burn three map reads per
+      ;; rolled maker. Skip the fold; sweep and assert below still run.
+      (walked (and
+        (> rolled u0)
         (begin
-          (try! (as-contract? ((with-ft (contract-of t) tx-name rem))
-            (try! (contract-call? t transfer rem current-contract swapper none))
+          (try! (fold walk-y-book-step
+            (get-token-y-depositors cycle)
+            (ok {
+              t: t,
+              name: tx-name,
+              taker: swapper,
+              cycle: cycle,
+              limit: limit,
+              mid: (var-get settle-clearing-price),
+            })
           ))
-          (map-delete token-x-deposits {
-            cycle: (var-get current-cycle),
-            depositor: swapper,
+          true
+        )
+      ))
+      ;; rounding crumbs the walk did not consume
+      (left (var-get pending-rebate-x))
+      ;; what the swapper still holds after the walk
+      (rem (get-token-x-deposit cycle swapper))
+    )
+    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
+    ;; into a later settlement's ride
+    (and
+      (> left u0)
+      (try! (as-contract? ((with-ft (contract-of t) tx-name left))
+        (try! (contract-call? t transfer left current-contract swapper none))
+      ))
+    )
+    (var-set pending-rebate-x u0)
+    ;; the walker must end empty: swap flows are atomic, full fill or revert.
+    ;; Mirror of the y-walker dust refund (the x walker rarely needs it - it
+    ;; clamps to the remainder exactly - but rounding safety is symmetric).
+    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
+    ;; clean full fill - rem u0 - passes here.)
+    (asserts! (< rem (var-get min-token-x-deposit)) ERR_PARTIAL_FILL)
+    (and
+      (> rem u0)
+      (begin
+        (try! (as-contract? ((with-ft (contract-of t) tx-name rem))
+          (try! (contract-call? t transfer rem current-contract swapper none))
+        ))
+        (map-delete token-x-deposits {
+          cycle: cycle,
+          depositor: swapper,
+        })
+        (map-delete token-x-deposit-limits swapper)
+        (var-set bumped-token-x-principal swapper)
+        (map-set token-x-depositor-list cycle
+          (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge (get-cycle-totals cycle) {
+            total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem),
           })
-          (map-delete token-x-deposit-limits swapper)
-          (var-set bumped-token-x-principal swapper)
-          (map-set token-x-depositor-list (var-get current-cycle)
-            (filter not-eq-bumped-token-x
-              (get-token-x-depositors (var-get current-cycle))
-            )
-          )
-          (map-set cycle-totals (var-get current-cycle)
-            (merge (get-cycle-totals (var-get current-cycle)) { total-token-x: (- (get total-token-x (get-cycle-totals (var-get current-cycle)))
-              rem
-            ) }
-            )
-          )
         )
         true
       )
     )
-    ;; the walker must end empty: swap flows are atomic, full fill or revert
-    (asserts!
-      (is-eq (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
-      ERR_PARTIAL_FILL
-    )
     (ok true)
   )
 )
-
 (define-public (cancel-cycle)
   (let (
       (cycle (var-get current-cycle))
@@ -2161,6 +2184,9 @@
       ERR_NOT_AUTHORIZED
     )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+    ;; a zero min would let dust deposits through and turns the remainder
+    ;; walk's "sub-min residual is unfillable dust" reasoning into nonsense
+    (asserts! (and (> min-x u0) (> min-y u0)) ERR_ZERO_MIN_DEPOSIT)
     (var-set token-x x)
     (var-set token-y y)
     (var-set min-token-x-deposit min-x)
@@ -2197,6 +2223,7 @@
 (define-public (set-min-token-y-deposit (amount uint))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (> amount u0) ERR_ZERO_MIN_DEPOSIT)
     (ok (var-set min-token-y-deposit amount))
   )
 )
@@ -2204,6 +2231,7 @@
 (define-public (set-min-token-x-deposit (amount uint))
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (> amount u0) ERR_ZERO_MIN_DEPOSIT)
     (ok (var-set min-token-x-deposit amount))
   )
 )
