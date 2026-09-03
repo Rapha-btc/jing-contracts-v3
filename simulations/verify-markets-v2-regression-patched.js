@@ -40,7 +40,16 @@ import {
 
 const OWNER_PRIVKEY =
   "3333333333333333333333333333333333333333333333333333333333333333" + "01";
-const DEPLOYER = getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
+// LIVE=1: exact deployed bytes at the mainnet contract ids (same deployer,
+// on-chain source, no patches), real Granite dual-feed VAA of 2026-08-17,
+// fork 8785968. See verify-markets-v2-remainder-cross.js for the rationale.
+const LIVE = process.env.LIVE === "1";
+const LIVE_DEPLOYER = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
+const LIVE_FORK = 8785968;
+const LIVE_PX = 6362215887773n;
+const LIVE_PY = 12143400n;
+const LIVE_VAA_FILE = new URL("./fixtures/vaa-granite-8785969-btc-stx.hex", import.meta.url);
+const DEPLOYER = LIVE ? LIVE_DEPLOYER : getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
 
 const CORE = "jing-core-v3";
 const MARKET = "markets-sbtc-stx-jing-v2";
@@ -71,26 +80,40 @@ const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const btcFeedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 const marketCV = contractPrincipalCV(DEPLOYER, MARKET);
-const DUMMY_VAA = bufferCV(Buffer.from("00", "hex"));
+const DUMMY_VAA = LIVE
+  ? bufferCV(Buffer.from(fs.readFileSync(LIVE_VAA_FILE, "utf8").trim(), "hex"))
+  : bufferCV(Buffer.from("00", "hex"));
 
-const coreSrc = fs.readFileSync(
-  new URL(`../contracts/${CORE}.clar`, import.meta.url),
-  "utf8",
-);
-let mktSrc = fs.readFileSync(
-  new URL(`../contracts/${MARKET}.clar`, import.meta.url),
-  "utf8",
-);
-// sim-only patches (Hermes is key-gated since 2026-08-18): loosen staleness,
-// no-op the two verifies; the market reads the REAL prices in pyth storage.
-mktSrc = mktSrc.replace(
-  "(define-constant MAX_STALENESS u80)",
-  "(define-constant MAX_STALENESS u999999999)",
-);
-const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
-if ((mktSrc.match(VERIFY_BLOCK) || []).length !== 2)
-  throw new Error("expected 2 verify blocks");
-mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
+async function onChainSource(name) {
+  const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${LIVE_DEPLOYER}/${name}?proof=0`);
+  const d = await r.json();
+  if (!d.source) throw new Error(`no on-chain source for ${name}`);
+  return d.source;
+}
+let coreSrc, mktSrc;
+if (LIVE) {
+  coreSrc = await onChainSource(CORE);
+  mktSrc = await onChainSource(MARKET);
+} else {
+  coreSrc = fs.readFileSync(
+    new URL(`../contracts/${CORE}.clar`, import.meta.url),
+    "utf8",
+  );
+  mktSrc = fs.readFileSync(
+    new URL(`../contracts/${MARKET}.clar`, import.meta.url),
+    "utf8",
+  );
+  // sim-only patches (Hermes is key-gated since 2026-08-18): loosen staleness,
+  // no-op the two verifies; the market reads the REAL prices in pyth storage.
+  mktSrc = mktSrc.replace(
+    "(define-constant MAX_STALENESS u80)",
+    "(define-constant MAX_STALENESS u999999999)",
+  );
+  const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
+  if ((mktSrc.match(VERIFY_BLOCK) || []).length !== 2)
+    throw new Error("expected 2 verify blocks");
+  mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
+}
 
 function decodeTx(s) {
   const r = s?.Result?.Transaction;
@@ -175,7 +198,9 @@ async function main() {
       wstxAsset,
     ]);
 
-  let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API })
+  let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (LIVE) b = b.useBlockHeight(LIVE_FORK);
+  b = b
     .withSender(DEPLOYER)
     .addContractDeploy({ contract_name: CORE, source_code: coreSrc })
     .addContractDeploy({ contract_name: MARKET, source_code: mktSrc })

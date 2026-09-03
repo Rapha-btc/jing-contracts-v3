@@ -74,7 +74,20 @@ import {
 
 const OWNER_PRIVKEY =
   "4444444444444444444444444444444444444444444444444444444444444444" + "01";
-const DEPLOYER = getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
+// LIVE=1: run the EXACT deployed bytes at the mainnet contract ids.
+// Hermes is key-gated, so the harness reuses a real dual-feed PNAU VAA that
+// Granite posted on 2026-08-17 (tx 0x075d0c27be4f…, block 8785969, publish
+// 11:33:44) and forks at 8785968 where it is 39 s old (< MAX_STALENESS 80).
+// The sim redeploys core-v3 + the market from SPV9K21… (same deployer, same
+// contract ids as mainnet), source fetched from chain, no patches. Only the
+// deploy block differs from mainnet. See contracts/README-pyth-core-vs-lazer.md.
+const LIVE = process.env.LIVE === "1";
+const LIVE_DEPLOYER = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
+const LIVE_FORK = 8785968;
+const LIVE_PX = 6362215887773n; // BTC/USD stored at the fork after the VAA
+const LIVE_PY = 12143400n; // STX/USD
+const LIVE_VAA_FILE = new URL("./fixtures/vaa-granite-8785969-btc-stx.hex", import.meta.url);
+const DEPLOYER = LIVE ? LIVE_DEPLOYER : getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
 const mkAddr = (n) =>
   getAddressFromPrivateKey(
     String(n).repeat(64).slice(0, 64) + "01",
@@ -108,27 +121,41 @@ const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const btcFeedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 const marketCV = contractPrincipalCV(DEPLOYER, MARKET);
-const DUMMY_VAA = bufferCV(Buffer.from("00", "hex"));
+const DUMMY_VAA = LIVE
+  ? bufferCV(Buffer.from(fs.readFileSync(LIVE_VAA_FILE, "utf8").trim(), "hex"))
+  : bufferCV(Buffer.from("00", "hex"));
 
-const coreSrc = fs.readFileSync(
-  new URL(`../contracts/${CORE}.clar`, import.meta.url),
-  "utf8",
-);
-let mktSrc = fs.readFileSync(
-  new URL(`../contracts/${MARKET}.clar`, import.meta.url),
-  "utf8",
-);
-// sim-only patches (documented pattern): loosen staleness, no-op the two
-// Hermes verifies so the market reads the REAL prices resting in storage.
-mktSrc = mktSrc.replace(
-  "(define-constant MAX_STALENESS u80)",
-  "(define-constant MAX_STALENESS u999999999)",
-);
-const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
-const verifyCount = (mktSrc.match(VERIFY_BLOCK) || []).length;
-if (verifyCount !== 2)
-  throw new Error(`expected 2 verify blocks, found ${verifyCount}`);
-mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
+async function onChainSource(name) {
+  const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${LIVE_DEPLOYER}/${name}?proof=0`);
+  const d = await r.json();
+  if (!d.source) throw new Error(`no on-chain source for ${name}`);
+  return d.source;
+}
+let coreSrc, mktSrc;
+if (LIVE) {
+  coreSrc = await onChainSource(CORE);
+  mktSrc = await onChainSource(MARKET);
+} else {
+  coreSrc = fs.readFileSync(
+    new URL(`../contracts/${CORE}.clar`, import.meta.url),
+    "utf8",
+  );
+  mktSrc = fs.readFileSync(
+    new URL(`../contracts/${MARKET}.clar`, import.meta.url),
+    "utf8",
+  );
+  // sim-only patches (documented pattern): loosen staleness, no-op the two
+  // Hermes verifies so the market reads the REAL prices resting in storage.
+  mktSrc = mktSrc.replace(
+    "(define-constant MAX_STALENESS u80)",
+    "(define-constant MAX_STALENESS u999999999)",
+  );
+  const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
+  const verifyCount = (mktSrc.match(VERIFY_BLOCK) || []).length;
+  if (verifyCount !== 2)
+    throw new Error(`expected 2 verify blocks, found ${verifyCount}`);
+  mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
+}
 
 function decodeTx(s) {
   const r = s?.Result?.Transaction;
@@ -188,8 +215,9 @@ async function main() {
   console.log("=== remainder-cross SELF-VERIFYING stxer harness ===\n");
   console.log(`throwaway deployer = ${DEPLOYER}`);
 
-  const px = await storedPrice(BTC_USD_FEED_HEX);
-  const py = await storedPrice(STX_USD_FEED_HEX);
+  const px = LIVE ? LIVE_PX : await storedPrice(BTC_USD_FEED_HEX);
+  const py = LIVE ? LIVE_PY : await storedPrice(STX_USD_FEED_HEX);
+  if (LIVE) console.log(`LIVE mode: fork ${LIVE_FORK}, deployer ${LIVE_DEPLOYER}, real VAA, no patches`);
   const MID = (px * PP) / py;
   console.log(`stored px=${px} py=${py} mid=${MID}\n`);
 
@@ -283,7 +311,9 @@ async function main() {
   const evalStxBal = (who) => (b) =>
     b.addEvalCode(CID, `(stx-get-balance '${who})`);
 
-  let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API })
+  let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (LIVE) b = b.useBlockHeight(LIVE_FORK);
+  b = b
     .withSender(DEPLOYER)
     .addContractDeploy({ contract_name: CORE, source_code: coreSrc })
     .addContractDeploy({ contract_name: MARKET, source_code: mktSrc })
