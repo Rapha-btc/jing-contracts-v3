@@ -111,6 +111,11 @@
 ;; stranded. Settlement zeroes both on the way out.
 (define-data-var pending-rebate-x uint u0)
 (define-data-var pending-rebate-y uint u0)
+;; True only inside a swap / reprice-or-swap tx, from before close-deposits
+;; until the remainder walk ends. Lets settlement proceed with the maker side
+;; empty at the mid (every maker out of range) so the walk can do the whole
+;; fill; public settle calls never see it set.
+(define-data-var crossing bool false)
 
 (define-map token-y-deposits
   {
@@ -894,6 +899,7 @@
           (try! (stx-transfer? rebate tx-sender current-contract))
         )
         (var-set pending-rebate-y rebate)
+        (var-set crossing true)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
           ;; the mid could not fill everything: walk the rolled opposite book
@@ -947,6 +953,7 @@
           ))
         )
         (var-set pending-rebate-x rebate)
+        (var-set crossing true)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
           (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
@@ -1371,6 +1378,7 @@
         (try! (deposit-token-y-core net limit-price ty-trait ty-name))
       )
     )
+    (var-set crossing true)
     (try! (close-deposits))
     ;; Fill-or-kill. The 20 bps buys full immediate execution, so a swap that
     ;; would fill nothing (limit rolled out, nothing live resting) or only
@@ -1711,6 +1719,7 @@
         true
       )
     )
+    (var-set crossing false)
     (ok true)
   )
 )
@@ -1789,6 +1798,7 @@
         true
       )
     )
+    (var-set crossing false)
     (ok true)
   )
 )
@@ -1911,10 +1921,16 @@
             u0
           ))
         )
+        ;; A swap in flight may face a maker side that is empty at the mid
+        ;; (all makers out of range): clearing is then zero on both legs,
+        ;; everything rolls, and the walk fills from the rolled makers.
         (asserts!
-          (and
-            (>= total-token-y (var-get min-token-y-deposit))
-            (>= total-token-x (var-get min-token-x-deposit))
+          (or
+            (var-get crossing)
+            (and
+              (>= total-token-y (var-get min-token-y-deposit))
+              (>= total-token-x (var-get min-token-x-deposit))
+            )
           )
           ERR_NOTHING_TO_SETTLE
         )

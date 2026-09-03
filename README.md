@@ -52,6 +52,12 @@ the swapper's own limit.
   reverts with `ERR_PARTIAL_FILL`. A residual *below* min deposit is
   integer-division dust that can buy nothing from anyone, so it is refunded and
   the swap exits clean.
+- **Cross-only fills work.** A swap facing a book where every maker is out of
+  range at the mid would have died at settlement with `ERR_NOTHING_TO_SETTLE`
+  (u1012). A `crossing` flag, set only inside `swap` / `reprice-or-swap` and
+  cleared after the walk, lets settlement proceed with the maker side empty:
+  clearing is zero on both legs, everything rolls, and the walk does the whole
+  fill at the makers' limits. Public settle calls never see the flag.
 - **Rebate pot.** Settlement rides the mid-filled share of the swapper's 20 bps
   rebate into the pool and leaves the rest in `pending-rebate-*`. The walk pays
   crossed makers from that pot per fill; crumbs go back to the swapper and the

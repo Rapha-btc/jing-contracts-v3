@@ -4,14 +4,20 @@
 //   S1 happy walk: mid fill + partial crossed maker at the maker's limit,
 //      rebate split (ride to mid maker, 20bps to crossed maker, crumbs +
 //      sub-min residual refunded to the taker), escrow conservation.
-//   S2 no-mid-liquidity edge: only out-of-range makers -> u1012 (documented
-//      limitation: a swap cannot fill purely by crossing), full atomicity.
+//   S2 no-mid-liquidity edge: only out-of-range makers. The `crossing` flag
+//      lets settlement run with the maker side empty at the mid; A1 is too big
+//      for the crossable book within LT -> u1023 partial revert, atomic.
 //   S2b beyond-limit makers only -> u1023 partial revert, atomicity.
 //   S3 dust maker: walk leaves a maker below min-deposit; a later walk SKIPS
 //      that dust maker.
 //   S3b sub-min remainder: refunds silently, swap succeeds on the mid fill.
 //   S4 mirror direction: x-taker walks an out-of-range y bid at the bid's
 //      limit; x walker leaves zero residual.
+//   S5b cross-only, oversize: only Y1's rolled bid on the book, taker bigger
+//      than it can absorb -> u1023, atomic (cycle + Y1 unchanged).
+//   S5 cross-only, sized: same book, taker fits -> settles with zero mid
+//      clearing and the walk does the WHOLE fill at Y1's limit; Y1 paid
+//      net-of-fee + 20bps rebate, taker residual 0.
 //
 // Hermes is key-gated since 2026-08-18, so the harness runs on the REAL
 // prices already in pyth-storage-v4 (read pre-run for exact expectations)
@@ -316,7 +322,7 @@ async function main() {
   b = evalM(`(stx-get-balance '${CID})`)(b); // escrow: 0 STX resting
   b = evalSbtcBal(CID)(b); // escrow: M2_LEFT + M3
 
-  // ---------- S2: only out-of-range makers -> u1012, atomic ----------
+  // ---------- S2: only out-of-range makers -> walk runs, A1 too big -> u1023, atomic ----------
   b = evalSbtcBal(STX_DEPOSITOR_1)(b);
   b = swap(STX_DEPOSITOR_1, A1, LT, false)(b); // book: M2_LEFT@L2, M3@L3, no in-range
   b = evalSbtcBal(STX_DEPOSITOR_1)(b); // unchanged
@@ -371,6 +377,39 @@ async function main() {
   b = evalM("(get-current-cycle)")(b); // u4
   b = evalM(`(get-token-x-deposit u4 '${SBTC_DEPOSITOR_1})`)(b); // 0 residual
 
+  // ---------- S5b: cross-only, oversize -> u1023 atomic ----------
+  // Book in u4: Y1's rolled bid (1.14 STX, absorbs ~177 sats) plus a fresh
+  // 20 STX bid at LY1, BOTH out of range. No in-range y at all, so before the
+  // `crossing` flag this died at settlement with u1012.
+  const LX5 = (MID * 99n) / 100n; // x-taker floor, below LY1 -> crosses both
+  const Y2_AMT = 20_000_000n;
+  b = depositY(STX_DEPOSITOR_1, Y2_AMT, LY1)(b); // out-of-range bid 20 STX
+  const BIG5 = 20_000n; // sats; the two bids absorb a few thousand at most
+  let A7 = (BIG5 * BPS) / (BPS - REB);
+  while (A7 - (A7 * REB) / BPS < BIG5) A7 += 1n;
+  b = evalM(`(get-token-y-deposit u4 '${Y1})`)(b); // Y1 rolled bid before
+  b = swap(SBTC_DEPOSITOR_1, A7, LX5, true)(b); // -> u1023
+  b = evalM("(get-current-cycle)")(b); // still u4
+  b = evalM(`(get-token-y-deposit u4 '${Y1})`)(b); // unchanged
+
+  // ---------- S5: cross-only, sized -> whole fill by the walk ----------
+  // 1500 sats net: Y1 (list-first) absorbs its ~177, the 20 STX bid the rest.
+  const NET6 = 1500n;
+  let A6 = (NET6 * BPS) / (BPS - REB);
+  while (A6 - (A6 * REB) / BPS < NET6) A6 += 1n;
+  const REBATE6 = (A6 * REB) / BPS;
+  const NET6r = A6 - REBATE6; // exact net after the search (>= NET6)
+  b = evalSbtcBal(Y1)(b);
+  b = evalSbtcBal(STX_DEPOSITOR_1)(b);
+  b = swap(SBTC_DEPOSITOR_1, A6, LX5, true)(b); // ok
+  b = evalSbtcBal(Y1)(b);
+  b = evalSbtcBal(STX_DEPOSITOR_1)(b);
+  b = evalM("(get-current-cycle)")(b); // u5
+  b = evalM(`(get-token-x-deposit u5 '${SBTC_DEPOSITOR_1})`)(b); // 0 residual
+  b = evalM(`(get-token-y-deposit u5 '${Y1})`)(b); // crumbs or 0
+  b = evalM(`(get-token-y-deposit u5 '${STX_DEPOSITOR_1})`)(b); // 20 STX - y2
+  b = evalM("(var-get pending-rebate-x)")(b); // pot zeroed
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid);
@@ -406,7 +445,7 @@ async function main() {
   assert(`escrow sBTC == M2left+M3 (${M2_LEFT + M3_AMT})`, escrowSbtc, (v) => v === M2_LEFT + M3_AMT);
 
   const t2Before = uintOf(decodeEval(s[i++]));
-  assert("S2 no-mid-liquidity -> u1012", decodeTx(s[i++]), "(err u1012)");
+  assert("S2 no-mid-liquidity -> walk runs, partial -> u1023", decodeTx(s[i++]), "(err u1023)");
   const t2After = uintOf(decodeEval(s[i++]));
   assert("S2 atomic (taker sBTC unchanged)", t2After - t2Before, (d) => d === 0n);
   assert("S2 cycle unchanged", decodeEval(s[i++]), "u1");
@@ -438,6 +477,35 @@ async function main() {
   assert("S4 Y1 received sBTC at own bid", y1After - y1Before, (d) => d > 0n);
   assert("S4 cycle -> u4", decodeEval(s[i++]), "u4");
   assert("S4 x-walker zero residual", decodeEval(s[i++]), "u0");
+
+  assert("S5b 20 STX out-of-range bid", decodeTx(s[i++]), `(ok u${Y2_AMT})`);
+  const y1Bid = uintOf(decodeEval(s[i++]));
+  assert("S5b Y1 rolled bid rests (>= min)", y1Bid, (v) => v >= MIN_STX);
+  assert("S5b cross-only oversize -> u1023", decodeTx(s[i++]), "(err u1023)");
+  assert("S5b cycle unchanged", decodeEval(s[i++]), "u4");
+  assert("S5b Y1 bid unchanged", decodeEval(s[i++]), `u${y1Bid}`);
+
+  // walk expectations from the read-back Y1 bid (contract order of ops)
+  const X6a = (y1Bid * PPDF) / LY1; // Y1 absorbs (x-from-y, clamps the taker)
+  const Y6a = (X6a * LY1) / PPDF; // uSTX Y1 actually spends (floors)
+  const X6b = NET6r - X6a; // remainder walks into the 20 STX bid
+  const Y6b = (X6b * LY1) / PPDF;
+  const REB6a = (X6a * REB) / BPS; // both below the pot (REBATE6 > NET6r*REB/BPS)
+  const REB6b = (X6b * REB) / BPS;
+  const Y1_GAIN = X6a - (X6a * FEE) / BPS + REB6a;
+  const Y2_GAIN = X6b - (X6b * FEE) / BPS + REB6b;
+  const y1SbtcBefore = uintOf(decodeEval(s[i++]));
+  const y2SbtcBefore = uintOf(decodeEval(s[i++]));
+  assert("S5 cross-only sized swap ok", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
+  const y1SbtcAfter = uintOf(decodeEval(s[i++]));
+  const y2SbtcAfter = uintOf(decodeEval(s[i++]));
+  assert(`S5 Y1 paid at own limit net+rebate (${Y1_GAIN})`, y1SbtcAfter - y1SbtcBefore, (d) => d === Y1_GAIN);
+  assert(`S5 20-STX bid paid at own limit net+rebate (${Y2_GAIN})`, y2SbtcAfter - y2SbtcBefore, (d) => d === Y2_GAIN);
+  assert("S5 cycle -> u5", decodeEval(s[i++]), "u5");
+  assert("S5 taker residual 0", decodeEval(s[i++]), "u0");
+  assert(`S5 Y1 left with crumbs (${y1Bid - Y6a})`, decodeEval(s[i++]), `u${y1Bid - Y6a}`);
+  assert(`S5 20-STX bid keeps the rest (${Y2_AMT - Y6b})`, decodeEval(s[i++]), `u${Y2_AMT - Y6b}`);
+  assert("S5 rebate pot zeroed", decodeEval(s[i++]), "u0");
 
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
