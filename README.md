@@ -32,6 +32,45 @@ A small utility that produces the signature format used by vaults (see below). O
 ### Markets — `markets-sbtc-stx-jing` / `markets-sbtc-usdcx-jing`
 A **blind-batch auction**. Instead of front-running each other on order books, depositors put their sBTC (or STX / USDCx) into a shared pool with a price they're willing to accept. After a short window, the market settles every order at the same fair price using a Pyth oracle, and everyone gets filled (or rolled to the next round) without any MEV games. One contract per pair.
 
+#### v2: the swapper's remainder crosses the rolled book
+
+`markets-sbtc-stx-jing-v2` adds one thing on top of the batch. Passive
+depositors behave exactly as before. Only the active swapper (`swap`,
+`reprice-or-swap-*`) gets extra behaviour: after settlement clears everyone in
+range at the oracle mid, whatever the swapper has left walks the *opposite*
+side's rolled book like a plain order book, one fold over the new cycle's
+depositor list, and fills every out-of-range maker whose limit is still within
+the swapper's own limit.
+
+- **Makers are paid at their own limit, times their size.** An x-maker selling
+  sBTC at 1.10 receives sBTC x 1.10 in STX, minus the 10 bps fee, plus a 20 bps
+  rebate drawn from the swapper's prepaid rebate pot. If the swapper's remainder
+  is smaller than the maker, the maker is partially filled at that same limit
+  and the rest stays rolled. The swapper is the one taking the worse price.
+- **Full fill or revert.** If the walk ends and the swapper still holds a
+  deposit at or above the side's min deposit, the whole tx (settlement included)
+  reverts with `ERR_PARTIAL_FILL`. A residual *below* min deposit is
+  integer-division dust that can buy nothing from anyone, so it is refunded and
+  the swap exits clean.
+- **Rebate pot.** Settlement rides the mid-filled share of the swapper's 20 bps
+  rebate into the pool and leaves the rest in `pending-rebate-*`. The walk pays
+  crossed makers from that pot per fill; crumbs go back to the swapper and the
+  pot is zeroed before the next settlement.
+- **Ordering, not price, is the fairness question.** The walk follows deposit
+  order, not best-price-first. Nobody gets a worse price than they asked, but
+  a later maker can miss the fill if the remainder runs out before the list
+  reaches them.
+
+**Why the walk does not need the `MIN_SHARE_BPS` filter.** `close-deposits`
+rolls any maker below 0.2% of their side's total instead of clearing them at
+the mid. That guard exists because mid clearing is *pro rata*: a tiny share of
+a large side rounds badly, so the small maker would get a bad fill price. The
+walk is not pro rata. Each maker is filled one at a time at their own limit,
+so their size relative to the rest of the side has no effect on the price they
+receive. The only size check the walk makes is absolute: makers below the
+side's min deposit are skipped, because a dust fill rounds to zero on one leg
+and would move nothing while still touching state.
+
 ### Vaults — `vault-sbtc-stx` / `vault-sbtc-usdcx`
 Your **personal trading account**. You deploy one (or use a deployer service), park your sBTC and STX/USDCx in it, and sign trade conditions off-chain — *"sell 0.1 sBTC for at least 5,000 USDCx, expires in 24 hours"*. A keeper bot watches the market and executes when conditions are met. Your funds never leave your control: they only move into the official Jing market, into Bitflow's pools, or back to you. The keeper can't substitute tokens or reroute funds.
 
