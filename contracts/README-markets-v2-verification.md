@@ -52,5 +52,6 @@ stub for it. The stub body must be `(begin (asserts! true (err u0)) (ok true))`,
    walk harness enters through `swap` only.
 6. A real-Pyth run once a Hermes key is in hand: the same three harnesses with the source
    patches removed.
-7. Audit. None yet. An aibtc bounty scoped to this contract versus the deployed v1 is open
-   (see README-markets-sbtc-stx-jing-v2.md for the design notes).
+7. Audit. An aibtc bounty scoped to this contract versus the deployed v1 is open until
+   2026-09-17, 21,000 sats: https://aibtc.com/bounties/mtkrbts96d961f6fae5e (design notes in
+   README-markets-sbtc-stx-jing-v2.md).
