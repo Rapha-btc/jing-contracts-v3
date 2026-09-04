@@ -9,7 +9,7 @@
 //      fallback u3003; split not adding up to amount u3004; jing without a
 //      vaa u3005; a venue's own
 //      minimum too high is refused by the VENUE (DLMM
-//      u2003, XYK u6009, Velar u107); nothing moved across all of them; a u0
+//      u2003, XYK u1019/u1020 via xyk-core, Velar u107); nothing moved across all of them; a u0
 //      Velar minimum is floored, not refused. W1p partial fill: a second
 //      router copy with DLMM_MAX_STEPS u1 sells more than one bin holds;
 //      DLMM returns in < amount, the swap succeeds, dlmm-in is what sold,
@@ -25,6 +25,20 @@
 //      fallback none: XYK runs, Jing amount stays home (unsold == 4000);
 //      "Jing mainly", fallback (some XYK): the whole amount lands on XYK
 //      (xyk-in == 4000, unsold u0), the retail shape.
+//   W8 market get-taker-capacity is tight: read-only == the JS formula to the
+//      sat (mid + walk, own side subtracted), limit filters, selling exactly
+//      gross-cap fills in full (dust at most), two min deposits over is
+//      FOK-refused; get-storage-mid / refresh-mid (some/none) return the mid.
+//   W9 smart swaps, split computed ON CHAIN at execution: W9a sell 40000 sats
+//      with a bid resting, loose limit: book to capacity, DLMM the rest;
+//      W9b vaa none: no book leg; W9c tight limit on an empty book: no venue
+//      respects it -> u3002, nothing moved; W9d sell 200 STX with an ask
+//      resting; W9f the four-venue happy path: 0.7 BTC at a limit 3% under
+//      the AMMs' spot: Jing to capacity, DLMM bins until the limit, XYK +
+//      Velar by closed-form room, unsold u0; W9e 3 BTC at the same limit
+//      right after: the room is spent, most stays home. Every leg's achieved
+//      price is checked against the limit (within the 2-unit rounding
+//      slack the router concedes on venue minimums).
 //   W7 four legs: W7a sell sBTC 2000 Jing + 1500 DLMM + 1500 XYK + 1000
 //      Velar against a resting bid, every leg's in == planned, out == sum
 //      of the four outs; W7c sell STX 5 Jing + 3 DLMM + 2 XYK + 2 Velar
@@ -38,6 +52,7 @@
 import fs from "node:fs";
 import {
   uintCV,
+  falseCV,
   someCV,
   noneCV,
   tupleCV,
@@ -203,7 +218,7 @@ async function main() {
   const g0s = sbtcOf(T, "W1 before"); const g0x = stxOf(T, "W1 before");
   tx("W1 total min-out too high -> u3002", sellSbtc(T, 0n, NONE, amts(3000n, 0n, 0n), ONES, HUGE, NO_VAA), "(err u3002)");
   tx("W1 DLMM minimum too high -> venue u2003", sellSbtc(T, 0n, NONE, amts(3000n, 0n, 0n), amts(HUGE, 1n, 1n), 1n, NO_VAA), "(err u2003)");
-  tx("W1 XYK minimum too high -> venue u6009", sellSbtc(T, 0n, NONE, amts(0n, 3000n, 0n), amts(1n, HUGE, 1n), 1n, NO_VAA), "(err u6009)");
+  tx("W1 XYK minimum too high -> xyk-core u1019/u1020 (direct, no helper)", sellSbtc(T, 0n, NONE, amts(0n, 3000n, 0n), amts(1n, HUGE, 1n), 1n, NO_VAA), (v) => v === "(err u1019)" || v === "(err u1020)");
   tx("W1 Velar minimum too high -> venue u107", sellSbtc(T, 0n, NONE, amts(0n, 0n, 3000n), amts(1n, 1n, HUGE), 1n, NO_VAA), "(err u107)");
   const g1s = sbtcOf(T, "W1 after"); const g1x = stxOf(T, "W1 after");
   tx("W1 Velar minimum u0 is floored, not refused", sellSbtc(T, 0n, NONE, amts(0n, 0n, 1000n), ZEROS, 1n, NO_VAA), okPrefix);
@@ -328,6 +343,60 @@ async function main() {
   ev("W8 S's bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
   ev("W8 low bid fully walked (dust at most)", `(get-token-y-deposit u5 '${M8})`, (v) => uintOf(v) < MIN_STX, CID);
 
+  // =============== W9: smart swaps, split computed on chain ===============
+  // NOTE the fork's Pyth storage is stale: the oracle mid (~6462 uSTX/sat)
+  // sits about 2x above where the AMMs trade (~3011 uSTX/sat, see W2). So a
+  // limit near the mid finds no AMM capacity, and a limit at 40% of the
+  // mid finds plenty. Both are used on purpose.
+  const smartSbtc = (sender, amount, limit, vaa, minOut) =>
+    call(sender, "smart-swap-sbtc-for-stx", [uintCV(amount), uintCV(limit), vaa, uintCV(minOut)]);
+  const smartStx = (sender, amount, limit, vaa, minOut) =>
+    call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(minOut)]);
+  const L_LOOSE = (MID * 40n) / 100n; // below the AMM price: AMMs have room
+  const L_TIGHT = (MID * 80n) / 100n; // above the AMM price, below the mid: book only
+  tx("W9 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const n0s = sbtcOf(T, "W9a before"); const n0x = stxOf(T, "W9a before");
+  const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const n1s = sbtcOf(T, "W9a after"); const n1x = stxOf(T, "W9a after");
+  ev("W9a bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
+  const r9b = tx("W9b smart sell 10000 sats, vaa none: no book leg, all XYK/Velar", smartSbtc(T, 10_000n, L_LOOSE, NO_VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const n2s = sbtcOf(T, "W9b after"); const n2x = stxOf(T, "W9b after");
+  const n3s = sbtcOf(T, "W9c before"); const n3x = stxOf(T, "W9c before");
+  tx("W9c smart sell 5000 sats, tight limit, empty book: no venue respects it -> u3002", smartSbtc(T, 5000n, L_TIGHT, VAA, 1n), "(err u3002)");
+  const n4s = sbtcOf(T, "W9c after"); const n4x = stxOf(T, "W9c after");
+  // W9a's mid fill left S a few uSTX of pro-rata rounding dust, rolled under
+  // S's name: to the market that is a resting position, and `swap` refuses
+  // a caller who rests on the side it deposits (u1024). Cancel it first.
+  tx("W9d S cancels its rolled dust so it can swap on the STX side", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+  const ASK9 = 20_000n;
+  tx("W9d 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK9), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK9})`);
+  const n5s = sbtcOf(S, "W9d before"); const n5x = stxOf(S, "W9d before");
+  const r9d = tx("W9d smart sell 200 STX, loose limit (3x mid): book to capacity, rest split XYK/Velar", smartStx(S, 200_000_000n, MID * 3n, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
+  ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit u6 '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
+  const L_NEAR = (MID * 45n) / 100n;
+  // W9f: the four-venue happy path with nothing left home. A bid rests;
+  // 0.7 BTC at the limit 3% under the AMM price: the book fills to
+  // capacity, DLMM to the limit (~0.68 BTC in W9e), XYK + Velar absorb
+  // the rest inside their room, unsold u0, and every leg's achieved price
+  // is at or above the limit.
+  tx("W9f 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const q0s = sbtcOf(T, "W9f before"); const q0x = stxOf(T, "W9f before");
+  const r9f = tx("W9f smart sell 0.7 BTC, limit just under the AMM price: Jing + DLMM + XYK + Velar, unsold u0", smartSbtc(T, 70_000_000n, L_NEAR, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const q1s = sbtcOf(T, "W9f after"); const q1x = stxOf(T, "W9f after");
+
+  // W9e: 3 BTC at the same limit right after W9f: the venues' room at this
+  // limit is spent, so almost everything stays home; what still fills does
+  // so at or above the limit and everything adds up.
+  const n7s = sbtcOf(T, "W9e before"); const n7x = stxOf(T, "W9e before");
+  const BIG = 300_000_000n; // 3 BTC: more than the DLMM holds inside 30 bins
+  const r9e = tx("W9e smart sell 3 BTC, vaa none, same limit, venues' room spent by W9f: most stays home", smartSbtc(T, BIG, L_NEAR, NO_VAA, 0n), okPrefix);
+  const n8s = sbtcOf(T, "W9e after"); const n8x = stxOf(T, "W9e after");
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -403,6 +472,61 @@ async function main() {
   check(`W8 exact: jing-in + unsold == gross-cap`, jingIn8 + unsold8, (t) => t === gross8);
   check(`W8 exact: sBTC delta == jing-in (${jingIn8})`, k1s.value - k2s.value, (d) => d === jingIn8);
   check(`W8 exact: STX grew by out (${out8})`, k2x.value - k1x.value, (d) => d === out8 && d > 0n);
+  const out9a = field(r9a.raw, "out");
+  check("W9a sBTC delta == 40000", n0s.value - n1s.value, (d) => d === 40_000n);
+  check(`W9a STX grew by out (${out9a})`, n1x.value - n0x.value, (d) => d === out9a && d > 0n);
+  check("W9a out == sum of the four legs", legs(r9a), (t) => t === out9a);
+  check("W9a book leg sized to the mid capacity (jing-in + dust == gross-cap 15505)", field(r9a.raw, "jing-in"), (j) => j >= 15505n - MIN_SBTC && j <= 15505n);
+  check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === 40_000n - field(r9a.raw, "jing-in"));
+  check("W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == 40000", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === 40_000n);
+  const out9b = field(r9b.raw, "out");
+  check("W9b sBTC delta == 10000", n1s.value - n2s.value, (d) => d === 10_000n);
+  check(`W9b STX grew by out (${out9b})`, n2x.value - n1x.value, (d) => d === out9b && d > 0n);
+  check("W9b dlmm-in + xyk-in + velar-in == 10000", ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9b.raw, k), 0n), (t) => t === 10_000n);
+  check("W9c revert moved no sBTC", n4s.value - n3s.value, (d) => d === 0n);
+  check("W9c revert moved no STX", n4x.value - n3x.value, (d) => d === 0n);
+  const out9e = field(r9e.raw, "out"), unsold9e = field(r9e.raw, "unsold");
+  check(`W9e sBTC delta == 3 BTC - unsold (${unsold9e})`, n7s.value - n8s.value, (d) => d === 300_000_000n - unsold9e);
+  check(`W9e STX grew by out (${out9e})`, n8x.value - n7x.value, (d) => d === out9e && d > 0n);
+  check("W9e out == sum of the four legs", legs(r9e), (t) => t === out9e);
+  // W9f already took every venue's room at this limit, so W9e finds only
+  // what the pools regained; the point is that nothing exceeds the limit
+  // and everything is accounted for
+  check("W9e DLMM leg stayed inside the limit (dlmm-in < 3 BTC)", field(r9e.raw, "dlmm-in"), (d) => d < 300_000_000n);
+  check("W9e most stayed home (every venue capped by the limit)", unsold9e, (d) => d > 200_000_000n);
+  check("W9e legs + unsold == 3 BTC", ["dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r9e.raw, k), 0n), (t) => t === 300_000_000n);
+  // achieved price per leg vs the limit. selling sats: out uSTX / in sats
+  // >= limit / 1e10; selling uSTX: out sats / in uSTX >= 1e10 / limit.
+  // The router concedes ROUND_SLACK (2 units of input) on each venue
+  // minimum so pool floor-rounding cannot trip it; the check allows exactly
+  // that: the limit must hold on (in - 2).
+  const SLACK = 2n;
+  const legPriceOk = (tag, r, limit, sellSbtc) => {
+    for (const v of ["jing", "dlmm", "xyk", "velar"]) {
+      const i = field(r.raw, `${v}-in`), o = field(r.raw, `${v}-out`);
+      if (i === 0n) continue;
+      const a = i > SLACK ? i - SLACK : 0n;
+      check(`${tag} ${v} price respects the limit within 2 units of input (${o}/${i})`, [a, o], ([a, b]) => sellSbtc ? b * PP * 100n >= a * limit : b * limit >= a * PP * 100n);
+    }
+  };
+  legPriceOk("W9a", r9a, L_LOOSE, true);
+  legPriceOk("W9b", r9b, L_LOOSE, true);
+  legPriceOk("W9e", r9e, L_NEAR, true);
+  const out9f = field(r9f.raw, "out");
+  check("W9f sBTC delta == 0.7 BTC", q0s.value - q1s.value, (d) => d === 70_000_000n);
+  check(`W9f STX grew by out (${out9f})`, q1x.value - q0x.value, (d) => d === out9f && d > 0n);
+  check("W9f out == sum of the four legs", legs(r9f), (t) => t === out9f);
+  check("W9f all four venues filled", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r9f.raw, k)), (a) => a.every((x) => x > 0n));
+  check("W9f legs add up to 0.7 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9f.raw, k), 0n), (t) => t === 70_000_000n);
+  legPriceOk("W9f", r9f, L_NEAR, true);
+  const out9d = field(r9d.raw, "out");
+  check("W9d STX delta == 200000000", n5x.value - n6x.value, (d) => d === 200_000_000n);
+  check(`W9d sBTC grew by out (${out9d})`, n6s.value - n5s.value, (d) => d === out9d && d > 0n);
+  check("W9d out == sum of the four legs", legs(r9d), (t) => t === out9d);
+  check("W9d DLMM took the remainder after the book", field(r9d.raw, "dlmm-in"), (d) => d === 200_000_000n - field(r9d.raw, "jing-in"));
+  legPriceOk("W9d", r9d, MID * 3n, false);
+  const yGross9 = (() => { const net = (ASK9 * MID) / (PP * 100n); const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
+  check(`W9d book leg sized to the ask's capacity (gross-cap ${yGross9}, dust at most)`, field(r9d.raw, "jing-in"), (j) => j >= yGross9 - MIN_STX && j <= yGross9);
 
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);

@@ -671,15 +671,24 @@
   )
 )
 
-;; the venue's minimum for a leg: the limit applied to that leg's size
+;; the venue's minimum for a leg: the limit applied to the leg's size, less
+;; a few units of input so the pool's own floor rounding (adjusted input,
+;; then output) cannot land one unit under the minimum on a small leg
+(define-constant ROUND_SLACK u2)
+
 (define-private (limit-min
     (leg uint)
     (limit uint)
     (sell-sbtc bool)
   )
-  (if sell-sbtc
-    (/ (* leg limit) PRICE_SCALE)
-    (/ (* leg PRICE_SCALE) limit)
+  (let ((base (if (> leg ROUND_SLACK)
+      (- leg ROUND_SLACK)
+      u0
+    )))
+    (if sell-sbtc
+      (/ (* base limit) PRICE_SCALE)
+      (/ (* base PRICE_SCALE) limit)
+    )
   )
 )
 
@@ -909,7 +918,9 @@
       unsold: u0,
     })
     (let (
-        (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit sell-sbtc))
+        (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit
+          sell-sbtc
+        ))
         (cap-velar (cp-capacity (velar-reserves sell-sbtc) (velar-keep) limit sell-sbtc))
         (plan (cp-split left cap-xyk cap-velar))
         (xyk (try! (amm-leg (get xyk plan) limit sell-sbtc VENUE_XYK)))
