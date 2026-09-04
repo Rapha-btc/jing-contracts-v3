@@ -38,7 +38,10 @@
 //      Velar by closed-form room, unsold u0; W9e 3 BTC at the same limit
 //      right after: the room is spent, most stays home. Every leg's achieved
 //      price is checked against the limit (within the 2-unit rounding
-//      slack the router concedes on venue minimums).
+//      slack the router concedes on venue minimums). W9g resting size on
+//      the taker's own side: an ask above the mid is ignored by the
+//      capacity and untouched by the swap; the opposite bid fills to
+//      capacity, the rest goes to DLMM.
 //   W7 four legs: W7a sell sBTC 2000 Jing + 1500 DLMM + 1500 XYK + 1000
 //      Velar against a resting bid, every leg's in == planned, out == sum
 //      of the four outs; W7c sell STX 5 Jing + 3 DLMM + 2 XYK + 2 Velar
@@ -366,6 +369,8 @@ async function main() {
     call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(minOut)]);
   const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
   const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
+  // gross-cap for a taker facing a 100 STX bid at the mid with an empty own side
+  const midGross9a = (() => { const net = (BID * PP * 100n) / MID; const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
   tx("W9 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
   const n0s = sbtcOf(T, "W9a before"); const n0x = stxOf(T, "W9a before");
   const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
@@ -415,6 +420,23 @@ async function main() {
   const q1s = sbtcOf(T, "W9f after"); const q1x = stxOf(T, "W9f after");
   const m8s1 = sbtcOf(M8, "W9f M8 after"); const m9s1 = sbtcOf(M9, "W9f M9 after"); const s9s1 = sbtcOf(S, "W9f S after");
   tx("W9f M9 cancels its untouched bid: the full 40 STX come back", call(M9, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), "(ok u40000000)");
+
+  // W9g: resting size on the taker's OWN side. In-range makers on both
+  // sides cannot coexist (the maker gate refuses a deposit that would rest
+  // crossed against a live opposite maker), so the realistic case is an ask
+  // resting ABOVE the mid on the taker's side, waiting. It must not count
+  // against the taker's capacity, must not be touched by the taker's swap,
+  // and the taker fills the opposite bid to capacity, the rest on DLMM.
+  const ASK_OWN = 10_000n;
+  tx("W9g M8 asks 10000 sats at +1% (own side, out of range)", call(M8, "deposit-token-x", [uintCV(ASK_OWN), uintCV((MID * 101n) / 100n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
+  tx("W9g S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) =>
+    String(v).includes(`(gross-cap u${midGross9a})`) && String(v).includes("(walk-cap u0)"), CID);
+  const w0s = sbtcOf(T, "W9g before"); const w0x = stxOf(T, "W9g before"); const g8s0 = sbtcOf(M8, "W9g M8 before"); const g8x0 = stxOf(M8, "W9g M8 before");
+  const r9g = tx("W9g smart sell 40000 sats, loose limit: bid to capacity, ask untouched, rest on DLMM", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const w1s = sbtcOf(T, "W9g after"); const w1x = stxOf(T, "W9g after"); const g8s1 = sbtcOf(M8, "W9g M8 after"); const g8x1 = stxOf(M8, "W9g M8 after");
+  tx("W9g M8 cancels its untouched ask: the full 10000 sats come back", call(M8, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
 
   // W9e: 3 BTC at the same limit right after W9f: the venues' room at this
   // limit is spent, so almost everything stays home; what still fills does
@@ -503,7 +525,6 @@ async function main() {
   check("W9a sBTC delta == 40000", n0s.value - n1s.value, (d) => d === 40_000n);
   check(`W9a STX grew by out (${out9a})`, n1x.value - n0x.value, (d) => d === out9a && d > 0n);
   check("W9a out == sum of the four legs", legs(r9a), (t) => t === out9a);
-  const midGross9a = (() => { const net = (BID * PP * 100n) / MID; const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
   check(`W9a book leg sized to the mid capacity (gross-cap ${midGross9a}, dust at most)`, field(r9a.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
   check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === 40_000n - field(r9a.raw, "jing-in"));
   check("W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == 40000", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === 40_000n);
@@ -551,6 +572,14 @@ async function main() {
   check("W9f M8 (inside the limit) was walked and paid sBTC", m8s1.value - m8s0.value, (d) => d > 0n);
   check("W9f M9 (outside the limit) received nothing", m9s1.value - m9s0.value, (d) => d === 0n);
   legPriceOk("W9f", r9f, L_NEAR, true);
+  const out9g = field(r9g.raw, "out");
+  check("W9g sBTC delta == 40000", w0s.value - w1s.value, (d) => d === 40_000n);
+  check(`W9g STX grew by out (${out9g})`, w1x.value - w0x.value, (d) => d === out9g && d > 0n);
+  check("W9g out == sum of the legs", legs(r9g), (t) => t === out9g);
+  check(`W9g book leg == the bid's capacity (gross ${midGross9a}, dust at most)`, field(r9g.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
+  check("W9g DLMM took the rest", field(r9g.raw, "dlmm-in"), (d) => d === 40_000n - field(r9g.raw, "jing-in"));
+  check("W9g M8's ask received no STX (untouched)", g8x1.value - g8x0.value, (d) => d === 0n);
+  legPriceOk("W9g", r9g, L_LOOSE, true);
   const out9d = field(r9d.raw, "out");
   check("W9d STX delta == 200000000", n5x.value - n6x.value, (d) => d === 200_000_000n);
   check(`W9d sBTC grew by out (${out9d})`, n6s.value - n5s.value, (d) => d === out9d && d > 0n);
