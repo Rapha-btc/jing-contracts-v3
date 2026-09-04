@@ -23,6 +23,11 @@
 //   G4 u1024 on a fork: cancel-cycle rolls the stuck cycle, the x maker
 //      rests in the new cycle, `swap` on the same side -> u1024, and
 //      nothing moved (deposit, limit, balance, cycle).
+//   G6 phase and guard codes the fork never saw: initialize twice u1018,
+//      deposit below min u1001, swap of u0 u1001, cancel-cycle in deposit
+//      phase u1003, then after a public close: deposit / cancel / set-limit /
+//      reprice-or-swap in settle phase u1002, cancel-cycle before the
+//      threshold u1014, after it ok (book rolls, cycle advances).
 //   G5 rebate pot fully consumed (README 4): not a sim step. The cap branch
 //      `(if (> r pending) pending r)` in execute-fill is unreachable: the
 //      pot is charged 20 bps on the GROSS amount and the walk draws 20 bps
@@ -296,6 +301,37 @@ async function main() {
   // round trip the role
   tx("G1 OP2 hands back", setOperator(OP2, DEPLOYER), "(ok true)");
   ev("G1 operator is deployer again", "(var-get operator)", DEPLOYER);
+
+  // =============== G6: phase + guard codes ===============
+  // state: cycle u1, x ask 2000 @ DEAD_X-1 (SBTC_DEPOSITOR_1), y bid 100 STX (STX_DEPOSITOR_1)
+  tx("G6 initialize twice -> u1018", call(DEPLOYER, "initialize", [
+    contractPrincipalCV(DEPLOYER, MARKET),
+    contractPrincipalCV(SBTC_ADDR, SBTC_NAME),
+    contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
+    uintCV(MIN_SBTC), uintCV(MIN_STX), btcFeedBuf, stxFeedBuf,
+  ]), "(err u1018)");
+  tx("G6 x deposit below min -> u1001", depositX(SBTC_DEPOSITOR_1, MIN_SBTC - 1n, DEAD_X), "(err u1001)");
+  tx("G6 y deposit below min -> u1001", depositY(Y9, MIN_STX - 1n, LIVE_Y), "(err u1001)");
+  tx("G6 swap of u0 -> u1001", swap(Y9, 0n, HUGE, false), "(err u1001)");
+  tx("G6 cancel-cycle in deposit phase -> u1003", call(OUTSIDER, "cancel-cycle", []), "(err u1003)");
+  tx("G6 public close-deposits", call(OUTSIDER, "close-deposits", []), "(ok true)");
+  tx("G6 y deposit in settle phase -> u1002", depositY(Y9, MIN_STX, LIVE_Y), "(err u1002)");
+  tx("G6 x deposit in settle phase -> u1002", depositX(SBTC_DEPOSITOR_1, 1500n, DEAD_X), "(err u1002)");
+  tx("G6 cancel resting y in settle phase -> u1002", call(STX_DEPOSITOR_1, "cancel-token-y-deposit", [wstxTrait, wstxAsset]), "(err u1002)");
+  tx("G6 cancel resting x in settle phase -> u1002", call(SBTC_DEPOSITOR_1, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset]), "(err u1002)");
+  tx("G6 set-token-x-limit in settle phase -> u1002", call(SBTC_DEPOSITOR_1, "set-token-x-limit", [uintCV(DEAD_X), DUMMY_VAA]), "(err u1002)");
+  tx("G6 set-token-y-limit in settle phase -> u1002", call(STX_DEPOSITOR_1, "set-token-y-limit", [uintCV(LIVE_Y - 1n), DUMMY_VAA]), "(err u1002)");
+  tx("G6 reprice-or-swap-token-x in settle phase -> u1002", call(SBTC_DEPOSITOR_1, "reprice-or-swap-token-x", [uintCV(DEAD_X), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), "(err u1002)");
+  tx("G6 reprice-or-swap-token-y in settle phase -> u1002", call(STX_DEPOSITOR_1, "reprice-or-swap-token-y", [uintCV(LIVE_Y - 1n), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), "(err u1002)");
+  tx("G6 cancel-cycle before threshold -> u1014", call(OUTSIDER, "cancel-cycle", []), "(err u1014)");
+  ev("G6 still cycle u1", "(get-current-cycle)", "u1");
+  ev("G6 x deposit intact", `(get-token-x-deposit u1 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
+  b = b.addAdvanceBlocks({ bitcoin_blocks: 43, stacks_blocks_per_bitcoin: 1 });
+  tx("G6 cancel-cycle after threshold", call(OUTSIDER, "cancel-cycle", []), "(ok true)");
+  ev("G6 cycle -> u2", "(get-current-cycle)", "u2");
+  ev("G6 x rolled to u2", `(get-token-x-deposit u2 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
+  ev("G6 y rolled to u2", `(get-token-y-deposit u2 '${STX_DEPOSITOR_1})`, `u${Y_AMT}`);
+  ev("G6 back in deposit phase", "(get-cycle-phase)", "u0");
 
   // ---- run ----
   const sid = await b.run();
