@@ -21,6 +21,14 @@
 //   W6 AMM-only entry points (no VAA): amm-swap-sbtc-for-stx / -stx-for-sbtc
 //      on DLMM, XYK, Velar; exact deltas, amm-out == out; guards u3001,
 //      u3003, venue min-out refusal (u2003), partial ok on the 1-step copy.
+//   W7 split entry points (off-chain split, on-chain execution): W7a sell
+//      sBTC 2000 Jing + 1500 DLMM + 1500 XYK + 1000 Velar against a resting
+//      bid, every leg's in == planned, out == sum of the four outs; W7b
+//      empty book, the Jing amount rolls back and stays in the wallet
+//      (unsold == jing-amount, no reroute), the Velar leg runs as planned;
+//      W7c sell STX 5 Jing + 3 DLMM + 2 XYK + 2 Velar against a resting
+//      ask; W7e jing-amount u0 with an EMPTY vaa (0x), AMM legs only; W7d
+//      guards: zero split u3005, DLMM min too high -> venue u2003.
 //   W5 fallback: empty book (fresh cycle), jing-amount == amount. The market
 //      returns an err, the wrapper catches it, the whole amount goes to the
 //      venue: jing-ok false / jing-in u0 / amm-in amount; no x position was
@@ -34,6 +42,7 @@
 import fs from "node:fs";
 import {
   uintCV,
+  tupleCV,
   contractPrincipalCV,
   stringAsciiCV,
   bufferCV,
@@ -263,6 +272,48 @@ async function main() {
     w6.push({ name, amt, s0, x0, s1, x1, r, dir: "stx" });
   }
 
+  // =============== W7: split entry points ===============
+  const amts = (d, x, v) => tupleCV({ dlmm: uintCV(d), xyk: uintCV(x), velar: uintCV(v) });
+  const splitSbtc = (sender, jing, a, m, minOut, vaa = DUMMY_VAA) =>
+    call(sender, "swap-sbtc-for-stx-split", [uintCV(jing), uintCV(1n), vaa, a, m, uintCV(minOut)]);
+  const splitStx = (sender, jing, a, m, minOut, vaa = DUMMY_VAA) =>
+    call(sender, "swap-stx-for-sbtc-split", [uintCV(jing), uintCV(HUGE), vaa, a, m, uintCV(minOut)]);
+  const EMPTY_VAA = bufferCV(new Uint8Array(0));
+  const ONES = amts(1n, 1n, 1n);
+  // W7d guards first (nothing resting yet)
+  tx("W7d zero split -> u3005", splitSbtc(T, 0n, amts(0n, 0n, 0n), ONES, 1n), "(err u3005)");
+  tx("W7d DLMM min too high -> venue u2003", splitSbtc(T, 0n, amts(1000n, 0n, 0n), amts(HUGE, 1n, 1n), 1n), "(err u2003)");
+  // W7a: bid rests, four legs
+  tx("W7a 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const a0s = sbtcOf(T, "W7a before"); const a0x = stxOf(T, "W7a before");
+  const r7a = tx("W7a split sell 6000 sats: 2000 Jing / 1500 DLMM / 1500 XYK / 1000 Velar", splitSbtc(T, 2000n, amts(1500n, 1500n, 1000n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u2000)") && String(v).includes("(dlmm-in u1500)") &&
+    String(v).includes("(xyk-in u1500)") && String(v).includes("(velar-in u1000)") && String(v).includes("(unsold u0)"));
+  const a1s = sbtcOf(T, "W7a after"); const a1x = stxOf(T, "W7a after");
+  ev("W7a taker holds no x position", `(get-token-x-deposit u2 '${T})`, "u0", CID);
+  // W7b: empty book, residual to the fallback venue
+  tx("W7b maker cancels the rolled bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+  const b0s = sbtcOf(T, "W7b before"); const b0x = stxOf(T, "W7b before");
+  const r7b = tx("W7b split on empty book: 1000 Jing rolls back and stays home, Velar 500 runs", splitSbtc(T, 1000n, amts(0n, 0n, 500n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(dlmm-in u0)") &&
+    String(v).includes("(xyk-in u0)") && String(v).includes("(velar-in u500)") && String(v).includes("(unsold u1000)"));
+  const b1s = sbtcOf(T, "W7b after"); const b1x = stxOf(T, "W7b after");
+  // W7e: no book leg, empty vaa, AMM legs only
+  const e0s = sbtcOf(T, "W7e before"); const e0x = stxOf(T, "W7e before");
+  const r7e = tx("W7e jing-amount u0 + empty vaa: 800 DLMM / 700 XYK / 500 Velar", splitSbtc(T, 0n, amts(800n, 700n, 500n), ONES, 1n, EMPTY_VAA), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(dlmm-in u800)") &&
+    String(v).includes("(xyk-in u700)") && String(v).includes("(velar-in u500)") && String(v).includes("(unsold u0)"));
+  const e1s = sbtcOf(T, "W7e after"); const e1x = stxOf(T, "W7e after");
+  // W7c: ask rests, STX side
+  const ASK = 20_000n;
+  tx("W7c 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK})`);
+  const c0s = sbtcOf(S, "W7c before"); const c0x = stxOf(S, "W7c before");
+  const r7c = tx("W7c split sell 12 STX: 5 Jing / 3 DLMM / 2 XYK / 2 Velar", splitStx(S, 5_000_000n, amts(3_000_000n, 2_000_000n, 2_000_000n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u5000000)") && String(v).includes("(dlmm-in u3000000)") &&
+    String(v).includes("(xyk-in u2000000)") && String(v).includes("(velar-in u2000000)") && String(v).includes("(unsold u0)"));
+  const c1s = sbtcOf(S, "W7c after"); const c1x = stxOf(S, "W7c after");
+  ev("W7c taker holds no y position", `(get-token-y-deposit u3 '${S})`, "u0", CID);
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -281,6 +332,24 @@ async function main() {
   // relative checks
   check("W1 min-out revert moved no sBTC", g1s.value - g0s.value, (d) => d === 0n);
   check("W1 min-out revert moved no STX", g1x.value - g0x.value, (d) => d === 0n);
+  const legs = (r) => ["jing-out", "dlmm-out", "xyk-out", "velar-out"].reduce((t, k) => t + field(r.raw, k), 0n);
+  const out7a = field(r7a.raw, "out");
+  check("W7a sBTC delta == 6000", a0s.value - a1s.value, (d) => d === 6000n);
+  check(`W7a STX grew by out (${out7a})`, a1x.value - a0x.value, (d) => d === out7a && d > 0n);
+  check("W7a out == jing-out + dlmm-out + xyk-out + velar-out", legs(r7a), (t) => t === out7a);
+  check("W7a every leg paid something", ["jing-out", "dlmm-out", "xyk-out", "velar-out"].map((k) => field(r7a.raw, k)), (a) => a.every((x) => x > 0n));
+  const out7b = field(r7b.raw, "out");
+  check("W7b sBTC delta == 500 (Jing's 1000 stayed home)", b0s.value - b1s.value, (d) => d === 500n);
+  check(`W7b STX grew by out (${out7b})`, b1x.value - b0x.value, (d) => d === out7b && d > 0n);
+  check("W7b out == velar-out alone", field(r7b.raw, "velar-out"), (v) => v === out7b);
+  const out7e = field(r7e.raw, "out");
+  check("W7e sBTC delta == 2000", e0s.value - e1s.value, (d) => d === 2000n);
+  check(`W7e STX grew by out (${out7e})`, e1x.value - e0x.value, (d) => d === out7e && d > 0n);
+  check("W7e out == dlmm-out + xyk-out + velar-out", legs(r7e), (t) => t === out7e);
+  const out7c = field(r7c.raw, "out");
+  check("W7c STX delta == 12000000", c0x.value - c1x.value, (d) => d === 12_000_000n);
+  check(`W7c sBTC grew by out (${out7c})`, c1s.value - c0s.value, (d) => d === out7c && d > 0n);
+  check("W7c out == sum of the four legs", legs(r7c), (t) => t === out7c);
   for (const [tag, r, s0, s1, x0, x1] of [["W1p", rp, p0s, p1s, p0x, p1x], ["W6p", rq, q0s, q1s, q0x, q1x]]) {
     const sold = field(r.raw, "amm-in"), unsold = field(r.raw, "unsold"), out = field(r.raw, "out");
     check(`${tag} partial: amm-in + unsold == 5000000`, sold + unsold, (t) => t === 5_000_000n && unsold > 0n && sold > 0n);
