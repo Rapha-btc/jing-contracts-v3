@@ -111,7 +111,28 @@ const sbtcAsset = stringAsciiCV(SBTC_ASSET_NAME);
 const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const btcFeedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
 const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
-const DUMMY_VAA = bufferCV(Buffer.from("00", "hex"));
+// LIVE=1: real oracle path. A fresh dual-feed VAA (BTC/USD + STX/USD) is
+// fetched from the keyed Hermes (PYTH_API_KEY from Pyth Terminal) and the
+// market runs UNPATCHED: real verify-and-update, real MAX_STALENESS, real
+// storage reads, Pyth fees paid by the caller. The mid comes from the same
+// Hermes parsed prices the VAA carries.
+const LIVE = process.env.LIVE === "1";
+const HERMES_BASE = (process.env.PYTH_HERMES_BASE || "https://pyth.dourolabs.app/hermes").replace(/\/$/, "");
+let DUMMY_VAA = bufferCV(Buffer.from("00", "hex"));
+let LIVE_PX = 0n, LIVE_PY = 0n;
+async function fetchLiveVaa() {
+  const key = process.env.PYTH_API_KEY;
+  if (!key) throw new Error("LIVE=1 needs PYTH_API_KEY");
+  const url = `${HERMES_BASE}/v2/updates/price/latest?encoding=hex&ids[]=${BTC_USD_FEED_HEX}&ids[]=${STX_USD_FEED_HEX}`;
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json" } });
+  if (!r.ok) throw new Error(`Hermes ${r.status}`);
+  const j = await r.json();
+  const hex = j.binary.data[0];
+  const byId = Object.fromEntries(j.parsed.map((e) => [e.id.toLowerCase().replace(/^0x/, ""), e.price]));
+  const px = byId[BTC_USD_FEED_HEX.toLowerCase()], py = byId[STX_USD_FEED_HEX.toLowerCase()];
+  if (!px || !py || px.expo !== py.expo) throw new Error("Hermes parsed prices missing or expo mismatch");
+  return { hex, px: BigInt(px.price), py: BigInt(py.price), publishTime: px.publish_time, expo: px.expo };
+}
 
 // ---- sources + sim-only patches (market only) ----
 const routerSrc = fs.readFileSync(new URL(`../contracts/${ROUTER}.clar`, import.meta.url), "utf8");
@@ -124,6 +145,10 @@ const router1StepSrc = (() => {
   return s;
 })();
 let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8");
+// pinned oracle for the patched (non-LIVE) market, see below
+const PX = 11_000_000_000_000n;
+const PY = 37_101_908n;
+if (!LIVE) {
 mktSrc = mktSrc.replace("(define-constant MAX_STALENESS u80)", "(define-constant MAX_STALENESS u999999999)");
 const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
 if ((mktSrc.match(VERIFY_BLOCK) || []).length !== 3) throw new Error("expected 3 verify blocks (settle-with-refresh, fresh-classification-price, refresh-mid)");
@@ -132,14 +157,13 @@ mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
 // 332). Pin the market's storage reads to today's Pyth mid instead, so
 // makers, limits and AMM prices all sit where they do on mainnet:
 // BTC $110,000 and STX $0.3710 (expo -8) = 296,480.82 STX/BTC = 337.29 sats/STX.
-const PX = 11_000_000_000_000n;
-const PY = 37_101_908n;
 const feedLit = (p) => `(ok { price: ${p}, conf: u0, expo: -8, ema-price: ${p}, ema-conf: u0, publish-time: stacks-block-time, prev-publish-time: u0 })`;
 const STORAGE_READ = /\(contract-call\?\s*'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4\s+get-price\s+\(var-get oracle-feed-(x|y)\)\s*\)/g;
 const reads = (mktSrc.match(STORAGE_READ) || []).length;
 if (reads < 6) throw new Error(`expected at least 6 storage reads, got ${reads}`);
 console.log(`pinned ${reads} Pyth storage reads in the market to the sim mid`);
 mktSrc = mktSrc.replace(STORAGE_READ, (m, xy) => feedLit(xy === "x" ? PX : PY));
+}
 
 // ---- decode + assert ----
 function decodeTx(s) {
@@ -178,8 +202,14 @@ async function storedPrice(feedHex) {
 
 async function main() {
   console.log("=== swap-router-sbtc-stx-jing SELF-VERIFYING stxer harness ===\n");
-  const MID = (PX * PP) / PY; // the mid the patched market settles at
-  console.log(`deployer ${DEPLOYER}  px=${PX} py=${PY} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
+  if (LIVE) {
+    const v = await fetchLiveVaa();
+    DUMMY_VAA = bufferCV(Buffer.from(v.hex, "hex"));
+    LIVE_PX = v.px; LIVE_PY = v.py;
+    console.log(`LIVE: real VAA (${v.hex.length / 2} bytes, publish ${new Date(v.publishTime * 1000).toISOString()}, expo ${v.expo}), market unpatched`);
+  }
+  const MID = LIVE ? (LIVE_PX * PP) / LIVE_PY : (PX * PP) / PY; // the mid the market settles at
+  console.log(`deployer ${DEPLOYER}  px=${LIVE ? LIVE_PX : PX} py=${LIVE ? LIVE_PY : PY} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
 
   const T = SBTC_DEPOSITOR_1; // sells sBTC through the wrapper
   const S = STX_DEPOSITOR_1; // sells STX through the wrapper; rests the Jing bid in W4
