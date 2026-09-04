@@ -271,10 +271,7 @@
     (min-amm-stx-out uint)
     (min-stx-out uint)
   )
-  (let (
-      (user tx-sender)
-      (stx-before (stx-get-balance user))
-    )
+  (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
     (asserts!
@@ -286,6 +283,8 @@
       ERR_BAD_VENUE
     )
     (let (
+        (user tx-sender)
+        (stx-before (stx-get-balance user))
         (jing (if (> jing-amount u0)
           (jing-swap jing-amount limit-price vaa true)
           none
@@ -302,32 +301,31 @@
             out: u0,
           }
         ))
+        (out (gain stx-before (stx-get-balance user)))
       )
-      (let ((out (gain stx-before (stx-get-balance user))))
-        (asserts! (>= out min-stx-out) ERR_MIN_OUT)
-        (print {
-          topic: "swap-sbtc-for-stx",
-          user: user,
-          amount: amount,
-          jing-ok: (is-some jing),
-          jing-in: jing-in,
-          jing-out: jing-got,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amm-in (get in amm)),
-          venue: venue,
-          out: out,
-        })
-        (ok {
-          jing-ok: (is-some jing),
-          jing-in: jing-in,
-          jing-out: jing-got,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amm-in (get in amm)),
-          out: out,
-        })
-      )
+      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
+      (print {
+        topic: "swap-sbtc-for-stx",
+        user: user,
+        amount: amount,
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: jing-got,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amm-in (get in amm)),
+        venue: venue,
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: jing-got,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amm-in (get in amm)),
+        out: out,
+      })
     )
   )
 )
@@ -345,10 +343,7 @@
     (min-amm-sbtc-out uint)
     (min-sbtc-out uint)
   )
-  (let (
-      (user tx-sender)
-      (sbtc-before (sbtc-balance user))
-    )
+  (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
     (asserts!
@@ -360,6 +355,8 @@
       ERR_BAD_VENUE
     )
     (let (
+        (user tx-sender)
+        (sbtc-before (sbtc-balance user))
         (jing (if (> jing-amount u0)
           (jing-swap jing-amount limit-price vaa false)
           none
@@ -374,32 +371,31 @@
             out: u0,
           }
         ))
+        (out (gain sbtc-before (sbtc-balance user)))
       )
-      (let ((out (gain sbtc-before (sbtc-balance user))))
-        (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
-        (print {
-          topic: "swap-stx-for-sbtc",
-          user: user,
-          amount: amount,
-          jing-ok: (is-some jing),
-          jing-in: jing-in,
-          jing-out: jing-got,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amm-in (get in amm)),
-          venue: venue,
-          out: out,
-        })
-        (ok {
-          jing-ok: (is-some jing),
-          jing-in: jing-in,
-          jing-out: jing-got,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amm-in (get in amm)),
-          out: out,
-        })
-      )
+      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
+      (print {
+        topic: "swap-stx-for-sbtc",
+        user: user,
+        amount: amount,
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: jing-got,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amm-in (get in amm)),
+        venue: venue,
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: jing-got,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amm-in (get in amm)),
+        out: out,
+      })
     )
   )
 )
@@ -416,10 +412,7 @@
     (venue uint)
     (min-stx-out uint)
   )
-  (let (
-      (user tx-sender)
-      (stx-before (stx-get-balance user))
-    )
+  (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts!
       (or
@@ -429,26 +422,29 @@
       )
       ERR_BAD_VENUE
     )
-    (let ((amm (try! (amm-sell-sbtc amount (amm-floor min-stx-out) venue))))
-      (let ((out (gain stx-before (stx-get-balance user))))
-        (asserts! (>= out min-stx-out) ERR_MIN_OUT)
-        (print {
-          topic: "amm-swap-sbtc-for-stx",
-          user: user,
-          amount: amount,
-          venue: venue,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amount (get in amm)),
-          out: out,
-        })
-        (ok {
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amount (get in amm)),
-          out: out,
-        })
+    (let (
+        (user tx-sender)
+        (stx-before (stx-get-balance user))
+        (amm (try! (amm-sell-sbtc amount (amm-floor min-stx-out) venue)))
+        (out (gain stx-before (stx-get-balance user)))
       )
+      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
+      (print {
+        topic: "amm-swap-sbtc-for-stx",
+        user: user,
+        amount: amount,
+        venue: venue,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amount (get in amm)),
+        out: out,
+      })
+      (ok {
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amount (get in amm)),
+        out: out,
+      })
     )
   )
 )
@@ -458,10 +454,7 @@
     (venue uint)
     (min-sbtc-out uint)
   )
-  (let (
-      (user tx-sender)
-      (sbtc-before (sbtc-balance user))
-    )
+  (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts!
       (or
@@ -471,26 +464,29 @@
       )
       ERR_BAD_VENUE
     )
-    (let ((amm (try! (amm-sell-stx amount (amm-floor min-sbtc-out) venue))))
-      (let ((out (gain sbtc-before (sbtc-balance user))))
-        (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
-        (print {
-          topic: "amm-swap-stx-for-sbtc",
-          user: user,
-          amount: amount,
-          venue: venue,
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amount (get in amm)),
-          out: out,
-        })
-        (ok {
-          amm-in: (get in amm),
-          amm-out: (get out amm),
-          unsold: (- amount (get in amm)),
-          out: out,
-        })
+    (let (
+        (user tx-sender)
+        (sbtc-before (sbtc-balance user))
+        (amm (try! (amm-sell-stx amount (amm-floor min-sbtc-out) venue)))
+        (out (gain sbtc-before (sbtc-balance user)))
       )
+      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
+      (print {
+        topic: "amm-swap-stx-for-sbtc",
+        user: user,
+        amount: amount,
+        venue: venue,
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amount (get in amm)),
+        out: out,
+      })
+      (ok {
+        amm-in: (get in amm),
+        amm-out: (get out amm),
+        unsold: (- amount (get in amm)),
+        out: out,
+      })
     )
   )
 )
