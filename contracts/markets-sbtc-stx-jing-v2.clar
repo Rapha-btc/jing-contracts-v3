@@ -73,6 +73,7 @@
 (define-constant ERR_PARTIAL_FILL (err u1023))
 (define-constant ERR_HAS_RESTING_POSITION (err u1024))
 (define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
+(define-constant ERR_TAKER_TOO_SMALL (err u1026))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -116,6 +117,9 @@
 ;; empty at the mid (every maker out of range) so the walk can do the whole
 ;; fill; public settle calls never see it set.
 (define-data-var crossing bool false)
+;; Set by the small-share filter when the active swapper is under 0.2% of
+;; their side; settlement clears it before the filters and asserts on it after.
+(define-data-var taker-too-small bool false)
 
 (define-map token-y-deposits
   {
@@ -982,6 +986,8 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* total-token-y MIN_SHARE_BPS))
+      (if (and (var-get crossing) (is-eq depositor tx-sender))
+        (ok (var-set taker-too-small true))
       (begin
         (map-set token-y-deposits {
           cycle: next-cycle,
@@ -1010,7 +1016,7 @@
           amount (var-get token-x) (var-get token-y)
         ))
         (ok true)
-      )
+      ))
       (ok true)
     )
   )
@@ -1026,6 +1032,8 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* total-token-x MIN_SHARE_BPS))
+      (if (and (var-get crossing) (is-eq depositor tx-sender))
+        (ok (var-set taker-too-small true))
       (begin
         (map-set token-x-deposits {
           cycle: next-cycle,
@@ -1054,7 +1062,7 @@
           amount (var-get token-x) (var-get token-y)
         ))
         (ok true)
-      )
+      ))
       (ok true)
     )
   )
@@ -1165,8 +1173,10 @@
       )
       ERR_NOTHING_TO_SETTLE
     )
-    (map filter-small-token-y-depositor (get-token-y-depositors cycle))
-    (map filter-small-token-x-depositor (get-token-x-depositors cycle))
+    ;; The small-share filter used to run here. It now runs at settlement,
+    ;; after the limit filter, so a depositor is measured against the part of
+    ;; their side that actually clears at the mid, not against out-of-range
+    ;; size that never trades.
     (var-set deposits-closed-block stacks-block-height)
     (try! (contract-call? .jing-core-v3 log-close-deposits cycle stacks-block-height
       elapsed (var-get token-x) (var-get token-y)
@@ -1886,6 +1896,17 @@
       (map filter-limit-violating-token-x-depositor
         (get-token-x-depositors cycle)
       )
+      ;; Small-share filter, after the limit filter so a depositor is
+      ;; measured against the in-range size of their own side. A swapper
+      ;; under 0.2% is not rolled: the filter raises `taker-too-small`
+      ;; instead (map drops the filters' results, so it cannot assert
+      ;; itself) and the tx reverts here. Bigger same-side size settles
+      ;; first; the small taker swaps next cycle. Cleared before the
+      ;; filters so no stale value can ever reach the assert.
+      (var-set taker-too-small false)
+      (map filter-small-token-y-depositor (get-token-y-depositors cycle))
+      (map filter-small-token-x-depositor (get-token-x-depositors cycle))
+      (asserts! (not (var-get taker-too-small)) ERR_TAKER_TOO_SMALL)
       (let (
           (totals (get-cycle-totals cycle))
           (total-token-y (get total-token-y totals))
