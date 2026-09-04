@@ -1647,6 +1647,155 @@
   )
 )
 
+
+;; ---- price-ordered walk -------------------------------------------------
+;; Depositor lists are in arrival order. The walk must take the best price
+;; first, so the eligible makers (inside the walker's range, at or above min
+;; deposit) are gathered with their limit and insertion-sorted once per walk
+;; - asks ascending, bids descending, ties keep arrival order. The sorted
+;; principals feed the unchanged walk-*-book-step folds.
+(define-private (push-quote
+    (lst (list 50 { who: principal, l: uint }))
+    (e { who: principal, l: uint })
+  )
+  (unwrap-panic (as-max-len? (append lst e) u50))
+)
+
+(define-private (quote-who (e { who: principal, l: uint }))
+  (get who e)
+)
+
+;; asks: new entry goes before the first strictly higher limit
+(define-private (insert-ask-step
+    (entry { who: principal, l: uint })
+    (acc {
+      e: { who: principal, l: uint },
+      out: (list 50 { who: principal, l: uint }),
+      placed: bool,
+    })
+  )
+  (if (and (not (get placed acc)) (< (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+
+;; bids: new entry goes before the first strictly lower limit
+(define-private (insert-bid-step
+    (entry { who: principal, l: uint })
+    (acc {
+      e: { who: principal, l: uint },
+      out: (list 50 { who: principal, l: uint }),
+      placed: bool,
+    })
+  )
+  (if (and (not (get placed acc)) (> (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+
+;; y-walker's view of the x book: gather eligible asks in price order
+(define-private (collect-ask-step
+    (maker principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      out: (list 50 { who: principal, l: uint }),
+    })
+  )
+  (let (
+      (l (get-token-x-limit maker))
+      (m-amt (get-token-x-deposit (get cycle acc) maker))
+    )
+    (if (or
+        (< m-amt (var-get min-token-x-deposit))
+        (<= l (get mid acc))
+        (> l (get limit acc))
+      )
+      acc
+      (let ((r (fold insert-ask-step (get out acc) {
+          e: { who: maker, l: l },
+          out: (list),
+          placed: false,
+        })))
+        (merge acc {
+          out: (if (get placed r)
+            (get out r)
+            (push-quote (get out r) { who: maker, l: l })
+          ),
+        })
+      )
+    )
+  )
+)
+
+;; x-walker's view of the y book: gather eligible bids in price order
+(define-private (collect-bid-step
+    (maker principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      out: (list 50 { who: principal, l: uint }),
+    })
+  )
+  (let (
+      (l (get-token-y-limit maker))
+      (m-amt (get-token-y-deposit (get cycle acc) maker))
+    )
+    (if (or
+        (< m-amt (var-get min-token-y-deposit))
+        (is-eq l u0)
+        (>= l (get mid acc))
+        (< l (get limit acc))
+      )
+      acc
+      (let ((r (fold insert-bid-step (get out acc) {
+          e: { who: maker, l: l },
+          out: (list),
+          placed: false,
+        })))
+        (merge acc {
+          out: (if (get placed r)
+            (get out r)
+            (push-quote (get out r) { who: maker, l: l })
+          ),
+        })
+      )
+    )
+  )
+)
+
+(define-private (sorted-asks (cycle uint) (mid uint) (limit uint))
+  (map quote-who
+    (get out (fold collect-ask-step (get-token-x-depositors cycle) {
+      cycle: cycle,
+      mid: mid,
+      limit: limit,
+      out: (list),
+    }))
+  )
+)
+
+(define-private (sorted-bids (cycle uint) (mid uint) (limit uint))
+  (map quote-who
+    (get out (fold collect-bid-step (get-token-y-depositors cycle) {
+      cycle: cycle,
+      mid: mid,
+      limit: limit,
+      out: (list),
+    }))
+  )
+)
+
 ;; Cross the calling swapper's post-settlement remainder against the rolled
 ;; opposite book, bounded by their own limit. Runs in the same tx as the
 ;; settle; mid = the settlement's oracle price; events stamped with the
@@ -1670,7 +1819,7 @@
         (> rolled u0)
         (begin
           (try! (fold walk-x-book-step
-            (get-token-x-depositors cycle)
+            (sorted-asks cycle (var-get settle-clearing-price) limit)
             (ok {
               t: t,
               name: tx-name,
@@ -1752,7 +1901,7 @@
         (> rolled u0)
         (begin
           (try! (fold walk-y-book-step
-            (get-token-y-depositors cycle)
+            (sorted-bids cycle (var-get settle-clearing-price) limit)
             (ok {
               t: t,
               name: tx-name,
