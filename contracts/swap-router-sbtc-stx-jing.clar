@@ -117,8 +117,14 @@
   (unwrap-panic (contract-call? SBTC get-balance who))
 )
 
-(define-private (gain (before uint) (after uint))
-  (if (> after before) (- after before) u0)
+(define-private (gain
+    (before uint)
+    (after uint)
+  )
+  (if (> after before)
+    (- after before)
+    u0
+  )
 )
 
 ;; ---------------------------------------------------------------------------
@@ -133,26 +139,44 @@
     (vaa (buff 8192))
     (deposit-x bool)
   )
-  (match (contract-call? JING_MARKET swap amount limit-price vaa
-      SBTC ASSET_SBTC WSTX ASSET_WSTX deposit-x
-    )
+  (match (contract-call? JING_MARKET swap amount limit-price vaa SBTC ASSET_SBTC WSTX
+    ASSET_WSTX deposit-x
+  )
     res (some {
       spent: (- amount
-        (if deposit-x (get token-x-rolled res) (get token-y-rolled res))
+        (if deposit-x
+          (get token-x-rolled res)
+          (get token-y-rolled res)
+        )
         (get rebate-refunded res)
       ),
-      out: (if deposit-x (get token-y-received res) (get token-x-received res)),
+      out: (if deposit-x
+        (get token-y-received res)
+        (get token-x-received res)
+      ),
     })
     e none
   )
 )
 
-(define-private (jing-spent (r (optional { spent: uint, out: uint })))
-  (match r v (get spent v) u0)
+(define-private (jing-spent (r (optional {
+  spent: uint,
+  out: uint,
+})))
+  (match r
+    v (get spent v)
+    u0
+  )
 )
 
-(define-private (jing-out (r (optional { spent: uint, out: uint })))
-  (match r v (get out v) u0)
+(define-private (jing-out (r (optional {
+  spent: uint,
+  out: uint,
+})))
+  (match r
+    v (get out v)
+    u0
+  )
 )
 
 ;; ---------------------------------------------------------------------------
@@ -161,44 +185,60 @@
 ;; when the bins run out inside DLMM_MAX_STEPS); XYK and Velar are all or
 ;; nothing, so `in` is `amount`.
 
-(define-private (amm-sell-sbtc (amount uint) (min-received uint) (venue uint))
+(define-private (amm-sell-sbtc
+    (amount uint)
+    (min-received uint)
+    (venue uint)
+  )
   (if (is-eq venue VENUE_DLMM)
-    (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi
-      DLMM_POOL WSTX SBTC amount min-received DLMM_MAX_STEPS none
+    (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL WSTX
+      SBTC amount min-received DLMM_MAX_STEPS none
     )
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none
-          { a: SBTC, b: WSTX } { a: XYK_POOL }
+        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none {
+          a: SBTC,
+          b: WSTX,
+        } { a: XYK_POOL }
         )),
       })
       (ok {
         in: amount,
         out: (get amt-out
-          (try! (contract-call? VELAR_POOL swap SBTC VELAR_WSTX VELAR_FEES amount min-received))
+          (try! (contract-call? VELAR_POOL swap SBTC VELAR_WSTX VELAR_FEES amount
+            min-received
+          ))
         ),
       })
     )
   )
 )
 
-(define-private (amm-sell-stx (amount uint) (min-received uint) (venue uint))
+(define-private (amm-sell-stx
+    (amount uint)
+    (min-received uint)
+    (venue uint)
+  )
   (if (is-eq venue VENUE_DLMM)
-    (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi
-      DLMM_POOL WSTX SBTC amount min-received DLMM_MAX_STEPS none
+    (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL WSTX
+      SBTC amount min-received DLMM_MAX_STEPS none
     )
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none
-          { a: WSTX, b: SBTC } { a: XYK_POOL }
+        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none {
+          a: WSTX,
+          b: SBTC,
+        } { a: XYK_POOL }
         )),
       })
       (ok {
         in: amount,
         out: (get amt-out
-          (try! (contract-call? VELAR_POOL swap VELAR_WSTX SBTC VELAR_FEES amount min-received))
+          (try! (contract-call? VELAR_POOL swap VELAR_WSTX SBTC VELAR_FEES amount
+            min-received
+          ))
         ),
       })
     )
@@ -207,7 +247,10 @@
 
 ;; Velar refuses a zero minimum; u0 from the caller means "no per-leg floor"
 (define-private (amm-floor (min-amm-out uint))
-  (if (> min-amm-out u0) min-amm-out u1)
+  (if (> min-amm-out u0)
+    min-amm-out
+    u1
+  )
 )
 
 ;; ---------------------------------------------------------------------------
@@ -233,11 +276,19 @@
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
-    (asserts! (or (is-eq venue VENUE_DLMM) (is-eq venue VENUE_XYK) (is-eq venue VENUE_VELAR))
+    (asserts!
+      (or
+        (is-eq venue VENUE_DLMM)
+        (is-eq venue VENUE_XYK)
+        (is-eq venue VENUE_VELAR)
+      )
       ERR_BAD_VENUE
     )
     (let (
-        (jing (if (> jing-amount u0) (jing-swap jing-amount limit-price vaa true) none))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price vaa true)
+          none
+        ))
         ;; what the market actually kept: jing-amount less the refunded
         ;; residual and rebate crumbs, u0 when skipped or rolled back
         (jing-in (jing-spent jing))
@@ -245,20 +296,34 @@
         (amm-in (- amount jing-in))
         (amm (if (> amm-in u0)
           (try! (amm-sell-sbtc amm-in (amm-floor min-amm-stx-out) venue))
-          { in: u0, out: u0 }
+          {
+            in: u0,
+            out: u0,
+          }
         ))
       )
       (asserts! (is-eq (get in amm) amm-in) ERR_AMM_PARTIAL)
       (let ((out (gain stx-before (stx-get-balance user))))
         (asserts! (>= out min-stx-out) ERR_MIN_OUT)
         (print {
-          topic: "swap-sbtc-for-stx", user: user, amount: amount,
-          jing-ok: (is-some jing), jing-in: jing-in, jing-out: jing-got,
-          amm-in: amm-in, amm-out: (get out amm), venue: venue, out: out,
+          topic: "swap-sbtc-for-stx",
+          user: user,
+          amount: amount,
+          jing-ok: (is-some jing),
+          jing-in: jing-in,
+          jing-out: jing-got,
+          amm-in: amm-in,
+          amm-out: (get out amm),
+          venue: venue,
+          out: out,
         })
         (ok {
-          jing-ok: (is-some jing), jing-in: jing-in, jing-out: jing-got,
-          amm-in: amm-in, amm-out: (get out amm), out: out,
+          jing-ok: (is-some jing),
+          jing-in: jing-in,
+          jing-out: jing-got,
+          amm-in: amm-in,
+          amm-out: (get out amm),
+          out: out,
         })
       )
     )
@@ -284,30 +349,52 @@
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
-    (asserts! (or (is-eq venue VENUE_DLMM) (is-eq venue VENUE_XYK) (is-eq venue VENUE_VELAR))
+    (asserts!
+      (or
+        (is-eq venue VENUE_DLMM)
+        (is-eq venue VENUE_XYK)
+        (is-eq venue VENUE_VELAR)
+      )
       ERR_BAD_VENUE
     )
     (let (
-        (jing (if (> jing-amount u0) (jing-swap jing-amount limit-price vaa false) none))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price vaa false)
+          none
+        ))
         (jing-in (jing-spent jing))
         (jing-got (jing-out jing))
         (amm-in (- amount jing-in))
         (amm (if (> amm-in u0)
           (try! (amm-sell-stx amm-in (amm-floor min-amm-sbtc-out) venue))
-          { in: u0, out: u0 }
+          {
+            in: u0,
+            out: u0,
+          }
         ))
       )
       (asserts! (is-eq (get in amm) amm-in) ERR_AMM_PARTIAL)
       (let ((out (gain sbtc-before (sbtc-balance user))))
         (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
         (print {
-          topic: "swap-stx-for-sbtc", user: user, amount: amount,
-          jing-ok: (is-some jing), jing-in: jing-in, jing-out: jing-got,
-          amm-in: amm-in, amm-out: (get out amm), venue: venue, out: out,
+          topic: "swap-stx-for-sbtc",
+          user: user,
+          amount: amount,
+          jing-ok: (is-some jing),
+          jing-in: jing-in,
+          jing-out: jing-got,
+          amm-in: amm-in,
+          amm-out: (get out amm),
+          venue: venue,
+          out: out,
         })
         (ok {
-          jing-ok: (is-some jing), jing-in: jing-in, jing-out: jing-got,
-          amm-in: amm-in, amm-out: (get out amm), out: out,
+          jing-ok: (is-some jing),
+          jing-in: jing-in,
+          jing-out: jing-got,
+          amm-in: amm-in,
+          amm-out: (get out amm),
+          out: out,
         })
       )
     )
@@ -331,7 +418,12 @@
       (stx-before (stx-get-balance user))
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts! (or (is-eq venue VENUE_DLMM) (is-eq venue VENUE_XYK) (is-eq venue VENUE_VELAR))
+    (asserts!
+      (or
+        (is-eq venue VENUE_DLMM)
+        (is-eq venue VENUE_XYK)
+        (is-eq venue VENUE_VELAR)
+      )
       ERR_BAD_VENUE
     )
     (let ((amm (try! (amm-sell-sbtc amount (amm-floor min-stx-out) venue))))
@@ -339,10 +431,17 @@
       (let ((out (gain stx-before (stx-get-balance user))))
         (asserts! (>= out min-stx-out) ERR_MIN_OUT)
         (print {
-          topic: "amm-swap-sbtc-for-stx", user: user, amount: amount, venue: venue,
-          amm-out: (get out amm), out: out,
+          topic: "amm-swap-sbtc-for-stx",
+          user: user,
+          amount: amount,
+          venue: venue,
+          amm-out: (get out amm),
+          out: out,
         })
-        (ok { amm-out: (get out amm), out: out })
+        (ok {
+          amm-out: (get out amm),
+          out: out,
+        })
       )
     )
   )
@@ -358,7 +457,12 @@
       (sbtc-before (sbtc-balance user))
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts! (or (is-eq venue VENUE_DLMM) (is-eq venue VENUE_XYK) (is-eq venue VENUE_VELAR))
+    (asserts!
+      (or
+        (is-eq venue VENUE_DLMM)
+        (is-eq venue VENUE_XYK)
+        (is-eq venue VENUE_VELAR)
+      )
       ERR_BAD_VENUE
     )
     (let ((amm (try! (amm-sell-stx amount (amm-floor min-sbtc-out) venue))))
@@ -366,10 +470,17 @@
       (let ((out (gain sbtc-before (sbtc-balance user))))
         (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
         (print {
-          topic: "amm-swap-stx-for-sbtc", user: user, amount: amount, venue: venue,
-          amm-out: (get out amm), out: out,
+          topic: "amm-swap-stx-for-sbtc",
+          user: user,
+          amount: amount,
+          venue: venue,
+          amm-out: (get out amm),
+          out: out,
         })
-        (ok { amm-out: (get out amm), out: out })
+        (ok {
+          amm-out: (get out amm),
+          out: out,
+        })
       )
     )
   )
@@ -378,7 +489,8 @@
 ;; For the front end's split: below these the book leg is pointless. Literal
 ;; id on purpose: a constant is not allowed in a read-only call (see above).
 (define-read-only (get-jing-min-deposits)
-  (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v3
+  (contract-call?
+    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v3
     get-min-deposits
   )
 )
