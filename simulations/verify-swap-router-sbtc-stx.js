@@ -378,16 +378,30 @@ async function main() {
   const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
   ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit u6 '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
   const L_NEAR = (MID * 45n) / 100n;
-  // W9f: the four-venue happy path with nothing left home. A bid rests;
-  // 0.7 BTC at the limit 3% under the AMM price: the book fills to
-  // capacity, DLMM to the limit (~0.68 BTC in W9e), XYK + Velar absorb
-  // the rest inside their room, unsold u0, and every leg's achieved price
-  // is at or above the limit.
-  tx("W9f 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  // W9f: the four-venue happy path, with the book walk boundary checked
+  // from both sides. Three bids rest: S 100 STX at the mid (cleared at the
+  // mid), M8 50 STX at -0.5% (outside the mid, INSIDE the limit: walked),
+  // M9 40 STX at 40% of the mid (OUTSIDE the limit: must be left alone).
+  // 0.7 BTC at the limit 3% under the AMM spot: Jing fills mid + walk to
+  // the sat, DLMM bins until the limit, XYK + Velar their closed-form room,
+  // unsold u0; M9 receives nothing, M8 and S are paid.
+  tx("W9f S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  tx("W9f top up M8", (b) => b.withSender(S).addSTXTransfer({ recipient: M8, amount: 60_000_000 }), () => true);
+  const M9 = getAddressFromPrivateKey("9".repeat(64) + "01", "mainnet");
+  tx("W9f fund M9", (b) => b.withSender(S).addSTXTransfer({ recipient: M9, amount: 50_000_000 }), () => true);
+  const L_IN = (MID * 995n) / 1000n;  // inside the taker's limit -> walked
+  const L_OUT = (MID * 40n) / 100n;   // below the taker's limit -> untouched
+  tx("W9f M8 50 STX bid at -0.5% (walkable)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_IN), DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
+  tx("W9f M9 40 STX bid at 40% of the mid (outside the limit)", call(M9, "deposit-token-y", [uintCV(40_000_000n), uintCV(L_OUT), DUMMY_VAA, wstxTrait, wstxAsset], CID), "(ok u40000000)");
+  const jingNet9f = (BID * PP * 100n) / MID + (BID_LOW * PP * 100n) / L_IN;
+  const jingGross9f = (() => { const g = (jingNet9f * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > jingNet9f ? g - 1n : g; })();
   const q0s = sbtcOf(T, "W9f before"); const q0x = stxOf(T, "W9f before");
-  const r9f = tx("W9f smart sell 0.7 BTC, limit just under the AMM price: Jing + DLMM + XYK + Velar, unsold u0", smartSbtc(T, 70_000_000n, L_NEAR, VAA, 1n), (v) =>
+  const m8s0 = sbtcOf(M8, "W9f M8 before"); const m9s0 = sbtcOf(M9, "W9f M9 before"); const s9s0 = sbtcOf(S, "W9f S before");
+  const r9f = tx("W9f smart sell 0.7 BTC, limit just under the AMM spot: Jing mid + walk, DLMM, XYK, Velar, unsold u0", smartSbtc(T, 70_000_000n, L_NEAR, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const q1s = sbtcOf(T, "W9f after"); const q1x = stxOf(T, "W9f after");
+  const m8s1 = sbtcOf(M8, "W9f M8 after"); const m9s1 = sbtcOf(M9, "W9f M9 after"); const s9s1 = sbtcOf(S, "W9f S after");
+  tx("W9f M9 cancels its untouched bid: the full 40 STX come back", call(M9, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), "(ok u40000000)");
 
   // W9e: 3 BTC at the same limit right after W9f: the venues' room at this
   // limit is spent, so almost everything stays home; what still fills does
@@ -518,6 +532,10 @@ async function main() {
   check("W9f out == sum of the four legs", legs(r9f), (t) => t === out9f);
   check("W9f all four venues filled", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r9f.raw, k)), (a) => a.every((x) => x > 0n));
   check("W9f legs add up to 0.7 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9f.raw, k), 0n), (t) => t === 70_000_000n);
+  check(`W9f book leg == mid + walk capacity (gross ${jingGross9f}, dust at most)`, field(r9f.raw, "jing-in"), (j) => j >= jingGross9f - MIN_SBTC && j <= jingGross9f);
+  check("W9f S (at the mid) was paid sBTC", s9s1.value - s9s0.value, (d) => d > 0n);
+  check("W9f M8 (inside the limit) was walked and paid sBTC", m8s1.value - m8s0.value, (d) => d > 0n);
+  check("W9f M9 (outside the limit) received nothing", m9s1.value - m9s0.value, (d) => d === 0n);
   legPriceOk("W9f", r9f, L_NEAR, true);
   const out9d = field(r9d.raw, "out");
   check("W9d STX delta == 200000000", n5x.value - n6x.value, (d) => d === 200_000_000n);
