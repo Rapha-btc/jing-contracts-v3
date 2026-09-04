@@ -74,6 +74,8 @@
 (define-constant ERR_HAS_RESTING_POSITION (err u1024))
 (define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
 (define-constant ERR_TAKER_TOO_SMALL (err u1026))
+(define-constant ERR_PARKED (err u1027))
+(define-constant ERR_NOTHING_TO_READMIT (err u1028))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -174,6 +176,33 @@
 (define-map token-x-deposit-limits
   principal
   uint
+)
+
+;; Parked makers. A full side used to evict its smallest entry. With limits,
+;; size says nothing about whether a slot is useful: 50 out-of-range orders
+;; can hold every slot while nothing clears. So when a side is full and a new
+;; in-range maker arrives, the first out-of-range entry is parked instead:
+;; its escrow stays in the contract, its limit is kept, it sits out of
+;; settlement and the walk, and it can be cancelled or repriced any time.
+;; `readmit-token-*` (permissionless, keeper-driven) moves it back once a
+;; slot is free and the price is inside its limit again. Parked makers live
+;; in a map only, no list and no cap; the park / readmit print events are
+;; the keeper's index. Only when nothing is out of range does the old
+;; smallest-bump refund apply.
+(define-map token-y-parked
+  principal
+  uint
+)
+(define-map token-x-parked
+  principal
+  uint
+)
+
+(define-read-only (get-token-y-parked (who principal))
+  (default-to u0 (map-get? token-y-parked who))
+)
+(define-read-only (get-token-x-parked (who principal))
+  (default-to u0 (map-get? token-x-parked who))
 )
 
 (define-read-only (get-current-cycle)
@@ -309,6 +338,91 @@
 
 (define-private (not-eq-bumped-token-x (entry principal))
   (not (is-eq entry (var-get bumped-token-x-principal)))
+)
+
+;; the resting entry farthest outside the current price (least likely to
+;; come back in range); `gap` is the distance of the best candidate so far
+(define-private (find-parkable-token-y-fold
+    (depositor principal)
+    (acc { price: uint, gap: uint, found: (optional principal) })
+  )
+  (let ((limit (get-token-y-limit depositor)))
+    (if (and (> (get price acc) limit) (> (- (get price acc) limit) (get gap acc)))
+      (merge acc { gap: (- (get price acc) limit), found: (some depositor) })
+      acc
+    )
+  )
+)
+(define-private (find-parkable-token-x-fold
+    (depositor principal)
+    (acc { price: uint, gap: uint, found: (optional principal) })
+  )
+  (let ((limit (get-token-x-limit depositor)))
+    (if (and (< (get price acc) limit) (> (- limit (get price acc)) (get gap acc)))
+      (merge acc { gap: (- limit (get price acc)), found: (some depositor) })
+      acc
+    )
+  )
+)
+
+;; Take the slot of the farthest out-of-range maker for an in-range newcomer.
+;; Live-at-mid size always outranks out-of-range size. The entry is parked:
+;; escrow and limit kept, no transfer. Returns true when a slot was freed,
+;; false when nothing was out of range (the caller then falls back to the
+;; smallest-size bump).
+(define-private (park-one-token-y (cycle uint) (price uint))
+  (let ((depositors (get-token-y-depositors cycle)))
+    (match (get found (fold find-parkable-token-y-fold depositors {
+        price: price,
+        gap: u0,
+        found: none,
+      }))
+      who (let (
+          (amount (get-token-y-deposit cycle who))
+          (totals (get-cycle-totals cycle))
+        )
+        (map-set token-y-parked who amount)
+        (map-delete token-y-deposits { cycle: cycle, depositor: who })
+        (var-set bumped-token-y-principal who)
+        (map-set token-y-depositor-list cycle
+          (filter not-eq-bumped-token-y depositors)
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-y: (- (get total-token-y totals) amount) })
+        )
+        (print { event: "park-y", who: who, amount: amount, cycle: cycle, price: price })
+        true
+      )
+      false
+    )
+  )
+)
+(define-private (park-one-token-x (cycle uint) (price uint))
+  (let ((depositors (get-token-x-depositors cycle)))
+    (match (get found (fold find-parkable-token-x-fold depositors {
+        price: price,
+        gap: u0,
+        found: none,
+      }))
+      who (let (
+          (amount (get-token-x-deposit cycle who))
+          (totals (get-cycle-totals cycle))
+        )
+        (map-set token-x-parked who amount)
+        (map-delete token-x-deposits { cycle: cycle, depositor: who })
+        (var-set bumped-token-x-principal who)
+        (map-set token-x-depositor-list cycle
+          (filter not-eq-bumped-token-x depositors)
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+        )
+        (print { event: "park-x", who: who, amount: amount, cycle: cycle, price: price })
+        true
+      )
+      false
+    )
+  )
 )
 
 (define-private (roll-token-y-depositor (depositor principal))
@@ -612,14 +726,26 @@
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
-  (begin
-    (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
-      (asserts!
-        (not (would-take-as-y (try! (fresh-classification-price vaa)) limit-price))
-        ERR_MUST_USE_SWAP
-      )
-      true
+  (let (
+      (cycle (var-get current-cycle))
+      (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
+      (full (>= (len (get-token-y-depositors cycle)) MAX_DEPOSITORS))
+      ;; one oracle read, only when something needs a price: the maker gate
+      ;; (live opposite side) or the park rule (own side full)
+      (price (if (or
+          (> (len (get-token-x-depositors cycle)) u0)
+          (and new-maker full)
+        )
+        (try! (fresh-classification-price vaa))
+        u0
+      ))
     )
+    (asserts! (is-eq (get-token-y-parked tx-sender) u0) ERR_PARKED)
+    ;; would-take-as-y is false at price u0
+    (asserts! (not (would-take-as-y price limit-price)) ERR_MUST_USE_SWAP)
+    ;; side full and the newcomer is in range: free a slot by parking an
+    ;; out-of-range entry; an out-of-range newcomer gets the size bump only
+    (and new-maker full (>= limit-price price) (park-one-token-y cycle price))
     (deposit-token-y-core amount limit-price t asset-name)
   )
 )
@@ -720,14 +846,21 @@
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
-  (begin
-    (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
-      (asserts!
-        (not (would-take-as-x (try! (fresh-classification-price vaa)) limit-price))
-        ERR_MUST_USE_SWAP
-      )
-      true
+  (let (
+      (cycle (var-get current-cycle))
+      (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
+      (full (>= (len (get-token-x-depositors cycle)) MAX_DEPOSITORS))
+      (price (if (or
+          (> (len (get-token-y-depositors cycle)) u0)
+          (and new-maker full)
+        )
+        (try! (fresh-classification-price vaa))
+        u0
+      ))
     )
+    (asserts! (is-eq (get-token-x-parked tx-sender) u0) ERR_PARKED)
+    (asserts! (not (would-take-as-x price limit-price)) ERR_MUST_USE_SWAP)
+    (and new-maker full (<= limit-price price) (park-one-token-x cycle price))
     (deposit-token-x-core amount limit-price t asset-name)
   )
 )
@@ -740,31 +873,48 @@
       (cycle (var-get current-cycle))
       (caller tx-sender)
       (amount (get-token-y-deposit cycle caller))
+      (parked (get-token-y-parked caller))
       (totals (get-cycle-totals cycle))
       (tok-y (var-get token-y))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
-    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-    (try! (as-contract? ((with-stx amount))
-      (try! (stx-transfer? amount current-contract caller))
-    ))
-    (map-delete token-y-deposits {
-      cycle: cycle,
-      depositor: caller,
-    })
-    (map-delete token-y-deposit-limits caller)
-    (var-set bumped-token-y-principal caller)
-    (map-set token-y-depositor-list cycle
-      (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+    ;; parked escrow belongs to no cycle: refundable in any phase
+    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (is-eq amount u0)
+      (begin
+        (try! (as-contract? ((with-stx parked))
+          (try! (stx-transfer? parked current-contract caller))
+        ))
+        (map-delete token-y-parked caller)
+        (map-delete token-y-deposit-limits caller)
+        (try! (contract-call? .jing-core-v3 log-refund-y caller parked cycle
+          (var-get token-x) tok-y
+        ))
+        (ok parked)
+      )
+      (begin
+        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+        (try! (as-contract? ((with-stx amount))
+          (try! (stx-transfer? amount current-contract caller))
+        ))
+        (map-delete token-y-deposits {
+          cycle: cycle,
+          depositor: caller,
+        })
+        (map-delete token-y-deposit-limits caller)
+        (var-set bumped-token-y-principal caller)
+        (map-set token-y-depositor-list cycle
+          (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-y: (- (get total-token-y totals) amount) })
+        )
+        (try! (contract-call? .jing-core-v3 log-refund-y caller amount cycle
+          (var-get token-x) tok-y
+        ))
+        (ok amount)
+      )
     )
-    (map-set cycle-totals cycle
-      (merge totals { total-token-y: (- (get total-token-y totals) amount) })
-    )
-    (try! (contract-call? .jing-core-v3 log-refund-y caller amount cycle
-      (var-get token-x) tok-y
-    ))
-    (ok amount)
   )
 )
 
@@ -776,30 +926,112 @@
       (cycle (var-get current-cycle))
       (caller tx-sender)
       (amount (get-token-x-deposit cycle caller))
+      (parked (get-token-x-parked caller))
       (totals (get-cycle-totals cycle))
       (tok-x (var-get token-x))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
-    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-    (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
-      (try! (contract-call? t transfer amount current-contract caller none))
-    ))
-    (map-delete token-x-deposits {
-      cycle: cycle,
-      depositor: caller,
-    })
-    (map-delete token-x-deposit-limits caller)
-    (var-set bumped-token-x-principal caller)
-    (map-set token-x-depositor-list cycle
-      (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+    ;; parked escrow belongs to no cycle: refundable in any phase
+    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (is-eq amount u0)
+      (begin
+        (try! (as-contract? ((with-ft (contract-of t) asset-name parked))
+          (try! (contract-call? t transfer parked current-contract caller none))
+        ))
+        (map-delete token-x-parked caller)
+        (map-delete token-x-deposit-limits caller)
+        (try! (contract-call? .jing-core-v3 log-refund-x caller parked cycle tok-x
+          (var-get token-y)
+        ))
+        (ok parked)
+      )
+      (begin
+        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+        (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
+          (try! (contract-call? t transfer amount current-contract caller none))
+        ))
+        (map-delete token-x-deposits {
+          cycle: cycle,
+          depositor: caller,
+        })
+        (map-delete token-x-deposit-limits caller)
+        (var-set bumped-token-x-principal caller)
+        (map-set token-x-depositor-list cycle
+          (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+        )
+        (try! (contract-call? .jing-core-v3 log-refund-x caller amount cycle tok-x
+          (var-get token-y)
+        ))
+        (ok amount)
+      )
+    )
+  )
+)
+
+;; Bring a parked maker back into the live book. Permissionless so a keeper
+;; can run it. Needs a free slot and the deposit's crossing gate (a limit
+;; at or through a live opposite maker must go through swap). Range is not
+;; required: an out-of-range order is still walkable, so it belongs in the
+;; book whenever there is room. No transfer: the escrow never left.
+(define-public (readmit-token-y
+    (who principal)
+    (vaa (buff 8192))
+  )
+  (let (
+      (cycle (var-get current-cycle))
+      (amount (get-token-y-parked who))
+      (limit (get-token-y-limit who))
+      (depositors (get-token-y-depositors cycle))
+      (totals (get-cycle-totals cycle))
+      (price (try! (fresh-classification-price vaa)))
+    )
+    (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
+    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (would-take-as-y price limit)) ERR_MUST_USE_SWAP)
+    (map-set token-y-deposits { cycle: cycle, depositor: who } amount)
+    (map-set token-y-depositor-list cycle
+      (unwrap-panic (as-max-len? (append depositors who) u50))
     )
     (map-set cycle-totals cycle
-      (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+      (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
     )
-    (try! (contract-call? .jing-core-v3 log-refund-x caller amount cycle tok-x
-      (var-get token-y)
-    ))
+    (map-delete token-y-parked who)
+    (print { event: "readmit-y", who: who, amount: amount, cycle: cycle, price: price })
+    (ok amount)
+  )
+)
+
+(define-public (readmit-token-x
+    (who principal)
+    (vaa (buff 8192))
+  )
+  (let (
+      (cycle (var-get current-cycle))
+      (amount (get-token-x-parked who))
+      (limit (get-token-x-limit who))
+      (depositors (get-token-x-depositors cycle))
+      (totals (get-cycle-totals cycle))
+      (price (try! (fresh-classification-price vaa)))
+    )
+    (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
+    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (would-take-as-x price limit)) ERR_MUST_USE_SWAP)
+    (map-set token-x-deposits { cycle: cycle, depositor: who } amount)
+    (map-set token-x-depositor-list cycle
+      (unwrap-panic (as-max-len? (append depositors who) u50))
+    )
+    (map-set cycle-totals cycle
+      (merge totals { total-token-x: (+ (get total-token-x totals) amount) })
+    )
+    (map-delete token-x-parked who)
+    (print { event: "readmit-x", who: who, amount: amount, cycle: cycle, price: price })
     (ok amount)
   )
 )
@@ -814,7 +1046,11 @@
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (asserts! (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
+    ;; parked makers may reprice too, so they can come back into range
+    (asserts! (or
+        (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
+        (> (get-token-y-parked tx-sender) u0)
+      )
       ERR_NOTHING_TO_WITHDRAW
     )
     (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
@@ -839,7 +1075,10 @@
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (asserts! (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
+    (asserts! (or
+        (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
+        (> (get-token-x-parked tx-sender) u0)
+      )
       ERR_NOTHING_TO_WITHDRAW
     )
     (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)

@@ -16,6 +16,9 @@ Last full re-run: 2026-09-02 on the working tree that includes the dust refund.
 | 0dc0b37 | Remainder cross. After the batch clears at the oracle mid, the ACTIVE swapper's leftover walks the opposite side's rolled book, each out-of-range maker paid at their own limit, bounded by the swapper's limit. Passive makers never cross. Crossed makers get 20 bps from the unspent rebate pot; fees 10 bps per leg. Every fill logged via `jing-core-v3.log-match`. Dust makers (below min deposit) are skipped. |
 | 2bda263 | Dust refund: integer division can leave the walker a residual below the side's min deposit that no maker could ever fill. It is refunded to the swapper and the row cleared instead of reverting. At or above min it is a real partial fill and still reverts `u1023`. |
 | ac2a789 | Review pass (line by line with Rapha): `cross-remainder-as-x/y` take the settle result's rolled amount and skip the walk fold when it is zero; one `let` per function; `initialize` and both `set-min-token-*-deposit` reject a zero min (`u1025 ERR_ZERO_MIN_DEPOSIT`) so the full-fill assert `rem < min` is sound; `cycle` rides in the fold tuple; `log-cycle` dropped (fills stamp `cycle - 1`); `execute-fill` math bound once. |
+| 2989f6c | Small-share filter moved from `close-deposits` to settlement, after the limit filter, so a depositor is measured against the in-range size of their side. A swapper under 0.2% is no longer rolled (which emptied the walk and died `u1023`); the filter raises `taker-too-small` and settlement reverts `u1026 ERR_TAKER_TOO_SMALL`. Bigger same-side size settles first, the small taker swaps next cycle. (aibtc bounty F1.) |
+| 9f852d4 | Price-ordered walk. Eligible makers (inside the walker's range, at or above min) are gathered with their limit and insertion-sorted once per walk, asks ascending, bids descending, ties in arrival order; the sorted principals feed the unchanged walk steps. (aibtc bounty F3.) |
+| parked-makers | Parked makers. A full side used to bump its smallest entry; with limits, 50 out-of-range orders could hold every slot while nothing cleared. Now, when a side is full and a NEW in-range maker deposits, the farthest out-of-range entry is parked: escrow and limit kept in `token-x/y-parked` (map only, no list, no cap), off the cycle and the walk, refundable by its own `cancel-*` in any phase, repriceable by `set-token-*-limit`. `readmit-token-x/y (who, vaa)` moves it back when a slot is free; permissionless, gated only by the deposit's crossing rule (`u1022`), range not required since out-of-range makers are walkable. `u1027 ERR_PARKED` refuses a deposit from a parked maker; `u1028 ERR_NOTHING_TO_READMIT`. Park and readmit are `print` events, not core logs: the indexer must learn them. The smallest-size bump remains only when nothing is out of range or the newcomer is itself out of range. |
 | 630a972 | `crossing` flag. Settlement's min-both-sides assert (`u1012`) killed any swap whose counterparties were all out of range at the mid. The flag is set only inside `swap` / `reprice-or-swap` before `close-deposits`, cleared after the walk, and lets settlement proceed with the maker side empty: zero clearing, everything rolls, the walk does the whole fill. Public settle calls never see it; a revert unwinds it. |
 
 ## What is proven, and where
@@ -60,7 +63,19 @@ stub for it. The stub body must be `(begin (asserts! true (err u0)) (ok true))`,
    cancel + `swap`. Open with Rapha.
 6. Real-Pyth run: DONE via `LIVE=1` (above) on a reused mainnet VAA. A tip-block run
    with a fresh VAA still needs a Hermes API key; so does operating the market at all.
-7. Audit. An aibtc bounty scoped to this contract versus the deployed v1 is open until
+7. Readmit order is the keeper's job. The contract readmits whichever parked maker is
+   named first and has no ranking among them; a keeper should readmit the most in-range
+   first (then longest parked). Kept permissionless so a parked maker can always readmit
+   themselves if the keeper is down. Gating on the operator is an option if the ordering
+   ever matters enough.
+8. Dust refund is documented behavior (aibtc bounty F2): a swap fills what the book can
+   take and any leftover under min deposit is refunded rather than reverted. On a swap
+   close to min size the refunded part can be most of the order; that is a fill, not a
+   failure.
+9. Pause does not gate `set-token-*-limit`, the non-crossing branch of `reprice-or-swap`,
+   `cancel-*` or `cancel-cycle` (aibtc bounty, Sonic Mast). Limit edits move no funds and
+   nothing reads them while paused; cancels must always work. Informational, by design.
+10. Audit. An aibtc bounty scoped to this contract versus the deployed v1 is open until
    2026-09-17, 21,000 sats: https://aibtc.com/bounties/mtkrbts96d961f6fae5e (design notes in
    README-markets-sbtc-stx-jing-v2.md). The bounty text cites 2bda263; the scope now also
    includes ac2a789 (review pass) and 630a972 (`crossing` flag).
