@@ -491,7 +491,7 @@ async function main() {
   b = depositX(SBTC_DEPOSITOR_1, 2500n, L3)(b); // out-of-range ask (walk leg)
   // NOTE: M3 still rests 1818 sats at L3 (above min) and is EARLIER in the
   // x list than the new ask, so the walk pays M3; the 2500-sat ask is a
-  // same-price backstop that stays untouched (proves list-order fill).
+  // same-price backstop that stays untouched (price tie: arrival order kept).
   b = evalM(`(get-token-y-deposit u6 '${STX_DEPOSITOR_1})`)(b); // Y7 (read-back)
   b = evalM(`(get-token-x-deposit u6 '${M3})`)(b); // M3 size (read-back)
   b = evalStxBal(X4)(b);
@@ -707,7 +707,7 @@ async function main() {
   const STXD1_SBTC_GAIN = 1000n - (1000n * FEE) / BPS + (X7 - (X7 * FEE) / BPS);
   assert(`S7a mid maker paid at mid + ride (${X4_GAIN})`, x4StxAfter - x4StxBefore, (d) => d === X4_GAIN);
   assert(`S7a walked maker (M3, list-first) paid at L3 net+rebate (${SD1_STX_GAIN})`, m3StxAfter7 - m3StxBefore7, (d) => d === SD1_STX_GAIN);
-  assert("S7a later same-price ask untouched (list order)", sd1StxAfter - sd1StxBefore, (d) => d === 0n);
+  assert("S7a later same-price ask untouched (tie keeps arrival order)", sd1StxAfter - sd1StxBefore, (d) => d === 0n);
   assert(`S7a repriced bid got sBTC mid+walk (${STXD1_SBTC_GAIN})`, stxd1SbtcAfter - stxd1SbtcBefore, (d) => d === STXD1_SBTC_GAIN);
   assert("S7a cycle -> u7", decodeEval(s[i++]), "u7");
   assert("S7a bid fully consumed (dust refunded)", decodeEval(s[i++]), "u0");
