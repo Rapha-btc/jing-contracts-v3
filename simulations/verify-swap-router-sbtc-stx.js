@@ -125,6 +125,18 @@ mktSrc = mktSrc.replace("(define-constant MAX_STALENESS u80)", "(define-constant
 const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
 if ((mktSrc.match(VERIFY_BLOCK) || []).length !== 3) throw new Error("expected 3 verify blocks (settle-with-refresh, fresh-classification-price, refresh-mid)");
 mktSrc = mktSrc.replace(VERIFY_BLOCK, "true");
+// The fork's Pyth storage is stale (~155 sats/STX while the AMMs trade near
+// 332). Pin the market's storage reads to today's Pyth mid instead, so
+// makers, limits and AMM prices all sit where they do on mainnet:
+// BTC $110,000 and STX $0.3710 (expo -8) = 296,480.82 STX/BTC = 337.29 sats/STX.
+const PX = 11_000_000_000_000n;
+const PY = 37_101_908n;
+const feedLit = (p) => `(ok { price: ${p}, conf: u0, expo: -8, ema-price: ${p}, ema-conf: u0, publish-time: stacks-block-time, prev-publish-time: u0 })`;
+const STORAGE_READ = /\(contract-call\?\s*'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4\s+get-price\s+\(var-get oracle-feed-(x|y)\)\s*\)/g;
+const reads = (mktSrc.match(STORAGE_READ) || []).length;
+if (reads < 6) throw new Error(`expected at least 6 storage reads, got ${reads}`);
+console.log(`pinned ${reads} Pyth storage reads in the market to the sim mid`);
+mktSrc = mktSrc.replace(STORAGE_READ, (m, xy) => feedLit(xy === "x" ? PX : PY));
 
 // ---- decode + assert ----
 function decodeTx(s) {
@@ -163,10 +175,8 @@ async function storedPrice(feedHex) {
 
 async function main() {
   console.log("=== swap-router-sbtc-stx-jing SELF-VERIFYING stxer harness ===\n");
-  const px = await storedPrice(BTC_USD_FEED_HEX);
-  const py = await storedPrice(STX_USD_FEED_HEX);
-  const MID = (px * PP) / py;
-  console.log(`deployer ${DEPLOYER}  px=${px} py=${py} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
+  const MID = (PX * PP) / PY; // the mid the patched market settles at
+  console.log(`deployer ${DEPLOYER}  px=${PX} py=${PY} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
 
   const T = SBTC_DEPOSITOR_1; // sells sBTC through the wrapper
   const S = STX_DEPOSITOR_1; // sells STX through the wrapper; rests the Jing bid in W4
@@ -344,16 +354,18 @@ async function main() {
   ev("W8 low bid fully walked (dust at most)", `(get-token-y-deposit u5 '${M8})`, (v) => uintOf(v) < MIN_STX, CID);
 
   // =============== W9: smart swaps, split computed on chain ===============
-  // NOTE the fork's Pyth storage is stale: the oracle mid (~6462 uSTX/sat)
-  // sits about 2x above where the AMMs trade (~3011 uSTX/sat, see W2). So a
-  // limit near the mid finds no AMM capacity, and a limit at 40% of the
-  // mid finds plenty. Both are used on purpose.
+  // The oracle is pinned at 337.29 sats/STX; the live AMMs trade near 332,
+  // i.e. they pay ~1.6% MORE uSTX per sat than the mid. So for an sBTC
+  // seller a limit 1% under the mid leaves ~2.6% of AMM room, a limit 2%
+  // above the mid leaves none (and puts the taker out of the book's range);
+  // for an STX seller the AMMs ask 1.6% above the mid, so its limit must
+  // allow ~3% to reach them.
   const smartSbtc = (sender, amount, limit, vaa, minOut) =>
     call(sender, "smart-swap-sbtc-for-stx", [uintCV(amount), uintCV(limit), vaa, uintCV(minOut)]);
   const smartStx = (sender, amount, limit, vaa, minOut) =>
     call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(minOut)]);
-  const L_LOOSE = (MID * 40n) / 100n; // below the AMM price: AMMs have room
-  const L_TIGHT = (MID * 80n) / 100n; // above the AMM price, below the mid: book only
+  const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
+  const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
   tx("W9 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
   const n0s = sbtcOf(T, "W9a before"); const n0x = stxOf(T, "W9a before");
   const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
@@ -373,16 +385,17 @@ async function main() {
   const ASK9 = 20_000n;
   tx("W9d 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK9), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK9})`);
   const n5s = sbtcOf(S, "W9d before"); const n5x = stxOf(S, "W9d before");
-  const r9d = tx("W9d smart sell 200 STX, loose limit (3x mid): book to capacity, rest split XYK/Velar", smartStx(S, 200_000_000n, MID * 3n, VAA, 1n), (v) =>
+  const L_STX = (MID * 103n) / 100n; // STX seller: 3% over the mid reaches the AMMs
+  const r9d = tx("W9d smart sell 200 STX, limit 3% over the mid: book to capacity, DLMM next, rest XYK/Velar", smartStx(S, 200_000_000n, L_STX, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
   ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit u6 '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
-  const L_NEAR = (MID * 45n) / 100n;
-  // W9f: the four-venue happy path, with the book walk boundary checked
+  const L_NEAR = (MID * 99n) / 100n; // 1% under the mid, ~2.6% under the AMM spot
+  // W9f: the four-venue happy path at today's prices, with the book walk boundary checked
   // from both sides. Three bids rest: S 100 STX at the mid (cleared at the
   // mid), M8 50 STX at -0.5% (outside the mid, INSIDE the limit: walked),
-  // M9 40 STX at 40% of the mid (OUTSIDE the limit: must be left alone).
-  // 0.7 BTC at the limit 3% under the AMM spot: Jing fills mid + walk to
+  // M9 40 STX at -2% (OUTSIDE the 1% limit: must be left alone).
+  // 0.5 BTC at a limit 1% under the mid (~0.5 BTC of AMM room): Jing fills mid + walk to
   // the sat, DLMM bins until the limit, XYK + Velar their closed-form room,
   // unsold u0; M9 receives nothing, M8 and S are paid.
   tx("W9f S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
@@ -390,14 +403,14 @@ async function main() {
   const M9 = getAddressFromPrivateKey("9".repeat(64) + "01", "mainnet");
   tx("W9f fund M9", (b) => b.withSender(S).addSTXTransfer({ recipient: M9, amount: 50_000_000 }), () => true);
   const L_IN = (MID * 995n) / 1000n;  // inside the taker's limit -> walked
-  const L_OUT = (MID * 40n) / 100n;   // below the taker's limit -> untouched
+  const L_OUT = (MID * 98n) / 100n;   // 2% under, below the taker's 1% limit -> untouched
   tx("W9f M8 50 STX bid at -0.5% (walkable)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_IN), DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
-  tx("W9f M9 40 STX bid at 40% of the mid (outside the limit)", call(M9, "deposit-token-y", [uintCV(40_000_000n), uintCV(L_OUT), DUMMY_VAA, wstxTrait, wstxAsset], CID), "(ok u40000000)");
+  tx("W9f M9 40 STX bid at -2% (outside the 1% limit)", call(M9, "deposit-token-y", [uintCV(40_000_000n), uintCV(L_OUT), DUMMY_VAA, wstxTrait, wstxAsset], CID), "(ok u40000000)");
   const jingNet9f = (BID * PP * 100n) / MID + (BID_LOW * PP * 100n) / L_IN;
   const jingGross9f = (() => { const g = (jingNet9f * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > jingNet9f ? g - 1n : g; })();
   const q0s = sbtcOf(T, "W9f before"); const q0x = stxOf(T, "W9f before");
   const m8s0 = sbtcOf(M8, "W9f M8 before"); const m9s0 = sbtcOf(M9, "W9f M9 before"); const s9s0 = sbtcOf(S, "W9f S before");
-  const r9f = tx("W9f smart sell 0.7 BTC, limit just under the AMM spot: Jing mid + walk, DLMM, XYK, Velar, unsold u0", smartSbtc(T, 70_000_000n, L_NEAR, VAA, 1n), (v) =>
+  const r9f = tx("W9f smart sell 0.5 BTC, limit 1% under the mid: Jing mid + walk, DLMM, XYK, Velar, unsold u0", smartSbtc(T, 50_000_000n, L_NEAR, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const q1s = sbtcOf(T, "W9f after"); const q1x = stxOf(T, "W9f after");
   const m8s1 = sbtcOf(M8, "W9f M8 after"); const m9s1 = sbtcOf(M9, "W9f M9 after"); const s9s1 = sbtcOf(S, "W9f S after");
@@ -490,7 +503,8 @@ async function main() {
   check("W9a sBTC delta == 40000", n0s.value - n1s.value, (d) => d === 40_000n);
   check(`W9a STX grew by out (${out9a})`, n1x.value - n0x.value, (d) => d === out9a && d > 0n);
   check("W9a out == sum of the four legs", legs(r9a), (t) => t === out9a);
-  check("W9a book leg sized to the mid capacity (jing-in + dust == gross-cap 15505)", field(r9a.raw, "jing-in"), (j) => j >= 15505n - MIN_SBTC && j <= 15505n);
+  const midGross9a = (() => { const net = (BID * PP * 100n) / MID; const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
+  check(`W9a book leg sized to the mid capacity (gross-cap ${midGross9a}, dust at most)`, field(r9a.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
   check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === 40_000n - field(r9a.raw, "jing-in"));
   check("W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == 40000", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === 40_000n);
   const out9b = field(r9b.raw, "out");
@@ -501,7 +515,7 @@ async function main() {
   check("W9c revert moved no STX", n4x.value - n3x.value, (d) => d === 0n);
   const out9e = field(r9e.raw, "out"), unsold9e = field(r9e.raw, "unsold");
   check(`W9e sBTC delta == 3 BTC - unsold (${unsold9e})`, n7s.value - n8s.value, (d) => d === 300_000_000n - unsold9e);
-  check(`W9e STX grew by out (${out9e})`, n8x.value - n7x.value, (d) => d === out9e && d > 0n);
+  check(`W9e STX grew by out (${out9e}, may be zero: the room is spent)`, n8x.value - n7x.value, (d) => d === out9e);
   check("W9e out == sum of the four legs", legs(r9e), (t) => t === out9e);
   // W9f already took every venue's room at this limit, so W9e finds only
   // what the pools regained; the point is that nothing exceeds the limit
@@ -527,11 +541,11 @@ async function main() {
   legPriceOk("W9b", r9b, L_LOOSE, true);
   legPriceOk("W9e", r9e, L_NEAR, true);
   const out9f = field(r9f.raw, "out");
-  check("W9f sBTC delta == 0.7 BTC", q0s.value - q1s.value, (d) => d === 70_000_000n);
+  check("W9f sBTC delta == 0.5 BTC", q0s.value - q1s.value, (d) => d === 50_000_000n);
   check(`W9f STX grew by out (${out9f})`, q1x.value - q0x.value, (d) => d === out9f && d > 0n);
   check("W9f out == sum of the four legs", legs(r9f), (t) => t === out9f);
   check("W9f all four venues filled", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r9f.raw, k)), (a) => a.every((x) => x > 0n));
-  check("W9f legs add up to 0.7 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9f.raw, k), 0n), (t) => t === 70_000_000n);
+  check("W9f legs add up to 0.5 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9f.raw, k), 0n), (t) => t === 50_000_000n);
   check(`W9f book leg == mid + walk capacity (gross ${jingGross9f}, dust at most)`, field(r9f.raw, "jing-in"), (j) => j >= jingGross9f - MIN_SBTC && j <= jingGross9f);
   check("W9f S (at the mid) was paid sBTC", s9s1.value - s9s0.value, (d) => d > 0n);
   check("W9f M8 (inside the limit) was walked and paid sBTC", m8s1.value - m8s0.value, (d) => d > 0n);
@@ -542,7 +556,7 @@ async function main() {
   check(`W9d sBTC grew by out (${out9d})`, n6s.value - n5s.value, (d) => d === out9d && d > 0n);
   check("W9d out == sum of the four legs", legs(r9d), (t) => t === out9d);
   check("W9d DLMM took the remainder after the book", field(r9d.raw, "dlmm-in"), (d) => d === 200_000_000n - field(r9d.raw, "jing-in"));
-  legPriceOk("W9d", r9d, MID * 3n, false);
+  legPriceOk("W9d", r9d, L_STX, false);
   const yGross9 = (() => { const net = (ASK9 * MID) / (PP * 100n); const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
   check(`W9d book leg sized to the ask's capacity (gross-cap ${yGross9}, dust at most)`, field(r9d.raw, "jing-in"), (j) => j >= yGross9 - MIN_STX && j <= yGross9);
 
