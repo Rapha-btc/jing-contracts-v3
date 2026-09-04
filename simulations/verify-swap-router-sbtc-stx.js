@@ -4,7 +4,11 @@
 // DLMM / XYK / Velar for the remainder, one tx, 100% filled or reverted.
 //
 //   W1 guards: zero amount u3001, jing-amount > amount u3002, bad venue u3003,
-//      min-out too high u3004 (and nothing moved).
+//      total min-out too high u3004 (nothing moved); the AMM leg's own
+//      min-amm-out too high is refused by the VENUE (DLMM u2003, XYK u6009,
+//      Velar u107), nothing moved. W1p partial fill: a second wrapper copy
+//      with DLMM_MAX_STEPS u1 sells more than one bin holds; DLMM returns
+//      in < amount and the wrapper refuses u3005.
 //   W2 sell sBTC, book skipped (jing-amount 0): DLMM, XYK, Velar each take the
 //      whole amount; sBTC delta == amount, STX grew, tuple reports
 //      jing-ok false / jing-in u0 / amm-in amount.
@@ -13,6 +17,9 @@
 //      jing-amount 2000. Jing fills the 2000 at the mid (maker paid net of
 //      fee + ride), the other 3000 go to DLMM. Tuple jing-ok true /
 //      jing-in u2000 / amm-in u3000; cycle advanced by the swap.
+//   W6 AMM-only entry points (no VAA): amm-swap-sbtc-for-stx / -stx-for-sbtc
+//      on DLMM, XYK, Velar; exact deltas, amm-out == out; guards u3001,
+//      u3003, venue min-out refusal (u2003), u3005 on the 1-step copy.
 //   W5 fallback: empty book (fresh cycle), jing-amount == amount. The market
 //      returns an err, the wrapper catches it, the whole amount goes to the
 //      venue: jing-ok false / jing-in u0 / amm-in amount; no x position was
@@ -52,10 +59,14 @@ import {
 
 const OWNER_PRIVKEY =
   "6666666666666666666666666666666666666666666666666666666666666666" + "01";
-const DEPLOYER = getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
+// Everything deploys as chavita.btc, the live jing-core-v3 deployer, so the
+// market lands at the exact id the wrapper's JING_MARKET constant names and
+// the market's relative `.jing-core-v3` resolves to the LIVE core. stxer
+// needs no signature, so impersonating the deployer is free.
+const DEPLOYER = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 
 const CORE = "jing-core-v3";
-const MARKET = "markets-sbtc-stx-jing-v2";
+const MARKET = "markets-sbtc-stx-jing-v3";
 const ROUTER = "swap-router-sbtc-stx-jing";
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const CID = `${DEPLOYER}.${MARKET}`;
@@ -77,8 +88,15 @@ const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 const DUMMY_VAA = bufferCV(Buffer.from("00", "hex"));
 
 // ---- sources + sim-only patches (market only) ----
-const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
 const routerSrc = fs.readFileSync(new URL(`../contracts/${ROUTER}.clar`, import.meta.url), "utf8");
+if (!routerSrc.includes(`'${DEPLOYER}.${MARKET}`)) throw new Error("wrapper JING_MARKET does not name the deployer's market");
+// W1p: same wrapper, DLMM walk capped at one bin so a mid-size sell stops short
+const ROUTER_1STEP = `${ROUTER}-1step`;
+const router1StepSrc = (() => {
+  const s = routerSrc.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+  if (s === routerSrc) throw new Error("DLMM_MAX_STEPS patch did not apply");
+  return s;
+})();
 let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8");
 mktSrc = mktSrc.replace("(define-constant MAX_STALENESS u80)", "(define-constant MAX_STALENESS u999999999)");
 const VERIFY_BLOCK = /\(try! \(contract-call\? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-oracle-v4\s*\n\s*verify-and-update-price-feeds vaa \{\s*\n\s*pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-storage-v4,\s*\n\s*pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.pyth-pnau-decoder-v3,\s*\n\s*wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y\.wormhole-core-v4,\s*\n\s*\}\)\)/g;
@@ -133,10 +151,10 @@ async function main() {
   const steps = [];
   const call = (sender, fn, args, cid = RID) => (b) =>
     b.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
-  const sellSbtc = (sender, amount, jing, limit, venue, minOut) =>
-    call(sender, "swap-sbtc-for-stx", [uintCV(amount), uintCV(jing), uintCV(limit), DUMMY_VAA, uintCV(venue), uintCV(minOut)]);
-  const sellStx = (sender, amount, jing, limit, venue, minOut) =>
-    call(sender, "swap-stx-for-sbtc", [uintCV(amount), uintCV(jing), uintCV(limit), DUMMY_VAA, uintCV(venue), uintCV(minOut)]);
+  const sellSbtc = (sender, amount, jing, limit, venue, minOut, minAmm = 1n) =>
+    call(sender, "swap-sbtc-for-stx", [uintCV(amount), uintCV(jing), uintCV(limit), DUMMY_VAA, uintCV(venue), uintCV(minAmm), uintCV(minOut)]);
+  const sellStx = (sender, amount, jing, limit, venue, minOut, minAmm = 1n) =>
+    call(sender, "swap-stx-for-sbtc", [uintCV(amount), uintCV(jing), uintCV(limit), DUMMY_VAA, uintCV(venue), uintCV(minAmm), uintCV(minOut)]);
   const depositY = (sender, amount, limit) =>
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), DUMMY_VAA, wstxTrait, wstxAsset], CID);
 
@@ -148,23 +166,34 @@ async function main() {
   const stxOf = (who, label) => cap(`${label} stx`, `(stx-get-balance '${who})`, RID);
 
   // ---- deploy ----
-  tx("deploy core", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+  // jing-core-v3 is LIVE at this deployer; only the market and wrappers deploy
   tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy wrapper (unpatched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
   tx("initialize market", call(DEPLOYER, "initialize", [
     contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(MIN_SBTC), uintCV(MIN_STX), btcFeedBuf, stxFeedBuf,
   ], CID), "(ok true)");
-  ev("wrapper reads market mins", "(get-jing-min-deposits)", `(min-token-x u${MIN_SBTC})`);
+  ev("wrapper reads market mins (read-only via literal id)", "(get-jing-min-deposits)", (v) => String(v).includes(`(min-token-x u${MIN_SBTC})`));
 
   // =============== W1: guards ===============
   tx("W1 zero amount -> u3001", sellSbtc(T, 0n, 0n, 1n, DLMM, 1n), "(err u3001)");
   tx("W1 jing-amount > amount -> u3002", sellSbtc(T, 1000n, 2000n, 1n, DLMM, 1n), "(err u3002)");
   tx("W1 bad venue -> u3003", sellSbtc(T, 1000n, 0n, 1n, 9n, 1n), "(err u3003)");
   const g0s = sbtcOf(T, "W1 before"); const g0x = stxOf(T, "W1 before");
-  tx("W1 min-out too high -> u3004", sellSbtc(T, 3000n, 0n, 1n, DLMM, HUGE), "(err u3004)");
+  tx("W1 total min-out too high -> u3004", sellSbtc(T, 3000n, 0n, 1n, DLMM, HUGE), "(err u3004)");
+  tx("W1 min-amm-out too high on DLMM -> venue u2003", sellSbtc(T, 3000n, 0n, 1n, DLMM, 1n, HUGE), "(err u2003)");
+  tx("W1 min-amm-out too high on XYK -> venue u6009", sellSbtc(T, 3000n, 0n, 1n, XYK, 1n, HUGE), "(err u6009)");
+  tx("W1 min-amm-out too high on Velar -> venue u107", sellSbtc(T, 3000n, 0n, 1n, VELAR, 1n, HUGE), "(err u107)");
   const g1s = sbtcOf(T, "W1 after"); const g1x = stxOf(T, "W1 after");
+  tx("W1 min-amm-out u0 on Velar is floored, not refused", sellSbtc(T, 1000n, 0n, 1n, VELAR, 1n, 0n), okPrefix);
+  // W1p: one-bin walk cannot absorb 0.05 BTC; DLMM returns in < amount -> u3005
+  const p0s = sbtcOf(T, "W1p before"); const p0x = stxOf(T, "W1p before");
+  tx("W1p DLMM stops short of amount -> u3005", (b) =>
+    b.withSender(T).addContractCall({ contract_id: `${DEPLOYER}.${ROUTER_1STEP}`, function_name: "swap-sbtc-for-stx",
+      function_args: [uintCV(5_000_000n), uintCV(0n), uintCV(1n), DUMMY_VAA, uintCV(DLMM), uintCV(1n), uintCV(1n)] }), "(err u3005)");
+  const p1s = sbtcOf(T, "W1p after"); const p1x = stxOf(T, "W1p after");
 
   // =============== W2: sell sBTC, book skipped ===============
   const w2 = [];
@@ -208,6 +237,29 @@ async function main() {
   ev("W5 market cycle unchanged (failed leg rolled back)", "(get-current-cycle)", "u1", CID);
   ev("W5 no x position left on the market", `(get-token-x-deposit u1 '${T})`, "u0", CID);
 
+  // =============== W6: AMM-only entry points ===============
+  const ammSbtc = (sender, amount, venue, minOut) => call(sender, "amm-swap-sbtc-for-stx", [uintCV(amount), uintCV(venue), uintCV(minOut)]);
+  const ammStx = (sender, amount, venue, minOut) => call(sender, "amm-swap-stx-for-sbtc", [uintCV(amount), uintCV(venue), uintCV(minOut)]);
+  tx("W6 amm zero amount -> u3001", ammSbtc(T, 0n, DLMM, 1n), "(err u3001)");
+  tx("W6 amm bad venue -> u3003", ammSbtc(T, 1000n, 9n, 1n), "(err u3003)");
+  tx("W6 amm min-out too high on DLMM -> venue u2003", ammSbtc(T, 1000n, DLMM, HUGE), "(err u2003)");
+  tx("W6 amm partial on 1-step copy -> u3005", (b) =>
+    b.withSender(T).addContractCall({ contract_id: `${DEPLOYER}.${ROUTER_1STEP}`, function_name: "amm-swap-sbtc-for-stx",
+      function_args: [uintCV(5_000_000n), uintCV(DLMM), uintCV(1n)] }), "(err u3005)");
+  const w6 = [];
+  for (const [name, venue, amt] of [["DLMM", DLMM, 4000n], ["XYK", XYK, 2500n], ["Velar", VELAR, 2500n]]) {
+    const s0 = sbtcOf(T, `W6 ${name} before`); const x0 = stxOf(T, `W6 ${name} before`);
+    const r = tx(`W6 sell ${amt} sats on ${name} (amm only)`, ammSbtc(T, amt, venue, 1n), okPrefix);
+    const s1 = sbtcOf(T, `W6 ${name} after`); const x1 = stxOf(T, `W6 ${name} after`);
+    w6.push({ name, amt, s0, x0, s1, x1, r, dir: "sbtc" });
+  }
+  for (const [name, venue, amt] of [["DLMM", DLMM, 8_000_000n], ["XYK", XYK, 4_000_000n], ["Velar", VELAR, 4_000_000n]]) {
+    const s0 = sbtcOf(S, `W6 ${name} before`); const x0 = stxOf(S, `W6 ${name} before`);
+    const r = tx(`W6 sell ${amt} uSTX on ${name} (amm only)`, ammStx(S, amt, venue, 1n), okPrefix);
+    const s1 = sbtcOf(S, `W6 ${name} after`); const x1 = stxOf(S, `W6 ${name} after`);
+    w6.push({ name, amt, s0, x0, s1, x1, r, dir: "stx" });
+  }
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -226,15 +278,19 @@ async function main() {
   // relative checks
   check("W1 min-out revert moved no sBTC", g1s.value - g0s.value, (d) => d === 0n);
   check("W1 min-out revert moved no STX", g1x.value - g0x.value, (d) => d === 0n);
+  check("W1p partial-fill revert moved no sBTC", p1s.value - p0s.value, (d) => d === 0n);
+  check("W1p partial-fill revert moved no STX", p1x.value - p0x.value, (d) => d === 0n);
   for (const w of w2) {
     const out = field(w.r.raw, "out");
     check(`W2 ${w.name} sBTC delta == ${w.amt}`, w.s0.value - w.s1.value, (d) => d === w.amt);
     check(`W2 ${w.name} STX grew by tuple out (${out})`, w.x1.value - w.x0.value, (d) => d === out && d > 0n);
+    check(`W2 ${w.name} amm-out == out (venue reported the whole leg)`, field(w.r.raw, "amm-out"), (a) => a === out);
   }
   for (const w of w3) {
     const out = field(w.r.raw, "out");
     check(`W3 ${w.name} STX delta == ${w.amt}`, w.x0.value - w.x1.value, (d) => d === w.amt);
     check(`W3 ${w.name} sBTC grew by tuple out (${out})`, w.s1.value - w.s0.value, (d) => d === out && d > 0n);
+    check(`W3 ${w.name} amm-out == out`, field(w.r.raw, "amm-out"), (a) => a === out);
   }
   // W4: 2000 gross -> rebate 4, net 1996, fee 1, ride 4 -> maker +1999 sats
   check("W4 maker paid net of fee + ride (1999)", m1.value - m0.value, (d) => d === 1999n);
@@ -248,10 +304,23 @@ async function main() {
   const jingOut4 = field(r4.raw, "jing-out");
   check(`W4 tuple jing-out = mid fill net of fee (~${jingStx - jingStx / 1000n})`, jingOut4,
     (o) => o > 0n && o < out4 && o <= jingStx && o >= jingStx - jingStx / 1000n - 2n);
+  check("W4 jing-out + amm-out == out", jingOut4 + field(r4.raw, "amm-out"), (t) => t === out4);
   check("W5 tuple jing-out u0 (leg rolled back)", field(r5.raw, "jing-out"), (o) => o === 0n);
   check("W5 taker sBTC delta == 4000", f0s.value - f1s.value, (d) => d === 4000n);
   const out5 = field(r5.raw, "out");
   check(`W5 STX grew by tuple out (${out5})`, f1x.value - f0x.value, (d) => d === out5 && d > 0n);
+  check("W5 amm-out == out (whole amount on the venue)", field(r5.raw, "amm-out"), (a) => a === out5);
+  for (const w of w6) {
+    const out = field(w.r.raw, "out");
+    if (w.dir === "sbtc") {
+      check(`W6 ${w.name} amm-only sBTC delta == ${w.amt}`, w.s0.value - w.s1.value, (d) => d === w.amt);
+      check(`W6 ${w.name} amm-only STX grew by out (${out})`, w.x1.value - w.x0.value, (d) => d === out && d > 0n);
+    } else {
+      check(`W6 ${w.name} amm-only STX delta == ${w.amt}`, w.x0.value - w.x1.value, (d) => d === w.amt);
+      check(`W6 ${w.name} amm-only sBTC grew by out (${out})`, w.s1.value - w.s0.value, (d) => d === out && d > 0n);
+    }
+    check(`W6 ${w.name} amm-out == out`, field(w.r.raw, "amm-out"), (a) => a === out);
+  }
 
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
