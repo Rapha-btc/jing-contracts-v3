@@ -106,6 +106,11 @@
 (define-data-var caller-token-y-received uint u0)
 (define-data-var caller-token-x-rolled uint u0)
 
+;; What the walk paid the active swapper, net of fee, in the token they
+;; bought. Reset by cross-remainder-as-*, bumped per fill by execute-fill,
+;; folded into the swap result so callers see mid + walk, not mid only.
+(define-data-var walk-taker-received uint u0)
+
 (define-data-var settle-clearing-price uint u0)
 
 ;; Rebate parked by `swap` before it settles, denominated in the token the
@@ -1147,10 +1152,11 @@
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
           ;; the mid could not fill everything: walk the rolled opposite book
           ;; with the remainder, then judge full fill on remaining escrow
-          (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
-            tx-trait tx-name
+          (ok (swap-result-y result
+            (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
+              tx-trait tx-name
+            ))
           ))
-          (ok result)
         )
       )
       (ok {
@@ -1158,6 +1164,7 @@
         token-y-rolled: u0,
         token-y-received: u0,
         token-x-rolled: u0,
+        rebate-refunded: u0,
       })
     )
   )
@@ -1199,10 +1206,11 @@
         (var-set crossing true)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
-            tx-trait tx-name
+          (ok (swap-result-x result
+            (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
+              tx-trait tx-name
+            ))
           ))
-          (ok result)
         )
       )
       (ok {
@@ -1210,6 +1218,7 @@
         token-y-rolled: u0,
         token-y-received: u0,
         token-x-rolled: u0,
+        rebate-refunded: u0,
       })
     )
   )
@@ -1640,14 +1649,17 @@
       ;; the mid could not fill everything: walk the rolled opposite book
       ;; with the remainder, then judge full fill on remaining escrow
       (if deposit-x
-        (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
-          tx-trait tx-name
+        (ok (swap-result-x result
+          (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
+            tx-trait tx-name
+          ))
         ))
-        (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
-          tx-trait tx-name
+        (ok (swap-result-y result
+          (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
+            tx-trait tx-name
+          ))
         ))
       )
-      (ok result)
     )
   )
 )
@@ -1737,6 +1749,14 @@
             true
           )
         ))
+        (var-set walk-taker-received
+          (+ (var-get walk-taker-received)
+            (if y-is-taker
+              (- x-traded x-fee)
+              (- y-traded y-fee)
+            )
+          )
+        )
         (if (is-eq (- y-amt y-traded) u0)
           (begin
             (map-delete token-y-deposits {
@@ -2039,6 +2059,43 @@
 ;; opposite book, bounded by their own limit. Runs in the same tx as the
 ;; settle; mid = the settlement's oracle price; events stamped with the
 ;; settled cycle.
+;; Fold the walk's outcome into the settle tuple so a swap reports the whole
+;; fill: `received` = mid + walk, `rolled` = the sub-min residual that was
+;; refunded (nothing rolls for a taker), `rebate-refunded` = the unspent
+;; rebate crumbs. Every refund is in the deposit token, so the taker's true
+;; spend is amount - rolled - rebate-refunded.
+(define-private (swap-result-x
+    (result {
+      token-x-received: uint,
+      token-y-rolled: uint,
+      token-y-received: uint,
+      token-x-rolled: uint,
+    })
+    (cross { rem: uint, left: uint, walk-received: uint })
+  )
+  (merge result {
+    token-y-received: (+ (get token-y-received result) (get walk-received cross)),
+    token-x-rolled: (get rem cross),
+    rebate-refunded: (get left cross),
+  })
+)
+
+(define-private (swap-result-y
+    (result {
+      token-x-received: uint,
+      token-y-rolled: uint,
+      token-y-received: uint,
+      token-x-rolled: uint,
+    })
+    (cross { rem: uint, left: uint, walk-received: uint })
+  )
+  (merge result {
+    token-x-received: (+ (get token-x-received result) (get walk-received cross)),
+    token-y-rolled: (get rem cross),
+    rebate-refunded: (get left cross),
+  })
+)
+
 (define-private (cross-remainder-as-y
     (limit uint)
     (rolled uint)
@@ -2050,6 +2107,8 @@
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
+      ;; the walk's payout accumulator starts clean for this swapper
+      (reset (var-set walk-taker-received u0))
       ;; `rolled` = the swapper's rolled amount from the settle result. Mid
       ;; clearing may already have filled them in full; then the walk has
       ;; nothing to spend and every step would just burn three map reads per
@@ -2118,7 +2177,11 @@
       )
     )
     (var-set crossing false)
-    (ok true)
+    (ok {
+      rem: rem,
+      left: left,
+      walk-received: (var-get walk-taker-received),
+    })
   )
 )
 (define-private (cross-remainder-as-x
@@ -2132,6 +2195,8 @@
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
+      ;; the walk's payout accumulator starts clean for this swapper
+      (reset (var-set walk-taker-received u0))
       ;; `rolled` = the swapper's rolled amount from the settle result. Mid
       ;; clearing may already have filled them in full; then the walk has
       ;; nothing to spend and every step would just burn three map reads per
@@ -2197,7 +2262,11 @@
       )
     )
     (var-set crossing false)
-    (ok true)
+    (ok {
+      rem: rem,
+      left: left,
+      walk-received: (var-get walk-taker-received),
+    })
   )
 )
 (define-public (cancel-cycle)

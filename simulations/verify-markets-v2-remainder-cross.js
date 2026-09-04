@@ -578,7 +578,17 @@ async function main() {
   const x1Before = uintOf(decodeEval(s[i++]));
   const m2Before = uintOf(decodeEval(s[i++]));
   const tSbtcBefore = uintOf(decodeEval(s[i++]));
-  assert("S1 swap full fill via walk", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
+  const s1Tuple = String(decodeTx(s[i++]));
+  assert("S1 swap full fill via walk", s1Tuple, (v) => v.startsWith("(ok"));
+  // post-walk tuple: received = mid + walk, rolled = the sub-min uSTX the
+  // walk could not place (floor to sats and back), refunded to the taker,
+  // rebate-refunded = the crumbs the walk did not spend. So the taker's true
+  // spend is A1 - S1_REM - S1_CRUMBS.
+  const S1_CRUMBS = PEND_Y - REB2;
+  const S1_REM = R1 - Y2_TRADED;
+  assert(`S1 tuple token-x-received = mid + walk (${TAKER_SBTC_GAIN})`, s1Tuple, (v) => v.includes(`(token-x-received u${TAKER_SBTC_GAIN})`));
+  assert(`S1 tuple token-y-rolled = refunded residual (${S1_REM}, < ${MIN_STX})`, s1Tuple, (v) => S1_REM < MIN_STX && v.includes(`(token-y-rolled u${S1_REM})`));
+  assert(`S1 tuple rebate-refunded = crumbs (${S1_CRUMBS})`, s1Tuple, (v) => v.includes(`(rebate-refunded u${S1_CRUMBS})`));
   const x1After = uintOf(decodeEval(s[i++]));
   const m2After = uintOf(decodeEval(s[i++]));
   const tSbtcAfter = uintOf(decodeEval(s[i++]));
@@ -614,7 +624,11 @@ async function main() {
 
   assert("X5 in-range offer", decodeTx(s[i++]), "(ok u1200)");
   i++; // taker STX before (informational)
-  assert("S3b sub-min remainder refunds, swap ok", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
+  const s3bTuple = String(decodeTx(s[i++]));
+  assert("S3b sub-min remainder refunds, swap ok", s3bTuple, (v) => v.startsWith("(ok"));
+  const s3bRolled = uintOf(s3bTuple.match(/\(token-y-rolled (u\d+)\)/)?.[1] ?? "u0");
+  assert(`S3b tuple token-y-rolled = refunded residual (0 < r < ${MIN_STX})`, s3bRolled, (v) => v > 0n && v < MIN_STX);
+  assert("S3b tuple token-x-received > 0 (mid fill reported)", s3bTuple, (v) => /\(token-x-received u[1-9]\d*\)/.test(v));
   assert("S3b cycle -> u3", decodeEval(s[i++]), "u3");
   assert("S3b dust maker untouched", decodeEval(s[i++]), `u${dust}`);
   assert("S3b taker clean", decodeEval(s[i++]), "u0");

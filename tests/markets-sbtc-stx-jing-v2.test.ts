@@ -1040,6 +1040,7 @@ describe.skipIf(!remoteDataEnabled)(
       "token-y-rolled": Cl.uint(0),
       "token-y-received": Cl.uint(0),
       "token-x-rolled": Cl.uint(0),
+      "rebate-refunded": Cl.uint(0),
     });
 
     it("get-taker-rebate-bps exposes the mirrored constant", function () {

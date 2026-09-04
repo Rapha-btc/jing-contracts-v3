@@ -14,6 +14,7 @@
   token-y-rolled: u0,
   token-y-received: u0,
   token-x-rolled: u0,
+  rebate-refunded: u0,
 })
 
 (define-read-only (get-taker-rebate-bps) u20)
