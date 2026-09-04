@@ -29,7 +29,7 @@
 ;;          fallback (some venue).
 ;;   AMMs   DLMM, XYK, Velar, each for its own amount, each skipped at u0,
 ;;          each with its own minimum from `amm-mins`: the venue refuses a
-;;          short fill itself with its own error (DLMM u2003, XYK u6009,
+;;          short fill itself with its own error (DLMM u2003, XYK u1019/u1020,
 ;;          Velar u107). A zero minimum is floored to u1 since Velar refuses
 ;;          u0. DLMM's router may stop short: it returns `in` < amount when
 ;;          it runs out of bins inside `max-steps` and never pulls the rest
@@ -67,8 +67,9 @@
 ;;            pool   .dlmm-pool-stx-sbtc-v-2-bps-15 (x = STX, y = sBTC)
 ;;            the v-1 pool the vault still names holds ~0.007 BTC; v-2 holds
 ;;            ~0.86 BTC and 1.25M STX.
-;;   u2 XYK   helper SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-swap-helper-v-1-3
-;;            pool   .xyk-pool-sbtc-stx-v-1-1 (~0.45 BTC, 136k STX)
+;;   u2 XYK   core   SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2
+;;            pool   .xyk-pool-sbtc-stx-v-1-1 (~0.45 BTC, 136k STX); called
+;;            direct, not via xyk-swap-helper (aggregator fee, see xyk-swap)
 ;;   u3 VELAR pool   SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070
 ;;            fees   .univ2-fees-v1_0_0-0070, registry id 70 (wSTX/sBTC,
 ;;            ~0.70 BTC, 211k STX). Same call form as leo-arbitrage-faktory-v2,
@@ -102,10 +103,11 @@
 
 (define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2)
 (define-constant DLMM_POOL 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15)
+(define-constant DLMM_CORE 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1)
 ;; Bins the router may walk. Bitflow's own front end uses 230.
 (define-constant DLMM_MAX_STEPS u230)
 
-(define-constant XYK_HELPER 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-swap-helper-v-1-3)
+(define-constant XYK_CORE 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2)
 (define-constant XYK_POOL 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1)
 
 (define-constant VELAR_POOL 'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070)
@@ -191,6 +193,37 @@
   )
 )
 
+;; XYK straight through xyk-core with the pool, no swap-helper: the helper
+;; routes every call through aggregator-core, which skims a per-contract
+;; fee off the input unless the caller is exempt. The pool's x may be
+;; either token, so the side is read at call time.
+(define-private (xyk-swap
+    (sell-sbtc bool)
+    (amount uint)
+    (min-received uint)
+  )
+  (let ((x-is-sbtc (is-eq (get x-token (unwrap-panic (contract-call? XYK_POOL get-pool))) SBTC)))
+    (if x-is-sbtc
+      (if sell-sbtc
+        (contract-call? XYK_CORE swap-x-for-y XYK_POOL SBTC WSTX amount
+          min-received
+        )
+        (contract-call? XYK_CORE swap-y-for-x XYK_POOL SBTC WSTX amount
+          min-received
+        )
+      )
+      (if sell-sbtc
+        (contract-call? XYK_CORE swap-y-for-x XYK_POOL WSTX SBTC amount
+          min-received
+        )
+        (contract-call? XYK_CORE swap-x-for-y XYK_POOL WSTX SBTC amount
+          min-received
+        )
+      )
+    )
+  )
+)
+
 ;; ---------------------------------------------------------------------------
 ;; leg 2: one venue, normalised to {in, out}. `min-received` is the venue's
 ;; own minimum-received, derived by `amm-min` below. DLMM reports `in` itself (it may stop short of `amount`
@@ -209,11 +242,7 @@
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none {
-          a: SBTC,
-          b: WSTX,
-        } { a: XYK_POOL }
-        )),
+        out: (try! (xyk-swap true amount min-received)),
       })
       (ok {
         in: amount,
@@ -239,11 +268,7 @@
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (contract-call? XYK_HELPER swap-helper-a amount min-received none {
-          a: WSTX,
-          b: SBTC,
-        } { a: XYK_POOL }
-        )),
+        out: (try! (xyk-swap false amount min-received)),
       })
       (ok {
         in: amount,
@@ -524,6 +549,505 @@
         )
           (- dlmm-in (get in dlmm))
         ),
+        out: out,
+      })
+    )
+  )
+)
+
+;; ---------------------------------------------------------------------------
+;; Smart. The split computed ON CHAIN at execution, so nothing can lag
+;; between a quote and the tx. One number from the user: `limit-price`,
+;; the worst price they accept, in the market's scale (uSTX per sat x
+;; 1e10). Then:
+;;
+;;   Jing   `refresh-mid` pushes the VAA so Pyth holds the price `swap`
+;;          will settle at; `get-taker-capacity` says how much the book
+;;          fills in full at that mid inside the limit; the leg is
+;;          min(amount, capacity), or nothing when that is under the
+;;          market's min deposit or `vaa` is none.
+;;   XYK    constant product with fee f and reserves (in, out): the
+;;   Velar  largest input whose AVERAGE price still respects the limit is
+;;          closed form, cap = (out * k / P - in) / k with k = 1 - f and
+;;          P the floor, shaved 20 bps so rounding never trips the venue. What the book did not keep is split between the
+;;          two pro rata to those capacities, each leg's minimum set to
+;;          leg * P so the venue itself enforces the limit. Beyond every
+;;          capacity the rest stays in the wallet (`unsold`).
+;;   end    `min-out` on the wallet delta, as everywhere else.
+;;
+;;   DLMM   between the book and the constant-product pools: the active bin
+;;          plus every bin inside the limit (see the walk below), then the
+;;          leftover goes to XYK and Velar.
+
+(define-constant PRICE_SCALE u10000000000) ;; PRICE_PRECISION * DECIMAL_FACTOR
+(define-constant BPS u10000)
+(define-constant CP_SAFETY u9980) ;; constant-product legs stop 20 bps short of the limit
+
+;; k = 1 - f as num/den for the token being sold
+(define-private (xyk-keep (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
+    ;; the pool's x may be either token; fees are per side of the pool
+    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
+      {
+        num: (- BPS (+ (get x-protocol-fee pool) (get x-provider-fee pool))),
+        den: BPS,
+      }
+      {
+        num: (- BPS (+ (get y-protocol-fee pool) (get y-provider-fee pool))),
+        den: BPS,
+      }
+    )
+  )
+)
+
+(define-private (velar-keep)
+  (let ((fees (unwrap-panic (contract-call? VELAR_FEES get-fees))))
+    {
+      num: (get num (get swap-fee fees)),
+      den: (get den (get swap-fee fees)),
+    }
+  )
+)
+
+;; reserves as {in, out} for the direction being traded
+(define-private (xyk-reserves (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
+    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
+      {
+        in: (get x-balance pool),
+        out: (get y-balance pool),
+      }
+      {
+        in: (get y-balance pool),
+        out: (get x-balance pool),
+      }
+    )
+  )
+)
+
+(define-private (velar-reserves (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? VELAR_POOL get-pool))))
+    (if (is-eq (is-eq (get token0 pool) SBTC) sell-sbtc)
+      {
+        in: (get reserve0 pool),
+        out: (get reserve1 pool),
+      }
+      {
+        in: (get reserve1 pool),
+        out: (get reserve0 pool),
+      }
+    )
+  )
+)
+
+;; largest input whose average price respects the limit.
+;; selling sats:  floor P = limit / SCALE uSTX per sat
+;;   cap = (out * SCALE * num / (limit * den) - in) * den / num
+;; selling uSTX:  floor P = SCALE / limit sats per uSTX
+;;   cap = (out * limit * num / (SCALE * den) - in) * den / num
+(define-private (cp-capacity
+    (r {
+      in: uint,
+      out: uint,
+    })
+    (k {
+      num: uint,
+      den: uint,
+    })
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (let ((top (if sell-sbtc
+      (/ (* (get out r) PRICE_SCALE (get num k)) (* limit (get den k)))
+      (/ (* (get out r) limit (get num k)) (* PRICE_SCALE (get den k)))
+    )))
+    ;; 20 bps under the exact boundary: the pool floors its output and the
+    ;; XYK helper may skim an aggregator fee, either of which lands one unit
+    ;; under the venue's minimum when the leg sits exactly on the limit
+    (if (> top (get in r))
+      (/ (* (- top (get in r)) (get den k) CP_SAFETY) (* (get num k) BPS))
+      u0
+    )
+  )
+)
+
+;; the venue's minimum for a leg: the limit applied to that leg's size
+(define-private (limit-min
+    (leg uint)
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (if sell-sbtc
+    (/ (* leg limit) PRICE_SCALE)
+    (/ (* leg PRICE_SCALE) limit)
+  )
+)
+
+;; book leg size: min(amount, capacity), u0 when under min deposit or no vaa
+(define-private (jing-size
+    (amount uint)
+    (limit uint)
+    (vaa (optional (buff 8192)))
+    (sell-sbtc bool)
+  )
+  (match vaa
+    v (let (
+        (mid (try! (contract-call? JING_MARKET refresh-mid (some v))))
+        (cap (get gross-cap
+          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc)
+        ))
+        (size (if (> cap amount)
+          amount
+          cap
+        ))
+        (net (- size (/ (* size u20) BPS)))
+        (mins (contract-call? JING_MARKET get-min-deposits))
+        (min-dep (if sell-sbtc
+          (get min-token-x mins)
+          (get min-token-y mins)
+        ))
+      )
+      (ok (if (>= net min-dep)
+        size
+        u0
+      ))
+    )
+    (ok u0)
+  )
+)
+
+;; split `residual` between XYK and Velar pro rata to their capacities;
+;; whatever exceeds both stays home
+(define-private (cp-split
+    (residual uint)
+    (cap-xyk uint)
+    (cap-velar uint)
+  )
+  (let ((total (+ cap-xyk cap-velar)))
+    (if (<= residual total)
+      (let ((xyk (if (> total u0)
+          (/ (* residual cap-xyk) total)
+          u0
+        )))
+        {
+          xyk: xyk,
+          velar: (- residual xyk),
+        }
+      )
+      {
+        xyk: cap-xyk,
+        velar: cap-velar,
+      }
+    )
+  )
+)
+
+;; ---------------------------------------------------------------------------
+;; DLMM capacity at the limit: the active bin plus every next bin whose
+;; price still respects the limit, at most DLMM_WALK_BINS of them (each bin
+;; is two reads, one of which pulls the core's 1001-entry factor table, so
+;; the walk is capped; 30 bins x 15 bps = 4.5% of price). Per bin the
+;; input that empties it is the core's own formula, fee grossed up. Selling
+;; STX (x for y) walks the id DOWN, selling sBTC (y for x) walks it UP,
+;; exactly as the core moves the active bin. `bin-price` is sats per uSTX
+;; x 1e8; the user's limit (uSTX per sat x 1e10) becomes the threshold
+;; SCALE * 1e8 / limit in that unit.
+
+(define-constant DLMM_PRICE_SCALE u100000000) ;; core PRICE_SCALE_BPS
+(define-constant DLMM_CENTER_BIN 500) ;; core CENTER_BIN_ID
+(define-constant DLMM_WALK_BINS (list
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
+  u21 u22 u23 u24 u25 u26 u27 u28 u29
+))
+
+(define-private (dlmm-bin-step
+    (i uint)
+    (acc {
+      bin: int,
+      up: bool,
+      threshold: uint,
+      initial-price: uint,
+      bin-step: uint,
+      fee: uint,
+      cap: uint,
+      done: bool,
+    })
+  )
+  (if (get done acc)
+    acc
+    (let (
+        (price (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price acc)
+          (get bin-step acc) (get bin acc)
+        )))
+        (bal (unwrap-panic (contract-call? DLMM_POOL get-bin-balances
+          (to-uint (+ (get bin acc) DLMM_CENTER_BIN))
+        )))
+        ;; up = selling sBTC (y) for STX (x): STX must cost at most the
+        ;; threshold in sats; down = selling STX: it must fetch at least it
+        (ok-price (if (get up acc)
+          (<= price (get threshold acc))
+          (>= price (get threshold acc))
+        ))
+        ;; the input that empties the bin, before fees (core's ceil)
+        (raw (if (get up acc)
+          (/ (+ (* (get x-balance bal) price) (- DLMM_PRICE_SCALE u1))
+            DLMM_PRICE_SCALE
+          )
+          (/ (+ (* (get y-balance bal) DLMM_PRICE_SCALE) (- price u1)) price)
+        ))
+        (grossed (if (> (get fee acc) u0)
+          (/ (* raw BPS) (- BPS (get fee acc)))
+          raw
+        ))
+      )
+      (if ok-price
+        (merge acc {
+          cap: (+ (get cap acc) grossed),
+          bin: (if (get up acc)
+            (+ (get bin acc) 1)
+            (- (get bin acc) 1)
+          ),
+        })
+        (merge acc { done: true })
+      )
+    )
+  )
+)
+
+(define-private (dlmm-capacity
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (let (
+      (pool (unwrap-panic (contract-call? DLMM_POOL get-pool)))
+      (fee (if sell-sbtc
+        (+ (get y-protocol-fee pool) (get y-provider-fee pool)
+          (get y-variable-fee pool)
+        )
+        (+ (get x-protocol-fee pool) (get x-provider-fee pool)
+          (get x-variable-fee pool)
+        )
+      ))
+    )
+    (get cap
+      (fold dlmm-bin-step DLMM_WALK_BINS {
+        bin: (get active-bin-id pool),
+        up: sell-sbtc,
+        threshold: (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit),
+        initial-price: (get initial-price pool),
+        bin-step: (get bin-step pool),
+        fee: fee,
+        cap: u0,
+        done: false,
+      })
+    )
+  )
+)
+
+;; ---------------------------------------------------------------------------
+;; smart-swap stages. Each stage takes what is still unsold and returns the
+;; same tuple shape whether it traded or not; the first line of every stage
+;; is the early exit, so once an order is filled nothing downstream is read
+;; or computed. `let` evaluates every binding, which is why the guard has to
+;; be an `if` around the whole stage rather than around the leg alone.
+
+(define-private (amm-leg
+    (amount uint)
+    (limit uint)
+    (sell-sbtc bool)
+    (venue uint)
+  )
+  (if sell-sbtc
+    (leg-sbtc amount (limit-min amount limit true) venue)
+    (leg-stx amount (limit-min amount limit false) venue)
+  )
+)
+
+;; DLMM: the active bin plus every bin inside the limit
+(define-private (dlmm-stage
+    (left uint)
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (if (is-eq left u0)
+    (ok {
+      cap: u0,
+      in: u0,
+      out: u0,
+    })
+    (let (
+        (cap (dlmm-capacity limit sell-sbtc))
+        (plan (if (> cap left)
+          left
+          cap
+        ))
+        (leg (try! (amm-leg plan limit sell-sbtc VENUE_DLMM)))
+      )
+      (ok {
+        cap: cap,
+        in: (get in leg),
+        out: (get out leg),
+      })
+    )
+  )
+)
+
+;; XYK + Velar, split pro rata to their capacities; the excess is `unsold`
+(define-private (cp-stage
+    (left uint)
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (if (is-eq left u0)
+    (ok {
+      xyk-cap: u0,
+      velar-cap: u0,
+      xyk-in: u0,
+      xyk-out: u0,
+      velar-in: u0,
+      velar-out: u0,
+      unsold: u0,
+    })
+    (let (
+        (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit sell-sbtc))
+        (cap-velar (cp-capacity (velar-reserves sell-sbtc) (velar-keep) limit sell-sbtc))
+        (plan (cp-split left cap-xyk cap-velar))
+        (xyk (try! (amm-leg (get xyk plan) limit sell-sbtc VENUE_XYK)))
+        (velar (try! (amm-leg (get velar plan) limit sell-sbtc VENUE_VELAR)))
+      )
+      (ok {
+        xyk-cap: cap-xyk,
+        velar-cap: cap-velar,
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (- left (get xyk plan) (get velar plan)),
+      })
+    )
+  )
+)
+
+(define-public (smart-swap-sbtc-for-stx
+    (amount uint)
+    (limit-price uint)
+    (vaa (optional (buff 8192)))
+    (min-stx-out uint)
+  )
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (let (
+        (user tx-sender)
+        (stx-before (stx-get-balance user))
+        ;; stage 1: the book
+        (jing-amount (try! (jing-size amount limit-price vaa true)))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap-panic vaa) true)
+          none
+        ))
+        (jing-in (jing-spent jing))
+        ;; stage 2: DLMM on what the book left; exits at once when nothing is left
+        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price true)))
+        ;; stage 3: XYK + Velar on what DLMM left; same early exit
+        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price true)))
+        (out (gain stx-before (stx-get-balance user)))
+      )
+      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
+      (print {
+        topic: "smart-swap-sbtc-for-stx",
+        user: user,
+        amount: amount,
+        limit-price: limit-price,
+        jing-cap: jing-amount,
+        dlmm-cap: (get cap dlmm),
+        xyk-cap: (get xyk-cap cp),
+        velar-cap: (get velar-cap cp),
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+    )
+  )
+)
+
+(define-public (smart-swap-stx-for-sbtc
+    (amount uint)
+    (limit-price uint)
+    (vaa (optional (buff 8192)))
+    (min-sbtc-out uint)
+  )
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (let (
+        (user tx-sender)
+        (sbtc-before (sbtc-balance user))
+        ;; stage 1: the book
+        (jing-amount (try! (jing-size amount limit-price vaa false)))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap-panic vaa) false)
+          none
+        ))
+        (jing-in (jing-spent jing))
+        ;; stage 2: DLMM on what the book left; exits at once when nothing is left
+        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price false)))
+        ;; stage 3: XYK + Velar on what DLMM left; same early exit
+        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price false)))
+        (out (gain sbtc-before (sbtc-balance user)))
+      )
+      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
+      (print {
+        topic: "smart-swap-stx-for-sbtc",
+        user: user,
+        amount: amount,
+        limit-price: limit-price,
+        jing-cap: jing-amount,
+        dlmm-cap: (get cap dlmm),
+        xyk-cap: (get xyk-cap cp),
+        velar-cap: (get velar-cap cp),
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
         out: out,
       })
     )
