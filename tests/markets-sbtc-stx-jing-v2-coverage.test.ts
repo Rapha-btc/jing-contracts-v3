@@ -273,7 +273,11 @@ describe("markets-sbtc-stx-jing-v2 deterministic coverage", function () {
     ).toBeBool(true);
   });
 
-  it("close-and-settle-with-refresh runs the close leg before settling", function () {
+  // Hermes-gated since 6e90025 (parked makers: a full side reads the oracle) and
+// ac2a789 (u1025: mins can no longer be zeroed to close an empty side), so a
+// dummy VAA cannot stage these any more. Each is proven on a mainnet fork:
+// verify-markets-v2-gaps.js G3 (close unwound with the settle, phase u0).
+  it.skip("close-and-settle-with-refresh runs the close leg before settling", function () {
     setupRegistryAndInit();
     // Empty book, mins dropped to zero: the close leg succeeds, then the
     // settle leg fails on the dummy VAA - proving the wrapper sequences
@@ -303,7 +307,11 @@ describe("markets-sbtc-stx-jing-v2 deterministic coverage", function () {
 
   // --- queue eviction at MAX_OFFERS -----------------------------------------
 
-  it("y book at 50: smaller deposit hits ERR_QUEUE_FULL, larger evicts the smallest", function () {
+  // Hermes-gated since 6e90025 (parked makers: a full side reads the oracle) and
+// ac2a789 (u1025: mins can no longer be zeroed to close an empty side), so a
+// dummy VAA cannot stage these any more. Each is proven on a mainnet fork:
+// verify-markets-v2-bounty-fixes.js P1-P9 (u1013 bump, park, readmit).
+  it.skip("y book at 50: smaller deposit hits ERR_QUEUE_FULL, larger evicts the smallest", function () {
     setupRegistryAndInit();
     const cycle = 0;
     for (let i = 0; i < MAX_OFFERS; i++) {
@@ -329,7 +337,11 @@ describe("markets-sbtc-stx-jing-v2 deterministic coverage", function () {
     expect(yDeposit(cycle, late)).toBe(MIN_Y * 5);
   });
 
-  it("x book at 50: smaller deposit hits ERR_QUEUE_FULL, larger evicts the smallest", function () {
+  // Hermes-gated since 6e90025 (parked makers: a full side reads the oracle) and
+// ac2a789 (u1025: mins can no longer be zeroed to close an empty side), so a
+// dummy VAA cannot stage these any more. Each is proven on a mainnet fork:
+// verify-markets-v2-bounty-fixes.js PX (x mirror of P1-P9).
+  it.skip("x book at 50: smaller deposit hits ERR_QUEUE_FULL, larger evicts the smallest", function () {
     setupRegistryAndInit();
     const cycle = 0;
     for (let i = 0; i < MAX_OFFERS; i++) {
@@ -355,7 +367,12 @@ describe("markets-sbtc-stx-jing-v2 deterministic coverage", function () {
 
   // --- close-deposits rolls sub-min depositors after a min raise ------------
 
-  it("close-deposits rolls an x depositor whose share falls under MIN_SHARE_BPS", function () {
+  // Hermes-gated since 6e90025 (parked makers: a full side reads the oracle) and
+// ac2a789 (u1025: mins can no longer be zeroed to close an empty side), so a
+// dummy VAA cannot stage these any more. Each is proven on a mainnet fork:
+// premise also moved: the small-share filter runs at settlement since 2989f6c
+  // (verify-markets-v2-bounty-fixes.js B1-B3).
+  it.skip("close-deposits rolls an x depositor whose share falls under MIN_SHARE_BPS", function () {
     setupRegistryAndInit();
     const cycle = 0;
     // MIN_SHARE_BPS is 20 (0.2% of the side's total). wallet1's 1k sats
@@ -387,7 +404,11 @@ describe("markets-sbtc-stx-jing-v2 deterministic coverage", function () {
 
   // --- cancel-cycle rolls the whole book -------------------------------------
 
-  it("cancel-cycle after the threshold rolls resting depositors to the next cycle", function () {
+  // Hermes-gated since 6e90025 (parked makers: a full side reads the oracle) and
+// ac2a789 (u1025: mins can no longer be zeroed to close an empty side), so a
+// dummy VAA cannot stage these any more. Each is proven on a mainnet fork:
+// verify-markets-v2-gaps.js G4/G6 (u1014 before the threshold, roll after).
+  it.skip("cancel-cycle after the threshold rolls resting depositors to the next cycle", function () {
     setupRegistryAndInit();
     const cycle = 0;
     // One-sided staging only: any deposit into a non-empty opposite book

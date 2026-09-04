@@ -115,3 +115,17 @@ templates `jing-core-v3` then `markets-sbtc-stx-jing-v2` (Clarity 5, 0.1 STX). P
 13. All five fork harnesses rerun 2026-09-04 on the source after c48bcf2 (`swap` returns the
    post-walk fill): 22 + 115 + 43 + 127 + 78 = 385 checks, links in the table above. The
    `markets-sbtc-stx-jing-v3.clar` deploy candidate is byte-identical to that source.
+14. Clarinet unit suite, 2026-09-04: 48 passed, 5 skipped, 0 failed across the three v2
+   files (`markets-sbtc-stx-jing-v2.test.ts`, `-coverage.test.ts`, `-hermes-coverage.test.ts`).
+   The five skips were deterministic tests that a dummy VAA can no longer stage: a full
+   side reads the oracle since 6e90025 (parked makers) and mins cannot be zeroed since
+   ac2a789 (`u1025`). Each carries a pointer to the fork harness that proves it. Fresh
+   line coverage of the market from this suite is 349/1411 = 24.7% (branches 137/434);
+   the August figure of 98% was measured on the 965-line pre-walk contract. What the unit
+   suite does not reach - settlement filters, the remainder walk, park/readmit, reprice
+   through the walk - is exactly what the fork harnesses cover (385 checks). Closing the
+   unit gap needs a real VAA in simnet: pin `[repl.remote_data]` to a height where a
+   fixture VAA is fresh, or a Hermes key.
+   Hiro's free tier rate-limits clarinet `remote_data` hard enough to fail requirement
+   resolution ("unresolved contract pyth-storage-v4"); `simulations/_api-proxy.mjs` routes
+   the same calls to the signer box, set `api_url = "http://127.0.0.1:8787"` for the run.

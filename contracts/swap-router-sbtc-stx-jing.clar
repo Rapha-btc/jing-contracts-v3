@@ -1,55 +1,65 @@
 ;; title: swap-router-sbtc-stx-jing
-;; DRAFT - uncommitted. Retail swap wrapper for the sBTC/STX pair:
-;; Jing's maker/taker book first, Bitflow for whatever is left. One tx,
-;; the user ends 100% filled at or above their minimum, or nothing moves.
+;; Retail swap router for the sBTC/STX pair: Jing's maker/taker book plus
+;; Bitflow DLMM, Bitflow XYK and Velar, one tx, one receipt.
 ;;
 ;; HOW A SWAP RUNS
 ;;
-;;   leg 1  Jing `swap` (taker, fill-or-kill) for `jing-amount`, best effort.
-;;          The front end sizes `jing-amount` to what the book can absorb
-;;          (in-range size at the mid plus the walkable out-of-range makers
-;;          inside `limit-price`). If the market cannot fill it, it returns
-;;          an err; the wrapper catches that and moves on. Clarity rolls the
-;;          failed call back, so nothing has moved, including the Pyth fee.
-;;   leg 2  whatever the market did not keep goes to the chosen Bitflow
-;;          venue: the whole amount when leg 1 was skipped or failed,
-;;          `amount - jing-amount` when the split was planned, plus the dust
-;;          the market refunds when the walk cannot place the last few units
-;;          (below the side's min deposit, see markets README note 8) and
-;;          the unspent rebate crumbs. The market's `swap` returns all of
-;;          that post-walk: `token-*-rolled` is the refunded residual,
-;;          `rebate-refunded` the crumbs, `token-*-received` mid + walk.
-;;          DLMM's router may stop short: it returns `in` < amount when it
-;;          runs out of bins inside `max-steps`, and never pulls the rest.
-;;          That is allowed (Rapha: a partial fill beats a revert); the
-;;          tuple reports `amm-in` as what was really sold and `unsold` as
-;;          what stayed in the wallet. XYK and Velar are all or nothing.
-;;          The AMM leg carries its own `min-amm-out`, from
-;;          the front end's venue quote: the book leg is guarded by
-;;          `limit-price`, the AMM leg by this, each on its own. The venue
-;;          refuses a short fill itself with its own error (DLMM u2003, XYK
-;;          u6009, Velar u107). A zero `min-amm-out` is floored to u1 since
-;;          Velar refuses a zero minimum.
+;; The front end computes the split off-chain from live quotes (book depth
+;; on the opposite side at the mid plus walkable makers inside the limit,
+;; then each AMM's marginal price) and hands the contract one amount per
+;; venue: `jing-amount` and `amm-amounts {dlmm, xyk, velar}`. The user
+;; signs `amount`; the four must add up to it (`u3004`) so a bad split
+;; fails loudly instead of selling a different total. The contract
+;; executes the legs in that order.
+;;
+;;   Jing   `swap` (taker, fill-or-kill) for `jing-amount` at `limit-price`,
+;;          best effort. If the market cannot fill it, it returns an err;
+;;          the router catches that and Clarity rolls the call back
+;;          (nothing moved, Pyth fee included). The market's `swap` returns
+;;          the post-walk fill: `token-*-rolled` is the refunded sub-min
+;;          residual, `rebate-refunded` the unspent rebate crumbs,
+;;          `token-*-received` mid + walk. With `jing-amount` u0 the market
+;;          is never called and `vaa` is `none`: no Pyth fee, no Hermes
+;;          round trip. A non-zero `jing-amount` with `none` is `u3005`.
+;;   fallback  what the book did not keep (skipped, rolled back, dust
+;;          refund) goes to the `fallback` venue on top of that venue's
+;;          planned amount, its minimum scaled pro rata so the per-unit
+;;          floor holds; `none` leaves it in the wallet. "Jing mainly, the
+;;          rest on one venue" is jing-amount = total, amm-amounts all u0,
+;;          fallback (some venue).
+;;   AMMs   DLMM, XYK, Velar, each for its own amount, each skipped at u0,
+;;          each with its own minimum from `amm-mins`: the venue refuses a
+;;          short fill itself with its own error (DLMM u2003, XYK u6009,
+;;          Velar u107). A zero minimum is floored to u1 since Velar refuses
+;;          u0. DLMM's router may stop short: it returns `in` < amount when
+;;          it runs out of bins inside `max-steps` and never pulls the rest
+;;          (Rapha: a partial fill beats a revert). XYK and Velar are all or
+;;          nothing.
 ;;   end    the user's balance of the bought asset must have grown by at
-;;          least `min-out`, or the whole tx reverts (`u3004`): the total
-;;          backstop across both legs.
+;;          least `min-out`, or the whole tx reverts (`u3002`): the total
+;;          backstop across all legs, measured on the wallet, not on what
+;;          the venues report.
+;;
+;; The receipt (print and ok) carries `jing-in`/`jing-out`, one `in`/`out`
+;; pair per AMM, `unsold` (book amount neither kept nor rerouted + DLMM
+;; shortfall, all still in the wallet) and the measured `out`.
 ;;
 ;; WHO HOLDS THE FUNDS
 ;;
-;; Nobody but the user. The wrapper is called WITHOUT as-contract, so
-;; tx-sender stays the user through both legs: the market and the pool pull
-;; from the user and pay the user. The Jing leg is sized from the market's
-;; return tuple; the final `min-out` guard is measured on the user's
-;; balance so it covers both legs. This contract holds no funds and no
-;; state.
+;; Nobody but the user. The router is called WITHOUT as-contract, so
+;; tx-sender stays the user through every leg: the market and the pools
+;; pull from the user and pay the user. The Jing leg is read from the
+;; market's return tuple; the final `min-out` guard is measured on the
+;; user's balance so it covers every leg. This contract holds no funds and
+;; no state.
 ;;
 ;; POST-CONDITIONS (front end)
 ;;
-;; Deny mode on the user: one "sent <= amount" per asset sold, covering
-;; both the market and the pool in one condition. Nothing on the bought
-;; side: `min-out` is enforced here and a shortfall reverts the tx.
-;; Selling STX also pays Pyth's update fee (currently 1 uSTX per feed, two
-;; feeds) when leg 1 refreshes the oracle - budget a few uSTX above `amount`.
+;; Deny mode on the user: one "sent <= total" per asset sold, covering
+;; the market and every pool in one condition. Nothing on the bought side:
+;; `min-out` is enforced here and a shortfall reverts the tx. A Jing leg
+;; also pays Pyth's update fee in STX (currently 1 uSTX per feed, two
+;; feeds) - budget a few uSTX above the STX total.
 ;;
 ;; VENUES (both verified on mainnet 2026-09-04)
 ;;
@@ -66,8 +76,8 @@
 ;;            facade over native STX; balances are measured on the user, so
 ;;            which facade a venue uses does not matter here.
 ;;
-;; The front end picks the venue from live quotes and must toast when the
-;; Bitflow leg crosses the sandwich breakeven (fn of active-bin liquidity,
+;; The front end sizes the legs from live quotes and must toast when an
+;; AMM leg crosses the sandwich breakeven (fn of active-bin liquidity,
 ;; attacker pays 100 bps round trip). The Jing leg has no sandwich exposure:
 ;; it clears at the oracle mid.
 ;;
@@ -107,9 +117,10 @@
 (define-constant VENUE_VELAR u3)
 
 (define-constant ERR_ZERO_AMOUNT (err u3001))
-(define-constant ERR_JING_AMOUNT (err u3002))
+(define-constant ERR_MIN_OUT (err u3002))
 (define-constant ERR_BAD_VENUE (err u3003))
-(define-constant ERR_MIN_OUT (err u3004))
+(define-constant ERR_SPLIT_MISMATCH (err u3004))
+(define-constant ERR_VAA_REQUIRED (err u3005))
 
 ;; ---------------------------------------------------------------------------
 ;; balances
@@ -247,173 +258,15 @@
 )
 
 ;; Velar refuses a zero minimum; u0 from the caller means "no per-leg floor"
-(define-private (amm-floor (min-amm-out uint))
-  (if (> min-amm-out u0)
-    min-amm-out
+(define-private (amm-floor (min-received uint))
+  (if (> min-received u0)
+    min-received
     u1
   )
 )
 
 ;; ---------------------------------------------------------------------------
-;; public
-
-;; Sell `amount` sats for STX. `jing-amount` (<= amount, u0 to skip the
-;; book) tries Jing first at `limit-price` (market scale: uSTX per sat
-;; x 1e10, the same number a maker would rest at). `venue` takes the rest
-;; and must pay at least `min-amm-stx-out` for it; `min-stx-out` is the
-;; floor on the whole trade.
-(define-public (swap-sbtc-for-stx
-    (amount uint)
-    (jing-amount uint)
-    (limit-price uint)
-    (vaa (buff 8192))
-    (venue uint)
-    (min-amm-stx-out uint)
-    (min-stx-out uint)
-  )
-  (begin
-    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
-    (asserts!
-      (or
-        (is-eq venue VENUE_DLMM)
-        (is-eq venue VENUE_XYK)
-        (is-eq venue VENUE_VELAR)
-      )
-      ERR_BAD_VENUE
-    )
-    (let (
-        (user tx-sender)
-        (stx-before (stx-get-balance user))
-        (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price vaa true)
-          none
-        ))
-        ;; what the market actually kept: jing-amount less the refunded
-        ;; residual and rebate crumbs, u0 when skipped or rolled back
-        (jing-in (jing-spent jing))
-        (jing-got (jing-out jing))
-        (amm-in (- amount jing-in))
-        (amm (if (> amm-in u0)
-          (try! (amm-sell-sbtc amm-in (amm-floor min-amm-stx-out) venue))
-          {
-            in: u0,
-            out: u0,
-          }
-        ))
-        (out (gain stx-before (stx-get-balance user)))
-      )
-      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
-      (print {
-        topic: "swap-sbtc-for-stx",
-        user: user,
-        amount: amount,
-        jing-ok: (is-some jing),
-        jing-in: jing-in,
-        jing-out: jing-got,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amm-in (get in amm)),
-        venue: venue,
-        out: out,
-      })
-      (ok {
-        jing-ok: (is-some jing),
-        jing-in: jing-in,
-        jing-out: jing-got,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amm-in (get in amm)),
-        out: out,
-      })
-    )
-  )
-)
-
-;; Sell `amount` uSTX for sBTC. Same shape. Pyth's update fee (a few uSTX)
-;; leaves the user's wallet on leg 1 but is not part of `amount`: the
-;; market's tuple counts only the deposit, so `amm-in` is exact and the
-;; user must hold `amount` plus the fee.
-(define-public (swap-stx-for-sbtc
-    (amount uint)
-    (jing-amount uint)
-    (limit-price uint)
-    (vaa (buff 8192))
-    (venue uint)
-    (min-amm-sbtc-out uint)
-    (min-sbtc-out uint)
-  )
-  (begin
-    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts! (<= jing-amount amount) ERR_JING_AMOUNT)
-    (asserts!
-      (or
-        (is-eq venue VENUE_DLMM)
-        (is-eq venue VENUE_XYK)
-        (is-eq venue VENUE_VELAR)
-      )
-      ERR_BAD_VENUE
-    )
-    (let (
-        (user tx-sender)
-        (sbtc-before (sbtc-balance user))
-        (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price vaa false)
-          none
-        ))
-        (jing-in (jing-spent jing))
-        (jing-got (jing-out jing))
-        (amm-in (- amount jing-in))
-        (amm (if (> amm-in u0)
-          (try! (amm-sell-stx amm-in (amm-floor min-amm-sbtc-out) venue))
-          {
-            in: u0,
-            out: u0,
-          }
-        ))
-        (out (gain sbtc-before (sbtc-balance user)))
-      )
-      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
-      (print {
-        topic: "swap-stx-for-sbtc",
-        user: user,
-        amount: amount,
-        jing-ok: (is-some jing),
-        jing-in: jing-in,
-        jing-out: jing-got,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amm-in (get in amm)),
-        venue: venue,
-        out: out,
-      })
-      (ok {
-        jing-ok: (is-some jing),
-        jing-in: jing-in,
-        jing-out: jing-got,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amm-in (get in amm)),
-        out: out,
-      })
-    )
-  )
-)
-
-;; ---------------------------------------------------------------------------
-;; Split. The front end computes the split off-chain from live quotes (book
-;; depth on the opposite side at the mid plus walkable makers, then each
-;; AMM's marginal price) and hands the contract one amount per venue; the
-;; contract executes the four legs and reports each one, it never reroutes.
-;; Jing runs first, best effort, as in the single-venue swaps: what the
-;; book did not keep (skipped, rolled back, dust refund) stays in the
-;; wallet. Then DLMM, XYK, Velar, each with its own minimum, each skipped
-;; when its amount is u0; a DLMM shortfall stays in the wallet too. Both
-;; are reported as `unsold` next to the per-leg `in`s. `min-out` guards
-;; the total. With `jing-amount` u0 the market is never called, so `vaa`
-;; can be the empty buffer 0x: no Pyth fee, no Hermes round trip.
-
-(define-constant ERR_ZERO_SPLIT (err u3005))
+;; public. One entry point per direction; see HOW A SWAP RUNS above.
 
 (define-private (leg-sbtc
     (amount uint)
@@ -443,10 +296,48 @@
   )
 )
 
-(define-public (swap-sbtc-for-stx-split
+;; planned leg + the Jing residual when this venue is the fallback
+(define-private (with-fallback
+    (planned uint)
+    (venue uint)
+    (fallback (optional uint))
+    (residual uint)
+  )
+  (if (is-eq (some venue) fallback)
+    (+ planned residual)
+    planned
+  )
+)
+
+;; the FE's minimum for the planned size, stretched to the size that runs
+(define-private (scale-min
+    (min-received uint)
+    (planned uint)
+    (actual uint)
+  )
+  (if (or (is-eq planned u0) (is-eq actual planned))
+    min-received
+    (/ (* min-received actual) planned)
+  )
+)
+
+(define-private (valid-fallback (fallback (optional uint)))
+  (match fallback
+    v (or
+      (is-eq v VENUE_DLMM)
+      (is-eq v VENUE_XYK)
+      (is-eq v VENUE_VELAR)
+    )
+    true
+  )
+)
+
+(define-public (swap-sbtc-for-stx
+    (amount uint)
     (jing-amount uint)
     (limit-price uint)
-    (vaa (buff 8192))
+    (vaa (optional (buff 8192)))
+    (fallback (optional uint))
     (amm-amounts {
       dlmm: uint,
       xyk: uint,
@@ -460,32 +351,47 @@
     (min-stx-out uint)
   )
   (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    ;; the user signs `amount`; the split is the front end's arithmetic
     (asserts!
-      (>
+      (is-eq amount
         (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
           (get velar amm-amounts)
-        )
-        u0
-      )
-      ERR_ZERO_SPLIT
+        ))
+      ERR_SPLIT_MISMATCH
     )
+    (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
     (let (
         (user tx-sender)
         (stx-before (stx-get-balance user))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price vaa true)
+          (jing-swap jing-amount limit-price (unwrap! vaa ERR_VAA_REQUIRED) true)
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (leg-sbtc (get dlmm amm-amounts) (get dlmm amm-mins) VENUE_DLMM)))
-        (xyk (try! (leg-sbtc (get xyk amm-amounts) (get xyk amm-mins) VENUE_XYK)))
-        (velar (try! (leg-sbtc (get velar amm-amounts) (get velar amm-mins) VENUE_VELAR)))
+        (residual (- jing-amount jing-in))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (dlmm (try! (leg-sbtc dlmm-in
+          (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
+          VENUE_DLMM
+        )))
+        (xyk (try! (leg-sbtc xyk-in
+          (scale-min (get xyk amm-mins) (get xyk amm-amounts) xyk-in)
+          VENUE_XYK
+        )))
+        (velar (try! (leg-sbtc velar-in
+          (scale-min (get velar amm-mins) (get velar amm-amounts) velar-in)
+          VENUE_VELAR
+        )))
         (out (gain stx-before (stx-get-balance user)))
       )
       (asserts! (>= out min-stx-out) ERR_MIN_OUT)
       (print {
-        topic: "swap-sbtc-for-stx-split",
+        topic: "swap-sbtc-for-stx",
         user: user,
+        amount: amount,
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
@@ -495,7 +401,12 @@
         xyk-out: (get out xyk),
         velar-in: (get in velar),
         velar-out: (get out velar),
-        unsold: (+ (- jing-amount jing-in) (- (get dlmm amm-amounts) (get in dlmm))),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
         out: out,
       })
       (ok {
@@ -508,17 +419,24 @@
         xyk-out: (get out xyk),
         velar-in: (get in velar),
         velar-out: (get out velar),
-        unsold: (+ (- jing-amount jing-in) (- (get dlmm amm-amounts) (get in dlmm))),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
         out: out,
       })
     )
   )
 )
 
-(define-public (swap-stx-for-sbtc-split
+(define-public (swap-stx-for-sbtc
+    (amount uint)
     (jing-amount uint)
     (limit-price uint)
-    (vaa (buff 8192))
+    (vaa (optional (buff 8192)))
+    (fallback (optional uint))
     (amm-amounts {
       dlmm: uint,
       xyk: uint,
@@ -532,32 +450,47 @@
     (min-sbtc-out uint)
   )
   (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    ;; the user signs `amount`; the split is the front end's arithmetic
     (asserts!
-      (>
+      (is-eq amount
         (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
           (get velar amm-amounts)
-        )
-        u0
-      )
-      ERR_ZERO_SPLIT
+        ))
+      ERR_SPLIT_MISMATCH
     )
+    (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
     (let (
         (user tx-sender)
         (sbtc-before (sbtc-balance user))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price vaa false)
+          (jing-swap jing-amount limit-price (unwrap! vaa ERR_VAA_REQUIRED) false)
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (leg-stx (get dlmm amm-amounts) (get dlmm amm-mins) VENUE_DLMM)))
-        (xyk (try! (leg-stx (get xyk amm-amounts) (get xyk amm-mins) VENUE_XYK)))
-        (velar (try! (leg-stx (get velar amm-amounts) (get velar amm-mins) VENUE_VELAR)))
+        (residual (- jing-amount jing-in))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (dlmm (try! (leg-stx dlmm-in
+          (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
+          VENUE_DLMM
+        )))
+        (xyk (try! (leg-stx xyk-in
+          (scale-min (get xyk amm-mins) (get xyk amm-amounts) xyk-in)
+          VENUE_XYK
+        )))
+        (velar (try! (leg-stx velar-in
+          (scale-min (get velar amm-mins) (get velar amm-amounts) velar-in)
+          VENUE_VELAR
+        )))
         (out (gain sbtc-before (sbtc-balance user)))
       )
       (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
       (print {
-        topic: "swap-stx-for-sbtc-split",
+        topic: "swap-stx-for-sbtc",
         user: user,
+        amount: amount,
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
@@ -567,7 +500,12 @@
         xyk-out: (get out xyk),
         velar-in: (get in velar),
         velar-out: (get out velar),
-        unsold: (+ (- jing-amount jing-in) (- (get dlmm amm-amounts) (get in dlmm))),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
         out: out,
       })
       (ok {
@@ -580,105 +518,19 @@
         xyk-out: (get out xyk),
         velar-in: (get in velar),
         velar-out: (get out velar),
-        unsold: (+ (- jing-amount jing-in) (- (get dlmm amm-amounts) (get in dlmm))),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
         out: out,
       })
     )
   )
 )
 
-;; ---------------------------------------------------------------------------
-;; AMM only. Same venue helpers and guards, no book leg, so no VAA, no
-;; limit price and no Pyth fee: the front end uses these when the book has
-;; nothing for the trade (below min deposit, no makers in range) or the
-;; user picked a venue outright. `jing-amount u0` on the swaps above does
-;; the same thing but still carries the VAA.
-
-(define-public (amm-swap-sbtc-for-stx
-    (amount uint)
-    (venue uint)
-    (min-stx-out uint)
-  )
-  (begin
-    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts!
-      (or
-        (is-eq venue VENUE_DLMM)
-        (is-eq venue VENUE_XYK)
-        (is-eq venue VENUE_VELAR)
-      )
-      ERR_BAD_VENUE
-    )
-    (let (
-        (user tx-sender)
-        (stx-before (stx-get-balance user))
-        (amm (try! (amm-sell-sbtc amount (amm-floor min-stx-out) venue)))
-        (out (gain stx-before (stx-get-balance user)))
-      )
-      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
-      (print {
-        topic: "amm-swap-sbtc-for-stx",
-        user: user,
-        amount: amount,
-        venue: venue,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amount (get in amm)),
-        out: out,
-      })
-      (ok {
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amount (get in amm)),
-        out: out,
-      })
-    )
-  )
-)
-
-(define-public (amm-swap-stx-for-sbtc
-    (amount uint)
-    (venue uint)
-    (min-sbtc-out uint)
-  )
-  (begin
-    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (asserts!
-      (or
-        (is-eq venue VENUE_DLMM)
-        (is-eq venue VENUE_XYK)
-        (is-eq venue VENUE_VELAR)
-      )
-      ERR_BAD_VENUE
-    )
-    (let (
-        (user tx-sender)
-        (sbtc-before (sbtc-balance user))
-        (amm (try! (amm-sell-stx amount (amm-floor min-sbtc-out) venue)))
-        (out (gain sbtc-before (sbtc-balance user)))
-      )
-      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
-      (print {
-        topic: "amm-swap-stx-for-sbtc",
-        user: user,
-        amount: amount,
-        venue: venue,
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amount (get in amm)),
-        out: out,
-      })
-      (ok {
-        amm-in: (get in amm),
-        amm-out: (get out amm),
-        unsold: (- amount (get in amm)),
-        out: out,
-      })
-    )
-  )
-)
-
-;; For the front end's split: below these the book leg is pointless. Literal
+;; For the front end's sizing: below these the book leg is pointless. Literal
 ;; id on purpose: a constant is not allowed in a read-only call (see above).
 (define-read-only (get-jing-min-deposits)
   (contract-call?
