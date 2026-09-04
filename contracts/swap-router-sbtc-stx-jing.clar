@@ -19,10 +19,12 @@
 ;;          the unspent rebate crumbs. The market's `swap` returns all of
 ;;          that post-walk: `token-*-rolled` is the refunded residual,
 ;;          `rebate-refunded` the crumbs, `token-*-received` mid + walk.
-;;          The venue must spend all of it: DLMM's router returns `in` <
-;;          amount when it runs out of bins inside `max-steps`, and that is
-;;          refused here (`u3005`) so the promise "100% filled or nothing
-;;          moves" holds. The AMM leg carries its own `min-amm-out`, from
+;;          DLMM's router may stop short: it returns `in` < amount when it
+;;          runs out of bins inside `max-steps`, and never pulls the rest.
+;;          That is allowed (Rapha: a partial fill beats a revert); the
+;;          tuple reports `amm-in` as what was really sold and `unsold` as
+;;          what stayed in the wallet. XYK and Velar are all or nothing.
+;;          The AMM leg carries its own `min-amm-out`, from
 ;;          the front end's venue quote: the book leg is guarded by
 ;;          `limit-price`, the AMM leg by this, each on its own. The venue
 ;;          refuses a short fill itself with its own error (DLMM u2003, XYK
@@ -108,7 +110,6 @@
 (define-constant ERR_JING_AMOUNT (err u3002))
 (define-constant ERR_BAD_VENUE (err u3003))
 (define-constant ERR_MIN_OUT (err u3004))
-(define-constant ERR_AMM_PARTIAL (err u3005))
 
 ;; ---------------------------------------------------------------------------
 ;; balances
@@ -302,7 +303,6 @@
           }
         ))
       )
-      (asserts! (is-eq (get in amm) amm-in) ERR_AMM_PARTIAL)
       (let ((out (gain stx-before (stx-get-balance user))))
         (asserts! (>= out min-stx-out) ERR_MIN_OUT)
         (print {
@@ -312,8 +312,9 @@
           jing-ok: (is-some jing),
           jing-in: jing-in,
           jing-out: jing-got,
-          amm-in: amm-in,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amm-in (get in amm)),
           venue: venue,
           out: out,
         })
@@ -321,8 +322,9 @@
           jing-ok: (is-some jing),
           jing-in: jing-in,
           jing-out: jing-got,
-          amm-in: amm-in,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amm-in (get in amm)),
           out: out,
         })
       )
@@ -373,7 +375,6 @@
           }
         ))
       )
-      (asserts! (is-eq (get in amm) amm-in) ERR_AMM_PARTIAL)
       (let ((out (gain sbtc-before (sbtc-balance user))))
         (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
         (print {
@@ -383,8 +384,9 @@
           jing-ok: (is-some jing),
           jing-in: jing-in,
           jing-out: jing-got,
-          amm-in: amm-in,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amm-in (get in amm)),
           venue: venue,
           out: out,
         })
@@ -392,8 +394,9 @@
           jing-ok: (is-some jing),
           jing-in: jing-in,
           jing-out: jing-got,
-          amm-in: amm-in,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amm-in (get in amm)),
           out: out,
         })
       )
@@ -427,7 +430,6 @@
       ERR_BAD_VENUE
     )
     (let ((amm (try! (amm-sell-sbtc amount (amm-floor min-stx-out) venue))))
-      (asserts! (is-eq (get in amm) amount) ERR_AMM_PARTIAL)
       (let ((out (gain stx-before (stx-get-balance user))))
         (asserts! (>= out min-stx-out) ERR_MIN_OUT)
         (print {
@@ -435,11 +437,15 @@
           user: user,
           amount: amount,
           venue: venue,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amount (get in amm)),
           out: out,
         })
         (ok {
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amount (get in amm)),
           out: out,
         })
       )
@@ -466,7 +472,6 @@
       ERR_BAD_VENUE
     )
     (let ((amm (try! (amm-sell-stx amount (amm-floor min-sbtc-out) venue))))
-      (asserts! (is-eq (get in amm) amount) ERR_AMM_PARTIAL)
       (let ((out (gain sbtc-before (sbtc-balance user))))
         (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
         (print {
@@ -474,11 +479,15 @@
           user: user,
           amount: amount,
           venue: venue,
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amount (get in amm)),
           out: out,
         })
         (ok {
+          amm-in: (get in amm),
           amm-out: (get out amm),
+          unsold: (- amount (get in amm)),
           out: out,
         })
       )

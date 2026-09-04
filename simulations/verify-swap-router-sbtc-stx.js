@@ -8,7 +8,8 @@
 //      min-amm-out too high is refused by the VENUE (DLMM u2003, XYK u6009,
 //      Velar u107), nothing moved. W1p partial fill: a second wrapper copy
 //      with DLMM_MAX_STEPS u1 sells more than one bin holds; DLMM returns
-//      in < amount and the wrapper refuses u3005.
+//      in < amount, the swap succeeds, amm-in is what sold, unsold stays
+//      in the wallet (Rapha: a partial fill beats a revert).
 //   W2 sell sBTC, book skipped (jing-amount 0): DLMM, XYK, Velar each take the
 //      whole amount; sBTC delta == amount, STX grew, tuple reports
 //      jing-ok false / jing-in u0 / amm-in amount.
@@ -19,7 +20,7 @@
 //      jing-in u2000 / amm-in u3000; cycle advanced by the swap.
 //   W6 AMM-only entry points (no VAA): amm-swap-sbtc-for-stx / -stx-for-sbtc
 //      on DLMM, XYK, Velar; exact deltas, amm-out == out; guards u3001,
-//      u3003, venue min-out refusal (u2003), u3005 on the 1-step copy.
+//      u3003, venue min-out refusal (u2003), partial ok on the 1-step copy.
 //   W5 fallback: empty book (fresh cycle), jing-amount == amount. The market
 //      returns an err, the wrapper catches it, the whole amount goes to the
 //      venue: jing-ok false / jing-in u0 / amm-in amount; no x position was
@@ -188,11 +189,11 @@ async function main() {
   tx("W1 min-amm-out too high on Velar -> venue u107", sellSbtc(T, 3000n, 0n, 1n, VELAR, 1n, HUGE), "(err u107)");
   const g1s = sbtcOf(T, "W1 after"); const g1x = stxOf(T, "W1 after");
   tx("W1 min-amm-out u0 on Velar is floored, not refused", sellSbtc(T, 1000n, 0n, 1n, VELAR, 1n, 0n), okPrefix);
-  // W1p: one-bin walk cannot absorb 0.05 BTC; DLMM returns in < amount -> u3005
+  // W1p: one-bin walk cannot absorb 0.05 BTC; DLMM returns in < amount, swap ok
   const p0s = sbtcOf(T, "W1p before"); const p0x = stxOf(T, "W1p before");
-  tx("W1p DLMM stops short of amount -> u3005", (b) =>
+  const rp = tx("W1p DLMM stops short of amount -> partial ok", (b) =>
     b.withSender(T).addContractCall({ contract_id: `${DEPLOYER}.${ROUTER_1STEP}`, function_name: "swap-sbtc-for-stx",
-      function_args: [uintCV(5_000_000n), uintCV(0n), uintCV(1n), DUMMY_VAA, uintCV(DLMM), uintCV(1n), uintCV(1n)] }), "(err u3005)");
+      function_args: [uintCV(5_000_000n), uintCV(0n), uintCV(1n), DUMMY_VAA, uintCV(DLMM), uintCV(1n), uintCV(1n)] }), okPrefix);
   const p1s = sbtcOf(T, "W1p after"); const p1x = stxOf(T, "W1p after");
 
   // =============== W2: sell sBTC, book skipped ===============
@@ -243,9 +244,11 @@ async function main() {
   tx("W6 amm zero amount -> u3001", ammSbtc(T, 0n, DLMM, 1n), "(err u3001)");
   tx("W6 amm bad venue -> u3003", ammSbtc(T, 1000n, 9n, 1n), "(err u3003)");
   tx("W6 amm min-out too high on DLMM -> venue u2003", ammSbtc(T, 1000n, DLMM, HUGE), "(err u2003)");
-  tx("W6 amm partial on 1-step copy -> u3005", (b) =>
+  const q0s = sbtcOf(T, "W6p before"); const q0x = stxOf(T, "W6p before");
+  const rq = tx("W6p amm-only partial on 1-step copy -> ok", (b) =>
     b.withSender(T).addContractCall({ contract_id: `${DEPLOYER}.${ROUTER_1STEP}`, function_name: "amm-swap-sbtc-for-stx",
-      function_args: [uintCV(5_000_000n), uintCV(DLMM), uintCV(1n)] }), "(err u3005)");
+      function_args: [uintCV(5_000_000n), uintCV(DLMM), uintCV(1n)] }), okPrefix);
+  const q1s = sbtcOf(T, "W6p after"); const q1x = stxOf(T, "W6p after");
   const w6 = [];
   for (const [name, venue, amt] of [["DLMM", DLMM, 4000n], ["XYK", XYK, 2500n], ["Velar", VELAR, 2500n]]) {
     const s0 = sbtcOf(T, `W6 ${name} before`); const x0 = stxOf(T, `W6 ${name} before`);
@@ -278,8 +281,13 @@ async function main() {
   // relative checks
   check("W1 min-out revert moved no sBTC", g1s.value - g0s.value, (d) => d === 0n);
   check("W1 min-out revert moved no STX", g1x.value - g0x.value, (d) => d === 0n);
-  check("W1p partial-fill revert moved no sBTC", p1s.value - p0s.value, (d) => d === 0n);
-  check("W1p partial-fill revert moved no STX", p1x.value - p0x.value, (d) => d === 0n);
+  for (const [tag, r, s0, s1, x0, x1] of [["W1p", rp, p0s, p1s, p0x, p1x], ["W6p", rq, q0s, q1s, q0x, q1x]]) {
+    const sold = field(r.raw, "amm-in"), unsold = field(r.raw, "unsold"), out = field(r.raw, "out");
+    check(`${tag} partial: amm-in + unsold == 5000000`, sold + unsold, (t) => t === 5_000_000n && unsold > 0n && sold > 0n);
+    check(`${tag} partial: sBTC delta == amm-in (${sold}), unsold stayed home`, s0.value - s1.value, (d) => d === sold);
+    check(`${tag} partial: STX grew by out (${out})`, x1.value - x0.value, (d) => d === out && d > 0n);
+    check(`${tag} partial: amm-out == out`, field(r.raw, "amm-out"), (a) => a === out);
+  }
   for (const w of w2) {
     const out = field(w.r.raw, "out");
     check(`W2 ${w.name} sBTC delta == ${w.amt}`, w.s0.value - w.s1.value, (d) => d === w.amt);
