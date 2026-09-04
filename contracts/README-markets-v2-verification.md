@@ -29,6 +29,7 @@ Last full re-run: 2026-09-04 on master 6e90025 (small-share at settle, price-ord
 | `simulations/verify-markets-v2-remainder-cross.js` | 110/110, [3c0e462f](https://stxer.xyz/simulations/mainnet/3c0e462fc96e20ec11d051b0a3177689) | S1 happy walk with exact payouts and rebate split; S2 only-out-of-range makers, walk runs and reverts `u1023` atomic (was `u1012` before the flag); S2b beyond-limit makers `u1023`; S3/S3b dust maker skipped, sub-min remainder refunded; S4 mirror direction; S5b/S5 cross-only oversize `u1023` / cross-only sized whole-walk fill (x-taker); S6 cross-only sized (y-taker); S7a/S7b `reprice-or-swap-token-y/-x` through the walk, mid leg + walk leg exact incl. ride/pending split, same-price tie keeps arrival order; S9 `u1025` on both setters and `initialize`; S8 flag never leaks (swap reverting in the walk leaves `crossing` false) and public `close-deposits` + `settle-with-refresh` on an all-out-of-range book `u1012` |
 | `simulations/verify-markets-v2-multifill.js` | 43/43, [0508e9c9](https://stxer.xyz/simulations/mainnet/0508e9c95434bf7f7f0bf40dd7850ad2) | eight-maker walk in one tx, ordering, per-maker limit fills |
 | `simulations/verify-markets-v2-bounty-fixes.js` | 127/127, [82d6d6d1](https://stxer.xyz/simulations/mainnet/82d6d6d1a3639c18b923649e334c3c14) | B1 1000 STX dead bid at u1 + 1.5 STX taker (0.15% of the raw side) fills by walking the +2% ask, whale limit-rolled intact; B2 in-range 1000 STX bid + 1.5 STX taker `u1026`, escrow and cycle unchanged, flag unwound; B3 1 STX fish survives public `close-deposits` (no roll at close), `cancel-cycle` after the threshold rolls all; B4 asks resting +2%, +5%, +1% in arrival order, +5.5% y-taker fills the +1% ask only, exact sBTC gain; B4b bids -5% then -1%, -5.5% x-taker fills the -1% bid only, zero residual; P1-P9 parked makers on a second instance with `MAX_DEPOSITORS` patched to u3: farthest out-of-range bid parked (map, totals, limit kept), out-of-range newcomer `u1013`, parked deposit `u1027`, parked reprice ok, readmit full `u1013`, readmit after a cancel ok, parked cancel refunds, readmit of non-parked `u1028`; x mirror parks the +10% ask, cancel refunds 3000 sats, top-up needs no park |
+| `simulations/verify-markets-v2-gaps.js` | 56/56, [5e6eb07b](https://stxer.xyz/simulations/mainnet/5e6eb07bf205ee1f8abc1f658945db20) | the surface no other harness called: G1 operator role (`set-paused` / `set-treasury` / `set-operator` refuse a non-operator `u1011`, treasury and operator retarget, the old operator loses `set-paused` after handover, round trip); G2 pause on `close-deposits` (`u1010`), plus deposit, `swap` and plain `settle` while paused, `set-token-x-limit` NOT gated (note 9), unpause; G3 `settle` (no VAA) in deposit phase `u1003`, wrong trait `u1019`, `close-and-settle-with-refresh` dies `u1012` and its close is unwound (phase back to deposit), public `close-deposits` by an outsider, second close `u1016`, plain `settle` `u1012`, cycle and both makers unchanged; G4 `u1024` on a fork after `cancel-cycle` rolls the book: swap on the resting side reverts, deposit / limit / balance / cycle / flag untouched, a fresh taker on the other side passes the gate; G5 off-chain exhaustive: the crossed-maker rebate cap branch is unreachable (see 4 below) |
 | the three harnesses above with `LIVE=1` | remainder-cross 110/110 [f288233f](https://stxer.xyz/simulations/mainnet/f288233f85034d859cd859bef59fc8aa), multifill 43/43 [05def9c8](https://stxer.xyz/simulations/mainnet/05def9c868442df5a35317b7dff1bcf3), regression 22/22 [78a5c2d8](https://stxer.xyz/simulations/mainnet/78a5c2d86939f7fafe534d94a3f026ce) | the EXACT deployed bytes (source fetched from chain, no patches) at the mainnet contract ids `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v3` / `.markets-sbtc-stx-jing-v2`, real Wormhole verification through `pyth-oracle-v4` with a real dual-feed PNAU VAA (Granite, 2026-08-17, `simulations/fixtures/vaa-granite-8785969-btc-stx.hex`), forked at 8785968 where that VAA is 39 s old. Only the deploy block differs from mainnet (deployed 2026-09-02 at 8906186). Why not a tip fork: Hermes is key-gated and nobody has posted a Core update on Stacks since 2026-08-21, see `README-pyth-core-vs-lazer.md` |
 | `simulations/fuzz-remainder-cross-math.mjs` | 200,000 cases, 0 failures | rebate split exact, walker never overdraws escrow, traded <= maker size, fees <= traded, bounded rounding dust, conservation, no u128 overflow |
 | `tests/markets-sbtc-stx-jing-v2.test.ts` (clarinet) | 53/53 across the v2 files | maker-gate truth table, top-ups, reprice matrix, `u1024` resting-position refusal, Hermes swap trio on the production contract |
@@ -45,15 +46,19 @@ stub for it. The stub body must be `(begin (asserts! true (err u0)) (ok true))`,
 
 ## What is left to test
 
-1. `u1024` on a mainnet fork. The resting-position refusal is proven in the clarinet suite
-   only. Add to the regression harness: rest on side x, call `swap` on side x, expect
-   `u1024`, assert nothing moved (position, limit, balance).
-2. `paused` on `close-deposits` on a mainnet fork. The operator-setters sim checks pause on
-   deposit only. Add: `set-paused true`, `close-deposits` -> `u1010`, unpause, closes.
+1. `u1024` on a mainnet fork: DONE, `verify-markets-v2-gaps.js` G4 (swap on the resting
+   side reverts `u1024`; position, limit, balance, cycle and `crossing` untouched).
+2. `paused` on `close-deposits` on a mainnet fork: DONE, gaps harness G2 (`u1010` on
+   close-deposits, deposit, swap and plain settle; `set-token-x-limit` still works; unpause
+   then close ok). G1 covers the three operator setters, which no harness had called.
 3. Walk cost at scale. Eight makers proven (43/43); the depositor list bound is 50. Accepted
    as-is by Rapha (linear in list length, `execute-fill` cost fixed per maker); no harness.
-4. Rebate pot fully consumed. Crumb refunds are proven in both directions (S1, S5, S7b);
-   a case where the crossed makers' 20 bps exactly drains the pot (cap branch taken) is not.
+4. Rebate pot fully consumed: UNREACHABLE, so no fork case exists. The pot is charged
+   20 bps on the taker's gross amount and the walk draws 20 bps on at most the net
+   remainder, so `pending >= r` always and the `(if (> r pending) pending r)` cap in
+   `execute-fill` is defensive. Checked exhaustively for every gross <= 20,000 units and
+   every mid/walk split (gaps harness G5, max `r - pending` = 0). Crumb refunds stay
+   proven by S1, S5, S7b.
 5. Design decision, not a test: `reprice-or-swap-token-x/y` cannot take on a cross-only
    book. `would-take-as-x/-y` only looks for a live maker at or inside the mid, so with
    every counterparty out of range the call reprices and returns the zero tuple (S7a in an
@@ -91,3 +96,12 @@ Deploy artefacts: `contracts/deploying/jing-core-v3.clar` and
 clarinet-formatted copies (token-equivalent to master). faktory-dao `/api/bot/deploy-contract`
 templates `jing-core-v3` then `markets-sbtc-stx-jing-v2` (Clarity 5, 0.1 STX). Post-deploy:
 `jing-core-v3.set-verified-contract`, then `initialize` with non-zero mins.
+11. `settle` and `close-and-settle-with-refresh` on a book that CLEARS. At a fixed oracle
+   price this cannot happen: a maker at or inside the mid is refused at deposit (`u1022`,
+   `would-take-as-*`) by the same comparison the settle limit filter uses, so a passive
+   book never has both sides in range and every public settle ends `u1012` (gaps harness
+   G3, S8). The clearing path needs the price to move between deposit and settle, i.e. two
+   fresh VAAs, which means a Hermes key (or two historical Granite VAAs with the fork's
+   synthetic clock walked to the second one). Everything else on those two functions is
+   covered: phase gate `u1003`, trait gate `u1019`, pause `u1010`, atomic unwind of the
+   close, `u1016` on a second close.
