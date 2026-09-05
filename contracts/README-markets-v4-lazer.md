@@ -164,6 +164,35 @@ The counts are two lower than the local runs: the deploy steps are gone.
 PYTH_API_KEY=<key> DEPLOYED=1 npx tsx simulations/verify-swap-router-v2-lazer.js
 ```
 
+## Coverage audit of the market (v4)
+
+Every public function is called by at least one harness. Error codes:
+
+| code | reached by | note |
+|---|---|---|
+| u1001, u1002, u1003, u1005, u1008, u1010, u1011, u1012, u1013, u1014, u1016, u1017, u1018, u1019, u1022, u1023, u1024, u1025, u1026, u1027, u1028 | the five ported harnesses | |
+| u1029 ERR_FEED_MISSING | `verify-markets-v4-lazer-paths.js` L2, L3 | an update without the STX feed (BTC only, or BTC + USDC) |
+| u1006 ERR_PRICE_UNCERTAIN | lazer-paths L4, L5 | an update fetched without the confidence property, on refresh-mid, swap and a gated deposit |
+| u1004 ERR_ALREADY_SETTLED | defensive | the deposit-phase gate (u1003) is checked first; lazer-paths L7 shows it |
+| u1009 ERR_ZERO_PRICE, u1020 ERR_EXPO_MISMATCH | defensive | a signed Lazer update cannot carry a zero price, and both feeds carry expo -8 |
+| u1021 ERR_NOTHING_FILLED | dead | never raised; can be removed in a later cut |
+
+lazer-paths also covers the read-onlys nobody called (`get-min-deposits`,
+`get-cycle-start-block`, `get-blocks-elapsed`, `would-take-as-x/-y` on an
+empty book and with a live maker, `get-token-x-depositors`,
+`get-settlement` before and after a settlement) and the gate rule: a
+deposit only reads the price when the opposite side has makers.
+
+| harness | local v4 | deployed `markets-sbtc-stx-jingswap` |
+|---|---|---|
+| `verify-markets-v4-lazer-paths.js` | 31/31, [2149a4b0](https://stxer.xyz/simulations/mainnet/2149a4b0dd23894e6c6f3dba833cfd48) | 29/29, [a5cfe1f4](https://stxer.xyz/simulations/mainnet/a5cfe1f48d44f175d8b120b6260428c2) |
+
+One thing the deployed run surfaced: the cycle clock (`cycle-start-block`)
+starts at deploy and on each roll, `initialize` does not reset it. On
+mainnet the first cycle therefore counts the blocks since deploy, so its
+cancel threshold is reachable right after initialize. Harmless: an empty
+cycle rolls nothing.
+
 ## To deploy
 
 1. Done: `markets-sbtc-stx-jingswap` (v4) and `swap-router-sbtc-stx-jingswap`
