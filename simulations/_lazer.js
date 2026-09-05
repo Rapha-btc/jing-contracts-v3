@@ -18,3 +18,16 @@ export async function fetchLazerUpdate(ids = [1, 45]) {
   if (!a || !b || a.exponent !== b.exponent) throw new Error("Lazer parsed feeds missing or expo mismatch");
   return { hex: j.evm.data, px: BigInt(a.price), py: BigInt(b.price), ts: Number(j.parsed.timestampUs) / 1e6, expo: a.exponent };
 }
+
+// Same fetch with custom feed ids / properties, for the negative paths
+// (single feed -> ERR_FEED_MISSING, no confidence -> ERR_PRICE_UNCERTAIN).
+export async function fetchLazerUpdateOpts({ ids = [1, 45], properties = ["price", "exponent", "confidence", "publisherCount"] } = {}) {
+  const key = process.env.PYTH_API_KEY;
+  if (!key) throw new Error("PYTH_API_KEY is required");
+  const r = await fetch("https://pyth-lazer.dourolabs.app/v1/latest_price", { method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ priceFeedIds: ids, properties, formats: ["evm"], channel: "fixed_rate@1000ms", jsonBinaryEncoding: "hex" }) });
+  if (!r.ok) throw new Error(`Lazer ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  return { hex: j.evm.data, parsed: j.parsed };
+}
