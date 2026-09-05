@@ -224,6 +224,35 @@ No invariant broke in any run. One harness bug was found and fixed on the
 way (a maker key colliding with the local deployer's, which is also the
 treasury), nothing in the market. `SEED` and `STEPS` change the sequence.
 
+## Router breadth: seeded random takers (`verify-swap-router-v2-stress.js`)
+
+Makers rest random bids and asks on the market; takers go through the
+router with random split swaps (random book share, random split over DLMM,
+XYK and Velar, fallback some or none) and random smart swaps (random size,
+limit 0.5% to 4%), both directions. After every router swap: the receipt's
+legs plus `unsold` equal the amount (R1), the sold asset left the wallet by
+exactly amount minus unsold (R2), the bought asset grew by exactly `out`
+(R3), `out` equals the sum of the legs (R4), every filled leg of a smart
+swap respects the limit (R5), and the router holds nothing (R6). Every ten
+actions the market's book invariants are checked as well.
+
+| run | swaps through | with a book fill | result |
+|---|---|---|---|
+| seed 7, local v4 + router v2 | 21/27 | 6 | 213/213, [110e924f](https://stxer.xyz/simulations/mainnet/110e924fd750b7e1435ae19e0c9d3581) |
+| seed 7, deployed | 21/27 | 6 | 211/211, [c864173f](https://stxer.xyz/simulations/mainnet/c864173fd6830f08c46d611f3dcb24bb) |
+| seed 31, 60 actions, deployed | 29/30 | 10 | 265/265, [dfdfae98](https://stxer.xyz/simulations/mainnet/dfdfae98d7af36772a67fcbf6632810c) |
+
+Two observations for the front end, neither a router defect:
+
+- **Dust legs.** A random split that hands a venue a leg worth less than one
+  unit of output (a few hundred uSTX of STX, or a handful of sats) is
+  refused by that venue's own minimum (`u2003`, `u1019`) and the whole
+  split swap reverts. Do not plan legs below roughly one output unit.
+- **One output unit of rounding.** The limit is honoured on every leg
+  within the router's two input units of slack and one unit of integer
+  output: a dust leg whose fair output is 1.02 sats pays 1 sat. Immaterial
+  at any real size.
+
 ## To deploy
 
 1. Done: `markets-sbtc-stx-jingswap` (v4) and `swap-router-sbtc-stx-jingswap`
