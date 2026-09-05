@@ -78,12 +78,23 @@ import {
 
 const OWNER_PRIVKEY =
   "5555555555555555555555555555555555555555555555555555555555555555" + "01";
-const DEPLOYER = getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
+// DEPLOYED=1: run against the MAINNET deployments at chavita
+// (markets-sbtc-stx-jingswap = v4, swap-router-sbtc-stx-jingswap = router v2)
+// and the live jing-core-v3: nothing is deployed except test-only copies;
+// verify + initialize run on the fork as chavita (mainnet still has to).
+const DEPLOYED = process.env.DEPLOYED === "1";
+const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : (getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet"));
 const mkAddr = (n) =>
   getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 
 const CORE = "jing-core-v3";
-const MARKET = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED
+const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+// This harness advances the clock by hours, which the live 80 s staleness
+// window cannot survive, so in DEPLOYED mode it runs a test copy of the
+// LIVE bytes (fetched from chain, only MAX_STALENESS widened) deployed under
+// a test name; the deployed bytes are otherwise exercised as is.
+const MARKET_LIVE = "markets-sbtc-stx-jingswap";
+const MARKET = DEPLOYED ? `${MARKET_LIVE}-clock` : MARKET_FILE;
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const CID = `${DEPLOYER}.${MARKET}`;
 const STACKS_NODE_API = "http://77.42.3.101/stacks-api";
@@ -108,7 +119,12 @@ let DUMMY_VAA = bufferCV(Buffer.from("00", "hex")); // replaced by the real Laze
 
 // ---- sources + sim-only patches ----
 const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
-let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8");
+let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8");
+if (DEPLOYED) {
+  const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22/${MARKET_LIVE}?proof=0`);
+  mktSrc = (await r.json()).source;
+  console.log(`DEPLOYED: clock-test copy ${MARKET} built from the live ${MARKET_LIVE} bytes (${mktSrc.length} chars), MAX_STALENESS widened only`);
+}
   // v4: signatures are REAL (a signed Lazer update, verified by the live
   // oracle). ONE sim-only patch remains here: MAX_STALENESS is widened,
   // because this harness advances the chain by 43 bitcoin blocks to reach
@@ -225,6 +241,7 @@ async function main() {
   const stxSend = (to, amt) => (b) => b.withSender(STX_DEPOSITOR_1).addSTXTransfer({ recipient: to, amount: amt });
 
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (DEPLOYED) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE) ? b : origDeploy(p); }
   const tx = (label, fn, want) => { b = fn(b); steps.push({ label, kind: "tx", want }); };
   const ev = (label, code, want, cid = CID) => {
     b = b.addEvalCode(cid, code);
@@ -238,7 +255,7 @@ async function main() {
   };
 
   // ---- deploy ----
-  tx("deploy core", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) tx("deploy core", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
   tx("initialize", call(DEPLOYER, "initialize", [

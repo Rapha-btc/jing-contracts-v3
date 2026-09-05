@@ -139,14 +139,39 @@ is proven by the router harness (W10).
 609 checks on the deploy candidate, all with real Pyth signatures. Every
 harness needs `PYTH_API_KEY`.
 
+## The same harnesses against the DEPLOYED contracts
+
+`DEPLOYED=1` runs every harness against the mainnet deployments at chavita,
+`markets-sbtc-stx-jingswap` (= v4, height 8920088) and
+`swap-router-sbtc-stx-jingswap` (= router v2, height 8920090), with the live
+`jing-core-v3`. Nothing is deployed except test-only copies; the sim
+verifies and initializes the market on the fork as chavita, which mainnet
+still has to do for real. The two clock-advancing harnesses run a
+`-clock` copy built from the live bytes with only `MAX_STALENESS` widened.
+
+| harness | result on the deployed contracts |
+|---|---|
+| router v2 | 222/222, [6fc2f215](https://stxer.xyz/simulations/mainnet/6fc2f215e1e942cdc396d952454014fd) |
+| remainder-cross | 113/113, [339658e2](https://stxer.xyz/simulations/mainnet/339658e2d38ecec29af1c9ab35436aac) |
+| multifill | 41/41, [2b3dda89](https://stxer.xyz/simulations/mainnet/2b3dda8981edd05fbf97be462f9b6191) |
+| regression | 20/20, [9e715527](https://stxer.xyz/simulations/mainnet/9e715527682ef33398ab07c6b08d2394) |
+| bounty-fixes, `-clock` copy of the live bytes | 126/126, [8c1c7c4e](https://stxer.xyz/simulations/mainnet/8c1c7c4ee47ec80b44d3cf9050ca1238) |
+| gaps, `-clock` copy of the live bytes | 77/77, [a95823b1](https://stxer.xyz/simulations/mainnet/a95823b1e838ada1a2c302c6eaceb52d) |
+
+The counts are two lower than the local runs: the deploy steps are gone.
+
+```
+PYTH_API_KEY=<key> DEPLOYED=1 npx tsx simulations/verify-swap-router-v2-lazer.js
+```
+
 ## To deploy
 
-1. Deploy `markets-sbtc-stx-jing-v4` from chavita (deploy copy: comments
-   stripped, formatted).
-2. `jing-core-v3 set-verified-contract` for it, then `initialize` with
-   `min-x u1000`, `min-y u1000000`, feed ids `u1`, `u45`.
-3. Deploy `swap-router-sbtc-stx-jing-v2`.
-4. Backend: `PYTH_API_KEY` on Vercel, the VAA route replaced by the Lazer
-   fetch above.
+1. Done: `markets-sbtc-stx-jingswap` (v4) and `swap-router-sbtc-stx-jingswap`
+   (router v2) are deployed from chavita.
+2. Still to send from chavita: `jing-core-v3 set-verified-contract` for the
+   market, then `initialize` with `min-x u1000`, `min-y u1000000`, feed ids
+   `u1`, `u45`.
+3. Backend: `PYTH_API_KEY` on Vercel, the VAA route replaced by the Lazer
+   fetch above. Front end passes `update`.
 
 v3 and router v1 stay on mainnet as dead code. Do not initialize v3.

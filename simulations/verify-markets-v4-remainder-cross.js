@@ -91,7 +91,12 @@ const LIVE_FORK = 8785968;
 const LIVE_PX = 6362215887773n; // BTC/USD stored at the fork after the VAA
 const LIVE_PY = 12143400n; // STX/USD
 const LIVE_VAA_FILE = new URL("./fixtures/vaa-granite-8785969-btc-stx.hex", import.meta.url);
-const DEPLOYER = LIVE ? LIVE_DEPLOYER : getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
+// DEPLOYED=1: run against the MAINNET deployments at chavita
+// (markets-sbtc-stx-jingswap = v4, swap-router-sbtc-stx-jingswap = router v2)
+// and the live jing-core-v3: nothing is deployed except test-only copies;
+// verify + initialize run on the fork as chavita (mainnet still has to).
+const DEPLOYED = process.env.DEPLOYED === "1";
+const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : (LIVE ? LIVE_DEPLOYER : getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet"));
 const mkAddr = (n) =>
   getAddressFromPrivateKey(
     String(n).repeat(64).slice(0, 64) + "01",
@@ -104,7 +109,8 @@ const X5 = mkAddr(8); // in-range x maker for S3b
 const Y1 = mkAddr(9); // out-of-range y bid for S4
 
 const CORE = "jing-core-v3";
-const MARKET = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED
+const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const CID = `${DEPLOYER}.${MARKET}`;
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const STACKS_NODE_API = "http://77.42.3.101/stacks-api";
@@ -143,7 +149,7 @@ if (LIVE) {
     "utf8",
   );
   mktSrc = fs.readFileSync(
-    new URL(`../contracts/${MARKET}.clar`, import.meta.url),
+    new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url),
     "utf8",
   );
   // v4: no sim patches, the market runs UNPATCHED on a real Lazer update
@@ -306,6 +312,7 @@ async function main() {
     b.addEvalCode(CID, `(stx-get-balance '${who})`);
 
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (DEPLOYED) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET) ? b : origDeploy(p); }
   if (LIVE) b = b.useBlockHeight(LIVE_FORK);
   b = b
     .withSender(DEPLOYER)
@@ -559,10 +566,10 @@ async function main() {
   const s = res.steps;
 
   let i = 0;
-  assert("deploy core", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
-  assert("deploy market (patched)", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
-  assert("set-verified-contract", decodeTx(s[i++]), "(ok true)");
-  assert("initialize", decodeTx(s[i++]), "(ok true)");
+  if (!DEPLOYED) assert("deploy core", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) assert("deploy market (patched)", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
+  assert("set-verified-contract", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
+  assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1018)"));
   for (let k = 0; k < 9; k++)
     assert(`funding tx ${k}`, decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
   assert("X1 in-range offer", decodeTx(s[i++]), `(ok u${X1_AMT})`);

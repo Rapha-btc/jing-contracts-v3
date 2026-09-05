@@ -93,14 +93,20 @@ const OWNER_PRIVKEY =
 // market lands at the exact id the wrapper's JING_MARKET constant names and
 // the market's relative `.jing-core-v3` resolves to the LIVE core. stxer
 // needs no signature, so impersonating the deployer is free.
-const DEPLOYER = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
+// DEPLOYED=1: run against the MAINNET deployments at chavita
+// (markets-sbtc-stx-jingswap = v4, swap-router-sbtc-stx-jingswap = router v2)
+// and the live jing-core-v3: nothing is deployed except test-only copies;
+// verify + initialize run on the fork as chavita (mainnet still has to).
+const DEPLOYED = process.env.DEPLOYED === "1";
+const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : ("SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22");
 
 const CORE = "jing-core-v3";
-const MARKET = "markets-sbtc-stx-jing-v4";
+const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const ROUTER = "swap-router-sbtc-stx-jing-v2";
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const CID = `${DEPLOYER}.${MARKET}`;
-const RID = `${DEPLOYER}.${ROUTER}`;
+const RID = `${DEPLOYER}.${DEPLOYED ? "swap-router-sbtc-stx-jingswap" : ROUTER}`;
 const STACKS_NODE_API = "http://77.42.3.101/stacks-api";
 
 const MIN_SBTC = 1000n;
@@ -131,13 +137,14 @@ async function fetchLazerUpdate() {
 }
 const routerSrc = fs.readFileSync(new URL(`../contracts/${ROUTER}.clar`, import.meta.url), "utf8");
 // W1p: same wrapper, DLMM walk capped at one bin so a mid-size sell stops short
-const ROUTER_1STEP = `${ROUTER}-1step`;
-const router1StepSrc = (() => {
+const ROUTER_LIVE = "swap-router-sbtc-stx-jingswap";
+const ROUTER_1STEP = `${DEPLOYED ? ROUTER_LIVE : ROUTER}-1step`;
+let router1StepSrc = (() => {
   const s = routerSrc.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
   if (s === routerSrc) throw new Error("DLMM_MAX_STEPS patch did not apply");
   return s;
 })();
-const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8"); // UNPATCHED
+const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8"); // UNPATCHED
 
 // ---- decode + assert ----
 function decodeTx(s) {
@@ -176,6 +183,13 @@ async function storedPrice(feedHex) {
 
 async function main() {
   console.log("=== swap-router-sbtc-stx-jing SELF-VERIFYING stxer harness ===\n");
+  if (DEPLOYED) {
+    const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${DEPLOYER}/${ROUTER_LIVE}?proof=0`);
+    const live = (await r.json()).source;
+    router1StepSrc = live.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+    if (router1StepSrc === live) throw new Error("DLMM_MAX_STEPS patch did not apply to the live router");
+    console.log(`DEPLOYED: market ${DEPLOYER}.${MARKET}, router ${DEPLOYER}.${ROUTER_LIVE}, 1-step copy from the live router bytes`);
+  }
   const lz = await fetchLazerUpdate();
   DUMMY_VAA = bufferCV(Buffer.from(lz.hex, "hex"));
   PX = lz.px; PY = lz.py;
@@ -206,6 +220,7 @@ async function main() {
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), upd, wstxTrait, wstxAsset], CID);
 
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (DEPLOYED) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET || p.contract_name === ROUTER) ? b : origDeploy(p); }
   const tx = (label, fn, want) => { b = fn(b); const slot = { label, kind: "tx", want, raw: null }; steps.push(slot); return slot; };
   const ev = (label, code, want, cid = RID) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); };
   const cap = (label, code, cid) => { b = b.addEvalCode(cid, code); const slot = { label, kind: "eval", capture: true, value: null }; steps.push(slot); return slot; };
@@ -217,8 +232,8 @@ async function main() {
   // (patched) and the router from the local files; LIVE mode uses the
   // mainnet deployments of both and only verifies + initializes the market
   // on the fork (as chavita), which mainnet still has to do for real.
-  tx("deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
-  tx("deploy router v2", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) tx("deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) tx("deploy router v2", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
   tx("initialize market", call(DEPLOYER, "initialize", [
