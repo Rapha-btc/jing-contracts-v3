@@ -137,13 +137,20 @@ async function fetchLiveVaa() {
 // ---- sources + sim-only patches (market only) ----
 const routerSrc = fs.readFileSync(new URL(`../contracts/${ROUTER}.clar`, import.meta.url), "utf8");
 if (!routerSrc.includes(`'${DEPLOYER}.${MARKET}`)) throw new Error("wrapper JING_MARKET does not name the deployer's market");
-// W1p: same wrapper, DLMM walk capped at one bin so a mid-size sell stops short
+// W1p: same wrapper, DLMM walk capped at one bin so a mid-size sell stops short.
+// In LIVE mode the copy is built from the LIVE router bytes (fetched below).
 const ROUTER_1STEP = `${ROUTER}-1step`;
-const router1StepSrc = (() => {
-  const s = routerSrc.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
-  if (s === routerSrc) throw new Error("DLMM_MAX_STEPS patch did not apply");
+const oneStep = (src) => {
+  const s = src.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+  if (s === src) throw new Error("DLMM_MAX_STEPS patch did not apply");
   return s;
-})();
+};
+let router1StepSrc = oneStep(routerSrc);
+async function fetchLiveSource(name) {
+  const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${DEPLOYER}/${name}?proof=0`);
+  if (!r.ok) throw new Error(`source ${name} ${r.status}`);
+  return (await r.json()).source;
+}
 let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8");
 // pinned oracle for the patched (non-LIVE) market, see below
 const PX = 11_000_000_000_000n;
@@ -206,7 +213,11 @@ async function main() {
     const v = await fetchLiveVaa();
     DUMMY_VAA = bufferCV(Buffer.from(v.hex, "hex"));
     LIVE_PX = v.px; LIVE_PY = v.py;
-    console.log(`LIVE: real VAA (${v.hex.length / 2} bytes, publish ${new Date(v.publishTime * 1000).toISOString()}, expo ${v.expo}), market unpatched`);
+    console.log(`LIVE: real VAA (${v.hex.length / 2} bytes, publish ${new Date(v.publishTime * 1000).toISOString()}, expo ${v.expo})`);
+    // the DEPLOYED market and router (chavita), not local deploys
+    const liveRouter = await fetchLiveSource(ROUTER);
+    router1StepSrc = oneStep(liveRouter);
+    console.log(`LIVE: market ${CID} and router ${RID} are the mainnet deployments; the 1-step copy is built from the live router bytes`);
   }
   const MID = LIVE ? (LIVE_PX * PP) / LIVE_PY : (PX * PP) / PY; // the mid the market settles at
   console.log(`deployer ${DEPLOYER}  px=${LIVE ? LIVE_PX : PX} py=${LIVE ? LIVE_PY : PY} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
@@ -241,9 +252,14 @@ async function main() {
   const stxOf = (who, label) => cap(`${label} stx`, `(stx-get-balance '${who})`, RID);
 
   // ---- deploy ----
-  // jing-core-v3 is LIVE at this deployer; only the market and wrappers deploy
-  tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
-  tx("deploy wrapper (unpatched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  // jing-core-v3 is LIVE at this deployer. Normal mode deploys the market
+  // (patched) and the router from the local files; LIVE mode uses the
+  // mainnet deployments of both and only verifies + initializes the market
+  // on the fork (as chavita), which mainnet still has to do for real.
+  if (!LIVE) {
+    tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
+    tx("deploy wrapper (unpatched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  }
   tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
   tx("initialize market", call(DEPLOYER, "initialize", [
