@@ -1,5 +1,7 @@
 # swap-router-sbtc-stx-jing
 
+> **Superseded by `swap-router-sbtc-stx-jing-v2` on `markets-sbtc-stx-jing-v4` (Pyth Lazer).** Pyth Core cannot be verified on Stacks since the Core upgrade, so this router's market cannot settle on mainnet. See `README-markets-v4-lazer.md`.
+
 Retail swap router for the sBTC/STX pair. One transaction, one receipt, four
 venues: Jing's maker/taker book (`markets-sbtc-stx-jing-v3`), Bitflow DLMM,
 Bitflow XYK, Velar. The router holds no funds and no state: it is called

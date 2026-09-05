@@ -83,6 +83,16 @@ contract_id = "SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-fees-v1_0_0-0070"
 [[project.requirements]]
 contract_id = "SP1Y5YSTAHZ88XYK1VPDH24GY0HPX5J4JECTMY4A1.wstx"
 
+# Pyth Lazer on Stacks (markets v4 price source)
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-traits"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle"
+
 
 
 [repl.remote_data]
@@ -128,6 +138,11 @@ epoch = "3.4"
 
 [contracts.markets-sbtc-stx-jing-v3]
 path = "contracts/markets-sbtc-stx-jing-v3.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v4]
+path = "contracts/markets-sbtc-stx-jing-v4.clar"
 clarity_version = 5
 epoch = "3.4"
 
