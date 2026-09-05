@@ -58,6 +58,7 @@
 import fs from "node:fs";
 import {
   uintCV,
+  standardPrincipalCV,
   falseCV,
   someCV,
   noneCV,
@@ -448,6 +449,59 @@ async function main() {
   const r9e = tx("W9e smart sell 3 BTC, vaa none, same limit, venues' room spent by W9f: most stays home", smartSbtc(T, BIG, L_NEAR, NO_VAA, 0n), okPrefix);
   const n8s = sbtcOf(T, "W9e after"); const n8x = stxOf(T, "W9e after");
 
+  // =============== W11: STX-seller walk boundary on the smart swap ===============
+  // asks rest: T at the mid (limit 1), M8 at +0.5% (inside the seller's 2%
+  // limit: walked), M9 at +3% (outside: untouched). S sells 200 STX at +2%.
+  tx("W11 S cancels its rolled dust (if any) so it can swap on the STX side", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), () => true);
+  const L_STX2 = (MID * 102n) / 100n;
+  const A_IN = (MID * 1005n) / 1000n, A_OUT = (MID * 103n) / 100n;
+  tx("W11 fund M8 with sBTC", (b) => b.withSender(T).addContractCall({ contract_id: SBTC_FQN, function_name: "transfer", function_args: [uintCV(30_000n), standardPrincipalCV(T), standardPrincipalCV(M8), noneCV()] }), okPrefix);
+  tx("W11 fund M9 with sBTC", (b) => b.withSender(T).addContractCall({ contract_id: SBTC_FQN, function_name: "transfer", function_args: [uintCV(30_000n), standardPrincipalCV(T), standardPrincipalCV(M9), noneCV()] }), okPrefix);
+  tx("W11 T asks 20000 sats at the mid", call(T, "deposit-token-x", [uintCV(20_000n), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  tx("W11 M8 asks 20000 sats at +0.5% (walkable)", call(M8, "deposit-token-x", [uintCV(20_000n), uintCV(A_IN), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  tx("W11 M9 asks 20000 sats at +3% (outside the 2% limit)", call(M9, "deposit-token-x", [uintCV(20_000n), uintCV(A_OUT), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  const v0x = stxOf(S, "W11 before"); const v0s = sbtcOf(S, "W11 before"); const v8x = stxOf(M8, "W11 M8 before"); const v9x = stxOf(M9, "W11 M9 before"); const vtx = stxOf(T, "W11 T before");
+  const r11 = tx("W11 smart sell 200 STX at +2%: mid ask cleared, +0.5% walked, +3% untouched, rest DLMM", smartStx(S, 200_000_000n, L_STX2, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)"));
+  const v1x = stxOf(S, "W11 after"); const v1s = sbtcOf(S, "W11 after"); const v8x1 = stxOf(M8, "W11 M8 after"); const v9x1 = stxOf(M9, "W11 M9 after"); const vtx1 = stxOf(T, "W11 T after");
+  tx("W11 M9 cancels its untouched ask in full", call(M9, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+
+  // =============== W12: book too thin for the min deposit -> Jing skipped ===============
+  // a 1 STX bid is worth ~330 sats at this mid, under the 1000-sat min
+  // deposit: capacity says so, jing-size returns u0, the AMMs take it all
+  // and the bid stays where it is
+  tx("W12 S bids 1 STX at the mid", depositY(S, MIN_STX, HUGE), `(ok u${MIN_STX})`);
+  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
+  const t0s12 = sbtcOf(T, "W12 before");
+  const r12 = tx("W12 smart sell 5000 sats: book skipped for size, all on the AMMs", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const t1s12 = sbtcOf(T, "W12 after");
+  tx("W12 the 1 STX bid still rests, cancel returns it", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), `(ok u${MIN_STX})`);
+
+  // =============== W13: fallback with a dust residual (split swap) ===============
+  // a 100 STX bid at the mid; jing-amount = gross-cap + 500 sats (under the
+  // min deposit): the book keeps its capacity, refunds the sub-min dust,
+  // and the dust lands on the fallback venue on top of its planned 1000
+  tx("W13 S bids 100 STX at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const gross13 = midGross9a, over13 = gross13 + 500n;
+  const d0s = sbtcOf(T, "W13 before"); const d0x = stxOf(T, "W13 before");
+  const r13 = tx(`W13 split: Jing ${over13} (cap + 500 dust), XYK 1000, fallback XYK`, sellSbtc(T, over13, fb(XYK), amts(0n, 1000n, 0n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const d1s = sbtcOf(T, "W13 after"); const d1x = stxOf(T, "W13 after");
+
+  // =============== W14: legs would fill, min-out not reached -> everything reverts ===============
+  const e0s14 = sbtcOf(T, "W14 before"); const e0x14 = stxOf(T, "W14 before");
+  tx("W14 smart sell 40000 sats with an impossible min-out -> u3002, nothing moved", smartSbtc(T, 40_000n, L_LOOSE, VAA, HUGE), "(err u3002)");
+  const e1s14 = sbtcOf(T, "W14 after"); const e1x14 = stxOf(T, "W14 after");
+
+  // =============== W15: the 30-bin cap on the DLMM walk ===============
+  // 10% under the mid every bin near the active one qualifies, so the walk
+  // stops at its 30-bin cap (4.5% of price); 3 BTC exceeds what those bins
+  // hold, the leg stays under the amount and spills to XYK + Velar
+  const f0s15 = sbtcOf(T, "W15 before"); const f0x15 = stxOf(T, "W15 before");
+  const r15 = tx("W15 smart sell 3 BTC at 10% under: DLMM capped at 30 bins, spill-over, rest home", smartSbtc(T, 300_000_000n, L_LOOSE, NO_VAA, 1n), okPrefix);
+  const f1s15 = sbtcOf(T, "W15 after"); const f1x15 = stxOf(T, "W15 after");
+
   // =============== W10: freshness ===============
   // A genuinely old update: fixtures/lazer-update-stale-btc-stx.hex was
   // fetched on 2026-09-05 and is minutes to days older than the fork tip on
@@ -478,9 +532,16 @@ async function main() {
     const raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]);
     i += 1;
     st.raw = raw;
+    st.cost = s[i - 1]?.Result?.Transaction?.Ok?.execution_cost ?? s[i - 1]?.ExecutionCost ?? null;
     if (st.capture) { st.value = uintOf(raw); console.log(`  ..   ${st.label}: ${raw}`); }
     else check(st.label, raw, st.want);
   }
+  // execution cost of the heaviest smart swaps vs the Stacks block limits
+  const LIMITS = { runtime: 5_000_000_000, read_count: 15_000, read_length: 100_000_000, write_count: 15_000, write_length: 15_000_000 };
+  const costLine = (st) => {
+    const c = st.cost; if (!c) return `${st.label}: (no cost data)`;
+    return `${st.label}: ` + Object.keys(LIMITS).map((k) => `${k} ${c[k]} (${(100 * c[k] / LIMITS[k]).toFixed(2)}% of block)`).join(", ");
+  };
 
   // relative checks
   const legs = (r) => ["jing-out", "dlmm-out", "xyk-out", "velar-out"].reduce((t, k) => t + field(r.raw, k), 0n);
@@ -610,6 +671,43 @@ async function main() {
   check("W9d out == sum of the four legs", legs(r9d), (t) => t === out9d);
   check("W9d DLMM took the remainder after the book", field(r9d.raw, "dlmm-in"), (d) => d === 200_000_000n - field(r9d.raw, "jing-in"));
   legPriceOk("W9d", r9d, L_STX, false);
+  // W11
+  const out11 = field(r11.raw, "out");
+  check("W11 STX delta == 200 STX", v0x.value - v1x.value, (d) => d === 200_000_000n);
+  check(`W11 sBTC grew by out (${out11})`, v1s.value - v0s.value, (d) => d === out11 && d > 0n);
+  check("W11 out == sum of the legs", legs(r11), (t) => t === out11);
+  check("W11 T (ask at the mid) was paid STX", vtx1.value - vtx.value, (d) => d > 0n);
+  check("W11 M8 (+0.5%, inside) was walked and paid STX", v8x1.value - v8x.value, (d) => d > 0n);
+  check("W11 M9 (+3%, outside) received nothing", v9x1.value - v9x.value, (d) => d === 0n);
+  check("W11 DLMM took the rest", field(r11.raw, "dlmm-in"), (d) => d > 0n);
+  legPriceOk("W11", r11, L_STX2, false);
+  // W12
+  check("W12 sBTC delta == 5000, all on AMMs", t0s12.value - t1s12.value, (d) => d === 5000n);
+  legPriceOk("W12", r12, L_LOOSE, true);
+  // W13
+  const jin13 = field(r13.raw, "jing-in"), xin13 = field(r13.raw, "xyk-in");
+  check(`W13 book kept its capacity (jing-in ${jin13} within a min deposit of ${gross13})`, jin13, (j) => j >= gross13 - MIN_SBTC && j <= gross13);
+  check(`W13 dust landed on the fallback: xyk-in == 1000 + (${over13} - jing-in)`, xin13, (x) => x === 1000n + (over13 - jin13));
+  check("W13 sBTC delta == jing-in + xyk-in", d0s.value - d1s.value, (d) => d === jin13 + xin13);
+  check(`W13 STX grew by out`, d1x.value - d0x.value, (d) => d === field(r13.raw, "out") && d > 0n);
+  // W14
+  check("W14 min-out revert moved no sBTC", e1s14.value - e0s14.value, (d) => d === 0n);
+  check("W14 min-out revert moved no STX", e1x14.value - e0x14.value, (d) => d === 0n);
+  // W15
+  const out15 = field(r15.raw, "out"), unsold15 = field(r15.raw, "unsold"), dl15 = field(r15.raw, "dlmm-in");
+  check(`W15 sBTC delta == 3 BTC - unsold (${unsold15})`, f0s15.value - f1s15.value, (d) => d === 300_000_000n - unsold15);
+  check(`W15 STX grew by out (${out15})`, f1x15.value - f0x15.value, (d) => d === out15);
+  check(`W15 DLMM leg capped (0 < ${dl15} < 3 BTC)`, dl15, (d) => d > 0n && d < 300_000_000n);
+  check("W15 spill-over reached XYK and Velar", [field(r15.raw, "xyk-in"), field(r15.raw, "velar-in")], (a) => a.every((x) => x > 0n));
+  check("W15 legs + unsold == 3 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r15.raw, k), 0n), (t) => t === 300_000_000n);
+  legPriceOk("W15", r15, L_LOOSE, true);
+  console.log("  cost " + costLine(r9f));
+  console.log("  cost " + costLine(r15));
+  // observed 2026-09-05: read_count ~13%, read_length ~12%, runtime 0.4%;
+  // the walk's per-bin get-bin-price call loads the (large) DLMM core each
+  // time. A local bin-price (one call for the active bin, then the 15 bps
+  // step applied per bin) would cut that ~10x. Bar set at 15% until then.
+  check("W15 30-bin walk + 4 legs stays under 15% of every block limit", r15.cost, (c) => !!c && Object.keys(LIMITS).every((k) => c[k] < LIMITS[k] * 0.15));
   const yGross9 = (() => { const net = (ASK9 * MID) / (PP * 100n); const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
   check(`W9d book leg sized to the ask's capacity (gross-cap ${yGross9}, dust at most)`, field(r9d.raw, "jing-in"), (j) => j >= yGross9 - MIN_STX && j <= yGross9);
 
