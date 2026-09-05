@@ -85,6 +85,29 @@ real signatures, plus:
   fork's block time trails the wall clock by about 80 s, so a fixture must
   be older than that at block time to be stale.
 
+## The five market harnesses on v4
+
+Ported from the v2 harnesses (`verify-markets-v4-*.js`): the market file is
+v4, the dummy VAA is a real signed Lazer update fetched at build time, the
+feed ids are `u1`/`u45`, and the storage-only `settle` calls became
+`settle-with-refresh`. Three run with no patch at all. Two advance the
+chain by 43 bitcoin blocks to reach `CANCEL_THRESHOLD`, hours ahead of any
+update that can be fetched, so in those two the sim copy widens
+`MAX_STALENESS` and nothing else; signatures stay real, and the 80 s window
+is proven by the router harness (W10).
+
+| harness | patch | result |
+|---|---|---|
+| `verify-markets-v4-remainder-cross.js` | none | 115/115, [61beb09a](https://stxer.xyz/simulations/mainnet/61beb09a2b889aeb05ea18a7281fd993) (M3 sized 8000 sats for the live mid) |
+| `verify-markets-v4-multifill.js` | none | 43/43, [631d64cb](https://stxer.xyz/simulations/mainnet/631d64cbbf8c622f682d2474cc40c939) |
+| `verify-markets-v4-regression.js` | none | 22/22, [7f25ca7d](https://stxer.xyz/simulations/mainnet/7f25ca7d6286cea1a6c92d17fdefe60f) |
+| `verify-markets-v4-bounty-fixes.js` | staleness window only | 127/127, [575cc8a4](https://stxer.xyz/simulations/mainnet/575cc8a46a00b86c4646517b6cec2bbb) |
+| `verify-markets-v4-gaps.js` | staleness window only | 78/78, [3fb5028b](https://stxer.xyz/simulations/mainnet/3fb5028bd2c63f1ec5f6a84b78f79c5a) |
+| `verify-swap-router-v2-lazer.js` | none | 182/182, [9d8071e1](https://stxer.xyz/simulations/mainnet/9d8071e14ef206f23bb6bdd9073f7b01) |
+
+567 checks on the deploy candidate, all with real Pyth signatures. Every
+harness needs `PYTH_API_KEY`.
+
 ## To deploy
 
 1. Deploy `markets-sbtc-stx-jing-v4` from chavita (deploy copy: comments
