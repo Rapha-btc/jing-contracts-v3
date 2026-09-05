@@ -1,0 +1,793 @@
+// verify-swap-router-sbtc-stx.js
+// Self-verifying stxer mainnet-fork harness for the retail router
+// contracts/swap-router-sbtc-stx-jing.clar: two entry points, one per
+// direction, each taking an off-chain split (jing-amount + {dlmm, xyk,
+// velar}) with per-venue minimums, an optional fallback venue for the
+// book residual, and a total min-out.
+//
+//   W1 guards: zero amount u3001; total min-out too high u3002; bad
+//      fallback u3003; split not adding up to amount u3004; jing without a
+//      vaa u3005; a venue's own
+//      minimum too high is refused by the VENUE (DLMM
+//      u2003, XYK u1019/u1020 via xyk-core, Velar u107); nothing moved across all of them; a u0
+//      Velar minimum is floored, not refused. W1p partial fill: a second
+//      router copy with DLMM_MAX_STEPS u1 sells more than one bin holds;
+//      DLMM returns in < amount, the swap succeeds, dlmm-in is what sold,
+//      unsold stays home.
+//   W2 sell sBTC on one venue at a time, jing u0 + vaa none: DLMM, XYK,
+//      Velar; sBTC delta == amount, STX grew by out, out == the leg's out.
+//   W3 same, selling STX.
+//   W4 Jing + DLMM: a 100 STX bid rests; 2000 sats via Jing, 3000 via DLMM.
+//      jing-in u2000, dlmm-in u3000, maker paid net of fee + ride, jing-out
+//      == mid fill net of fee, jing-out + dlmm-out == out, cycle advanced.
+//   W5 empty book (bid cancelled): all-Jing, fallback none, fills nothing
+//      -> the min-out backstop reverts u3002, nothing moved; Jing + XYK,
+//      fallback none: XYK runs, Jing amount stays home (unsold == 4000);
+//      "Jing mainly", fallback (some XYK): the whole amount lands on XYK
+//      (xyk-in == 4000, unsold u0), the retail shape.
+//   W8 market get-taker-capacity is tight: read-only == the JS formula to the
+//      sat (mid + walk, own side subtracted), limit filters, selling exactly
+//      gross-cap fills in full (dust at most), two min deposits over is
+//      FOK-refused; refresh-mid verifies the Lazer update and returns the mid.
+//   W9 smart swaps, split computed ON CHAIN at execution: W9a sell 40000 sats
+//      with a bid resting, loose limit: book to capacity, DLMM the rest;
+//      W9b vaa none: no book leg; W9c tight limit on an empty book: no venue
+//      respects it -> u3002, nothing moved; W9d sell 200 STX with an ask
+//      resting; W9f the four-venue happy path: 0.7 BTC at a limit 3% under
+//      the AMMs' spot: Jing to capacity, DLMM bins until the limit, XYK +
+//      Velar by closed-form room, unsold u0; W9e 3 BTC at the same limit
+//      right after: the room is spent, most stays home. Every leg's achieved
+//      price is checked against the limit (within the 2-unit rounding
+//      slack the router concedes on venue minimums). W9g resting size on
+//      the taker's own side: an ask above the mid is ignored by the
+//      capacity and untouched by the swap; the opposite bid fills to
+//      capacity, the rest goes to DLMM.
+//   W7 four legs: W7a sell sBTC 2000 Jing + 1500 DLMM + 1500 XYK + 1000
+//      Velar against a resting bid, every leg's in == planned, out == sum
+//      of the four outs; W7c sell STX 5 Jing + 3 DLMM + 2 XYK + 2 Velar
+//      against a resting ask; W7e jing u0 + vaa none, three AMM legs.
+//
+// Market v4 settles on Pyth Lazer (SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle):
+// the harness fetches ONE signed Lazer update (BTC/USD feed 1 + STX/USD feed
+// 45, evm format, 1000ms channel, with confidence) with the Pyth Pro key and
+// the market runs UNPATCHED on a tip fork: real signature verification, real
+// MAX_STALENESS, no Pyth fee (the Lazer oracle fee is u0). W10 at the end
+// advances the chain past the window and expects the same update refused.
+//
+// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-swap-router-v2-lazer.js
+import fs from "node:fs";
+import {
+  uintCV,
+  standardPrincipalCV,
+  falseCV,
+  someCV,
+  noneCV,
+  tupleCV,
+  contractPrincipalCV,
+  stringAsciiCV,
+  bufferCV,
+  cvToString,
+  cvToJSON,
+  deserializeCV,
+  getAddressFromPrivateKey,
+} from "@stacks/transactions";
+import { SimulationBuilder, getSimulationResult } from "stxer";
+import {
+  STX_DEPOSITOR_1,
+  SBTC_DEPOSITOR_1,
+  SBTC_ADDR,
+  SBTC_NAME,
+  SBTC_ASSET_NAME,
+  SBTC_FQN,
+  WSTX_ADDR,
+  WSTX_NAME,
+  WSTX_ASSET_NAME,
+  BTC_USD_FEED_HEX,
+  STX_USD_FEED_HEX,
+  PYTH_STORAGE,
+} from "./_setup.js";
+
+const OWNER_PRIVKEY =
+  "6666666666666666666666666666666666666666666666666666666666666666" + "01";
+// Everything deploys as chavita.btc, the live jing-core-v3 deployer, so the
+// market lands at the exact id the wrapper's JING_MARKET constant names and
+// the market's relative `.jing-core-v3` resolves to the LIVE core. stxer
+// needs no signature, so impersonating the deployer is free.
+// DEPLOYED=1: run against the MAINNET deployments at chavita
+// (markets-sbtc-stx-jingswap = v4, swap-router-sbtc-stx-jingswap = router v2)
+// and the live jing-core-v3: nothing is deployed except test-only copies;
+// verify + initialize run on the fork as chavita (mainnet still has to).
+const DEPLOYED = process.env.DEPLOYED === "1";
+// DEPLOYED=1: the MAINNET router v3 (swap-router-sbtc-stx-jingswap-v1, tx
+// 096413a7…) against the MAINNET market; nothing deployed but the 1-step copy
+// built from the live router bytes.
+// DEPLOY_COPY=1: the DEPLOYED market (markets-sbtc-stx-jingswap = v4, plain
+// tuple from get-taker-capacity) + the comment-stripped deploy copy of router
+// v3 (contracts/deploying/swap-router-sbtc-stx-jingswap-v1.clar, no try! on
+// the capacity call) deployed on the fork under chavita as
+// swap-router-sbtc-stx-jingswap-v1: the exact bytes and name mainnet gets.
+const DEPLOY_COPY = process.env.DEPLOY_COPY === "1";
+const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : ("SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22");
+
+const CORE = "jing-core-v3";
+const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source) = the deployed markets-sbtc-stx-jingswap
+const MARKET = (DEPLOYED || DEPLOY_COPY) ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
+const ROUTER = DEPLOY_COPY ? "swap-router-sbtc-stx-jingswap-v1" : "swap-router-sbtc-stx-jing-v3"; // v3 = v2 + caller-supplied mid (no second oracle verification) + zero guards
+const CORE_ID = `${DEPLOYER}.${CORE}`;
+const CID = `${DEPLOYER}.${MARKET}`;
+const RID = `${DEPLOYER}.${DEPLOYED ? "swap-router-sbtc-stx-jingswap-v1" : ROUTER}`;
+const STACKS_NODE_API = "http://77.42.3.101/stacks-api";
+
+const MIN_SBTC = 1000n;
+const MIN_STX = 1_000_000n;
+const PP = 100_000_000n;
+const HUGE = 999_999_999_999_999n;
+const DLMM = 1n, XYK = 2n, VELAR = 3n;
+
+const sbtcTrait = contractPrincipalCV(SBTC_ADDR, SBTC_NAME);
+const wstxTrait = contractPrincipalCV(WSTX_ADDR, WSTX_NAME);
+const sbtcAsset = stringAsciiCV(SBTC_ASSET_NAME);
+const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
+const btcFeedBuf = bufferCV(Buffer.from(BTC_USD_FEED_HEX, "hex"));
+const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
+let DUMMY_VAA = bufferCV(Buffer.from("00", "hex")); // replaced by the Lazer update at start
+let PX = 0n, PY = 0n; // from the Lazer update
+async function fetchLazerUpdate() {
+  const key = process.env.PYTH_API_KEY;
+  if (!key) throw new Error("PYTH_API_KEY is required (Pyth Pro key from pythdata.app)");
+  const r = await fetch("https://pyth-lazer.dourolabs.app/v1/latest_price", { method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ priceFeedIds: [1, 45], properties: ["price", "exponent", "confidence", "publisherCount"], formats: ["evm"], channel: "fixed_rate@1000ms", jsonBinaryEncoding: "hex" }) });
+  if (!r.ok) throw new Error(`Lazer ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const j = await r.json();
+  const f = Object.fromEntries(j.parsed.priceFeeds.map((e) => [e.priceFeedId, e]));
+  if (!f[1] || !f[45] || f[1].exponent !== f[45].exponent) throw new Error("Lazer parsed feeds missing or expo mismatch");
+  return { hex: j.evm.data, px: BigInt(f[1].price), py: BigInt(f[45].price), ts: Number(j.parsed.timestampUs) / 1e6, expo: f[1].exponent };
+}
+const routerSrc = fs.readFileSync(new URL(DEPLOY_COPY ? `../contracts/deploying/${ROUTER}.clar` : `../contracts/${ROUTER}.clar`, import.meta.url), "utf8");
+// W1p: same wrapper, DLMM walk capped at one bin so a mid-size sell stops short
+const ROUTER_LIVE = "swap-router-sbtc-stx-jingswap-v1";
+const ROUTER_1STEP = `${DEPLOYED ? ROUTER_LIVE : ROUTER}-1step`;
+let router1StepSrc = (() => {
+  const s = routerSrc.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+  if (s === routerSrc) throw new Error("DLMM_MAX_STEPS patch did not apply");
+  return s;
+})();
+const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8"); // UNPATCHED
+
+// ---- decode + assert ----
+function decodeTx(s) {
+  const r = s?.Result?.Transaction;
+  if (!r) return "<no tx>";
+  if ("Err" in r) return `ENGINE-ERR: ${JSON.stringify(r.Err)}`;
+  try { return cvToString(deserializeCV(r.Ok.result)); } catch (e) { return `decode-failed: ${e.message}`; }
+}
+function decodeEval(s) {
+  const r = s?.Result?.Eval;
+  if (!r) return "<no eval>";
+  if (!("Ok" in r)) return `ERR: ${JSON.stringify(r.Err)}`;
+  try { return cvToString(deserializeCV(r.Ok)); } catch { return r.Ok; }
+}
+const uintOf = (s) => BigInt((String(s).match(/u(\d+)/) || [, "0"])[1]);
+const field = (s, k) => BigInt((String(s).match(new RegExp(`\\(${k} u(\\d+)\\)`)) || [, "0"])[1]);
+const okPrefix = (v) => String(v).startsWith("(ok");
+
+let checks = 0, failures = 0;
+function check(label, actual, want) {
+  checks += 1;
+  const ok = typeof want === "function" ? want(actual) : String(actual).includes(want);
+  if (ok) console.log(`  ok   ${label}: ${String(actual).slice(0, 110)}`);
+  else { failures += 1; console.log(`  FAIL ${label}: got "${actual}" want "${want}"`); }
+}
+
+async function storedPrice(feedHex) {
+  const [addr, name] = PYTH_STORAGE.split(".");
+  const r = await fetch(`${STACKS_NODE_API}/v2/contracts/call-read/${addr}/${name}/get-price`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sender: addr, arguments: ["0x0200000020" + feedHex] }),
+  });
+  const j = cvToJSON(deserializeCV((await r.json()).result));
+  return BigInt(j.value.value.price.value);
+}
+
+async function main() {
+  console.log("=== swap-router-sbtc-stx-jing-v3 (+ deployed market v4) SELF-VERIFYING stxer harness ===\n");
+  if (DEPLOYED) {
+    const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${DEPLOYER}/${ROUTER_LIVE}?proof=0`);
+    const live = (await r.json()).source;
+    router1StepSrc = live.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+    if (router1StepSrc === live) throw new Error("DLMM_MAX_STEPS patch did not apply to the live router");
+    console.log(`DEPLOYED: market ${DEPLOYER}.${MARKET}, router ${DEPLOYER}.${ROUTER_LIVE}, 1-step copy from the live router bytes`);
+  }
+  const lz = await fetchLazerUpdate();
+  DUMMY_VAA = bufferCV(Buffer.from(lz.hex, "hex"));
+  PX = lz.px; PY = lz.py;
+  console.log(`Lazer update ${lz.hex.length / 2} bytes, ts ${new Date(lz.ts * 1000).toISOString()}, expo ${lz.expo}; market UNPATCHED`);
+  const MID = (PX * PP) / PY; // the mid the market settles at
+  console.log(`deployer ${DEPLOYER}  px=${PX} py=${PY} mid=${MID}  (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
+
+  const T = SBTC_DEPOSITOR_1; // sells sBTC through the wrapper
+  const S = STX_DEPOSITOR_1; // sells STX through the wrapper; rests the Jing bid in W4
+
+  const steps = [];
+  const call = (sender, fn, args, cid = RID) => (b) =>
+    b.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
+  const amts = (d, x, v) => tupleCV({ dlmm: uintCV(d), xyk: uintCV(x), velar: uintCV(v) });
+  const ONES = amts(1n, 1n, 1n);
+  const ZEROS = amts(0n, 0n, 0n);
+  const NO_VAA = noneCV();
+  const VAA = someCV(DUMMY_VAA);
+  const NONE = noneCV();
+  const fb = (venue) => someCV(uintCV(venue));
+  // `amount` is the sum of the four legs unless a test overrides it
+  const total = (jing, a) => jing + Object.values(a.value).reduce((t, cv) => t + BigInt(cv.value), 0n);
+  const sellSbtc = (sender, jing, fallback, a, m, minOut, vaa = VAA, cid = RID, amount = total(jing, a)) =>
+    call(sender, "swap-sbtc-for-stx", [uintCV(amount), uintCV(jing), uintCV(1n), vaa, fallback, a, m, uintCV(minOut)], cid);
+  const sellStx = (sender, jing, fallback, a, m, minOut, vaa = VAA, cid = RID, amount = total(jing, a)) =>
+    call(sender, "swap-stx-for-sbtc", [uintCV(amount), uintCV(jing), uintCV(HUGE), vaa, fallback, a, m, uintCV(minOut)], cid);
+  const depositY = (sender, amount, limit, upd = DUMMY_VAA) =>
+    call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), upd, wstxTrait, wstxAsset], CID);
+
+  let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (DEPLOYED || DEPLOY_COPY) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET || (DEPLOYED && p.contract_name === ROUTER)) ? b : origDeploy(p); }
+  const tx = (label, fn, want) => { b = fn(b); const slot = { label, kind: "tx", want, raw: null }; steps.push(slot); return slot; };
+  const ev = (label, code, want, cid = RID) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); };
+  const cap = (label, code, cid) => { b = b.addEvalCode(cid, code); const slot = { label, kind: "eval", capture: true, value: null }; steps.push(slot); return slot; };
+  const sbtcOf = (who, label) => cap(`${label} sbtc`, `(get-balance '${who})`, SBTC_FQN);
+  const stxOf = (who, label) => cap(`${label} stx`, `(stx-get-balance '${who})`, RID);
+
+  // ---- deploy ----
+  // jing-core-v3 is LIVE at this deployer. Normal mode deploys the market
+  // (patched) and the router from the local files; LIVE mode uses the
+  // mainnet deployments of both and only verifies + initializes the market
+  // on the fork (as chavita), which mainnet still has to do for real.
+  if (!DEPLOYED && !DEPLOY_COPY) tx("deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) tx(DEPLOY_COPY ? "deploy router deploy-copy swap-router-sbtc-stx-jingswap-v1 (v3 bytes)" : "deploy router v3", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
+  tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
+  tx("initialize market", call(DEPLOYER, "initialize", [
+    contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
+    uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
+  ], CID), "(ok true)");
+  ev("wrapper reads market mins (read-only via literal id)", "(get-jing-min-deposits)", (v) => String(v).includes(`(min-token-x u${MIN_SBTC})`));
+
+  // =============== W1: guards ===============
+  tx("W1 zero split -> u3001", sellSbtc(T, 0n, NONE, ZEROS, ONES, 1n, NO_VAA), "(err u3001)");
+  tx("W1 bad fallback -> u3003", sellSbtc(T, 0n, fb(9n), amts(1000n, 0n, 0n), ONES, 1n, NO_VAA), "(err u3003)");
+  tx("W1 jing-amount without a vaa -> u3005", sellSbtc(T, 1000n, NONE, ZEROS, ONES, 1n, NO_VAA), "(err u3005)");
+  tx("W1 split does not add up to amount -> u3004", sellSbtc(T, 0n, NONE, amts(1000n, 0n, 0n), ONES, 1n, NO_VAA, RID, 999n), "(err u3004)");
+  tx("W1 amount u0 with a non-zero leg -> u3001", sellSbtc(T, 0n, NONE, amts(1000n, 0n, 0n), ONES, 1n, NO_VAA, RID, 0n), "(err u3001)");
+  const g0s = sbtcOf(T, "W1 before"); const g0x = stxOf(T, "W1 before");
+  tx("W1 total min-out too high -> u3002", sellSbtc(T, 0n, NONE, amts(3000n, 0n, 0n), ONES, HUGE, NO_VAA), "(err u3002)");
+  tx("W1 DLMM minimum too high -> venue u2003", sellSbtc(T, 0n, NONE, amts(3000n, 0n, 0n), amts(HUGE, 1n, 1n), 1n, NO_VAA), "(err u2003)");
+  tx("W1 XYK minimum too high -> xyk-core u1019/u1020 (direct, no helper)", sellSbtc(T, 0n, NONE, amts(0n, 3000n, 0n), amts(1n, HUGE, 1n), 1n, NO_VAA), (v) => v === "(err u1019)" || v === "(err u1020)");
+  tx("W1 Velar minimum too high -> venue u107", sellSbtc(T, 0n, NONE, amts(0n, 0n, 3000n), amts(1n, 1n, HUGE), 1n, NO_VAA), "(err u107)");
+  const g1s = sbtcOf(T, "W1 after"); const g1x = stxOf(T, "W1 after");
+  tx("W1 Velar minimum u0 is floored, not refused", sellSbtc(T, 0n, NONE, amts(0n, 0n, 1000n), ZEROS, 1n, NO_VAA), okPrefix);
+  // W1p: one-bin walk cannot absorb 0.05 BTC; DLMM returns in < amount, swap ok
+  const p0s = sbtcOf(T, "W1p before"); const p0x = stxOf(T, "W1p before");
+  const rp = tx("W1p DLMM stops short of amount -> partial ok", sellSbtc(T, 0n, NONE, amts(5_000_000n, 0n, 0n), ONES, 1n, NO_VAA, `${DEPLOYER}.${ROUTER_1STEP}`), okPrefix);
+  const p1s = sbtcOf(T, "W1p after"); const p1x = stxOf(T, "W1p after");
+
+  // =============== W2: sell sBTC, one venue, no book, vaa none ===============
+  const w2 = [];
+  for (const [name, a, amt] of [["DLMM", amts(5000n, 0n, 0n), 5000n], ["XYK", amts(0n, 3000n, 0n), 3000n], ["Velar", amts(0n, 0n, 3000n), 3000n]]) {
+    const s0 = sbtcOf(T, `W2 ${name} before`); const x0 = stxOf(T, `W2 ${name} before`);
+    const r = tx(`W2 sell ${amt} sats on ${name}`, sellSbtc(T, 0n, NONE, a, ONES, 1n, NO_VAA), (v) =>
+      okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+    const s1 = sbtcOf(T, `W2 ${name} after`); const x1 = stxOf(T, `W2 ${name} after`);
+    w2.push({ name, amt, s0, x0, s1, x1, r, key: `${name.toLowerCase()}-out` });
+  }
+
+  // =============== W3: sell STX, one venue, no book, vaa none ===============
+  const w3 = [];
+  for (const [name, a, amt] of [["DLMM", amts(10_000_000n, 0n, 0n), 10_000_000n], ["XYK", amts(0n, 5_000_000n, 0n), 5_000_000n], ["Velar", amts(0n, 0n, 5_000_000n), 5_000_000n]]) {
+    const s0 = sbtcOf(S, `W3 ${name} before`); const x0 = stxOf(S, `W3 ${name} before`);
+    const r = tx(`W3 sell ${amt} uSTX on ${name}`, sellStx(S, 0n, NONE, a, ONES, 1n, NO_VAA), (v) =>
+      okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(unsold u0)"));
+    const s1 = sbtcOf(S, `W3 ${name} after`); const x1 = stxOf(S, `W3 ${name} after`);
+    w3.push({ name, amt, s0, x0, s1, x1, r, key: `${name.toLowerCase()}-out` });
+  }
+
+  // =============== W4: Jing + DLMM ===============
+  const BID = 100_000_000n; // 100 STX at any price
+  tx("W4 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const m0 = sbtcOf(S, "W4 maker before");
+  const t0s = sbtcOf(T, "W4 taker before"); const t0x = stxOf(T, "W4 taker before");
+  const r4 = tx("W4 sell 5000 sats: 2000 Jing / 3000 DLMM", sellSbtc(T, 2000n, NONE, amts(3000n, 0n, 0n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u2000)") && String(v).includes("(dlmm-in u3000)") && String(v).includes("(unsold u0)"));
+  const m1 = sbtcOf(S, "W4 maker after");
+  const t1s = sbtcOf(T, "W4 taker after"); const t1x = stxOf(T, "W4 taker after");
+  ev("W4 market cycle advanced by the taker", "(get-current-cycle)", "u1", CID);
+  ev("W4 taker holds no x position", `(get-token-x-deposit u1 '${T})`, "u0", CID);
+  ev("W4 maker bid rolled (100 STX minus the fill)", `(get-token-y-deposit u1 '${S})`, (v) => uintOf(v) > 0n && uintOf(v) < BID, CID);
+
+  // =============== W5: empty book ===============
+  tx("W5 maker cancels the rolled bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+  const f0s = sbtcOf(T, "W5 before"); const f0x = stxOf(T, "W5 before");
+  tx("W5 all-Jing, fallback none, empty book fills nothing -> min-out backstop u3002", sellSbtc(T, 4000n, NONE, ZEROS, ONES, 1n), "(err u3002)");
+  const f1s = sbtcOf(T, "W5 mid"); const f1x = stxOf(T, "W5 mid");
+  const r5 = tx("W5 Jing 4000 + XYK 1000, fallback none: XYK runs, Jing amount stays home", sellSbtc(T, 4000n, NONE, amts(0n, 1000n, 0n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(xyk-in u1000)") && String(v).includes("(unsold u4000)"));
+  const f2s = sbtcOf(T, "W5 after"); const f2x = stxOf(T, "W5 after");
+  ev("W5 market cycle unchanged (failed leg rolled back)", "(get-current-cycle)", "u1", CID);
+  ev("W5 no x position left on the market", `(get-token-x-deposit u1 '${T})`, "u0", CID);
+  const h0s = sbtcOf(T, "W5f before"); const h0x = stxOf(T, "W5f before");
+  const r5f = tx("W5f Jing mainly: 4000 Jing, fallback XYK, empty book -> all 4000 on XYK", sellSbtc(T, 4000n, fb(XYK), ZEROS, ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(xyk-in u4000)") && String(v).includes("(unsold u0)"));
+  const h1s = sbtcOf(T, "W5f after"); const h1x = stxOf(T, "W5f after");
+
+  // =============== W7: four legs ===============
+  tx("W7a 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const a0s = sbtcOf(T, "W7a before"); const a0x = stxOf(T, "W7a before");
+  const r7a = tx("W7a sell 6000 sats: 2000 Jing / 1500 DLMM / 1500 XYK / 1000 Velar", sellSbtc(T, 2000n, NONE, amts(1500n, 1500n, 1000n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u2000)") && String(v).includes("(dlmm-in u1500)") &&
+    String(v).includes("(xyk-in u1500)") && String(v).includes("(velar-in u1000)") && String(v).includes("(unsold u0)"));
+  const a1s = sbtcOf(T, "W7a after"); const a1x = stxOf(T, "W7a after");
+  ev("W7a taker holds no x position", `(get-token-x-deposit u2 '${T})`, "u0", CID);
+  tx("W7a maker cancels the rolled bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+  const e0s = sbtcOf(T, "W7e before"); const e0x = stxOf(T, "W7e before");
+  const r7e = tx("W7e jing u0 + vaa none: 800 DLMM / 700 XYK / 500 Velar", sellSbtc(T, 0n, NONE, amts(800n, 700n, 500n), ONES, 1n, NO_VAA), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(dlmm-in u800)") && String(v).includes("(xyk-in u700)") &&
+    String(v).includes("(velar-in u500)") && String(v).includes("(unsold u0)"));
+  const e1s = sbtcOf(T, "W7e after"); const e1x = stxOf(T, "W7e after");
+  const ASK = 20_000n;
+  tx("W7c 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK})`);
+  const c0s = sbtcOf(S, "W7c before"); const c0x = stxOf(S, "W7c before");
+  const r7c = tx("W7c sell 12 STX: 5 Jing / 3 DLMM / 2 XYK / 2 Velar", sellStx(S, 5_000_000n, NONE, amts(3_000_000n, 2_000_000n, 2_000_000n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u5000000)") && String(v).includes("(dlmm-in u3000000)") &&
+    String(v).includes("(xyk-in u2000000)") && String(v).includes("(velar-in u2000000)") && String(v).includes("(unsold u0)"));
+  const c1s = sbtcOf(S, "W7c after"); const c1x = stxOf(S, "W7c after");
+  ev("W7c taker holds no y position", `(get-token-y-deposit u3 '${S})`, "u0", CID);
+
+  // =============== W8: market get-taker-capacity is tight ===============
+  // x-taker view with the x side emptied: a 100 STX bid in range and a 50
+  // STX bid at -0.5% (walkable inside the taker's limit, here u1 = any).
+  // Capacity = 100 STX at the mid + 50 STX at its own limit, grossed up for
+  // the rebate. The same formula in JS must match the read-only; selling
+  // gross-cap + two min deposits is refused by the market (FOK u1023 caught,
+  // jing-ok false, nothing moved); selling exactly gross-cap fills in full
+  // (at most sub-min dust back), both bids consumed.
+  const SCALE = PP * 100n;
+  const L_LOW = (MID * 995n) / 1000n;
+  const BID_LOW = 50_000_000n;
+  const midCap8 = (BID * SCALE) / MID;
+  const walkCap8 = (BID_LOW * SCALE) / L_LOW;
+  const netCap8 = midCap8 + walkCap8;
+  const g0 = (netCap8 * 10_000n) / 9_980n;
+  const gross8 = g0 - (g0 * 20n) / 10_000n > netCap8 ? g0 - 1n : g0;
+  tx("W8 T cancels its rolled ask so the x side is empty", call(T, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), okPrefix);
+  tx("W8 100 STX bid in range (S)", depositY(S, BID, HUGE), `(ok u${BID})`);
+  // a fresh account funded by S: the walkable bid must belong to neither the
+  // taker (the walk skips self) nor S (a second deposit merges + reprices)
+  const M8 = getAddressFromPrivateKey("8".repeat(64) + "01", "mainnet");
+  tx("W8 fund the low bidder with 60 STX", (b) => b.withSender(S).addSTXTransfer({ recipient: M8, amount: 60_000_000 }), () => true);
+  tx("W8 50 STX bid at -0.5% (fresh maker)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_LOW), DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
+  tx("W8 refresh-mid verifies the Lazer update and returns the mid", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
+  ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true)`, (v) =>
+    String(v).includes(`(gross-cap u${gross8})`) && String(v).includes(`(mid-cap u${midCap8})`) && String(v).includes(`(walk-cap u${walkCap8})`), CID);
+  ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true)`, (v) =>
+    String(v).includes("(walk-cap u0)") && String(v).includes(`(mid-cap u${midCap8})`), CID);
+  ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true)`, (v) =>
+    String(v).includes("(mid-cap u0)"), CID);
+  const k0s = sbtcOf(T, "W8 before"); const k0x = stxOf(T, "W8 before");
+  // one min deposit over still fills (the sub-min residual is refunded as
+  // dust); two over leaves a residual >= min and the market refuses (FOK)
+  tx(`W8 sell gross-cap + 2 min deposits (${gross8 + 2n * MIN_SBTC}) all via Jing -> FOK refused, jing-ok false`,
+    sellSbtc(T, gross8 + 2n * MIN_SBTC, NONE, ZEROS, ONES, 1n), (v) =>
+    okPrefix(v) === false && String(v).includes("(err u3002)"));
+  const k1s = sbtcOf(T, "W8 mid"); const k1x = stxOf(T, "W8 mid");
+  const r8 = tx(`W8 sell exactly gross-cap (${gross8}) all via Jing -> full fill`, sellSbtc(T, gross8, NONE, ZEROS, ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)"));
+  const k2s = sbtcOf(T, "W8 after"); const k2x = stxOf(T, "W8 after");
+  ev("W8 S's bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
+  ev("W8 low bid fully walked (dust at most)", `(get-token-y-deposit u5 '${M8})`, (v) => uintOf(v) < MIN_STX, CID);
+
+  // =============== W9: smart swaps, split computed on chain ===============
+  // The oracle is pinned at 337.29 sats/STX; the live AMMs trade near 332,
+  // i.e. they pay ~1.6% MORE uSTX per sat than the mid. So for an sBTC
+  // seller a limit 1% under the mid leaves ~2.6% of AMM room, a limit 2%
+  // above the mid leaves none (and puts the taker out of the book's range);
+  // for an STX seller the AMMs ask 1.6% above the mid, so its limit must
+  // allow ~3% to reach them.
+  // v3: the smart swaps take the mid as a sizing hint (the same number the
+  // market will settle at when the hint is honest); `mid` overrides it
+  const smartSbtc = (sender, amount, limit, vaa, minOut, mid = MID) =>
+    call(sender, "smart-swap-sbtc-for-stx", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)]);
+  const smartStx = (sender, amount, limit, vaa, minOut, mid = MID) =>
+    call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)]);
+  const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
+  const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
+  // gross-cap for a taker facing a 100 STX bid at the mid with an empty own side
+  const midGross9a = (() => { const net = (BID * PP * 100n) / MID; const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
+  tx("W9 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const n0s = sbtcOf(T, "W9a before"); const n0x = stxOf(T, "W9a before");
+  const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const n1s = sbtcOf(T, "W9a after"); const n1x = stxOf(T, "W9a after");
+  ev("W9a bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
+  const r9b = tx("W9b smart sell 10000 sats, vaa none: no book leg, all XYK/Velar", smartSbtc(T, 10_000n, L_LOOSE, NO_VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const n2s = sbtcOf(T, "W9b after"); const n2x = stxOf(T, "W9b after");
+  const n3s = sbtcOf(T, "W9c before"); const n3x = stxOf(T, "W9c before");
+  tx("W9c smart sell 5000 sats, tight limit, empty book: no venue respects it -> u3002", smartSbtc(T, 5000n, L_TIGHT, VAA, 1n), "(err u3002)");
+  const n4s = sbtcOf(T, "W9c after"); const n4x = stxOf(T, "W9c after");
+  // W9a's mid fill left S a few uSTX of pro-rata rounding dust, rolled under
+  // S's name: to the market that is a resting position, and `swap` refuses
+  // a caller who rests on the side it deposits (u1024). Cancel it first.
+  tx("W9d S cancels its rolled dust so it can swap on the STX side", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+  const ASK9 = 20_000n;
+  tx("W9d 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK9), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK9})`);
+  const n5s = sbtcOf(S, "W9d before"); const n5x = stxOf(S, "W9d before");
+  const L_STX = (MID * 103n) / 100n; // STX seller: 3% over the mid reaches the AMMs
+  const r9d = tx("W9d smart sell 200 STX, limit 3% over the mid: book to capacity, DLMM next, rest XYK/Velar", smartStx(S, 200_000_000n, L_STX, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
+  ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit u6 '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
+  const L_NEAR = (MID * 98n) / 100n; // 2% under the mid; the live AMMs sit on the mid, so ~0.15 BTC of room
+  // W9f: the four-venue happy path at today's prices, with the book walk boundary checked
+  // from both sides. Three bids rest: S 100 STX at the mid (cleared at the
+  // mid), M8 50 STX at -0.5% (outside the mid, INSIDE the limit: walked),
+  // M9 40 STX at -3% (OUTSIDE the 2% limit: must be left alone).
+  // 0.5 BTC at a limit 2% under the mid, more than the venues hold inside it: Jing fills mid + walk to
+  // the sat, DLMM bins until the limit, XYK + Velar their closed-form room,
+  // the rest stays home; M9 receives nothing, M8 and S are paid.
+  tx("W9f S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  tx("W9f top up M8", (b) => b.withSender(S).addSTXTransfer({ recipient: M8, amount: 60_000_000 }), () => true);
+  const M9 = getAddressFromPrivateKey("9".repeat(64) + "01", "mainnet");
+  tx("W9f fund M9", (b) => b.withSender(S).addSTXTransfer({ recipient: M9, amount: 50_000_000 }), () => true);
+  const L_IN = (MID * 995n) / 1000n;  // inside the taker's limit -> walked
+  const L_OUT = (MID * 97n) / 100n;   // 3% under, below the taker's 2% limit -> untouched
+  tx("W9f M8 50 STX bid at -0.5% (walkable)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_IN), DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
+  tx("W9f M9 40 STX bid at -3% (outside the 2% limit)", call(M9, "deposit-token-y", [uintCV(40_000_000n), uintCV(L_OUT), DUMMY_VAA, wstxTrait, wstxAsset], CID), "(ok u40000000)");
+  const jingNet9f = (BID * PP * 100n) / MID + (BID_LOW * PP * 100n) / L_IN;
+  const jingGross9f = (() => { const g = (jingNet9f * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > jingNet9f ? g - 1n : g; })();
+  const q0s = sbtcOf(T, "W9f before"); const q0x = stxOf(T, "W9f before");
+  const m8s0 = sbtcOf(M8, "W9f M8 before"); const m9s0 = sbtcOf(M9, "W9f M9 before"); const s9s0 = sbtcOf(S, "W9f S before");
+  const r9f = tx("W9f smart sell 0.5 BTC, limit 2% under the mid: Jing mid + walk, DLMM to its room, spill-over on XYK + Velar, rest home", smartSbtc(T, 50_000_000n, L_NEAR, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)"));
+  const q1s = sbtcOf(T, "W9f after"); const q1x = stxOf(T, "W9f after");
+  const m8s1 = sbtcOf(M8, "W9f M8 after"); const m9s1 = sbtcOf(M9, "W9f M9 after"); const s9s1 = sbtcOf(S, "W9f S after");
+  tx("W9f M9 cancels its untouched bid: the full 40 STX come back", call(M9, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), "(ok u40000000)");
+
+  // W9g: resting size on the taker's OWN side. In-range makers on both
+  // sides cannot coexist (the maker gate refuses a deposit that would rest
+  // crossed against a live opposite maker), so the realistic case is an ask
+  // resting ABOVE the mid on the taker's side, waiting. It must not count
+  // against the taker's capacity, must not be touched by the taker's swap,
+  // and the taker fills the opposite bid to capacity, the rest on DLMM.
+  const ASK_OWN = 10_000n;
+  tx("W9g M8 asks 10000 sats at +1% (own side, out of range)", call(M8, "deposit-token-x", [uintCV(ASK_OWN), uintCV((MID * 101n) / 100n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
+  tx("W9g S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) =>
+    String(v).includes(`(gross-cap u${midGross9a})`) && String(v).includes("(walk-cap u0)"), CID);
+  const w0s = sbtcOf(T, "W9g before"); const w0x = stxOf(T, "W9g before"); const g8s0 = sbtcOf(M8, "W9g M8 before"); const g8x0 = stxOf(M8, "W9g M8 before");
+  const r9g = tx("W9g smart sell 40000 sats, loose limit: bid to capacity, ask untouched, rest on DLMM", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const w1s = sbtcOf(T, "W9g after"); const w1x = stxOf(T, "W9g after"); const g8s1 = sbtcOf(M8, "W9g M8 after"); const g8x1 = stxOf(M8, "W9g M8 after");
+  tx("W9g M8 cancels its untouched ask: the full 10000 sats come back", call(M8, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
+
+  // W9e: 3 BTC at the same limit right after W9f: the venues' room at this
+  // limit is spent, so almost everything stays home; what still fills does
+  // so at or above the limit and everything adds up.
+  const n7s = sbtcOf(T, "W9e before"); const n7x = stxOf(T, "W9e before");
+  const BIG = 300_000_000n; // 3 BTC: more than the DLMM holds inside 30 bins
+  const r9e = tx("W9e smart sell 3 BTC, vaa none, same limit, venues' room spent by W9f: most stays home", smartSbtc(T, BIG, L_NEAR, NO_VAA, 0n), okPrefix);
+  const n8s = sbtcOf(T, "W9e after"); const n8x = stxOf(T, "W9e after");
+
+  // =============== W11: STX-seller walk boundary on the smart swap ===============
+  // asks rest: T at the mid (limit 1), M8 at +0.5% (inside the seller's 2%
+  // limit: walked), M9 at +3% (outside: untouched). S sells 200 STX at +2%.
+  tx("W11 S cancels its rolled dust (if any) so it can swap on the STX side", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), () => true);
+  const L_STX2 = (MID * 102n) / 100n;
+  const A_IN = (MID * 1005n) / 1000n, A_OUT = (MID * 103n) / 100n;
+  tx("W11 fund M8 with sBTC", (b) => b.withSender(T).addContractCall({ contract_id: SBTC_FQN, function_name: "transfer", function_args: [uintCV(30_000n), standardPrincipalCV(T), standardPrincipalCV(M8), noneCV()] }), okPrefix);
+  tx("W11 fund M9 with sBTC", (b) => b.withSender(T).addContractCall({ contract_id: SBTC_FQN, function_name: "transfer", function_args: [uintCV(30_000n), standardPrincipalCV(T), standardPrincipalCV(M9), noneCV()] }), okPrefix);
+  tx("W11 T asks 20000 sats at the mid", call(T, "deposit-token-x", [uintCV(20_000n), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  tx("W11 M8 asks 20000 sats at +0.5% (walkable)", call(M8, "deposit-token-x", [uintCV(20_000n), uintCV(A_IN), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  tx("W11 M9 asks 20000 sats at +3% (outside the 2% limit)", call(M9, "deposit-token-x", [uintCV(20_000n), uintCV(A_OUT), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  const v0x = stxOf(S, "W11 before"); const v0s = sbtcOf(S, "W11 before"); const v8x = stxOf(M8, "W11 M8 before"); const v9x = stxOf(M9, "W11 M9 before"); const vtx = stxOf(T, "W11 T before");
+  const r11 = tx("W11 smart sell 200 STX at +2%: mid ask cleared, +0.5% walked, +3% untouched, rest DLMM", smartStx(S, 200_000_000n, L_STX2, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)"));
+  const v1x = stxOf(S, "W11 after"); const v1s = sbtcOf(S, "W11 after"); const v8x1 = stxOf(M8, "W11 M8 after"); const v9x1 = stxOf(M9, "W11 M9 after"); const vtx1 = stxOf(T, "W11 T after");
+  tx("W11 M9 cancels its untouched ask in full", call(M9, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+
+  // =============== W12: book too thin for the min deposit -> Jing skipped ===============
+  // a 1 STX bid is worth ~330 sats at this mid, under the 1000-sat min
+  // deposit: capacity says so, jing-size returns u0, the AMMs take it all
+  // and the bid stays where it is
+  tx("W12 S bids 1 STX at the mid", depositY(S, MIN_STX, HUGE), `(ok u${MIN_STX})`);
+  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
+  const t0s12 = sbtcOf(T, "W12 before");
+  const r12 = tx("W12 smart sell 5000 sats: book skipped for size, all on the AMMs", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const t1s12 = sbtcOf(T, "W12 after");
+  tx("W12 the 1 STX bid still rests, cancel returns it", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), `(ok u${MIN_STX})`);
+
+  // =============== W13: fallback with a dust residual (split swap) ===============
+  // a 100 STX bid at the mid; jing-amount = gross-cap + 500 sats (under the
+  // min deposit): the book keeps its capacity, refunds the sub-min dust,
+  // and the dust lands on the fallback venue on top of its planned 1000
+  tx("W13 S bids 100 STX at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const gross13 = midGross9a, over13 = gross13 + 500n;
+  const d0s = sbtcOf(T, "W13 before"); const d0x = stxOf(T, "W13 before");
+  const r13 = tx(`W13 split: Jing ${over13} (cap + 500 dust), XYK 1000, fallback XYK`, sellSbtc(T, over13, fb(XYK), amts(0n, 1000n, 0n), ONES, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const d1s = sbtcOf(T, "W13 after"); const d1x = stxOf(T, "W13 after");
+
+  // =============== W14: legs would fill, min-out not reached -> everything reverts ===============
+  const e0s14 = sbtcOf(T, "W14 before"); const e0x14 = stxOf(T, "W14 before");
+  tx("W14 smart sell 40000 sats with an impossible min-out -> u3002, nothing moved", smartSbtc(T, 40_000n, L_LOOSE, VAA, HUGE), "(err u3002)");
+  const e1s14 = sbtcOf(T, "W14 after"); const e1x14 = stxOf(T, "W14 after");
+
+  // =============== W15: the 30-bin cap on the DLMM walk ===============
+  // 10% under the mid every bin near the active one qualifies, so the walk
+  // stops at its 30-bin cap (4.5% of price); 3 BTC exceeds what those bins
+  // hold, the leg stays under the amount and spills to XYK + Velar
+  const f0s15 = sbtcOf(T, "W15 before"); const f0x15 = stxOf(T, "W15 before");
+  const r15 = tx("W15 smart sell 3 BTC at 10% under: DLMM capped at 30 bins, spill-over, rest home", smartSbtc(T, 300_000_000n, L_LOOSE, NO_VAA, 1n), okPrefix);
+  const f1s15 = sbtcOf(T, "W15 after"); const f1x15 = stxOf(T, "W15 after");
+
+  // =============== W16: zero guards (audit LOW) ===============
+  // A zero limit or mid used to abort at runtime inside the sizing maths
+  // (division by zero, no error code); v3 refuses both up front, which also
+  // keeps the market's get-taker-capacity (divides by mid) unreachable at u0.
+  tx("W16 smart sell sBTC, limit u0 -> u3006", smartSbtc(T, 5000n, 0n, VAA, 1n), "(err u3006)");
+  tx("W16 smart sell STX, limit u0 -> u3006", smartStx(S, 5_000_000n, 0n, VAA, 1n), "(err u3006)");
+  tx("W16 smart sell sBTC, mid u0 -> u3007", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n, 0n), "(err u3007)");
+  tx("W16 smart sell STX, mid u0 -> u3007", smartStx(S, 5_000_000n, HUGE, VAA, 1n, 0n), "(err u3007)");
+  tx("W16 smart sell sBTC, vaa none, mid u0 -> still u3007 (guard is unconditional)", smartSbtc(T, 5000n, L_LOOSE, NO_VAA, 1n, 0n), "(err u3007)");
+  ev("W16 market get-taker-capacity happy -> (ok {...})", `(get-taker-capacity u${MID} u1 true)`, (v) => String(v).startsWith("(tuple") && String(v).includes("gross-cap"), CID);
+
+  // =============== W17: the mid is a hint, not a trust ===============
+  // The router no longer verifies the update itself; the caller passes the
+  // mid it read off the same Lazer payload. A wrong hint cannot hurt the
+  // taker: the market verifies the update inside swap and settles at ITS
+  // mid, so a hint 5% too high only undersizes the book leg (fills, rest on
+  // the AMMs) and a hint 5% too low oversizes it (the market's FOK refuses,
+  // everything goes to the AMMs). Both swaps succeed, both are bounded by
+  // the limit and min-out exactly as before.
+  const HINT_HI = (MID * 105n) / 100n;
+  const HINT_LO = (MID * 95n) / 100n;
+  const grossAt = (bid, mid) => { const net = (bid * PP * 100n) / mid; const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; };
+  const gross17hi = grossAt(BID, HINT_HI); // what the router will size at
+  const gross17lo = grossAt(BID, HINT_LO); // > the true capacity by ~5%
+  tx("W17 S cancels its rolled dust (if any)", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), () => true);
+  tx("W17 S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const ha0s = sbtcOf(T, "W17a before"); const ha0x = stxOf(T, "W17a before");
+  const r17a = tx(`W17a smart sell 40000 sats, hint 5% HIGH: book leg undersized to ${gross17hi} but fills, rest on the AMMs`, smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n, HINT_HI), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
+  const ha1s = sbtcOf(T, "W17a after"); const ha1x = stxOf(T, "W17a after");
+  tx("W17a S's bid was only partly taken: the rest comes back on cancel", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), (v) => okPrefix(v) && uintOf(v.slice(4, -1)) > 0n && uintOf(v.slice(4, -1)) < BID);
+  tx("W17 S 100 STX bid at the mid again", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const hb0s = sbtcOf(T, "W17b before"); const hb0x = stxOf(T, "W17b before");
+  const r17b = tx(`W17b smart sell 40000 sats, hint 5% LOW: book leg oversized to ${gross17lo}, market FOK refuses, all on the AMMs`, smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n, HINT_LO), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const hb1s = sbtcOf(T, "W17b after"); const hb1x = stxOf(T, "W17b after");
+  tx("W17b S's bid is untouched: cancel returns all 100 STX", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), `(ok u${BID})`);
+
+  // =============== W10: freshness ===============
+  // A genuinely old update: fixtures/lazer-update-stale-btc-stx.hex was
+  // fetched on 2026-09-05 and is minutes to days older than the fork tip on
+  // any later run, so it sits outside MAX_STALENESS (80 s). The Lazer oracle
+  // refuses it (max-age = MAX_STALENESS, u1002) before the market's own
+  // freshness assert (u1005) gets to run; the book leg rolls back and a
+  // swap with nothing else planned ends u3002. (Advancing blocks on the
+  // fork does not move its clock past a just-fetched update, so this is
+  // the honest way to test it.)
+  const clock = cap("W10 fork stacks-block-time", "stacks-block-time", CID);
+  const STALE = bufferCV(Buffer.from(fs.readFileSync(new URL("./fixtures/lazer-update-stale-btc-stx.hex", import.meta.url), "utf8").trim(), "hex"));
+  tx("W10 refresh-mid with the fresh update", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
+  tx("W10 refresh-mid with the stale fixture -> refused", call(T, "refresh-mid", [STALE], CID), (v) => v === "(err u1002)" || v === "(err u1005)");
+  tx("W10 swap with the stale fixture: book leg rolled back, nothing else planned -> u3002", sellSbtc(T, 4000n, NONE, ZEROS, ONES, 1n, someCV(STALE)), "(err u3002)");
+  // a deposit only consults the price when the opposite side has makers (the
+  // maker gate); rest an ask first so the bid must read it
+  tx("W10 T rests an ask with the fresh update", call(T, "deposit-token-x", [uintCV(20_000n), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
+  tx("W10 bid with the stale fixture against a resting ask -> refused", depositY(S, BID, HUGE, STALE), (v) => v === "(err u1002)" || v === "(err u1005)");
+
+  // ---- run ----
+  const sid = await b.run();
+  console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
+  const res = await getSimulationResult(sid);
+  const s = res.steps;
+  let i = 0;
+  for (const st of steps) {
+    while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1;
+    const raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]);
+    i += 1;
+    st.raw = raw;
+    st.cost = s[i - 1]?.Result?.Transaction?.Ok?.execution_cost ?? s[i - 1]?.ExecutionCost ?? null;
+    if (st.capture) { st.value = uintOf(raw); console.log(`  ..   ${st.label}: ${raw}`); }
+    else check(st.label, raw, st.want);
+  }
+  // execution cost of the heaviest smart swaps vs the Stacks block limits
+  const LIMITS = { runtime: 5_000_000_000, read_count: 15_000, read_length: 100_000_000, write_count: 15_000, write_length: 15_000_000 };
+  const costLine = (st) => {
+    const c = st.cost; if (!c) return `${st.label}: (no cost data)`;
+    return `${st.label}: ` + Object.keys(LIMITS).map((k) => `${k} ${c[k]} (${(100 * c[k] / LIMITS[k]).toFixed(2)}% of block)`).join(", ");
+  };
+
+  // relative checks
+  const legs = (r) => ["jing-out", "dlmm-out", "xyk-out", "velar-out"].reduce((t, k) => t + field(r.raw, k), 0n);
+  console.log(`  fork clock ${new Date(Number(clock.value) * 1000).toISOString()} vs wall ${new Date().toISOString()} vs fresh update ${new Date(lz.ts * 1000).toISOString()}`);
+  check("W1 reverts moved no sBTC", g1s.value - g0s.value, (d) => d === 0n);
+  check("W1 reverts moved no STX", g1x.value - g0x.value, (d) => d === 0n);
+  const soldP = field(rp.raw, "dlmm-in"), unsoldP = field(rp.raw, "unsold"), outP = field(rp.raw, "out");
+  check("W1p partial: dlmm-in + unsold == 5000000", soldP + unsoldP, (t) => t === 5_000_000n && unsoldP > 0n && soldP > 0n);
+  check(`W1p partial: sBTC delta == dlmm-in (${soldP}), unsold stayed home`, p0s.value - p1s.value, (d) => d === soldP);
+  check(`W1p partial: STX grew by out (${outP})`, p1x.value - p0x.value, (d) => d === outP && d > 0n);
+  for (const w of w2) {
+    const out = field(w.r.raw, "out");
+    check(`W2 ${w.name} sBTC delta == ${w.amt}`, w.s0.value - w.s1.value, (d) => d === w.amt);
+    check(`W2 ${w.name} STX grew by out (${out})`, w.x1.value - w.x0.value, (d) => d === out && d > 0n);
+    check(`W2 ${w.name} ${w.key} == out`, field(w.r.raw, w.key), (a) => a === out);
+  }
+  for (const w of w3) {
+    const out = field(w.r.raw, "out");
+    check(`W3 ${w.name} STX delta == ${w.amt}`, w.x0.value - w.x1.value, (d) => d === w.amt);
+    check(`W3 ${w.name} sBTC grew by out (${out})`, w.s1.value - w.s0.value, (d) => d === out && d > 0n);
+    check(`W3 ${w.name} ${w.key} == out`, field(w.r.raw, w.key), (a) => a === out);
+  }
+  // W4: 2000 gross -> rebate 4, net 1996, fee 1, ride 4 -> maker +1999 sats
+  check("W4 maker paid net of fee + ride (1999)", m1.value - m0.value, (d) => d === 1999n);
+  check("W4 taker sBTC delta == 5000", t0s.value - t1s.value, (d) => d === 5000n);
+  const out4 = field(r4.raw, "out");
+  check(`W4 taker STX grew by out (${out4})`, t1x.value - t0x.value, (d) => d === out4 && d > 0n);
+  const jingStx = (1996n * MID) / (PP * 100n); // uSTX the mid fill pays before fee
+  const jingOut4 = field(r4.raw, "jing-out");
+  check(`W4 jing-out = mid fill net of fee (~${jingStx - jingStx / 1000n})`, jingOut4,
+    (o) => o > 0n && o < out4 && o <= jingStx && o >= jingStx - jingStx / 1000n - 2n);
+  check("W4 jing-out + dlmm-out == out", legs(r4), (t) => t === out4);
+  check("W5 all-Jing revert moved no sBTC", f1s.value - f0s.value, (d) => d === 0n);
+  check("W5 all-Jing revert moved no STX", f1x.value - f0x.value, (d) => d === 0n);
+  const out5 = field(r5.raw, "out");
+  check("W5 sBTC delta == 1000 (Jing's 4000 stayed home)", f1s.value - f2s.value, (d) => d === 1000n);
+  check(`W5 STX grew by out (${out5})`, f2x.value - f1x.value, (d) => d === out5 && d > 0n);
+  check("W5 out == xyk-out alone", field(r5.raw, "xyk-out"), (v) => v === out5);
+  const out5f = field(r5f.raw, "out");
+  check("W5f sBTC delta == 4000 (residual rerouted to XYK)", h0s.value - h1s.value, (d) => d === 4000n);
+  check(`W5f STX grew by out (${out5f})`, h1x.value - h0x.value, (d) => d === out5f && d > 0n);
+  check("W5f out == xyk-out alone", field(r5f.raw, "xyk-out"), (v) => v === out5f);
+  const out7a = field(r7a.raw, "out");
+  check("W7a sBTC delta == 6000", a0s.value - a1s.value, (d) => d === 6000n);
+  check(`W7a STX grew by out (${out7a})`, a1x.value - a0x.value, (d) => d === out7a && d > 0n);
+  check("W7a out == jing-out + dlmm-out + xyk-out + velar-out", legs(r7a), (t) => t === out7a);
+  check("W7a every leg paid something", ["jing-out", "dlmm-out", "xyk-out", "velar-out"].map((k) => field(r7a.raw, k)), (a) => a.every((x) => x > 0n));
+  const out7e = field(r7e.raw, "out");
+  check("W7e sBTC delta == 2000", e0s.value - e1s.value, (d) => d === 2000n);
+  check(`W7e STX grew by out (${out7e})`, e1x.value - e0x.value, (d) => d === out7e && d > 0n);
+  check("W7e out == dlmm-out + xyk-out + velar-out", legs(r7e), (t) => t === out7e);
+  const out7c = field(r7c.raw, "out");
+  check("W7c STX delta == 12000000", c0x.value - c1x.value, (d) => d === 12_000_000n);
+  check(`W7c sBTC grew by out (${out7c})`, c1s.value - c0s.value, (d) => d === out7c && d > 0n);
+  check("W7c out == sum of the four legs", legs(r7c), (t) => t === out7c);
+  check("W8 over-capacity revert moved no sBTC", k1s.value - k0s.value, (d) => d === 0n);
+  check("W8 over-capacity revert moved no STX", k1x.value - k0x.value, (d) => d === 0n);
+  const unsold8 = field(r8.raw, "unsold"), jingIn8 = field(r8.raw, "jing-in"), out8 = field(r8.raw, "out");
+  check(`W8 exact: unsold is sub-min dust (${unsold8} < ${MIN_SBTC})`, unsold8, (d) => d < MIN_SBTC);
+  check(`W8 exact: jing-in + unsold == gross-cap`, jingIn8 + unsold8, (t) => t === gross8);
+  check(`W8 exact: sBTC delta == jing-in (${jingIn8})`, k1s.value - k2s.value, (d) => d === jingIn8);
+  check(`W8 exact: STX grew by out (${out8})`, k2x.value - k1x.value, (d) => d === out8 && d > 0n);
+  const out9a = field(r9a.raw, "out");
+  check("W9a sBTC delta == 40000", n0s.value - n1s.value, (d) => d === 40_000n);
+  check(`W9a STX grew by out (${out9a})`, n1x.value - n0x.value, (d) => d === out9a && d > 0n);
+  check("W9a out == sum of the four legs", legs(r9a), (t) => t === out9a);
+  check(`W9a book leg sized to the mid capacity (gross-cap ${midGross9a}, dust at most)`, field(r9a.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
+  check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === 40_000n - field(r9a.raw, "jing-in"));
+  check("W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == 40000", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === 40_000n);
+  const out9b = field(r9b.raw, "out");
+  check("W9b sBTC delta == 10000", n1s.value - n2s.value, (d) => d === 10_000n);
+  check(`W9b STX grew by out (${out9b})`, n2x.value - n1x.value, (d) => d === out9b && d > 0n);
+  check("W9b dlmm-in + xyk-in + velar-in == 10000", ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9b.raw, k), 0n), (t) => t === 10_000n);
+  check("W9c revert moved no sBTC", n4s.value - n3s.value, (d) => d === 0n);
+  check("W9c revert moved no STX", n4x.value - n3x.value, (d) => d === 0n);
+  const out9e = field(r9e.raw, "out"), unsold9e = field(r9e.raw, "unsold");
+  check(`W9e sBTC delta == 3 BTC - unsold (${unsold9e})`, n7s.value - n8s.value, (d) => d === 300_000_000n - unsold9e);
+  check(`W9e STX grew by out (${out9e}, may be zero: the room is spent)`, n8x.value - n7x.value, (d) => d === out9e);
+  check("W9e out == sum of the four legs", legs(r9e), (t) => t === out9e);
+  // W9f already took every venue's room at this limit, so W9e finds only
+  // what the pools regained; the point is that nothing exceeds the limit
+  // and everything is accounted for
+  check("W9e DLMM leg stayed inside the limit (dlmm-in < 3 BTC)", field(r9e.raw, "dlmm-in"), (d) => d < 300_000_000n);
+  check("W9e most stayed home (every venue capped by the limit)", unsold9e, (d) => d > 200_000_000n);
+  check("W9e legs + unsold == 3 BTC", ["dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r9e.raw, k), 0n), (t) => t === 300_000_000n);
+  // achieved price per leg vs the limit. selling sats: out uSTX / in sats
+  // >= limit / 1e10; selling uSTX: out sats / in uSTX >= 1e10 / limit.
+  // The router concedes ROUND_SLACK (2 units of input) on each venue
+  // minimum so pool floor-rounding cannot trip it; the check allows exactly
+  // that: the limit must hold on (in - 2).
+  const SLACK = 2n;
+  const legPriceOk = (tag, r, limit, sellSbtc) => {
+    for (const v of ["jing", "dlmm", "xyk", "velar"]) {
+      const i = field(r.raw, `${v}-in`), o = field(r.raw, `${v}-out`);
+      if (i === 0n) continue;
+      const a = i > SLACK ? i - SLACK : 0n;
+      check(`${tag} ${v} price respects the limit within 2 units of input (${o}/${i})`, [a, o], ([a, b]) => sellSbtc ? b * PP * 100n >= a * limit : b * limit >= a * PP * 100n);
+    }
+  };
+  legPriceOk("W9a", r9a, L_LOOSE, true);
+  legPriceOk("W9b", r9b, L_LOOSE, true);
+  legPriceOk("W9e", r9e, L_NEAR, true);
+  const out9f = field(r9f.raw, "out");
+  const unsold9f = field(r9f.raw, "unsold");
+  check(`W9f sBTC delta == 0.5 BTC - unsold (${unsold9f})`, q0s.value - q1s.value, (d) => d === 50_000_000n - unsold9f);
+  check(`W9f STX grew by out (${out9f})`, q1x.value - q0x.value, (d) => d === out9f && d > 0n);
+  check("W9f out == sum of the four legs", legs(r9f), (t) => t === out9f);
+  check("W9f all four venues filled", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r9f.raw, k)), (a) => a.every((x) => x > 0n));
+  check("W9f legs + unsold == 0.5 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r9f.raw, k), 0n), (t) => t === 50_000_000n);
+  check("W9f DLMM exhausted its room inside the limit (spill-over happened)", field(r9f.raw, "dlmm-in"), (d) => d > 0n && d < 50_000_000n);
+  check(`W9f book leg == mid + walk capacity (gross ${jingGross9f}, dust at most)`, field(r9f.raw, "jing-in"), (j) => j >= jingGross9f - MIN_SBTC && j <= jingGross9f + 1n); // +1: the JS mirror of gross-up rounds one sat under the contract at some prices (seen live 2026-09-05: 50933 vs 50932)
+  check("W9f S (at the mid) was paid sBTC", s9s1.value - s9s0.value, (d) => d > 0n);
+  check("W9f M8 (inside the limit) was walked and paid sBTC", m8s1.value - m8s0.value, (d) => d > 0n);
+  check("W9f M9 (outside the limit) received nothing", m9s1.value - m9s0.value, (d) => d === 0n);
+  legPriceOk("W9f", r9f, L_NEAR, true);
+  const out9g = field(r9g.raw, "out");
+  check("W9g sBTC delta == 40000", w0s.value - w1s.value, (d) => d === 40_000n);
+  check(`W9g STX grew by out (${out9g})`, w1x.value - w0x.value, (d) => d === out9g && d > 0n);
+  check("W9g out == sum of the legs", legs(r9g), (t) => t === out9g);
+  check(`W9g book leg == the bid's capacity (gross ${midGross9a}, dust at most)`, field(r9g.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
+  check("W9g DLMM took the rest", field(r9g.raw, "dlmm-in"), (d) => d === 40_000n - field(r9g.raw, "jing-in"));
+  check("W9g M8's ask received no STX (untouched)", g8x1.value - g8x0.value, (d) => d === 0n);
+  legPriceOk("W9g", r9g, L_LOOSE, true);
+  const out9d = field(r9d.raw, "out");
+  check("W9d STX delta == 200000000", n5x.value - n6x.value, (d) => d === 200_000_000n);
+  check(`W9d sBTC grew by out (${out9d})`, n6s.value - n5s.value, (d) => d === out9d && d > 0n);
+  check("W9d out == sum of the four legs", legs(r9d), (t) => t === out9d);
+  check("W9d DLMM took the remainder after the book", field(r9d.raw, "dlmm-in"), (d) => d === 200_000_000n - field(r9d.raw, "jing-in"));
+  legPriceOk("W9d", r9d, L_STX, false);
+  // W11
+  const out11 = field(r11.raw, "out");
+  check("W11 STX delta == 200 STX", v0x.value - v1x.value, (d) => d === 200_000_000n);
+  check(`W11 sBTC grew by out (${out11})`, v1s.value - v0s.value, (d) => d === out11 && d > 0n);
+  check("W11 out == sum of the legs", legs(r11), (t) => t === out11);
+  check("W11 T (ask at the mid) was paid STX", vtx1.value - vtx.value, (d) => d > 0n);
+  check("W11 M8 (+0.5%, inside) was walked and paid STX", v8x1.value - v8x.value, (d) => d > 0n);
+  check("W11 M9 (+3%, outside) received nothing", v9x1.value - v9x.value, (d) => d === 0n);
+  check("W11 DLMM took the rest", field(r11.raw, "dlmm-in"), (d) => d > 0n);
+  legPriceOk("W11", r11, L_STX2, false);
+  // W12
+  check("W12 sBTC delta == 5000, all on AMMs", t0s12.value - t1s12.value, (d) => d === 5000n);
+  legPriceOk("W12", r12, L_LOOSE, true);
+  // W13
+  const jin13 = field(r13.raw, "jing-in"), xin13 = field(r13.raw, "xyk-in");
+  check(`W13 book kept its capacity (jing-in ${jin13} within a min deposit of ${gross13})`, jin13, (j) => j >= gross13 - MIN_SBTC && j <= gross13);
+  check(`W13 dust landed on the fallback: xyk-in == 1000 + (${over13} - jing-in)`, xin13, (x) => x === 1000n + (over13 - jin13));
+  check("W13 sBTC delta == jing-in + xyk-in", d0s.value - d1s.value, (d) => d === jin13 + xin13);
+  check(`W13 STX grew by out`, d1x.value - d0x.value, (d) => d === field(r13.raw, "out") && d > 0n);
+  // W14
+  check("W14 min-out revert moved no sBTC", e1s14.value - e0s14.value, (d) => d === 0n);
+  check("W14 min-out revert moved no STX", e1x14.value - e0x14.value, (d) => d === 0n);
+  // W15
+  const out15 = field(r15.raw, "out"), unsold15 = field(r15.raw, "unsold"), dl15 = field(r15.raw, "dlmm-in");
+  check(`W15 sBTC delta == 3 BTC - unsold (${unsold15})`, f0s15.value - f1s15.value, (d) => d === 300_000_000n - unsold15);
+  check(`W15 STX grew by out (${out15})`, f1x15.value - f0x15.value, (d) => d === out15);
+  check(`W15 DLMM leg capped (0 < ${dl15} < 3 BTC)`, dl15, (d) => d > 0n && d < 300_000_000n);
+  check("W15 spill-over reached XYK and Velar", [field(r15.raw, "xyk-in"), field(r15.raw, "velar-in")], (a) => a.every((x) => x > 0n));
+  check("W15 legs + unsold == 3 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r15.raw, k), 0n), (t) => t === 300_000_000n);
+  legPriceOk("W15", r15, L_LOOSE, true);
+  console.log("  cost " + costLine(r9f));
+  console.log("  cost " + costLine(r15));
+  // observed 2026-09-05: read_count ~13%, read_length ~12%, runtime 0.4%;
+  // the walk's per-bin get-bin-price call loads the (large) DLMM core each
+  // time. A local bin-price (one call for the active bin, then the 15 bps
+  // step applied per bin) would cut that ~10x. Bar set at 15% until then.
+  check("W15 30-bin walk + 4 legs stays under 15% of every block limit", r15.cost, (c) => !!c && Object.keys(LIMITS).every((k) => c[k] < LIMITS[k] * 0.15));
+  const yGross9 = (() => { const net = (ASK9 * MID) / (PP * 100n); const g = (net * 10_000n) / 9_980n; return g - (g * 20n) / 10_000n > net ? g - 1n : g; })();
+  check(`W9d book leg sized to the ask's capacity (gross-cap ${yGross9}, dust at most)`, field(r9d.raw, "jing-in"), (j) => j >= yGross9 - MIN_STX && j <= yGross9);
+
+  // W17
+  const jin17a = field(r17a.raw, "jing-in");
+  check(`W17a book leg == the hint's gross-cap ${gross17hi} (dust at most)`, jin17a, (j) => j >= gross17hi - MIN_SBTC && j <= gross17hi);
+  check("W17a sBTC delta == 40000", ha0s.value - ha1s.value, (d) => d === 40_000n);
+  check("W17a STX grew by out", ha1x.value - ha0x.value, (d) => d === field(r17a.raw, "out") && d > 0n);
+  legPriceOk("W17a", r17a, L_LOOSE, true);
+  check("W17b sBTC delta == 40000 (all AMMs)", hb0s.value - hb1s.value, (d) => d === 40_000n);
+  check("W17b STX grew by out", hb1x.value - hb0x.value, (d) => d === field(r17b.raw, "out") && d > 0n);
+  check("W17b AMM legs sum to 40000", ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r17b.raw, k), 0n), (t) => t === 40_000n);
+  legPriceOk("W17b", r17b, L_LOOSE, true);
+
+  console.log(`\n${checks - failures}/${checks} checks green`);
+  if (failures > 0) process.exit(1);
+}
+
+main().catch((err) => { console.error(err); process.exit(1); });

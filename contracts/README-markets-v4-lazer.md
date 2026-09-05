@@ -264,3 +264,59 @@ Two observations for the front end, neither a router defect:
    fetch above. Front end passes `update`.
 
 v3 and router v1 stay on mainnet as dead code. Do not initialize v3.
+
+## Router v3 (`swap-router-sbtc-stx-jingswap-v1`)
+
+`swap-router-sbtc-stx-jing-v3.clar`, deploy copy
+`contracts/deploying/swap-router-sbtc-stx-jingswap-v1.clar`, same market.
+Two changes, both from the audit bounty:
+
+- The smart swaps take `mid` from the caller:
+  `smart-swap-* (amount limit-price update mid min-out)`. v2 called
+  `refresh-mid` first, which verified the Lazer update once just to size the
+  book leg, then `swap` verified it again. `mid` is a sizing hint only: the
+  market verifies the update inside `swap` and settles at its own mid, so a
+  wrong hint only undersizes the book leg (fills, rest on the AMMs) or
+  oversizes it (fill-or-kill refuses, everything on the AMMs). The front end
+  has it from the same Lazer response: `mid = px * 1e8 / py`.
+- `limit-price u0` is refused with u3006 and `mid u0` with u3007, instead of
+  a runtime division by zero with no code. `get-taker-capacity` in the
+  market divides by `mid` and is only reached through `jing-size`, after
+  these asserts, so the market stays as deployed.
+
+`jing-size` returns a plain uint now (nothing in it can fail).
+
+Harness `simulations/verify-swap-router-v3-lazer.js`: the v2 harness with
+the `mid` argument, plus W16 (the five zero guards) and W17 (a hint 5% high
+and 5% low, both swaps succeed under the limit, book leg sized as predicted).
+`DEPLOY_COPY=1` deploys the stripped copy on the fork under chavita as
+`swap-router-sbtc-stx-jingswap-v1` against the DEPLOYED market.
+
+| run | checks | stxer |
+|---|---|---|
+| local source, market v4 from file | 246/246 | https://stxer.xyz/simulations/mainnet/37b7ec813b92d5c83f6b4cf22d78e110 |
+| deploy copy vs deployed market | 245/245 | https://stxer.xyz/simulations/mainnet/3c901538683d4912739223a68c10a37e |
+| DEPLOYED router v1 bytes vs deployed market (`DEPLOYED=1`) | 244/244 | https://stxer.xyz/simulations/mainnet/71597fc98451c9764d5aec45ee23da4f |
+
+Deployed 2026-09-05 from chavita as
+`SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jingswap-v1`
+(tx 096413a7b9f41bc63963206378e0a907f76b470fc07184bf9edf5e7b858c6eae, via
+faktory-dao `deploy-contract`, template 26ec907c). The front end should use
+this router; `swap-router-sbtc-stx-jingswap` (v2) stays live as dead code.
+
+## Audit bounty notes (no change needed)
+
+- Freshness boundary: the Lazer oracle accepts age `<= 80 s`, the market
+  needs publish-time strictly newer than now minus 80 s. At exactly 80 s the
+  oracle passes and the market refuses with u1005 instead of the oracle's
+  u1002. Same outcome, refused.
+- Replay: any Lazer-signed update up to 80 s old is accepted, by design.
+  Re-using one inside the window re-uses a price the market would take
+  anyway.
+- Confidence and expo checks in the maker gate
+  (`fresh-classification-price`): the gate only decides (rest, refuse,
+  route to `swap`); every crossing path re-verifies the same update with
+  the full checks in `execute-settlement` in the same tx. A wide-confidence
+  update can only make a gate decision that settlement then reverts. No
+  path executes on an unchecked price.
+

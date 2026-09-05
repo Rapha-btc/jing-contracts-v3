@@ -146,6 +146,11 @@ path = "contracts/markets-sbtc-stx-jing-v4.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.swap-router-sbtc-stx-jing-v3]
+path = "contracts/swap-router-sbtc-stx-jing-v3.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.swap-router-sbtc-stx-jing]
 path = "contracts/swap-router-sbtc-stx-jing.clar"
 clarity_version = 5
