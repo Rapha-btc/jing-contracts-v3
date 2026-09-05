@@ -193,6 +193,37 @@ mainnet the first cycle therefore counts the blocks since deploy, so its
 cancel threshold is reachable right after initialize. Harmless: an empty
 cycle rolls nothing.
 
+## Breadth: seeded random sequences with invariants (`verify-markets-v4-stress.js`)
+
+A seeded random sequence of maker and taker actions over many cycles: bids
+and asks at limits around the mid (in and out of range), cancels, reprices,
+swaps of random size both ways at a 3% limit, close-and-settle attempts,
+readmits. Six funded makers plus the two takers. Every action must return
+`(ok ...)` or one of the market's documented refusals (`u1022` gate,
+`u1023` fill-or-kill, `u1008`, `u1012`, `u1028`, and the token contracts'
+`u1`/`u3` when a maker runs dry). Every ten actions the book's invariants
+are checked:
+
+- **I1 escrow**: the contract's sBTC equals every x deposit this cycle and
+  next plus parked x plus the pending x rebate; same for STX and y.
+- **I2** cycle totals equal the sums over the depositor lists, both cycles,
+  both sides.
+- **I3** the rebate pots are zero at rest.
+- **I4 conservation**: per token, the balance deltas of every participant,
+  the contract and the treasury sum to zero.
+- **I5** the treasury only ever gains, and gains when fills happened.
+
+| run | actions | fills | result |
+|---|---|---|---|
+| seed 7, local v4 | 60 | 12 | 125/125, [711e08bd](https://stxer.xyz/simulations/mainnet/711e08bdefff7975991ab6521ed8f734) |
+| seed 7, deployed | 60 | 12 | 123/123, [037b8311](https://stxer.xyz/simulations/mainnet/037b831130657eb2497f9e5ded3a5bc4) |
+| seed 11, local v4 | 80 | 11 | 161/161, [14d5629b](https://stxer.xyz/simulations/mainnet/14d5629bc89805eff1fe043996402473) |
+| seed 23, deployed | 80 | 10 | 159/159, [1b7398d6](https://stxer.xyz/simulations/mainnet/1b7398d6be6e561c37a96413124802e0) |
+
+No invariant broke in any run. One harness bug was found and fixed on the
+way (a maker key colliding with the local deployer's, which is also the
+treasury), nothing in the market. `SEED` and `STEPS` change the sequence.
+
 ## To deploy
 
 1. Done: `markets-sbtc-stx-jingswap` (v4) and `swap-router-sbtc-stx-jingswap`
