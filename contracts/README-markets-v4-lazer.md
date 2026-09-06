@@ -319,9 +319,13 @@ into the vault (deposit recipient = the vault principal).
 Entries: `execute-jing-deposit`, `execute-jing-set-limit` (new: pure
 reprice), `execute-jing-reprice` (reprice or swap), `execute-jing-swap`,
 `execute-router-swap` (new: smart swap through the router, min-out = amount
-at the signed limit), `cancel-jing-*`, `log-bridge-deposit` (new), deposits,
-withdraws, `revoke-intent`. No Pyth fee budget (Lazer charges none); the
-direct XYK / DLMM entries are gone, the router covers them.
+at the signed limit), `cancel-jing-*`, deposits, withdraws, `revoke-intent`.
+No Pyth fee budget (Lazer charges none); the direct XYK / DLMM entries are
+gone, the router covers them. A bridge mint into the vault is a plain
+balance: no on-chain catch-up entry (jing-core's equity ledger is
+informational and already double-credits registered vaults on market
+payouts, so such an entry could not be exact and replay-safe); the indexer
+records the mint event.
 
 Finding: `as-contract?` allowances count GROSS outgoing transfers. The book
 leg can refund sub-minimum dust and the router re-sells it on the fallback
@@ -339,15 +343,14 @@ router swap STX to sBTC; withdraw; keeper cannot withdraw u6001; stranger
 u6001; `execute-jing-swap` STX to sBTC fill-or-kill against a fresh maker's
 in-range ask; STX-side deposit; `execute-jing-reprice` crossing branch (the
 vault's bid repriced into range swaps on the spot); expiry passes / u6004;
-`revoke-intent` then u6003; a bridge-style mint recorded by
-`log-bridge-deposit` (the keeper calls it when a mint lands so jing-core's
-equity ledger, which only sees vault calls, catches up; moves nothing).
+`revoke-intent` then u6003; a bridge-style mint lands as balance.
 
 | run | checks | stxer |
 |---|---|---|
 | allowance bisect (`with-ft amount` -> err u0, `2x` ok) | 3 variants | https://stxer.xyz/simulations/mainnet/80133d98c3a2446f1d42872642ccaa2a |
 | first pass, live stack | 36/36 | https://stxer.xyz/simulations/mainnet/ab58335b99f81c5bfbea045d5f223850 |
 | full harness V1 to V15, live stack | 57/57 | https://stxer.xyz/simulations/mainnet/71aa94420bcaa8916bda3a239ae00915 |
+| final (log-bridge-deposit removed) | 56/56 | https://stxer.xyz/simulations/mainnet/7614814c61150f9658b13f4b0c95e353 |
 
 ## Audit bounty notes (no change needed)
 

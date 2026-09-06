@@ -13,7 +13,12 @@
 ;; router takes the Jing book first.
 ;;
 ;; The bridge can mint straight into this contract: an sBTC deposit whose
-;; recipient is the vault principal lands here, no second hop.
+;; recipient is the vault principal lands here, no second hop. Such a mint
+;; makes no vault call, so jing-core's equity ledger does not see it; the
+;; indexer records the mint event off chain instead (the on-chain ledger is
+;; informational and already double-credits registered vaults on market
+;; payouts, so no on-chain catch-up entry is offered: it could not be made
+;; both exact and replay-safe).
 ;;
 ;; What the keeper may do is exactly what the owner signed. `update` and
 ;; `mid` are never part of the intent: the market verifies the update
@@ -27,7 +32,6 @@
 ;;   - execute-router-swap: smart swap through the router, book + pools,
 ;;     min-out = amount at the signed limit
 ;;   - execute-jing-set-limit: pure reprice (set-token-*-limit), no crossing
-;;   - log-bridge-deposit: record an sBTC mint that landed without a call
 ;;   - the direct XYK / DLMM entries are gone (the router covers them)
 
 (define-constant OWNER tx-sender)
@@ -57,7 +61,6 @@
 (define-constant ERR_PUBKEY_NOT_SET (err u6021))
 (define-constant ERR_AMOUNT_MISMATCH (err u6022))
 (define-constant ERR_REBATE_MISMATCH (err u6023))
-(define-constant ERR_INSUFFICIENT_BALANCE (err u6024))
 
 ;; Mirror of the market's taker economics, used to size the allowance for
 ;; the crossing reprice: that path pulls exactly this rebate from the vault.
@@ -143,25 +146,6 @@
     (asserts! (is-eq tx-sender OWNER) ERR_NOT_OWNER)
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (try! (contract-call? SBTC_TOKEN transfer amount tx-sender current-contract none))
-    (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
-    (ok true)
-  )
-)
-
-;; sBTC that arrived without a call: the bridge minted a BTC deposit whose
-;; recipient is this vault. Nothing to move, only the equity log to catch
-;; up, so the owner or the keeper records it once the mint has landed. The
-;; amount is capped by what the vault actually holds.
-(define-public (log-bridge-deposit (amount uint))
-  (begin
-    (try! (check-owner-or-keeper))
-    (asserts! (> amount u0) ERR_NO_FUNDS)
-    (asserts!
-      (<= amount
-        (unwrap-panic (contract-call? SBTC_TOKEN get-balance current-contract))
-      )
-      ERR_INSUFFICIENT_BALANCE
-    )
     (try! (contract-call? JING-CORE log-deposit SBTC_TOKEN amount))
     (ok true)
   )

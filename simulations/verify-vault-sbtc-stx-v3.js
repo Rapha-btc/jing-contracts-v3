@@ -28,8 +28,8 @@
 //       is repriced into range and swaps on the spot against the ask
 //   V13 expiry: a future burn height passes, expiry u1 -> u6004
 //   V14 revoke-intent, then executing it -> u6003
-//   V15 a bridge-style mint (sBTC sent to the vault principal) recorded by
-//       log-bridge-deposit; above balance -> u6024
+//   V15 a bridge-style mint (sBTC sent to the vault principal) simply
+//       lands as balance; the indexer records the mint event off chain
 //
 // Run: PYTH_API_KEY=... npx tsx simulations/verify-vault-sbtc-stx-v3.js
 import fs from "node:fs";
@@ -196,7 +196,6 @@ async function main() {
   tx("V1 set-keeper", call(OWNER, VAULT_ID, "set-keeper", [someCV(standardPrincipalCV(KEEPER))]), "(ok true)");
   tx("V1 deposit-sbtc 30k", call(OWNER, VAULT_ID, "deposit-sbtc", [uintCV(SBTC_20K + SBTC_5K * 2)]), "(ok true)");
   tx("V1 deposit-stx 300", call(OWNER, VAULT_ID, "deposit-stx", [uintCV(STX_300)]), "(ok true)");
-  tx("V1 log-bridge-deposit above balance -> u6024", call(KEEPER, VAULT_ID, "log-bridge-deposit", [uintCV(HUGE)]), "(err u6024)");
   ev("V1 status", VAULT_ID, "(get-status)", (v) => v.includes("keeper"));
 
   // ---- V2 signed deposit (ask out of range, no gate read) ----
@@ -272,9 +271,9 @@ async function main() {
   tx("V14 executing the revoked intent -> u6003", exec(KEEPER, "execute-router-swap", revoked, [someCV(UPD), uintCV(Number(MID))]), "(err u6003)");
   tx("V14 revoking twice -> u6003", call(OWNER, VAULT_ID, "revoke-intent", [bufferCV(Buffer.from(revokedHash, "hex"))]), "(err u6003)");
 
-  // ---- V15 bridge-style mint ----
+  // ---- V15 bridge-style mint: lands as a plain balance, nothing to call ----
   tx("V15 sBTC lands in the vault without a call (bridge mint stand-in)", call(SBTC_DEPOSITOR_1, SBTC_FQN, "transfer", [uintCV(7_000), standardPrincipalCV(SBTC_DEPOSITOR_1), contractPrincipalCV(OWNER, VAULT_NAME), noneCV()]), "(ok true)");
-  tx("V15 keeper records it", call(KEEPER, VAULT_ID, "log-bridge-deposit", [uintCV(7_000)]), "(ok true)");
+  ev("V15 the owner can withdraw it like any other sBTC", SBTC_FQN, `(get-balance '${VAULT_ID})`, (v) => uintOf(v) >= 7_000n);
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
