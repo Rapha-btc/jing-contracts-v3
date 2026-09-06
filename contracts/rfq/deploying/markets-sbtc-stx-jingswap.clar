@@ -7,26 +7,8 @@
 
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
-;; Taker rebate. A batch auction has no book to sit on, so nothing rewards the
-;; depositors who escrow early and wait out the window - yet they are the only
-;; reason a `swap` caller can clear immediately. This charges the taker (the
-;; `swap` caller, who deposits and settles in one tx) an extra 20 bps and pays
-;; it to the OPPOSITE side's filled depositors, pro rata. Resting depositors
-;; still pay only FEE_BPS.
-;;
-;; 20 rather than 25: a Bitflow LP earns 25 bps but is filled at whatever the
-;; curve reached, so that yield is payment for impermanent loss. A maker here
-;; fills only inside their own limit and carries none, so 20 bps IL-free is the
-;; better risk-adjusted side of the trade. Matching 25 would price us as though
-;; we were selling the same thing. See README-maker-economics.md.
-;;
-;; Taker therefore pays 30 bps all-in (10 protocol + 20 to makers) against
-;; Bitflow's 50, before slippage - which the auction does not have at all.
 (define-constant TAKER_REBATE_BPS u20)
 
-;; Exposed so integrating vaults can assert their mirrored rebate constant
-;; matches at initialize time, refusing to register against a market whose
-;; taker economics drifted from their template.
 (define-read-only (get-taker-rebate-bps)
   TAKER_REBATE_BPS
 )
@@ -41,14 +23,17 @@
 (define-constant MAX_CONF_RATIO u50)
 
 (define-constant SAINT 'SP000000000000000000002Q6VF78)
-(define-constant SAINT_FEED 0x0000000000000000000000000000000000000000000000000000000000000000)
 
 (define-data-var token-x principal SAINT)
 (define-data-var token-y principal SAINT)
 (define-data-var initialized bool false)
 
-(define-data-var oracle-feed-x (buff 32) SAINT_FEED)
-(define-data-var oracle-feed-y (buff 32) SAINT_FEED)
+(define-data-var feed-id-x uint u0)
+(define-data-var feed-id-y uint u0)
+(define-constant LAZER_ORACLE 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle)
+(define-constant LAZER_DECODER 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1)
+(define-constant MICROS_PER_SECOND u1000000)
+(define-constant ERR_FEED_MISSING (err u1029))
 
 (define-constant ERR_DEPOSIT_TOO_SMALL (err u1001))
 (define-constant ERR_NOT_DEPOSIT_PHASE (err u1002))
@@ -73,6 +58,9 @@
 (define-constant ERR_PARTIAL_FILL (err u1023))
 (define-constant ERR_HAS_RESTING_POSITION (err u1024))
 (define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
+(define-constant ERR_TAKER_TOO_SMALL (err u1026))
+(define-constant ERR_PARKED (err u1027))
+(define-constant ERR_NOTHING_TO_READMIT (err u1028))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -103,19 +91,14 @@
 (define-data-var caller-token-y-received uint u0)
 (define-data-var caller-token-x-rolled uint u0)
 
+(define-data-var walk-taker-received uint u0)
+
 (define-data-var settle-clearing-price uint u0)
 
-;; Rebate parked by `swap` before it settles, denominated in the token the
-;; taker deposited. `swap` is atomic (deposit -> close -> settle in one tx), so
-;; either settlement consumes this or the whole tx reverts and it is never
-;; stranded. Settlement zeroes both on the way out.
 (define-data-var pending-rebate-x uint u0)
 (define-data-var pending-rebate-y uint u0)
-;; True only inside a swap / reprice-or-swap tx, from before close-deposits
-;; until the remainder walk ends. Lets settlement proceed with the maker side
-;; empty at the mid (every maker out of range) so the walk can do the whole
-;; fill; public settle calls never see it set.
 (define-data-var crossing bool false)
+(define-data-var taker-too-small bool false)
 
 (define-map token-y-deposits
   {
@@ -170,6 +153,22 @@
 (define-map token-x-deposit-limits
   principal
   uint
+)
+
+(define-map token-y-parked
+  principal
+  uint
+)
+(define-map token-x-parked
+  principal
+  uint
+)
+
+(define-read-only (get-token-y-parked (who principal))
+  (default-to u0 (map-get? token-y-parked who))
+)
+(define-read-only (get-token-x-parked (who principal))
+  (default-to u0 (map-get? token-x-parked who))
 )
 
 (define-read-only (get-current-cycle)
@@ -307,6 +306,126 @@
   (not (is-eq entry (var-get bumped-token-x-principal)))
 )
 
+(define-private (find-parkable-token-y-fold
+    (depositor principal)
+    (acc {
+      price: uint,
+      gap: uint,
+      found: (optional principal),
+    })
+  )
+  (let ((limit (get-token-y-limit depositor)))
+    (if (and (> (get price acc) limit) (> (- (get price acc) limit) (get gap acc)))
+      (merge acc {
+        gap: (- (get price acc) limit),
+        found: (some depositor),
+      })
+      acc
+    )
+  )
+)
+(define-private (find-parkable-token-x-fold
+    (depositor principal)
+    (acc {
+      price: uint,
+      gap: uint,
+      found: (optional principal),
+    })
+  )
+  (let ((limit (get-token-x-limit depositor)))
+    (if (and (< (get price acc) limit) (> (- limit (get price acc)) (get gap acc)))
+      (merge acc {
+        gap: (- limit (get price acc)),
+        found: (some depositor),
+      })
+      acc
+    )
+  )
+)
+
+(define-private (park-one-token-y
+    (cycle uint)
+    (price uint)
+  )
+  (let ((depositors (get-token-y-depositors cycle)))
+    (match (get found
+      (fold find-parkable-token-y-fold depositors {
+        price: price,
+        gap: u0,
+        found: none,
+      })
+    )
+      who (let (
+          (amount (get-token-y-deposit cycle who))
+          (totals (get-cycle-totals cycle))
+        )
+        (map-set token-y-parked who amount)
+        (map-delete token-y-deposits {
+          cycle: cycle,
+          depositor: who,
+        })
+        (var-set bumped-token-y-principal who)
+        (map-set token-y-depositor-list cycle
+          (filter not-eq-bumped-token-y depositors)
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-y: (- (get total-token-y totals) amount) })
+        )
+        (print {
+          event: "park-y",
+          who: who,
+          amount: amount,
+          cycle: cycle,
+          price: price,
+        })
+        true
+      )
+      false
+    )
+  )
+)
+(define-private (park-one-token-x
+    (cycle uint)
+    (price uint)
+  )
+  (let ((depositors (get-token-x-depositors cycle)))
+    (match (get found
+      (fold find-parkable-token-x-fold depositors {
+        price: price,
+        gap: u0,
+        found: none,
+      })
+    )
+      who (let (
+          (amount (get-token-x-deposit cycle who))
+          (totals (get-cycle-totals cycle))
+        )
+        (map-set token-x-parked who amount)
+        (map-delete token-x-deposits {
+          cycle: cycle,
+          depositor: who,
+        })
+        (var-set bumped-token-x-principal who)
+        (map-set token-x-depositor-list cycle
+          (filter not-eq-bumped-token-x depositors)
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+        )
+        (print {
+          event: "park-x",
+          who: who,
+          amount: amount,
+          cycle: cycle,
+          price: price,
+        })
+        true
+      )
+      false
+    )
+  )
+)
+
 (define-private (roll-token-y-depositor (depositor principal))
   (let ((cycle (var-get current-cycle)))
     (map-set token-y-deposits {
@@ -360,83 +479,129 @@
   )
 )
 
-;; --- Maker / taker ----------------------------------------------------------
-;;
-;; Role is decided by entry point, not by a stored flag. `swap` is the taker
-;; path: deposit, close and settle in one tx, paying TAKER_REBATE_BPS for the
-;; immediate fill. The public deposit functions are the maker path: they refuse
-;; any deposit that would cross live resting size on the other side, so the
-;; only way to be filled in the same tx is to pay for it. Crossing means both
-;; halves hold at the stored oracle price: the depositor's own limit is live,
-;; AND the opposite side has at least one resting deposit whose limit is live.
-;; Limits follow the settlement filters: y-limits are ceilings (a bid is live
-;; while price <= limit), x-limits are floors (an offer is live while
-;; price >= limit).
-;;
-;; The check reads only the OPPOSITE side. Reading your own side would let you
-;; seed a dust maker deposit and walk real size in for free - for the same
-;; reason the check also applies to top-ups of an existing deposit.
-;;
-;; Classification runs against a FRESH price. Each gated call carries a Pyth
-;; VAA (the platform's frontend supplies it; the depositor only pays gas):
-;; the market refreshes storage, then classifies, and reverts ERR_STALE_PRICE
-;; if what is stored is still older than MAX_STALENESS - so a replayed old
-;; VAA cannot fake freshness. Same window as settlement: the VAA is fetched
-;; at broadcast, so like `swap` the tx must land within MAX_STALENESS of the
-;; publish-time or it reverts and is retried with a fresh one.
-;;
-;; When the opposite side has no resting entries at all, no crossing is
-;; possible at any price: the VAA is ignored (pass 0x) so an empty book
-;; bootstraps - and exits always work - without a live oracle. Cancels never
-;; read the price at all.
-;;
-;; Two feeds here, so the classification price is the same ratio settlement
-;; computes: price-x scaled by PRICE_PRECISION over price-y.
-;; The frontend predicts the gate by calling would-take-as-x/-y with the
-;; price from the SAME Hermes payload whose VAA it will attach - never a
-;; stored price, which can disagree with the VAA and mispredict.
-(define-private (fresh-classification-price (vaa (buff 8192)))
-  (begin
-    (try! (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
-      verify-and-update-price-feeds vaa {
-      pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
-      pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
-      wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4,
-    }))
-    (let (
-        (feed-x (unwrap!
-          (contract-call?
-            'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-x)
-          )
-          ERR_ZERO_PRICE
-        ))
-        (feed-y (unwrap!
-          (contract-call?
-            'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-y)
-          )
-          ERR_ZERO_PRICE
-        ))
-        (min-freshness (- stacks-block-time MAX_STALENESS))
-      )
-      (asserts! (> (get publish-time feed-x) min-freshness) ERR_STALE_PRICE)
-      (asserts! (> (get publish-time feed-y) min-freshness) ERR_STALE_PRICE)
-      (asserts! (> (get price feed-x) 0) ERR_ZERO_PRICE)
-      (asserts! (> (get price feed-y) 0) ERR_ZERO_PRICE)
-      (ok (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
-        (to-uint (get price feed-y))
-      ))
-    )
+(define-private (pick-feed
+    (f {
+      feed-id: uint,
+      price: int,
+      exponent: int,
+      publisher-count: uint,
+      confidence: (optional uint),
+      best-bid: (optional int),
+      best-ask: (optional int),
+      funding-rate: (optional int),
+      funding-timestamp: (optional uint),
+      funding-rate-interval: (optional uint),
+      market-session: (optional uint),
+      ema-price: (optional int),
+      ema-confidence: (optional uint),
+      feed-update-timestamp: (optional uint),
+    })
+    (acc {
+      id: uint,
+      found: (optional {
+        feed-id: uint,
+        price: int,
+        exponent: int,
+        publisher-count: uint,
+        confidence: (optional uint),
+        best-bid: (optional int),
+        best-ask: (optional int),
+        funding-rate: (optional int),
+        funding-timestamp: (optional uint),
+        funding-rate-interval: (optional uint),
+        market-session: (optional uint),
+        ema-price: (optional int),
+        ema-confidence: (optional uint),
+        feed-update-timestamp: (optional uint),
+      }),
+    })
+  )
+  (if (is-eq (get feed-id f) (get id acc))
+    (merge acc { found: (some f) })
+    acc
   )
 )
 
-;; Resting size only counts as live when it is at least the market minimum.
-;; Fresh deposits always are, but pro-rata roll remainders and small-share
-;; rolls land in the next cycle below min with their limits intact - and if
-;; that dust classified the other side, one live dust entry would block every
-;; maker deposit opposite it while being too small for any FOK swap to clear.
-;; Sub-min dust still settles normally; it is just invisible to the gate.
+(define-private (shape-feed
+    (f {
+      feed-id: uint,
+      price: int,
+      exponent: int,
+      publisher-count: uint,
+      confidence: (optional uint),
+      best-bid: (optional int),
+      best-ask: (optional int),
+      funding-rate: (optional int),
+      funding-timestamp: (optional uint),
+      funding-rate-interval: (optional uint),
+      market-session: (optional uint),
+      ema-price: (optional int),
+      ema-confidence: (optional uint),
+      feed-update-timestamp: (optional uint),
+    })
+    (publish-time uint)
+  )
+  (ok {
+    price: (get price f),
+    conf: (unwrap! (get confidence f) ERR_PRICE_UNCERTAIN),
+    expo: (get exponent f),
+    ema-price: (default-to (get price f) (get ema-price f)),
+    ema-conf: (default-to u0 (get ema-confidence f)),
+    publish-time: publish-time,
+    prev-publish-time: u0,
+  })
+)
+
+(define-private (lazer-feeds (update (buff 8192)))
+  (let (
+      (decoded (try! (contract-call? LAZER_ORACLE verify-price-feeds update LAZER_DECODER
+        (some MAX_STALENESS)
+      )))
+      (feeds (get price-feeds decoded))
+      (publish-time (/ (get timestamp decoded) MICROS_PER_SECOND))
+      (fx (unwrap!
+        (get found
+          (fold pick-feed feeds {
+            id: (var-get feed-id-x),
+            found: none,
+          })
+        )
+        ERR_FEED_MISSING
+      ))
+      (fy (unwrap!
+        (get found
+          (fold pick-feed feeds {
+            id: (var-get feed-id-y),
+            found: none,
+          })
+        )
+        ERR_FEED_MISSING
+      ))
+    )
+    (ok {
+      feed-x: (try! (shape-feed fx publish-time)),
+      feed-y: (try! (shape-feed fy publish-time)),
+    })
+  )
+)
+
+(define-private (fresh-classification-price (update (buff 8192)))
+  (let (
+      (feeds (try! (lazer-feeds update)))
+      (feed-x (get feed-x feeds))
+      (feed-y (get feed-y feeds))
+      (min-freshness (- stacks-block-time MAX_STALENESS))
+    )
+    (asserts! (> (get publish-time feed-x) min-freshness) ERR_STALE_PRICE)
+    (asserts! (> (get publish-time feed-y) min-freshness) ERR_STALE_PRICE)
+    (asserts! (> (get price feed-x) 0) ERR_ZERO_PRICE)
+    (asserts! (> (get price feed-y) 0) ERR_ZERO_PRICE)
+    (ok (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
+      (to-uint (get price feed-y))
+    ))
+  )
+)
+
 (define-private (live-bid-fold
     (depositor principal)
     (acc {
@@ -604,17 +769,29 @@
 (define-public (deposit-token-y
     (amount uint)
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
-  (begin
-    (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
-      (asserts!
-        (not (would-take-as-y (try! (fresh-classification-price vaa)) limit-price))
-        ERR_MUST_USE_SWAP
-      )
-      true
+  (let (
+      (cycle (var-get current-cycle))
+      (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
+      (full (>= (len (get-token-y-depositors cycle)) MAX_DEPOSITORS))
+      (price (if (or
+          (> (len (get-token-x-depositors cycle)) u0)
+          (and new-maker full)
+        )
+        (try! (fresh-classification-price update))
+        u0
+      ))
+    )
+    (asserts! (is-eq (get-token-y-parked tx-sender) u0) ERR_PARKED)
+    (asserts! (not (would-take-as-y price limit-price)) ERR_MUST_USE_SWAP)
+    (and
+      new-maker
+      full
+      (>= limit-price price)
+      (park-one-token-y cycle price)
     )
     (deposit-token-y-core amount limit-price t asset-name)
   )
@@ -712,17 +889,29 @@
 (define-public (deposit-token-x
     (amount uint)
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
-  (begin
-    (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
-      (asserts!
-        (not (would-take-as-x (try! (fresh-classification-price vaa)) limit-price))
-        ERR_MUST_USE_SWAP
-      )
-      true
+  (let (
+      (cycle (var-get current-cycle))
+      (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
+      (full (>= (len (get-token-x-depositors cycle)) MAX_DEPOSITORS))
+      (price (if (or
+          (> (len (get-token-y-depositors cycle)) u0)
+          (and new-maker full)
+        )
+        (try! (fresh-classification-price update))
+        u0
+      ))
+    )
+    (asserts! (is-eq (get-token-x-parked tx-sender) u0) ERR_PARKED)
+    (asserts! (not (would-take-as-x price limit-price)) ERR_MUST_USE_SWAP)
+    (and
+      new-maker
+      full
+      (<= limit-price price)
+      (park-one-token-x cycle price)
     )
     (deposit-token-x-core amount limit-price t asset-name)
   )
@@ -736,31 +925,47 @@
       (cycle (var-get current-cycle))
       (caller tx-sender)
       (amount (get-token-y-deposit cycle caller))
+      (parked (get-token-y-parked caller))
       (totals (get-cycle-totals cycle))
       (tok-y (var-get token-y))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
-    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-    (try! (as-contract? ((with-stx amount))
-      (try! (stx-transfer? amount current-contract caller))
-    ))
-    (map-delete token-y-deposits {
-      cycle: cycle,
-      depositor: caller,
-    })
-    (map-delete token-y-deposit-limits caller)
-    (var-set bumped-token-y-principal caller)
-    (map-set token-y-depositor-list cycle
-      (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (is-eq amount u0)
+      (begin
+        (try! (as-contract? ((with-stx parked))
+          (try! (stx-transfer? parked current-contract caller))
+        ))
+        (map-delete token-y-parked caller)
+        (map-delete token-y-deposit-limits caller)
+        (try! (contract-call? .jing-core-v3 log-refund-y caller parked cycle
+          (var-get token-x) tok-y
+        ))
+        (ok parked)
+      )
+      (begin
+        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+        (try! (as-contract? ((with-stx amount))
+          (try! (stx-transfer? amount current-contract caller))
+        ))
+        (map-delete token-y-deposits {
+          cycle: cycle,
+          depositor: caller,
+        })
+        (map-delete token-y-deposit-limits caller)
+        (var-set bumped-token-y-principal caller)
+        (map-set token-y-depositor-list cycle
+          (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-y: (- (get total-token-y totals) amount) })
+        )
+        (try! (contract-call? .jing-core-v3 log-refund-y caller amount cycle
+          (var-get token-x) tok-y
+        ))
+        (ok amount)
+      )
     )
-    (map-set cycle-totals cycle
-      (merge totals { total-token-y: (- (get total-token-y totals) amount) })
-    )
-    (try! (contract-call? .jing-core-v3 log-refund-y caller amount cycle
-      (var-get token-x) tok-y
-    ))
-    (ok amount)
   )
 )
 
@@ -772,50 +977,149 @@
       (cycle (var-get current-cycle))
       (caller tx-sender)
       (amount (get-token-x-deposit cycle caller))
+      (parked (get-token-x-parked caller))
       (totals (get-cycle-totals cycle))
       (tok-x (var-get token-x))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
-    (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-    (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
-      (try! (contract-call? t transfer amount current-contract caller none))
-    ))
-    (map-delete token-x-deposits {
+    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (is-eq amount u0)
+      (begin
+        (try! (as-contract? ((with-ft (contract-of t) asset-name parked))
+          (try! (contract-call? t transfer parked current-contract caller none))
+        ))
+        (map-delete token-x-parked caller)
+        (map-delete token-x-deposit-limits caller)
+        (try! (contract-call? .jing-core-v3 log-refund-x caller parked cycle tok-x
+          (var-get token-y)
+        ))
+        (ok parked)
+      )
+      (begin
+        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+        (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
+          (try! (contract-call? t transfer amount current-contract caller none))
+        ))
+        (map-delete token-x-deposits {
+          cycle: cycle,
+          depositor: caller,
+        })
+        (map-delete token-x-deposit-limits caller)
+        (var-set bumped-token-x-principal caller)
+        (map-set token-x-depositor-list cycle
+          (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+        )
+        (map-set cycle-totals cycle
+          (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+        )
+        (try! (contract-call? .jing-core-v3 log-refund-x caller amount cycle tok-x
+          (var-get token-y)
+        ))
+        (ok amount)
+      )
+    )
+  )
+)
+
+(define-public (readmit-token-y
+    (who principal)
+    (update (buff 8192))
+  )
+  (let (
+      (cycle (var-get current-cycle))
+      (amount (get-token-y-parked who))
+      (limit (get-token-y-limit who))
+      (depositors (get-token-y-depositors cycle))
+      (totals (get-cycle-totals cycle))
+      (price (try! (fresh-classification-price update)))
+    )
+    (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
+    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (would-take-as-y price limit)) ERR_MUST_USE_SWAP)
+    (map-set token-y-deposits {
       cycle: cycle,
-      depositor: caller,
-    })
-    (map-delete token-x-deposit-limits caller)
-    (var-set bumped-token-x-principal caller)
-    (map-set token-x-depositor-list cycle
-      (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+      depositor: who,
+    }
+      amount
+    )
+    (map-set token-y-depositor-list cycle
+      (unwrap-panic (as-max-len? (append depositors who) u50))
     )
     (map-set cycle-totals cycle
-      (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+      (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
     )
-    (try! (contract-call? .jing-core-v3 log-refund-x caller amount cycle tok-x
-      (var-get token-y)
-    ))
+    (map-delete token-y-parked who)
+    (print {
+      event: "readmit-y",
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
     (ok amount)
   )
 )
 
-;; Same gate as the deposits: without it, a depositor could enter with a dead
-;; limit (passing the maker gate) and then retarget the limit into the live
-;; range - a crossing position built without ever touching `swap`.
+(define-public (readmit-token-x
+    (who principal)
+    (update (buff 8192))
+  )
+  (let (
+      (cycle (var-get current-cycle))
+      (amount (get-token-x-parked who))
+      (limit (get-token-x-limit who))
+      (depositors (get-token-x-depositors cycle))
+      (totals (get-cycle-totals cycle))
+      (price (try! (fresh-classification-price update)))
+    )
+    (asserts! (not (var-get paused)) ERR_PAUSED)
+    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
+    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (would-take-as-x price limit)) ERR_MUST_USE_SWAP)
+    (map-set token-x-deposits {
+      cycle: cycle,
+      depositor: who,
+    }
+      amount
+    )
+    (map-set token-x-depositor-list cycle
+      (unwrap-panic (as-max-len? (append depositors who) u50))
+    )
+    (map-set cycle-totals cycle
+      (merge totals { total-token-x: (+ (get total-token-x totals) amount) })
+    )
+    (map-delete token-x-parked who)
+    (print {
+      event: "readmit-x",
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
+    (ok amount)
+  )
+)
+
 (define-public (set-token-y-limit
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
   )
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (asserts! (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
+    (asserts!
+      (or
+        (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
+        (> (get-token-y-parked tx-sender) u0)
+      )
       ERR_NOTHING_TO_WITHDRAW
     )
     (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
       (asserts!
-        (not (would-take-as-y (try! (fresh-classification-price vaa)) limit-price))
+        (not (would-take-as-y (try! (fresh-classification-price update)) limit-price))
         ERR_MUST_USE_SWAP
       )
       true
@@ -830,17 +1134,21 @@
 
 (define-public (set-token-x-limit
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
   )
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (asserts! (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
+    (asserts!
+      (or
+        (> (get-token-x-deposit (var-get current-cycle) tx-sender) u0)
+        (> (get-token-x-parked tx-sender) u0)
+      )
       ERR_NOTHING_TO_WITHDRAW
     )
     (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
       (asserts!
-        (not (would-take-as-x (try! (fresh-classification-price vaa)) limit-price))
+        (not (would-take-as-x (try! (fresh-classification-price update)) limit-price))
         ERR_MUST_USE_SWAP
       )
       true
@@ -853,24 +1161,9 @@
   )
 )
 
-;; --- Reprice with take-through -----------------------------------------------
-;;
-;; set-token-*-limit refuses a limit that crosses live resting size
-;; (ERR_MUST_USE_SWAP): a maker must not become a taker for free. These are the
-;; paid versions of the same move. If the new limit does NOT cross (or nothing
-;; live rests opposite), they are exactly set-token-*-limit: the limit moves
-;; and the deposit keeps resting. If it DOES cross, the caller's whole resting
-;; deposit turns taker on the spot with `swap`'s economics: TAKER_REBATE_BPS
-;; is charged on the resting amount (transferred fresh, on top of what already
-;; rests, so the resting size itself is what settles), the cycle closes and
-;; settles in this tx, and the fill is all-or-nothing - the caller must clear
-;; 100% or the whole tx reverts, reprice included, and the old limit stands.
-;; The same VAA drives classification and settlement, so the price that says
-;; "you cross" is the price the fill happens at.
-
 (define-public (reprice-or-swap-token-y
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))
     (ty-trait <ft-trait>)
@@ -891,7 +1184,7 @@
     ))
     (if (and
         (> (len (get-token-x-depositors cycle)) u0)
-        (would-take-as-y (try! (fresh-classification-price vaa)) limit-price)
+        (would-take-as-y (try! (fresh-classification-price update)) limit-price)
       )
       (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
         (and
@@ -901,13 +1194,12 @@
         (var-set pending-rebate-y rebate)
         (var-set crossing true)
         (try! (close-deposits))
-        (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          ;; the mid could not fill everything: walk the rolled opposite book
-          ;; with the remainder, then judge full fill on remaining escrow
-          (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
-            tx-trait tx-name
+        (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
+          (ok (swap-result-y result
+            (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
+              tx-trait tx-name
+            ))
           ))
-          (ok result)
         )
       )
       (ok {
@@ -915,6 +1207,7 @@
         token-y-rolled: u0,
         token-y-received: u0,
         token-x-rolled: u0,
+        rebate-refunded: u0,
       })
     )
   )
@@ -922,7 +1215,7 @@
 
 (define-public (reprice-or-swap-token-x
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))
     (ty-trait <ft-trait>)
@@ -943,7 +1236,7 @@
     ))
     (if (and
         (> (len (get-token-y-depositors cycle)) u0)
-        (would-take-as-x (try! (fresh-classification-price vaa)) limit-price)
+        (would-take-as-x (try! (fresh-classification-price update)) limit-price)
       )
       (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
         (and
@@ -955,11 +1248,12 @@
         (var-set pending-rebate-x rebate)
         (var-set crossing true)
         (try! (close-deposits))
-        (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-          (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
-            tx-trait tx-name
+        (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
+          (ok (swap-result-x result
+            (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
+              tx-trait tx-name
+            ))
           ))
-          (ok result)
         )
       )
       (ok {
@@ -967,6 +1261,7 @@
         token-y-rolled: u0,
         token-y-received: u0,
         token-x-rolled: u0,
+        rebate-refunded: u0,
       })
     )
   )
@@ -982,34 +1277,39 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* total-token-y MIN_SHARE_BPS))
-      (begin
-        (map-set token-y-deposits {
-          cycle: next-cycle,
-          depositor: depositor,
-        }
-          amount
+      (if (and (var-get crossing) (is-eq depositor tx-sender))
+        (ok (var-set taker-too-small true))
+        (begin
+          (map-set token-y-deposits {
+            cycle: next-cycle,
+            depositor: depositor,
+          }
+            amount
+          )
+          (map-set token-y-depositor-list next-cycle
+            (unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor)
+              u50
+            ))
+          )
+          (map-set cycle-totals next-cycle
+            (merge totals-next { total-token-y: (+ (get total-token-y totals-next) amount) })
+          )
+          (map-delete token-y-deposits {
+            cycle: cycle,
+            depositor: depositor,
+          })
+          (var-set bumped-token-y-principal depositor)
+          (map-set token-y-depositor-list cycle
+            (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+          )
+          (map-set cycle-totals cycle
+            (merge totals { total-token-y: (- total-token-y amount) })
+          )
+          (try! (contract-call? .jing-core-v3 log-small-share-roll-y depositor cycle
+            amount (var-get token-x) (var-get token-y)
+          ))
+          (ok true)
         )
-        (map-set token-y-depositor-list next-cycle
-          (unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor) u50))
-        )
-        (map-set cycle-totals next-cycle
-          (merge totals-next { total-token-y: (+ (get total-token-y totals-next) amount) })
-        )
-        (map-delete token-y-deposits {
-          cycle: cycle,
-          depositor: depositor,
-        })
-        (var-set bumped-token-y-principal depositor)
-        (map-set token-y-depositor-list cycle
-          (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
-        )
-        (map-set cycle-totals cycle
-          (merge totals { total-token-y: (- total-token-y amount) })
-        )
-        (try! (contract-call? .jing-core-v3 log-small-share-roll-y depositor cycle
-          amount (var-get token-x) (var-get token-y)
-        ))
-        (ok true)
       )
       (ok true)
     )
@@ -1026,34 +1326,39 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* total-token-x MIN_SHARE_BPS))
-      (begin
-        (map-set token-x-deposits {
-          cycle: next-cycle,
-          depositor: depositor,
-        }
-          amount
+      (if (and (var-get crossing) (is-eq depositor tx-sender))
+        (ok (var-set taker-too-small true))
+        (begin
+          (map-set token-x-deposits {
+            cycle: next-cycle,
+            depositor: depositor,
+          }
+            amount
+          )
+          (map-set token-x-depositor-list next-cycle
+            (unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor)
+              u50
+            ))
+          )
+          (map-set cycle-totals next-cycle
+            (merge totals-next { total-token-x: (+ (get total-token-x totals-next) amount) })
+          )
+          (map-delete token-x-deposits {
+            cycle: cycle,
+            depositor: depositor,
+          })
+          (var-set bumped-token-x-principal depositor)
+          (map-set token-x-depositor-list cycle
+            (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+          )
+          (map-set cycle-totals cycle
+            (merge totals { total-token-x: (- total-token-x amount) })
+          )
+          (try! (contract-call? .jing-core-v3 log-small-share-roll-x depositor cycle
+            amount (var-get token-x) (var-get token-y)
+          ))
+          (ok true)
         )
-        (map-set token-x-depositor-list next-cycle
-          (unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor) u50))
-        )
-        (map-set cycle-totals next-cycle
-          (merge totals-next { total-token-x: (+ (get total-token-x totals-next) amount) })
-        )
-        (map-delete token-x-deposits {
-          cycle: cycle,
-          depositor: depositor,
-        })
-        (var-set bumped-token-x-principal depositor)
-        (map-set token-x-depositor-list cycle
-          (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
-        )
-        (map-set cycle-totals cycle
-          (merge totals { total-token-x: (- total-token-x amount) })
-        )
-        (try! (contract-call? .jing-core-v3 log-small-share-roll-x depositor cycle
-          amount (var-get token-x) (var-get token-y)
-        ))
-        (ok true)
       )
       (ok true)
     )
@@ -1165,8 +1470,6 @@
       )
       ERR_NOTHING_TO_SETTLE
     )
-    (map filter-small-token-y-depositor (get-token-y-depositors cycle))
-    (map filter-small-token-x-depositor (get-token-x-depositors cycle))
     (var-set deposits-closed-block stacks-block-height)
     (try! (contract-call? .jing-core-v3 log-close-deposits cycle stacks-block-height
       elapsed (var-get token-x) (var-get token-y)
@@ -1175,78 +1478,8 @@
   )
 )
 
-(define-public (settle
-    (tx-trait <ft-trait>)
-    (tx-name (string-ascii 128))
-    (ty-trait <ft-trait>)
-    (ty-name (string-ascii 128))
-  )
-  (let (
-      (feed-x (unwrap!
-        (contract-call?
-          'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4 get-price
-          (var-get oracle-feed-x)
-        )
-        ERR_ZERO_PRICE
-      ))
-      (feed-y (unwrap!
-        (contract-call?
-          'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4 get-price
-          (var-get oracle-feed-y)
-        )
-        ERR_ZERO_PRICE
-      ))
-      (cycle (var-get current-cycle))
-    )
-    (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
-    (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-    (try! (execute-settlement cycle feed-x feed-y tx-trait tx-name ty-trait ty-name))
-    (var-set acc-token-x-out u0)
-    (var-set acc-token-y-out u0)
-    (var-set acc-token-y-rolled u0)
-    (var-set acc-token-x-rolled u0)
-    (var-set caller-token-x-received u0)
-    (var-set caller-token-y-rolled u0)
-    (var-set caller-token-y-received u0)
-    (var-set caller-token-x-rolled u0)
-    (try! (fold distribute-to-token-y-depositor (get-token-y-depositors cycle)
-      (ok {
-        t: tx-trait,
-        name: tx-name,
-      })
-    ))
-    (try! (fold distribute-to-token-x-depositor (get-token-x-depositors cycle)
-      (ok {
-        t: ty-trait,
-        name: ty-name,
-      })
-    ))
-    (try! (roll-and-sweep-dust tx-trait tx-name ty-trait ty-name))
-    (advance-cycle)
-    (ok {
-      token-x-received: (var-get caller-token-x-received),
-      token-y-rolled: (var-get caller-token-y-rolled),
-      token-y-received: (var-get caller-token-y-received),
-      token-x-rolled: (var-get caller-token-x-rolled),
-    })
-  )
-)
-
-;; The Pyth execution plan is hard-coded rather than taken as trait arguments.
-;; pyth-governance-v3 already validates whatever is passed, so this buys no
-;; extra safety against a malicious caller. It buys independence from what Pyth
-;; changes underneath: nothing a caller supplies can steer which contracts this
-;; market talks to. If Pyth rotates the storage, decoder or wormhole contract,
-;; this market is redeployed deliberately instead of silently following.
-;; One bundled multi-feed VAA (Hermes multi-id query) refreshes BOTH feeds in
-;; a single verify. Correctness does not rest on the caller bundling
-;; properly: execute-settlement asserts publish-time freshness on each feed,
-;; so a VAA covering only one of them leaves the other stale and the settle
-;; reverts ERR_STALE_PRICE. v1 took two VAA slots for caller flexibility, but
-;; in practice both slots always carried the same bundle - the second verify
-;; re-checked identical bytes.
 (define-public (settle-with-refresh
-    (vaa (buff 8192))
+    (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))
     (ty-trait <ft-trait>)
@@ -1255,27 +1488,10 @@
   (begin
     (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
     (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-    (try! (contract-call? 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4
-      verify-and-update-price-feeds vaa {
-      pyth-storage-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4,
-      pyth-decoder-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3,
-      wormhole-core-contract: 'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4,
-    }))
     (let (
-        (feed-x (unwrap!
-          (contract-call?
-            'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-x)
-          )
-          ERR_ZERO_PRICE
-        ))
-        (feed-y (unwrap!
-          (contract-call?
-            'SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4
-            get-price (var-get oracle-feed-y)
-          )
-          ERR_ZERO_PRICE
-        ))
+        (feeds (try! (lazer-feeds update)))
+        (feed-x (get feed-x feeds))
+        (feed-y (get feed-y feeds))
         (cycle (var-get current-cycle))
       )
       (try! (execute-settlement cycle feed-x feed-y tx-trait tx-name ty-trait ty-name))
@@ -1312,7 +1528,7 @@
 )
 
 (define-public (close-and-settle-with-refresh
-    (vaa (buff 8192))
+    (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))
     (ty-trait <ft-trait>)
@@ -1320,31 +1536,20 @@
   )
   (begin
     (try! (close-deposits))
-    (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name)
+    (settle-with-refresh update tx-trait tx-name ty-trait ty-name)
   )
 )
 
 (define-public (swap
     (amount uint)
     (limit-price uint)
-    (vaa (buff 8192))
+    (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))
     (ty-trait <ft-trait>)
     (ty-name (string-ascii 128))
     (deposit-x bool)
   )
-  ;; The taker pays TAKER_REBATE_BPS on top of FEE_BPS. It is taken off the
-  ;; deposit here rather than at settlement so the maths stays inside the
-  ;; existing pro-rata machinery: the taker is credited for `net` only, and the
-  ;; withheld slice is handed to the other side's filled depositors below.
-  ;;
-  ;; `swap` opens a NEW taker position only. If the caller already rests size
-  ;; on that side, deposit-*-core would merge into it and overwrite its limit,
-  ;; silently converting non-crossing maker inventory into a taker fill that
-  ;; paid rebate on the fresh slice alone. Rather than price that merge, it is
-  ;; refused: the caller either reprices the resting position (which charges
-  ;; 20 bps on the whole of it) or cancels it first and swaps the total.
   (let (
       (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
       (net (- amount rebate))
@@ -1380,42 +1585,23 @@
     )
     (var-set crossing true)
     (try! (close-deposits))
-    ;; Fill-or-kill. The 20 bps buys full immediate execution, so a swap that
-    ;; would fill nothing (limit rolled out, nothing live resting) or only
-    ;; partially (rolled remainder would rest as an unwanted maker position,
-    ;; with the rebate overpaid on the unfilled part) reverts instead. Swap is
-    ;; atomic, so the parked rebate unwinds with it rather than being gifted
-    ;; to the other side. A taker who wants to rest the remainder swaps the
-    ;; absorbable size, then maker-deposits the rest in a second tx.
-    (let ((result (try! (settle-with-refresh vaa tx-trait tx-name ty-trait ty-name))))
-      ;; the mid could not fill everything: walk the rolled opposite book
-      ;; with the remainder, then judge full fill on remaining escrow
+    (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
       (if deposit-x
-        (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
-          tx-trait tx-name
+        (ok (swap-result-x result
+          (try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait
+            tx-name
+          ))
         ))
-        (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
-          tx-trait tx-name
+        (ok (swap-result-y result
+          (try! (cross-remainder-as-y limit-price (get token-y-rolled result) tx-trait
+            tx-name
+          ))
         ))
       )
-      (ok result)
     )
   )
 )
 
-;; --- Cross the swapper's remainder ------------------------------------------
-;; The batch clears everyone in range at the oracle mid, unchanged. When the
-;; SWAPPER (swap / reprice-or-swap) is left with a remainder after mid
-;; clearing, that remainder walks the opposite side's rolled book -
-;; orderbook-style, one fold - consuming every out-of-range maker whose limit
-;; the swapper's own limit reaches, each maker paid AT THEIR OWN LIMIT from
-;; the swapper's escrowed remainder. Passive depositors are untouched: their
-;; remainders roll exactly as before; only the active swapper crosses.
-;; Makers below min-deposit size are skipped (dust rests; no rounding-error
-;; fills). Fees: FEE_BPS off each leg to the treasury. No TAKER_REBATE on the
-;; crossed slice - flagged for review.
-
-;; One maker filled at `price` from the walker's escrowed remainder.
 (define-private (execute-fill
     (cycle uint)
     (y-who principal)
@@ -1430,36 +1616,37 @@
   )
   (let (
       (scale (* PRICE_PRECISION DECIMAL_FACTOR))
-      ;; how much x the y side buys at `price`; clamp to the x side's size
       (x-from-y (/ (* y-amt scale) price))
       (x-traded (if (> x-amt x-from-y)
         x-from-y
         x-amt
       ))
-      ;; y actually spent for x-traded (floors; the walker's residual crumbs
-      ;; are handled in cross-remainder-as-*)
       (y-traded (/ (* x-traded price) scale))
       (y-fee (/ (* y-traded FEE_BPS) BPS_PRECISION))
       (x-fee (/ (* x-traded FEE_BPS) BPS_PRECISION))
-      ;; the crossed maker's rebate: 20 bps on the volume they fill, drawn
-      ;; from the share of the taker's pot that did NOT ride the mid pool
       (reb-y (if y-is-taker
-        (let ((r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION))
-              (pending-rey (var-get pending-rebate-y)))
+        (let (
+            (r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION))
+            (pending-rey (var-get pending-rebate-y))
+          )
           (if (> r pending-rey)
             pending-rey
             r
-          ))
+          )
+        )
         u0
       ))
       (reb-x (if y-is-taker
         u0
-        (let ((r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION))
-              (pending-rex (var-get pending-rebate-x)))
+        (let (
+            (r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION))
+            (pending-rex (var-get pending-rebate-x))
+          )
           (if (> r pending-rex)
             pending-rex
             r
-          ))
+          )
+        )
       ))
       (totals (get-cycle-totals cycle))
     )
@@ -1469,25 +1656,28 @@
         (var-set pending-rebate-y (- (var-get pending-rebate-y) reb-y))
         (var-set pending-rebate-x (- (var-get pending-rebate-x) reb-x))
         (try! (as-contract? ((with-stx (+ y-traded reb-y)))
-          (try! (stx-transfer? (+ (- y-traded y-fee) reb-y) current-contract
-            x-who
-          ))
+          (try! (stx-transfer? (+ (- y-traded y-fee) reb-y) current-contract x-who))
           (if (> y-fee u0)
             (try! (stx-transfer? y-fee current-contract (var-get treasury)))
             true
-          )
-        ))
+          )))
         (try! (as-contract? ((with-ft (contract-of t) tx-name (+ x-traded reb-x)))
           (try! (contract-call? t transfer (+ (- x-traded x-fee) reb-x)
             current-contract y-who none
           ))
           (if (> x-fee u0)
-            (try! (contract-call? t transfer x-fee current-contract
-              (var-get treasury) none
+            (try! (contract-call? t transfer x-fee current-contract (var-get treasury)
+              none
             ))
             true
-          )
-        ))
+          )))
+        (var-set walk-taker-received
+          (+ (var-get walk-taker-received)
+            (if y-is-taker
+              (- x-traded x-fee)
+              (- y-traded y-fee)
+            ))
+        )
         (if (is-eq (- y-amt y-traded) u0)
           (begin
             (map-delete token-y-deposits {
@@ -1540,10 +1730,9 @@
           (if y-is-taker
             x-who
             y-who
-          ) y-is-taker x-traded y-traded price mid
-          ;; events stamp the cycle that just settled; the walk runs one later
-          (- cycle u1)
-          (var-get token-x) (var-get token-y)
+          ) y-is-taker
+          x-traded y-traded price mid (- cycle u1) (var-get token-x)
+          (var-get token-y)
         ))
         (ok true)
       )
@@ -1551,8 +1740,6 @@
   )
 )
 
-;; Walk one x-maker: consume it if the y-walker's remainder is live and the
-;; maker's limit is beyond mid but within the walker's tolerance.
 (define-private (walk-x-book-step
     (maker principal)
     (acc (response {
@@ -1583,8 +1770,8 @@
         )
         (ok st)
         (begin
-          (try! (execute-fill cycle takr rem maker m-amt l
-            (get mid st) true (get t st) (get name st)
+          (try! (execute-fill cycle takr rem maker m-amt l (get mid st) true (get t st)
+            (get name st)
           ))
           (ok st)
         )
@@ -1594,7 +1781,6 @@
   )
 )
 
-;; Walk one y-maker: mirror image for an x-walker selling down to bids.
 (define-private (walk-y-book-step
     (maker principal)
     (acc (response {
@@ -1626,8 +1812,8 @@
         )
         (ok st)
         (begin
-          (try! (execute-fill cycle maker m-amt takr rem l
-            (get mid st) false (get t st) (get name st)
+          (try! (execute-fill cycle maker m-amt takr rem l (get mid st) false
+            (get t st) (get name st)
           ))
           (ok st)
         )
@@ -1637,30 +1823,252 @@
   )
 )
 
-;; Cross the calling swapper's post-settlement remainder against the rolled
-;; opposite book, bounded by their own limit. Runs in the same tx as the
-;; settle; mid = the settlement's oracle price; events stamped with the
-;; settled cycle.
+(define-private (push-quote
+    (lst (list 50 {
+      who: principal,
+      l: uint,
+    }))
+    (e {
+      who: principal,
+      l: uint,
+    })
+  )
+  (unwrap-panic (as-max-len? (append lst e) u50))
+)
+
+(define-private (quote-who (e {
+  who: principal,
+  l: uint,
+}))
+  (get who e)
+)
+
+(define-private (insert-ask-step
+    (entry {
+      who: principal,
+      l: uint,
+    })
+    (acc {
+      e: {
+        who: principal,
+        l: uint,
+      },
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+      placed: bool,
+    })
+  )
+  (if (and (not (get placed acc)) (< (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+
+(define-private (insert-bid-step
+    (entry {
+      who: principal,
+      l: uint,
+    })
+    (acc {
+      e: {
+        who: principal,
+        l: uint,
+      },
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+      placed: bool,
+    })
+  )
+  (if (and (not (get placed acc)) (> (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+
+(define-private (collect-ask-step
+    (maker principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+    })
+  )
+  (let (
+      (l (get-token-x-limit maker))
+      (m-amt (get-token-x-deposit (get cycle acc) maker))
+    )
+    (if (or
+        (< m-amt (var-get min-token-x-deposit))
+        (<= l (get mid acc))
+        (> l (get limit acc))
+      )
+      acc
+      (let ((r (fold insert-ask-step (get out acc) {
+          e: {
+            who: maker,
+            l: l,
+          },
+          out: (list),
+          placed: false,
+        })))
+        (merge acc { out: (if (get placed r)
+          (get out r)
+          (push-quote (get out r) {
+            who: maker,
+            l: l,
+          })
+        ) }
+        )
+      )
+    )
+  )
+)
+
+(define-private (collect-bid-step
+    (maker principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+    })
+  )
+  (let (
+      (l (get-token-y-limit maker))
+      (m-amt (get-token-y-deposit (get cycle acc) maker))
+    )
+    (if (or
+        (< m-amt (var-get min-token-y-deposit))
+        (is-eq l u0)
+        (>= l (get mid acc))
+        (< l (get limit acc))
+      )
+      acc
+      (let ((r (fold insert-bid-step (get out acc) {
+          e: {
+            who: maker,
+            l: l,
+          },
+          out: (list),
+          placed: false,
+        })))
+        (merge acc { out: (if (get placed r)
+          (get out r)
+          (push-quote (get out r) {
+            who: maker,
+            l: l,
+          })
+        ) }
+        )
+      )
+    )
+  )
+)
+
+(define-private (sorted-asks
+    (cycle uint)
+    (mid uint)
+    (limit uint)
+  )
+  (map quote-who
+    (get out
+      (fold collect-ask-step (get-token-x-depositors cycle) {
+        cycle: cycle,
+        mid: mid,
+        limit: limit,
+        out: (list),
+      })
+    ))
+)
+
+(define-private (sorted-bids
+    (cycle uint)
+    (mid uint)
+    (limit uint)
+  )
+  (map quote-who
+    (get out
+      (fold collect-bid-step (get-token-y-depositors cycle) {
+        cycle: cycle,
+        mid: mid,
+        limit: limit,
+        out: (list),
+      })
+    ))
+)
+
+(define-private (swap-result-x
+    (result {
+      token-x-received: uint,
+      token-y-rolled: uint,
+      token-y-received: uint,
+      token-x-rolled: uint,
+    })
+    (cross {
+      rem: uint,
+      left: uint,
+      walk-received: uint,
+    })
+  )
+  (merge result {
+    token-y-received: (+ (get token-y-received result) (get walk-received cross)),
+    token-x-rolled: (get rem cross),
+    rebate-refunded: (get left cross),
+  })
+)
+
+(define-private (swap-result-y
+    (result {
+      token-x-received: uint,
+      token-y-rolled: uint,
+      token-y-received: uint,
+      token-x-rolled: uint,
+    })
+    (cross {
+      rem: uint,
+      left: uint,
+      walk-received: uint,
+    })
+  )
+  (merge result {
+    token-x-received: (+ (get token-x-received result) (get walk-received cross)),
+    token-y-rolled: (get rem cross),
+    rebate-refunded: (get left cross),
+  })
+)
+
 (define-private (cross-remainder-as-y
     (limit uint)
     (rolled uint)
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
-  ;; are read AFTER it, once the fold has spent the pot and the deposit.
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
-      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
-      ;; clearing may already have filled them in full; then the walk has
-      ;; nothing to spend and every step would just burn three map reads per
-      ;; rolled maker. Skip the fold; sweep and assert below still run.
+      (reset (var-set walk-taker-received u0))
       (walked (and
         (> rolled u0)
         (begin
           (try! (fold walk-x-book-step
-            (get-token-x-depositors cycle)
+            (sorted-asks cycle (var-get settle-clearing-price) limit)
             (ok {
               t: t,
               name: tx-name,
@@ -1673,13 +2081,9 @@
           true
         )
       ))
-      ;; rounding crumbs the walk did not consume
       (left (var-get pending-rebate-y))
-      ;; what the swapper still holds after the walk
       (rem (get-token-y-deposit cycle swapper))
     )
-    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
-    ;; into a later settlement's ride
     (and
       (> left u0)
       (try! (as-contract? ((with-stx left))
@@ -1687,14 +2091,6 @@
       ))
     )
     (var-set pending-rebate-y u0)
-    ;; the walker must end empty: swap flows are atomic, full fill or revert.
-    ;; Integer division leaves the y-walker a residual after a partial maker
-    ;; fill (floor to sats and back): a few uSTX that cannot buy one unit
-    ;; from anyone the walk could touch. Below the side's min deposit it is
-    ;; unfillable dust by construction - refund it so the swap exits clean.
-    ;; At or above min it is a genuine partial fill and reverts.
-    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
-    ;; clean full fill - rem u0 - passes here.)
     (asserts! (< rem (var-get min-token-y-deposit)) ERR_PARTIAL_FILL)
     (and
       (> rem u0)
@@ -1712,15 +2108,17 @@
           (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
         )
         (map-set cycle-totals cycle
-          (merge (get-cycle-totals cycle) {
-            total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem),
-          })
+          (merge (get-cycle-totals cycle) { total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem) })
         )
         true
       )
     )
     (var-set crossing false)
-    (ok true)
+    (ok {
+      rem: rem,
+      left: left,
+      walk-received: (var-get walk-taker-received),
+    })
   )
 )
 (define-private (cross-remainder-as-x
@@ -1729,20 +2127,15 @@
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
-  ;; are read AFTER it, once the fold has spent the pot and the deposit.
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
-      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
-      ;; clearing may already have filled them in full; then the walk has
-      ;; nothing to spend and every step would just burn three map reads per
-      ;; rolled maker. Skip the fold; sweep and assert below still run.
+      (reset (var-set walk-taker-received u0))
       (walked (and
         (> rolled u0)
         (begin
           (try! (fold walk-y-book-step
-            (get-token-y-depositors cycle)
+            (sorted-bids cycle (var-get settle-clearing-price) limit)
             (ok {
               t: t,
               name: tx-name,
@@ -1755,13 +2148,9 @@
           true
         )
       ))
-      ;; rounding crumbs the walk did not consume
       (left (var-get pending-rebate-x))
-      ;; what the swapper still holds after the walk
       (rem (get-token-x-deposit cycle swapper))
     )
-    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
-    ;; into a later settlement's ride
     (and
       (> left u0)
       (try! (as-contract? ((with-ft (contract-of t) tx-name left))
@@ -1769,11 +2158,6 @@
       ))
     )
     (var-set pending-rebate-x u0)
-    ;; the walker must end empty: swap flows are atomic, full fill or revert.
-    ;; Mirror of the y-walker dust refund (the x walker rarely needs it - it
-    ;; clamps to the remainder exactly - but rounding safety is symmetric).
-    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
-    ;; clean full fill - rem u0 - passes here.)
     (asserts! (< rem (var-get min-token-x-deposit)) ERR_PARTIAL_FILL)
     (and
       (> rem u0)
@@ -1791,15 +2175,17 @@
           (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
         )
         (map-set cycle-totals cycle
-          (merge (get-cycle-totals cycle) {
-            total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem),
-          })
+          (merge (get-cycle-totals cycle) { total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem) })
         )
         true
       )
     )
     (var-set crossing false)
-    (ok true)
+    (ok {
+      rem: rem,
+      left: left,
+      walk-received: (var-get walk-taker-received),
+    })
   )
 )
 (define-public (cancel-cycle)
@@ -1886,6 +2272,10 @@
       (map filter-limit-violating-token-x-depositor
         (get-token-x-depositors cycle)
       )
+      (var-set taker-too-small false)
+      (map filter-small-token-y-depositor (get-token-y-depositors cycle))
+      (map filter-small-token-x-depositor (get-token-x-depositors cycle))
+      (asserts! (not (var-get taker-too-small)) ERR_TAKER_TOO_SMALL)
       (let (
           (totals (get-cycle-totals cycle))
           (total-token-y (get total-token-y totals))
@@ -1904,14 +2294,8 @@
           (token-x-fee (/ (* token-x-clearing FEE_BPS) BPS_PRECISION))
           (token-y-unfilled (- total-token-y token-y-clearing))
           (token-x-unfilled (- total-token-x token-x-clearing))
-          ;; Bound here because the vars are rewritten below, before the log.
           (rebate-x (var-get pending-rebate-x))
           (rebate-y (var-get pending-rebate-y))
-          ;; Only the taker's MID-FILLED share of the rebate rides the pool;
-          ;; the rest stays in pending-rebate-* (one division, then a
-          ;; subtraction, so ride + pending == rebate exactly) and is paid to
-          ;; the crossed makers during the remainder walk, each on the volume
-          ;; they fill. Whatever the walk does not consume refunds the taker.
           (ride-x (if (> total-token-x u0)
             (/ (* rebate-x token-x-clearing) total-token-x)
             u0
@@ -1921,9 +2305,6 @@
             u0
           ))
         )
-        ;; A swap in flight may face a maker side that is empty at the mid
-        ;; (all makers out of range): clearing is then zero on both legs,
-        ;; everything rolls, and the walk fills from the rolled makers.
         (asserts!
           (or
             (var-get crossing)
@@ -1960,10 +2341,6 @@
         (var-set settle-token-x-cleared token-x-clearing)
         (var-set settle-total-token-y total-token-y)
         (var-set settle-total-token-x total-token-x)
-        ;; The taker's rebate rides along with the pool it is paid out of: token-x
-        ;; the taker sent is what token-y depositors receive, so adding it here
-        ;; splits it across exactly the makers who filled, in proportion to their
-        ;; fill. Zeroed immediately so a later settlement cannot pay it twice.
         (var-set settle-token-x-after-fee
           (+ (- token-x-clearing token-x-fee) ride-x)
         )
@@ -2191,8 +2568,8 @@
     (y principal)
     (min-x uint)
     (min-y uint)
-    (feed-x (buff 32))
-    (feed-y (buff 32))
+    (feed-x uint)
+    (feed-y uint)
   )
   (begin
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
@@ -2200,15 +2577,13 @@
       ERR_NOT_AUTHORIZED
     )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
-    ;; a zero min would let dust deposits through and turns the remainder
-    ;; walk's "sub-min residual is unfillable dust" reasoning into nonsense
     (asserts! (and (> min-x u0) (> min-y u0)) ERR_ZERO_MIN_DEPOSIT)
     (var-set token-x x)
     (var-set token-y y)
     (var-set min-token-x-deposit min-x)
     (var-set min-token-y-deposit min-y)
-    (var-set oracle-feed-x feed-x)
-    (var-set oracle-feed-y feed-y)
+    (var-set feed-id-x feed-x)
+    (var-set feed-id-y feed-y)
     (var-set initialized true)
     (try! (contract-call? .jing-core-v3 register canonical))
     (ok true)
@@ -2250,4 +2625,137 @@
     (asserts! (> amount u0) ERR_ZERO_MIN_DEPOSIT)
     (ok (var-set min-token-x-deposit amount))
   )
+)
+
+(define-private (cap-scale)
+  (* PRICE_PRECISION DECIMAL_FACTOR)
+)
+
+(define-private (cap-bid-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      in-range: uint,
+      walk: uint,
+    })
+  )
+  (let (
+      (amt (get-token-y-deposit (get cycle acc) who))
+      (l (get-token-y-limit who))
+    )
+    (if (>= l (get mid acc))
+      (merge acc { in-range: (+ (get in-range acc) amt) })
+      (if (and
+          (not (is-eq l u0))
+          (>= l (get limit acc))
+          (>= amt (var-get min-token-y-deposit))
+        )
+        (merge acc { walk: (+ (get walk acc) (/ (* amt (cap-scale)) l)) })
+        acc
+      )
+    )
+  )
+)
+
+(define-private (cap-ask-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      limit: uint,
+      in-range: uint,
+      walk: uint,
+    })
+  )
+  (let (
+      (amt (get-token-x-deposit (get cycle acc) who))
+      (l (get-token-x-limit who))
+    )
+    (if (<= l (get mid acc))
+      (merge acc { in-range: (+ (get in-range acc) amt) })
+      (if (and
+          (<= l (get limit acc))
+          (>= amt (var-get min-token-x-deposit))
+        )
+        (merge acc { walk: (+ (get walk acc) (/ (* amt l) (cap-scale))) })
+        acc
+      )
+    )
+  )
+)
+
+(define-private (gross-up (net uint))
+  (let (
+      (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_BPS)))
+      (n (- g (/ (* g TAKER_REBATE_BPS) BPS_PRECISION)))
+    )
+    (if (> n net)
+      (- g u1)
+      g
+    )
+  )
+)
+
+(define-read-only (get-taker-capacity
+    (mid uint)
+    (limit uint)
+    (deposit-x bool)
+  )
+  (let (
+      (cycle (var-get current-cycle))
+      (bids (fold cap-bid-fold (get-token-y-depositors cycle) {
+        cycle: cycle,
+        mid: mid,
+        limit: (if deposit-x
+          limit
+          mid
+        ),
+        in-range: u0,
+        walk: u0,
+      }))
+      (asks (fold cap-ask-fold (get-token-x-depositors cycle) {
+        cycle: cycle,
+        mid: mid,
+        limit: (if deposit-x
+          mid
+          limit
+        ),
+        in-range: u0,
+        walk: u0,
+      }))
+      (opposite (if deposit-x
+        (/ (* (get in-range bids) (cap-scale)) mid)
+        (/ (* (get in-range asks) mid) (cap-scale))
+      ))
+      (own (if deposit-x
+        (get in-range asks)
+        (get in-range bids)
+      ))
+      (taker-in-range (if deposit-x
+        (<= limit mid)
+        (>= limit mid)
+      ))
+      (mid-cap (if (and taker-in-range (> opposite own))
+        (- opposite own)
+        u0
+      ))
+      (walk-cap (if deposit-x
+        (get walk bids)
+        (get walk asks)
+      ))
+      (net-cap (+ mid-cap walk-cap))
+    )
+    {
+      mid-cap: mid-cap,
+      walk-cap: walk-cap,
+      net-cap: net-cap,
+      gross-cap: (gross-up net-cap),
+    }
+  )
+)
+
+(define-public (refresh-mid (update (buff 8192)))
+  (fresh-classification-price update)
 )
