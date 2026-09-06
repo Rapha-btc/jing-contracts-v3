@@ -304,6 +304,51 @@ Deployed 2026-09-05 from chavita as
 faktory-dao `deploy-contract`, template 26ec907c). The front end should use
 this router; `swap-router-sbtc-stx-jingswap` (v2) stays live as dead code.
 
+## Vault v3 (`vault-sbtc-stx-v3.clar`)
+
+Per-user vault on the live Lazer stack: `markets-sbtc-stx-jingswap`,
+`swap-router-sbtc-stx-jingswap-v1`, `jing-core-v3`, `jing-vault-auth`. Same
+SIP-018 intent model as v2 (side, amount, limit, auth-id, expiry signed by
+the owner; owner or keeper executes), with the price supplied at broadcast
+time: every execution takes the keeper's fresh Lazer `update`, and the
+router entry also its `mid`. That is what a pre-signed wallet tx cannot do
+(the oracle refuses an update older than 80 s), so a BTC-bridged swap can
+go through the book instead of pools only. The bridge can mint straight
+into the vault (deposit recipient = the vault principal).
+
+Entries: `execute-jing-deposit`, `execute-jing-set-limit` (new: pure
+reprice), `execute-jing-reprice` (reprice or swap), `execute-jing-swap`,
+`execute-router-swap` (new: smart swap through the router, min-out = amount
+at the signed limit), `cancel-jing-*`, `log-bridge-deposit` (new), deposits,
+withdraws, `revoke-intent`. No Pyth fee budget (Lazer charges none); the
+direct XYK / DLMM entries are gone, the router covers them.
+
+Finding: `as-contract?` allowances count GROSS outgoing transfers. The book
+leg can refund sub-minimum dust and the router re-sells it on the fallback
+venue, so the vault sends `amount` plus that dust while netting exactly
+`amount` (the router asserts legs + unsold = amount). `with-ft amount` fails
+the whole call with `(err u0)`; the vault allows `amount + min deposit`.
+
+Harness `simulations/verify-vault-sbtc-stx-v3.js` (real Lazer updates,
+vault deployed unmodified under a throwaway owner, chavita verifies the
+hash): deploy / verify / initialize / pubkey / keeper / funding; signed
+deposit, replay u6003, wrong key u6002; set-limit and amount mismatch
+u6022; reprice; cancel; router swap sBTC to STX taking a resting bid with a
+fresh update and mid; router swap with a stale update falls back to pools;
+router swap STX to sBTC; withdraw; keeper cannot withdraw u6001; stranger
+u6001; `execute-jing-swap` STX to sBTC fill-or-kill against a fresh maker's
+in-range ask; STX-side deposit; `execute-jing-reprice` crossing branch (the
+vault's bid repriced into range swaps on the spot); expiry passes / u6004;
+`revoke-intent` then u6003; a bridge-style mint recorded by
+`log-bridge-deposit` (the keeper calls it when a mint lands so jing-core's
+equity ledger, which only sees vault calls, catches up; moves nothing).
+
+| run | checks | stxer |
+|---|---|---|
+| allowance bisect (`with-ft amount` -> err u0, `2x` ok) | 3 variants | https://stxer.xyz/simulations/mainnet/80133d98c3a2446f1d42872642ccaa2a |
+| first pass, live stack | 36/36 | https://stxer.xyz/simulations/mainnet/ab58335b99f81c5bfbea045d5f223850 |
+| full harness V1 to V15, live stack | 57/57 | https://stxer.xyz/simulations/mainnet/71aa94420bcaa8916bda3a239ae00915 |
+
 ## Audit bounty notes (no change needed)
 
 - Freshness boundary: the Lazer oracle accepts age `<= 80 s`, the market
