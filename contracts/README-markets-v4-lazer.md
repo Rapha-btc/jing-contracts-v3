@@ -182,7 +182,7 @@ UNPATCHED + a `MAX_DEPOSITORS u3` park instance under a throwaway deployer:
 | tier | needs | result |
 |---|---|---|
 | L (live x), Y (live y): guards u1008/u1030/u1001/u1019, exact refund, size / totals / limit / list kept, core equity debited | no key (the opposite side is empty, nothing is priced) | 54/54, [902c1d03](https://stxer.xyz/simulations/mainnet/902c1d034c593162e1e427b3a63c714f) |
-| G (phase gate u1002 after close-deposits), P / PX (parked y / x: withdraw while parked, totals untouched, readmit the shrunk size) | `PYTH_API_KEY` (park needs a priced newcomer) | pending |
+| all tiers: L, Y + G (phase gate u1002 after close-deposits, cancel too), P / PX (parked y / x: withdraw while parked, whole size u1030, below min u1001, totals untouched, limit kept, readmit the shrunk size, live withdraw after readmit) | `PYTH_API_KEY` (park needs a priced newcomer; real signed update, market unpatched) | 98/98, [11ff4f59](https://stxer.xyz/simulations/mainnet/11ff4f5970cafa2203bb25c819af0c21) |
 
 ## Coverage audit of the market (v4)
 
