@@ -124,7 +124,7 @@ check_checker = { trusted_sender = false, trusted_caller = false, callee_filter 
 [contracts.jing-core]
 path = "contracts/jing-core.clar"
 clarity_version = 4
-epoch = "latest"
+epoch = "3.4"
 
 [contracts.jing-vault-auth]
 path = "contracts/jing-vault-auth.clar"
@@ -310,5 +310,15 @@ epoch = "3.4"
 
 [contracts.creator-bonus-jing]
 path = "contracts/deploying/creator-bonus-jing.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder]
+path = "contracts/jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx]
+path = "contracts/jing-buy-stx.clar"
 clarity_version = 5
 epoch = "3.4"

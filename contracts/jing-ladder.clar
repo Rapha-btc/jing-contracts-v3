@@ -1,0 +1,191 @@
+;; jing-ladder
+;;
+;; Registry of the pooled limit makers on markets-sbtc-stx-jing-v4: one
+;; jing-buy-stx (rests sBTC, buys STX) or jing-sell-stx (rests STX, sells
+;; STX) contract per price, named the way the FE speaks. Anyone
+;; deploys one from the template at a new price; it registers itself here at
+;; `initialize`, and the registry accepts it only if its code hash equals the
+;; canonical deploy's for that side (contract-hash?, the jing-core pattern:
+;; the owner verifies ONE canonical per side, every identical deploy is then
+;; permissionless). The price lives in a data-var set at initialize, not in
+;; the code, so every rung shares the canonical hash. One contract per
+;; (side, price): a second deploy at a taken price is refused.
+;;
+;; Prices here are the human number the rung is named after: hundredths of a
+;; sat per STX (jing-buy-stx-331-50 -> u33150). The rung derives the market
+;; unit itself.
+
+(define-constant ERR_NOT_AUTHORIZED (err u6001))
+(define-constant ERR_INVALID_CONTRACT_HASH (err u6002))
+(define-constant ERR_NOT_VERIFIED (err u6003))
+(define-constant ERR_HASH_MISMATCH (err u6004))
+(define-constant ERR_ALREADY_REGISTERED (err u6005))
+(define-constant ERR_PRICE_TAKEN (err u6006))
+(define-constant ERR_BAD_SIDE (err u6007))
+(define-constant ERR_NO_PENDING_OWNER (err u6008))
+(define-constant ERR_TIMELOCK_NOT_ELAPSED (err u6009))
+
+;; owner handover: propose, then accept once this many burn blocks passed
+(define-constant TIMELOCK_BURN_BLOCKS u144)
+
+(define-constant SIDE_BUY_STX "buy-stx")
+(define-constant SIDE_SELL_STX "sell-stx")
+
+(define-data-var contract-owner principal tx-sender)
+(define-data-var pending-owner (optional principal) none)
+(define-data-var proposed-at uint u0)
+;; the blessed deploy per side; its code hash is what every rung must match
+(define-map canonical
+  (string-ascii 8)
+  principal
+)
+;; (side, price) -> the contract holding that rung
+(define-map rungs
+  {
+    side: (string-ascii 8),
+    price: uint,
+  }
+  principal
+)
+;; contract -> its rung
+(define-map registered
+  principal
+  {
+    side: (string-ascii 8),
+    price: uint,
+  }
+)
+
+(define-read-only (get-owner)
+  (var-get contract-owner)
+)
+
+(define-read-only (get-pending-owner)
+  {
+    pending: (var-get pending-owner),
+    eligible-at: (+ (var-get proposed-at) TIMELOCK_BURN_BLOCKS),
+  }
+)
+
+(define-read-only (get-canonical (side (string-ascii 8)))
+  (map-get? canonical side)
+)
+
+(define-read-only (get-rung
+    (side (string-ascii 8))
+    (price uint)
+  )
+  (map-get? rungs {
+    side: side,
+    price: price,
+  })
+)
+
+(define-read-only (get-registered (who principal))
+  (map-get? registered who)
+)
+
+(define-read-only (is-registered (who principal))
+  (is-some (map-get? registered who))
+)
+
+(define-private (valid-side (side (string-ascii 8)))
+  (or (is-eq side SIDE_BUY_STX) (is-eq side SIDE_SELL_STX))
+)
+
+;; Owner: bless one deployed instance per side. Its code hash, read at
+;; register time, is the only hash the registry accepts for that side.
+(define-public (set-canonical
+    (side (string-ascii 8))
+    (contract principal)
+  )
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (valid-side side) ERR_BAD_SIDE)
+    (map-set canonical side contract)
+    (print {
+      event: "canonical-set",
+      side: side,
+      contract: contract,
+    })
+    (ok true)
+  )
+)
+
+;; Called by a jing-buy-stx / jing-sell-stx from its own `initialize`:
+;; contract-caller is the rung. Its code hash must equal the canonical
+;; deploy's for that side; the price must be free.
+(define-public (register
+    (side (string-ascii 8))
+    (price uint)
+  )
+  (let (
+      (caller contract-caller)
+      (caller-hash (unwrap! (contract-hash? caller) ERR_INVALID_CONTRACT_HASH))
+      (canon (unwrap! (map-get? canonical side) ERR_NOT_VERIFIED))
+    )
+    (asserts!
+      (is-eq caller-hash (unwrap! (contract-hash? canon) ERR_INVALID_CONTRACT_HASH))
+      ERR_HASH_MISMATCH
+    )
+    (asserts! (is-none (map-get? registered caller)) ERR_ALREADY_REGISTERED)
+    (asserts!
+      (is-none (map-get? rungs {
+        side: side,
+        price: price,
+      }))
+      ERR_PRICE_TAKEN
+    )
+    (map-set rungs {
+      side: side,
+      price: price,
+    }
+      caller
+    )
+    (map-set registered caller {
+      side: side,
+      price: price,
+    })
+    (print {
+      event: "rung-registered",
+      side: side,
+      price: price,
+      contract: caller,
+      hash: caller-hash,
+    })
+    (ok true)
+  )
+)
+
+;; Two-step handover with a cooldown: the owner proposes (none cancels), the
+;; proposed owner accepts, and only after TIMELOCK_BURN_BLOCKS.
+(define-public (propose-owner (new-owner (optional principal)))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (var-set pending-owner new-owner)
+    (var-set proposed-at burn-block-height)
+    (print {
+      event: "owner-proposed",
+      proposed-by: tx-sender,
+      pending-owner: new-owner,
+      eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS),
+    })
+    (ok true)
+  )
+)
+
+(define-public (accept-owner)
+  (let ((pending (unwrap! (var-get pending-owner) ERR_NO_PENDING_OWNER)))
+    (asserts! (is-eq tx-sender pending) ERR_NOT_AUTHORIZED)
+    (asserts! (>= burn-block-height (+ (var-get proposed-at) TIMELOCK_BURN_BLOCKS))
+      ERR_TIMELOCK_NOT_ELAPSED
+    )
+    (var-set contract-owner pending)
+    (var-set pending-owner none)
+    (print {
+      event: "owner-accepted",
+      new-owner: pending,
+    })
+    (ok true)
+  )
+)
