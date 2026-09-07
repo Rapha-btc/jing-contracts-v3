@@ -322,3 +322,8 @@ epoch = "3.4"
 path = "contracts/jing-buy-stx.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.jing-sell-stx]
+path = "contracts/jing-sell-stx.clar"
+clarity_version = 5
+epoch = "3.4"

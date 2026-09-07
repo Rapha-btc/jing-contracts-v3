@@ -1,40 +1,14 @@
-;; jing-buy-stx
+;; jing-sell-stx
 ;;
-;; A pooled STX buy (sBTC resting, the market's x side) at ONE price on
-;; markets-sbtc-stx-jing-v4. Many users, one maker slot: the contract rests
-;; the pooled sBTC at its price, receives the STX fills at settlement, and
-;; hands each member their share of both what is still resting and what was
-;; bought. Deployed by anyone at a new price from this template
-;; (jing-buy-stx-331-50 = buy STX once it is at or under 331.50 sats). The
-;; name is the human price in hundredths of a sat per STX; `initialize`
-;; takes that same integer (u33150) and derives the market unit on chain,
-;; micro-STX per sat times 1e10 = 1e18 / 33150, so name and price agree by
-;; construction. Registered in jing-ladder against the canonical hash.
-;;
-;; Accounting, the reward-per-share pattern on two indices:
-;;   unfilled-index      what fraction of the pooled sBTC is still unsold, times
-;;                   SCALE. Starts at SCALE, only ever goes down at fills.
-;;   proceeds-index  micro-STX earned per share since the start, times SCALE.
-;; A member holds `shares` (sats at unfilled-index SCALE). Their remaining sBTC is
-;; shares * unfilled-index / SCALE; their STX is shares * (proceeds-index -
-;; paid-index) / SCALE. `sync` (permissionless, run first by every action)
-;; reads the contract's size on the market (live + parked) plus the sBTC it
-;; holds locally, compares with what the indices predict, and folds the
-;; difference in as a fill together with the STX that arrived.
-;;
-;; Where the sBTC sits: on the market whenever the pool is at or above the
-;; market's own minimum (MIN_MARKET), otherwise held here (`held-sats`) until a
-;; deposit lifts it back. A withdrawal that would leave the market position
-;; under MIN_MARKET cancels the whole position and holds the rest (partial
-;; withdrawals on the market otherwise, withdraw-token-x). Nothing held here
-;; fills; that is the cost of being under the minimum.
-;;
-;; What passes straight through from the market: u1022 (the price crosses
-;; live bids: it cannot rest, wait or use swap), u1027 (parked: deposits wait
-;; for a readmit, which anyone does on the market), u1002 (settle phase:
-;; withdrawals wait for the next deposit phase).
-;;
-;; No fee, no owner action after initialize, no reprice: a rung is a price.
+;; The mirror of jing-buy-stx: a pooled STX sell (STX resting, the market's y
+;; side) at ONE price on markets-sbtc-stx-jing-v4. The contract rests the
+;; pooled STX at its price, receives the sBTC fills at settlement, and hands
+;; each member their share of both what is still resting and what was sold
+;; (jing-sell-stx-320-00 = sell STX once it is at or above 320.00 sats;
+;; `initialize` takes u32000 and derives the market unit, 1e18 / 32000). Same
+;; accounting as jing-buy-stx with the tokens swapped: shares are micro-STX
+;; at unfilled-index SCALE, proceeds are sats per share. Read jing-buy-stx for
+;; the design; only the token legs differ here.
 
 (define-constant ERR_NOT_AUTHORIZED (err u7001))
 (define-constant ERR_ALREADY_INITIALIZED (err u7002))
@@ -55,9 +29,11 @@
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant SIDE "buy-stx")
-;; the deploy name must be NAME_PREFIX + the price as named: jing-buy-stx-331-50
-(define-constant NAME_PREFIX "jing-buy-stx-")
+(define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
+(define-constant WSTX_NAME "wstx")
+(define-constant SIDE "sell-stx")
+;; the deploy name must be NAME_PREFIX + the price as named: jing-sell-stx-331-50
+(define-constant NAME_PREFIX "jing-sell-stx-")
 
 ;; fixed-point precision of the two indices (12 decimals): fine enough that
 ;; no member's share rounds to nothing, small enough that shares * index *
@@ -66,11 +42,10 @@
 ;; market price unit is micro-STX per sat times 1e10; from hundredths of a
 ;; sat per STX: price = 1e6 * 1e10 * 100 / cents = 1e18 / cents
 (define-constant PRICE_NUMERATOR u1000000000000000000)
-;; the market's own minimum per maker (its min-token-x-deposit at initialize)
-(define-constant MIN_MARKET u1000)
-;; smallest member deposit: a dust guard, not a maths need (shares are never
-;; fewer than sats deposited; payouts round down by at most 1 unit)
-(define-constant MIN_DEPOSIT u100)
+;; the market's own minimum per maker (its min-token-y-deposit at initialize)
+(define-constant MIN_MARKET u1000000)
+;; smallest member deposit, 0.1 STX: a dust guard, not a maths need
+(define-constant MIN_DEPOSIT u100000)
 
 (define-data-var initialized bool false)
 (define-constant DEPLOYER tx-sender)
@@ -87,10 +62,10 @@
 )
 (define-data-var unfilled-index uint SCALE)
 (define-data-var proceeds-index uint u0)
-;; sats kept in this contract, off the market (under MIN_MARKET, or refunds)
-(define-data-var held-sats uint u0)
-;; micro-STX balance already folded into proceeds-index
-(define-data-var stx-accounted uint u0)
+;; micro-STX kept in this contract, off the market (under MIN_MARKET, or refunds)
+(define-data-var held-ustx uint u0)
+;; sats balance already folded into proceeds-index
+(define-data-var sats-accounted uint u0)
 
 (define-map positions
   principal
@@ -119,32 +94,32 @@
     total-shares: (var-get total-shares),
     unfilled-index: (var-get unfilled-index),
     proceeds-index: (var-get proceeds-index),
-    held-sats: (var-get held-sats),
+    held-ustx: (var-get held-ustx),
     resting: (market-size),
-    pooled: (pooled-sbtc),
+    pooled: (pooled-stx),
   }
 )
 
-;; sBTC still unsold for `who`, and the STX they can claim, as of the last sync
+;; STX still unsold for `who`, and the sBTC they can claim, as of the last sync
 (define-read-only (get-position (who principal))
   (match (map-get? positions who)
     p (if (is-eq (get epoch p) (var-get epoch))
       {
         shares: (get shares p),
-        sbtc: (/ (* (get shares p) (var-get unfilled-index)) SCALE),
-        stx: (/ (* (get shares p) (- (var-get proceeds-index) (get paid-index p))) SCALE),
+        stx: (/ (* (get shares p) (var-get unfilled-index)) SCALE),
+        sbtc: (/ (* (get shares p) (- (var-get proceeds-index) (get paid-index p))) SCALE),
       }
       ;; an earlier epoch: sold out, only the proceeds against its final index remain
       {
         shares: (get shares p),
-        sbtc: u0,
-        stx: (/ (* (get shares p) (- (final-index (get epoch p)) (get paid-index p))) SCALE),
+        stx: u0,
+        sbtc: (/ (* (get shares p) (- (final-index (get epoch p)) (get paid-index p))) SCALE),
       }
     )
     {
       shares: u0,
-      sbtc: u0,
       stx: u0,
+      sbtc: u0,
     }
   )
 )
@@ -157,26 +132,24 @@
 (define-read-only (market-size)
   (+
     (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
-      get-token-x-deposit
+      get-token-y-deposit
       (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
         get-current-cycle
       )
       current-contract
     )
     (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
-      get-token-x-parked current-contract
+      get-token-y-parked current-contract
     )
   )
 )
 
-;; what the indices say is still unsold
-(define-read-only (pooled-sbtc)
+(define-read-only (pooled-stx)
   (/ (* (var-get total-shares) (var-get unfilled-index)) SCALE)
 )
 
 ;; ---------- lifecycle ----------
 
-;; Once, by the deployer: the price in the market unit, then register.
 (define-public (initialize (cents uint))
   (begin
     (asserts! (is-eq tx-sender DEPLOYER) ERR_NOT_AUTHORIZED)
@@ -194,26 +167,21 @@
 
 ;; ---------- sync ----------
 
-;; Fold the market's state into the indices. Fills shrink the market size and
-;; put STX here; refunds (dust, cancel) move sBTC from the market to here.
-;; `actual` = market size + sats held here; `recorded` = what the indices last knew.
-;; A shortfall is a fill: unfilled-index scales down by actual/recorded and every
-;; new micro-STX is spread per share.
+;; `actual` = market size + micro-STX held here; fills shrink it and put sBTC here.
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (unwrap-panic (contract-call? SBTC get-balance current-contract)))
+      (local (stx-get-balance current-contract))
       (actual (+ (market-size) local))
-      (recorded (pooled-sbtc))
-      (stx-now (stx-get-balance current-contract))
-      (gained (- stx-now (var-get stx-accounted)))
+      (recorded (pooled-stx))
+      (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
+      (gained (- sbtc-now (var-get sats-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-    (var-set held-sats local)
+    (var-set held-ustx local)
     (if (is-eq shares u0)
       (begin
-        ;; nobody in: nothing to attribute, just keep the STX watermark
-        (var-set stx-accounted stx-now)
+        (var-set sats-accounted sbtc-now)
         (ok true)
       )
       (let (
@@ -229,7 +197,7 @@
         )
         (var-set unfilled-index new-index)
         (var-set proceeds-index new-proceeds)
-        (var-set stx-accounted stx-now)
+        (var-set sats-accounted sbtc-now)
         ;; sold out (down to rounding dust): close the epoch, restart the pool.
         ;; Dust still resting rides into the next epoch as a gift.
         (and
@@ -250,8 +218,6 @@
 
 ;; ---------- member actions ----------
 
-;; Join the rung with `amount` sats. Goes to the market when the pool is at
-;; or above MIN_MARKET (pushing along anything held), else waits here.
 (define-public (deposit
     (amount uint)
     (update (buff 8192))
@@ -264,21 +230,21 @@
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
     (try! (settle-proceeds member))
-    (try! (contract-call? SBTC transfer amount member current-contract none))
+    (try! (stx-transfer? amount member current-contract))
     (let (
-        (to-push (+ amount (var-get held-sats)))
+        (to-push (+ amount (var-get held-ustx)))
         (shares (/ (* amount SCALE) (var-get unfilled-index)))
         (pos (position-of member))
         (epo (var-get epoch))
       )
       (if (>= to-push MIN_MARKET)
         (begin
-          (try! (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-            (try! (contract-call? MARKET deposit-token-x to-push p update SBTC SBTC_NAME))
+          (try! (as-contract? ((with-stx to-push))
+            (try! (contract-call? MARKET deposit-token-y to-push p update WSTX WSTX_NAME))
           ))
-          (var-set held-sats u0)
+          (var-set held-ustx u0)
         )
-        (var-set held-sats to-push)
+        (var-set held-ustx to-push)
       )
       (map-set positions member {
         epoch: epo,
@@ -287,16 +253,12 @@
       })
       (var-set total-shares (+ (var-get total-shares) shares))
       (contract-call? LADDER log-deposit member amount shares epo
-        (>= to-push MIN_MARKET) (var-get held-sats)
+        (>= to-push MIN_MARKET) (var-get held-ustx)
       )
     )
   )
 )
 
-;; Take `amount` of your unsold sats back (and your STX). Comes from what is
-;; held here first, then from the market by partial withdrawal; if that would
-;; leave the market position under MIN_MARKET the whole position is cancelled
-;; and the rest held here for the others.
 (define-public (withdraw (amount uint))
   (let (
       (member tx-sender)
@@ -321,11 +283,11 @@
         (epo (var-get epoch))
       )
       (asserts! (> take u0) ERR_INSUFFICIENT)
-      (try! (pull-to-held-sats take))
-      (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
-        (try! (contract-call? SBTC transfer take current-contract member none))
+      (try! (pull-to-held-ustx take))
+      (try! (as-contract? ((with-stx take))
+        (try! (stx-transfer? take current-contract member))
       ))
-      (var-set held-sats (- (var-get held-sats) take))
+      (var-set held-ustx (- (var-get held-ustx) take))
       (if (is-eq shares-out (get shares pos))
         (map-delete positions member)
         (map-set positions member {
@@ -336,13 +298,12 @@
       )
       (var-set total-shares (- (var-get total-shares) shares-out))
       (contract-call? LADDER log-withdraw member take shares-out epo
-        (var-get held-sats)
+        (var-get held-ustx)
       )
     )
   )
 )
 
-;; STX from fills only; the sBTC keeps resting.
 (define-public (claim)
   (begin
     (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
@@ -384,8 +345,6 @@
   )
 )
 
-;; Pay `who` the STX their shares earned since their paid-index, then move
-;; the mark. Called after sync by every member action.
 (define-private (settle-proceeds (who principal))
   (match (map-get? positions who)
     pos (let (
@@ -398,11 +357,11 @@
       )
       (and
         (> owed u0)
-        (try! (as-contract? ((with-stx owed))
-          (try! (stx-transfer? owed current-contract who))
+        (try! (as-contract? ((with-ft SBTC SBTC_NAME owed))
+          (try! (contract-call? SBTC transfer owed current-contract who none))
         ))
       )
-      (var-set stx-accounted (- (var-get stx-accounted) owed))
+      (var-set sats-accounted (- (var-get sats-accounted) owed))
       ;; an old-epoch position has no unsold size left: paid in full, gone
       (if current
         (map-set positions who (merge pos { paid-index: upto }))
@@ -414,11 +373,8 @@
   )
 )
 
-;; Make sure `held-sats` covers `amount`: partial-withdraw the gap from the market,
-;; or cancel the whole market position when the remainder would sit under
-;; the market minimum.
-(define-private (pull-to-held-sats (amount uint))
-  (let ((have (var-get held-sats)))
+(define-private (pull-to-held-ustx (amount uint))
+  (let ((have (var-get held-ustx)))
     (if (>= have amount)
       (ok true)
       (let (
@@ -429,15 +385,15 @@
         (if (>= (- on-market gap) MIN_MARKET)
           (begin
             (try! (as-contract? ()
-              (try! (contract-call? MARKET withdraw-token-x gap SBTC SBTC_NAME))
+              (try! (contract-call? MARKET withdraw-token-y gap WSTX WSTX_NAME))
             ))
-            (var-set held-sats (+ have gap))
+            (var-set held-ustx (+ have gap))
             (ok true)
           )
           (let ((refunded (try! (as-contract? ()
-              (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+              (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
             ))))
-            (var-set held-sats (+ have refunded))
+            (var-set held-ustx (+ have refunded))
             (ok true)
           )
         )

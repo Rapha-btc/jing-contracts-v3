@@ -24,6 +24,7 @@
 (define-constant ERR_BAD_SIDE (err u6007))
 (define-constant ERR_NO_PENDING_OWNER (err u6008))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u6009))
+(define-constant ERR_NOT_REGISTERED (err u6010))
 
 ;; owner handover: propose, then accept once this many burn blocks passed
 (define-constant TIMELOCK_BURN_BLOCKS u144)
@@ -114,10 +115,12 @@
 
 ;; Called by a jing-buy-stx / jing-sell-stx from its own `initialize`:
 ;; contract-caller is the rung. Its code hash must equal the canonical
-;; deploy's for that side; the price must be free.
+;; deploy's for that side; the price must be free. `market-price` is the
+;; rung's derived price in the market unit, logged for the indexer.
 (define-public (register
     (side (string-ascii 8))
     (price uint)
+    (market-price uint)
   )
   (let (
       (caller contract-caller)
@@ -150,8 +153,101 @@
       event: "rung-registered",
       side: side,
       price: price,
+      market-price: market-price,
       contract: caller,
       hash: caller-hash,
+    })
+    (ok true)
+  )
+)
+
+;; ---------- rung event log ----------
+;; Rungs print through the ladder, the jing-core pattern: one contract to
+;; subscribe to for every rung, and only a registered rung can emit.
+
+(define-private (rung-of (who principal))
+  (ok (unwrap! (map-get? registered who) ERR_NOT_REGISTERED))
+)
+
+(define-public (log-deposit
+    (member principal)
+    (amount uint)
+    (shares uint)
+    (epoch uint)
+    (pushed bool)
+    (held uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-deposit",
+      rung: contract-caller,
+      side: (get side rung),
+      price: (get price rung),
+      member: member,
+      amount: amount,
+      shares: shares,
+      epoch: epoch,
+      pushed: pushed,
+      held: held,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-withdraw
+    (member principal)
+    (amount uint)
+    (shares uint)
+    (epoch uint)
+    (held uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-withdraw",
+      rung: contract-caller,
+      side: (get side rung),
+      price: (get price rung),
+      member: member,
+      amount: amount,
+      shares: shares,
+      epoch: epoch,
+      held: held,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-claim
+    (member principal)
+    (amount uint)
+    (epoch uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-claim",
+      rung: contract-caller,
+      side: (get side rung),
+      price: (get price rung),
+      member: member,
+      amount: amount,
+      epoch: epoch,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-epoch-closed
+    (epoch uint)
+    (final-proceeds-index uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-epoch-closed",
+      rung: contract-caller,
+      side: (get side rung),
+      price: (get price rung),
+      epoch: epoch,
+      final-proceeds-index: final-proceeds-index,
     })
     (ok true)
   )
