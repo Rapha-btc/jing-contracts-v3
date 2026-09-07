@@ -7,26 +7,8 @@
 
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
-;; Taker rebate. A batch auction has no book to sit on, so nothing rewards the
-;; depositors who escrow early and wait out the window - yet they are the only
-;; reason a `swap` caller can clear immediately. This charges the taker (the
-;; `swap` caller, who deposits and settles in one tx) an extra 20 bps and pays
-;; it to the OPPOSITE side's filled depositors, pro rata. Resting depositors
-;; still pay only FEE_BPS.
-;;
-;; 20 rather than 25: a Bitflow LP earns 25 bps but is filled at whatever the
-;; curve reached, so that yield is payment for impermanent loss. A maker here
-;; fills only inside their own limit and carries none, so 20 bps IL-free is the
-;; better risk-adjusted side of the trade. Matching 25 would price us as though
-;; we were selling the same thing. See README-maker-economics.md.
-;;
-;; Taker therefore pays 30 bps all-in (10 protocol + 20 to makers) against
-;; Bitflow's 50, before slippage - which the auction does not have at all.
 (define-constant TAKER_REBATE_BPS u20)
 
-;; Exposed so integrating vaults can assert their mirrored rebate constant
-;; matches at initialize time, refusing to register against a market whose
-;; taker economics drifted from their template.
 (define-read-only (get-taker-rebate-bps)
   TAKER_REBATE_BPS
 )
@@ -46,13 +28,6 @@
 (define-data-var token-y principal SAINT)
 (define-data-var initialized bool false)
 
-;; Pyth Lazer (Pyth Pro) feed ids: BTC/USD = u1, STX/USD = u45, USDC/USD = u7.
-;; Set by `initialize`. The price source is the Lazer oracle on Stacks, signed
-;; by Pyth's own keys and verified per call: no Wormhole, no storage, no
-;; Hermes VAA. (Pyth Core cannot be verified on Stacks since the Core upgrade:
-;; its updates carry a 3/5 router signer set that wormhole-core-v4 does not
-;; hold, u1103.) The caller fetches one signed `update` (evm format, both
-;; feeds, 1000ms channel, WITH the confidence property) and passes it in.
 (define-data-var feed-id-x uint u0)
 (define-data-var feed-id-y uint u0)
 (define-constant LAZER_ORACLE 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle)
@@ -117,26 +92,13 @@
 (define-data-var caller-token-y-received uint u0)
 (define-data-var caller-token-x-rolled uint u0)
 
-;; What the walk paid the active swapper, net of fee, in the token they
-;; bought. Reset by cross-remainder-as-*, bumped per fill by execute-fill,
-;; folded into the swap result so callers see mid + walk, not mid only.
 (define-data-var walk-taker-received uint u0)
 
 (define-data-var settle-clearing-price uint u0)
 
-;; Rebate parked by `swap` before it settles, denominated in the token the
-;; taker deposited. `swap` is atomic (deposit -> close -> settle in one tx), so
-;; either settlement consumes this or the whole tx reverts and it is never
-;; stranded. Settlement zeroes both on the way out.
 (define-data-var pending-rebate-x uint u0)
 (define-data-var pending-rebate-y uint u0)
-;; True only inside a swap / reprice-or-swap tx, from before close-deposits
-;; until the remainder walk ends. Lets settlement proceed with the maker side
-;; empty at the mid (every maker out of range) so the walk can do the whole
-;; fill; public settle calls never see it set.
 (define-data-var crossing bool false)
-;; Set by the small-share filter when the active swapper is under 0.2% of
-;; their side; settlement clears it before the filters and asserts on it after.
 (define-data-var taker-too-small bool false)
 
 (define-map token-y-deposits
@@ -194,17 +156,6 @@
   uint
 )
 
-;; Parked makers. A full side used to evict its smallest entry. With limits,
-;; size says nothing about whether a slot is useful: 50 out-of-range orders
-;; can hold every slot while nothing clears. So when a side is full and a new
-;; in-range maker arrives, the first out-of-range entry is parked instead:
-;; its escrow stays in the contract, its limit is kept, it sits out of
-;; settlement and the walk, and it can be cancelled or repriced any time.
-;; `readmit-token-*` (permissionless, keeper-driven) moves it back once a
-;; slot is free and the price is inside its limit again. Parked makers live
-;; in a map only, no list and no cap; the park / readmit print events are
-;; the keeper's index. Only when nothing is out of range does the old
-;; smallest-bump refund apply.
 (define-map token-y-parked
   principal
   uint
@@ -356,8 +307,6 @@
   (not (is-eq entry (var-get bumped-token-x-principal)))
 )
 
-;; the resting entry farthest outside the current price (least likely to
-;; come back in range); `gap` is the distance of the best candidate so far
 (define-private (find-parkable-token-y-fold
     (depositor principal)
     (acc {
@@ -395,11 +344,6 @@
   )
 )
 
-;; Take the slot of the farthest out-of-range maker for an in-range newcomer.
-;; Live-at-mid size always outranks out-of-range size. The entry is parked:
-;; escrow and limit kept, no transfer. Returns true when a slot was freed,
-;; false when nothing was out of range (the caller then falls back to the
-;; smallest-size bump).
 (define-private (park-one-token-y
     (cycle uint)
     (price uint)
@@ -536,13 +480,6 @@
   )
 )
 
-;; ---- Lazer price source ---------------------------------------------------
-;; Verify one signed Lazer update (both feeds) and shape the two feeds the
-;; settlement code expects. `max-age` = MAX_STALENESS, so the oracle itself
-;; refuses an update older than the window; the freshness assert below is
-;; kept as a second gate on the same number. Confidence is required (the
-;; caller asks Lazer for the `confidence` property); its absence reverts
-;; ERR_PRICE_UNCERTAIN rather than silently skipping the conf/price check.
 (define-private (pick-feed
     (f {
       feed-id: uint,
@@ -649,41 +586,6 @@
   )
 )
 
-;; --- Maker / taker ----------------------------------------------------------
-;;
-;; Role is decided by entry point, not by a stored flag. `swap` is the taker
-;; path: deposit, close and settle in one tx, paying TAKER_REBATE_BPS for the
-;; immediate fill. The public deposit functions are the maker path: they refuse
-;; any deposit that would cross live resting size on the other side, so the
-;; only way to be filled in the same tx is to pay for it. Crossing means both
-;; halves hold at the stored oracle price: the depositor's own limit is live,
-;; AND the opposite side has at least one resting deposit whose limit is live.
-;; Limits follow the settlement filters: y-limits are ceilings (a bid is live
-;; while price <= limit), x-limits are floors (an offer is live while
-;; price >= limit).
-;;
-;; The check reads only the OPPOSITE side. Reading your own side would let you
-;; seed a dust maker deposit and walk real size in for free - for the same
-;; reason the check also applies to top-ups of an existing deposit.
-;;
-;; Classification runs against a FRESH price. Each gated call carries a Pyth
-;; VAA (the platform's frontend supplies it; the depositor only pays gas):
-;; the market refreshes storage, then classifies, and reverts ERR_STALE_PRICE
-;; if what is stored is still older than MAX_STALENESS - so a replayed old
-;; VAA cannot fake freshness. Same window as settlement: the VAA is fetched
-;; at broadcast, so like `swap` the tx must land within MAX_STALENESS of the
-;; publish-time or it reverts and is retried with a fresh one.
-;;
-;; When the opposite side has no resting entries at all, no crossing is
-;; possible at any price: the VAA is ignored (pass 0x) so an empty book
-;; bootstraps - and exits always work - without a live oracle. Cancels never
-;; read the price at all.
-;;
-;; Two feeds here, so the classification price is the same ratio settlement
-;; computes: price-x scaled by PRICE_PRECISION over price-y.
-;; The frontend predicts the gate by calling would-take-as-x/-y with the
-;; price from the SAME Hermes payload whose VAA it will attach - never a
-;; stored price, which can disagree with the VAA and mispredict.
 (define-private (fresh-classification-price (update (buff 8192)))
   (let (
       (feeds (try! (lazer-feeds update)))
@@ -701,12 +603,6 @@
   )
 )
 
-;; Resting size only counts as live when it is at least the market minimum.
-;; Fresh deposits always are, but pro-rata roll remainders and small-share
-;; rolls land in the next cycle below min with their limits intact - and if
-;; that dust classified the other side, one live dust entry would block every
-;; maker deposit opposite it while being too small for any FOK swap to clear.
-;; Sub-min dust still settles normally; it is just invisible to the gate.
 (define-private (live-bid-fold
     (depositor principal)
     (acc {
@@ -882,8 +778,6 @@
       (cycle (var-get current-cycle))
       (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
       (full (>= (len (get-token-y-depositors cycle)) MAX_DEPOSITORS))
-      ;; one oracle read, only when something needs a price: the maker gate
-      ;; (live opposite side) or the park rule (own side full)
       (price (if (or
           (> (len (get-token-x-depositors cycle)) u0)
           (and new-maker full)
@@ -893,10 +787,7 @@
       ))
     )
     (asserts! (is-eq (get-token-y-parked tx-sender) u0) ERR_PARKED)
-    ;; would-take-as-y is false at price u0
     (asserts! (not (would-take-as-y price limit-price)) ERR_MUST_USE_SWAP)
-    ;; side full and the newcomer is in range: free a slot by parking an
-    ;; out-of-range entry; an out-of-range newcomer gets the size bump only
     (and
       new-maker
       full
@@ -1040,7 +931,6 @@
       (tok-y (var-get token-y))
     )
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-    ;; parked escrow belongs to no cycle: refundable in any phase
     (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
     (if (is-eq amount u0)
       (begin
@@ -1093,7 +983,6 @@
       (tok-x (var-get token-x))
     )
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-    ;; parked escrow belongs to no cycle: refundable in any phase
     (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
     (if (is-eq amount u0)
       (begin
@@ -1133,22 +1022,6 @@
   )
 )
 
-;; Bring a parked maker back into the live book. Permissionless so a keeper
-;; can run it. Needs a free slot and the deposit's crossing gate (a limit
-;; at or through a live opposite maker must go through swap). Range is not
-;; required: an out-of-range order is still walkable, so it belongs in the
-;; book whenever there is room. No transfer: the escrow never left.
-;; Partial withdrawal: take `amount` back out of a resting deposit and leave
-;; the rest at the same limit. On a live position this is deposit phase
-;; only, like a cancel; on a parked position (no live size) it works in any
-;; phase, since parked escrow belongs to no cycle, and the smaller position
-;; can then be readmitted. Never pausable, like cancel. The remainder must
-;; still clear the side's minimum deposit. To take everything out use
-;; cancel-token-*-deposit: a withdrawal of the whole size is refused
-;; (ERR_USE_CANCEL) so the depositor list and the limit are never left
-;; pointing at an empty position. The core logs it as `withdraw-x/y` with
-;; the remaining size and where it sits, so the indexer can shrink the
-;; position instead of closing it (jing-core-v4).
 (define-public (withdraw-token-y
     (amount uint)
     (t <ft-trait>)
@@ -1160,15 +1033,22 @@
       (live (get-token-y-deposit cycle caller))
       (parked (get-token-y-parked caller))
       (on-live (> live u0))
-      (have (if on-live live parked))
+      (have (if on-live
+        live
+        parked
+      ))
       (totals (get-cycle-totals cycle))
       (tok-y (var-get token-y))
-      (remaining (- have (if (> amount have) have amount)))
+      (remaining (- have (if (> amount have)
+        have
+        amount
+      )))
     )
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
     (asserts! (> have u0) ERR_NOTHING_TO_WITHDRAW)
-    ;; live size is batch inventory: deposit phase only. parked is not.
-    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT)) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT))
+      ERR_NOT_DEPOSIT_PHASE
+    )
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (< amount have) ERR_USE_CANCEL)
     (asserts! (>= remaining (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
@@ -1207,15 +1087,22 @@
       (live (get-token-x-deposit cycle caller))
       (parked (get-token-x-parked caller))
       (on-live (> live u0))
-      (have (if on-live live parked))
+      (have (if on-live
+        live
+        parked
+      ))
       (totals (get-cycle-totals cycle))
       (tok-x (var-get token-x))
-      (remaining (- have (if (> amount have) have amount)))
+      (remaining (- have (if (> amount have)
+        have
+        amount
+      )))
     )
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
     (asserts! (> have u0) ERR_NOTHING_TO_WITHDRAW)
-    ;; live size is batch inventory: deposit phase only. parked is not.
-    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT)) ERR_NOT_DEPOSIT_PHASE)
+    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT))
+      ERR_NOT_DEPOSIT_PHASE
+    )
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (< amount have) ERR_USE_CANCEL)
     (asserts! (>= remaining (var-get min-token-x-deposit)) ERR_DEPOSIT_TOO_SMALL)
@@ -1325,9 +1212,6 @@
   )
 )
 
-;; Same gate as the deposits: without it, a depositor could enter with a dead
-;; limit (passing the maker gate) and then retarget the limit into the live
-;; range - a crossing position built without ever touching `swap`.
 (define-public (set-token-y-limit
     (limit-price uint)
     (update (buff 8192))
@@ -1335,7 +1219,6 @@
   (begin
     (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    ;; parked makers may reprice too, so they can come back into range
     (asserts!
       (or
         (> (get-token-y-deposit (var-get current-cycle) tx-sender) u0)
@@ -1387,21 +1270,6 @@
   )
 )
 
-;; --- Reprice with take-through -----------------------------------------------
-;;
-;; set-token-*-limit refuses a limit that crosses live resting size
-;; (ERR_MUST_USE_SWAP): a maker must not become a taker for free. These are the
-;; paid versions of the same move. If the new limit does NOT cross (or nothing
-;; live rests opposite), they are exactly set-token-*-limit: the limit moves
-;; and the deposit keeps resting. If it DOES cross, the caller's whole resting
-;; deposit turns taker on the spot with `swap`'s economics: TAKER_REBATE_BPS
-;; is charged on the resting amount (transferred fresh, on top of what already
-;; rests, so the resting size itself is what settles), the cycle closes and
-;; settles in this tx, and the fill is all-or-nothing - the caller must clear
-;; 100% or the whole tx reverts, reprice included, and the old limit stands.
-;; The same VAA drives classification and settlement, so the price that says
-;; "you cross" is the price the fill happens at.
-
 (define-public (reprice-or-swap-token-y
     (limit-price uint)
     (update (buff 8192))
@@ -1436,8 +1304,6 @@
         (var-set crossing true)
         (try! (close-deposits))
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
-          ;; the mid could not fill everything: walk the rolled opposite book
-          ;; with the remainder, then judge full fill on remaining escrow
           (ok (swap-result-y result
             (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
               tx-trait tx-name
@@ -1713,10 +1579,6 @@
       )
       ERR_NOTHING_TO_SETTLE
     )
-    ;; The small-share filter used to run here. It now runs at settlement,
-    ;; after the limit filter, so a depositor is measured against the part of
-    ;; their side that actually clears at the mid, not against out-of-range
-    ;; size that never trades.
     (var-set deposits-closed-block stacks-block-height)
     (try! (contract-call? .jing-core-v4 log-close-deposits cycle stacks-block-height
       elapsed (var-get token-x) (var-get token-y)
@@ -1725,19 +1587,6 @@
   )
 )
 
-;; The Pyth execution plan is hard-coded rather than taken as trait arguments.
-;; pyth-governance-v3 already validates whatever is passed, so this buys no
-;; extra safety against a malicious caller. It buys independence from what Pyth
-;; changes underneath: nothing a caller supplies can steer which contracts this
-;; market talks to. If Pyth rotates the storage, decoder or wormhole contract,
-;; this market is redeployed deliberately instead of silently following.
-;; One bundled multi-feed VAA (Hermes multi-id query) refreshes BOTH feeds in
-;; a single verify. Correctness does not rest on the caller bundling
-;; properly: execute-settlement asserts publish-time freshness on each feed,
-;; so a VAA covering only one of them leaves the other stale and the settle
-;; reverts ERR_STALE_PRICE. v1 took two VAA slots for caller flexibility, but
-;; in practice both slots always carried the same bundle - the second verify
-;; re-checked identical bytes.
 (define-public (settle-with-refresh
     (update (buff 8192))
     (tx-trait <ft-trait>)
@@ -1810,17 +1659,6 @@
     (ty-name (string-ascii 128))
     (deposit-x bool)
   )
-  ;; The taker pays TAKER_REBATE_BPS on top of FEE_BPS. It is taken off the
-  ;; deposit here rather than at settlement so the maths stays inside the
-  ;; existing pro-rata machinery: the taker is credited for `net` only, and the
-  ;; withheld slice is handed to the other side's filled depositors below.
-  ;;
-  ;; `swap` opens a NEW taker position only. If the caller already rests size
-  ;; on that side, deposit-*-core would merge into it and overwrite its limit,
-  ;; silently converting non-crossing maker inventory into a taker fill that
-  ;; paid rebate on the fresh slice alone. Rather than price that merge, it is
-  ;; refused: the caller either reprices the resting position (which charges
-  ;; 20 bps on the whole of it) or cancels it first and swaps the total.
   (let (
       (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
       (net (- amount rebate))
@@ -1856,16 +1694,7 @@
     )
     (var-set crossing true)
     (try! (close-deposits))
-    ;; Fill-or-kill. The 20 bps buys full immediate execution, so a swap that
-    ;; would fill nothing (limit rolled out, nothing live resting) or only
-    ;; partially (rolled remainder would rest as an unwanted maker position,
-    ;; with the rebate overpaid on the unfilled part) reverts instead. Swap is
-    ;; atomic, so the parked rebate unwinds with it rather than being gifted
-    ;; to the other side. A taker who wants to rest the remainder swaps the
-    ;; absorbable size, then maker-deposits the rest in a second tx.
     (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
-      ;; the mid could not fill everything: walk the rolled opposite book
-      ;; with the remainder, then judge full fill on remaining escrow
       (if deposit-x
         (ok (swap-result-x result
           (try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait
@@ -1882,19 +1711,6 @@
   )
 )
 
-;; --- Cross the swapper's remainder ------------------------------------------
-;; The batch clears everyone in range at the oracle mid, unchanged. When the
-;; SWAPPER (swap / reprice-or-swap) is left with a remainder after mid
-;; clearing, that remainder walks the opposite side's rolled book -
-;; orderbook-style, one fold - consuming every out-of-range maker whose limit
-;; the swapper's own limit reaches, each maker paid AT THEIR OWN LIMIT from
-;; the swapper's escrowed remainder. Passive depositors are untouched: their
-;; remainders roll exactly as before; only the active swapper crosses.
-;; Makers below min-deposit size are skipped (dust rests; no rounding-error
-;; fills). Fees: FEE_BPS off each leg to the treasury. No TAKER_REBATE on the
-;; crossed slice - flagged for review.
-
-;; One maker filled at `price` from the walker's escrowed remainder.
 (define-private (execute-fill
     (cycle uint)
     (y-who principal)
@@ -1909,19 +1725,14 @@
   )
   (let (
       (scale (* PRICE_PRECISION DECIMAL_FACTOR))
-      ;; how much x the y side buys at `price`; clamp to the x side's size
       (x-from-y (/ (* y-amt scale) price))
       (x-traded (if (> x-amt x-from-y)
         x-from-y
         x-amt
       ))
-      ;; y actually spent for x-traded (floors; the walker's residual crumbs
-      ;; are handled in cross-remainder-as-*)
       (y-traded (/ (* x-traded price) scale))
       (y-fee (/ (* y-traded FEE_BPS) BPS_PRECISION))
       (x-fee (/ (* x-traded FEE_BPS) BPS_PRECISION))
-      ;; the crossed maker's rebate: 20 bps on the volume they fill, drawn
-      ;; from the share of the taker's pot that did NOT ride the mid pool
       (reb-y (if y-is-taker
         (let (
             (r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION))
@@ -2029,9 +1840,8 @@
             x-who
             y-who
           ) y-is-taker
-          x-traded y-traded price mid
-          ;; events stamp the cycle that just settled; the walk runs one later
-          (- cycle u1) (var-get token-x) (var-get token-y)
+          x-traded y-traded price mid (- cycle u1) (var-get token-x)
+          (var-get token-y)
         ))
         (ok true)
       )
@@ -2039,8 +1849,6 @@
   )
 )
 
-;; Walk one x-maker: consume it if the y-walker's remainder is live and the
-;; maker's limit is beyond mid but within the walker's tolerance.
 (define-private (walk-x-book-step
     (maker principal)
     (acc (response {
@@ -2082,7 +1890,6 @@
   )
 )
 
-;; Walk one y-maker: mirror image for an x-walker selling down to bids.
 (define-private (walk-y-book-step
     (maker principal)
     (acc (response {
@@ -2125,12 +1932,6 @@
   )
 )
 
-;; ---- price-ordered walk -------------------------------------------------
-;; Depositor lists are in arrival order. The walk must take the best price
-;; first, so the eligible makers (inside the walker's range, at or above min
-;; deposit) are gathered with their limit and insertion-sorted once per walk
-;; - asks ascending, bids descending, ties keep arrival order. The sorted
-;; principals feed the unchanged walk-*-book-step folds.
 (define-private (push-quote
     (lst (list 50 {
       who: principal,
@@ -2151,7 +1952,6 @@
   (get who e)
 )
 
-;; asks: new entry goes before the first strictly higher limit
 (define-private (insert-ask-step
     (entry {
       who: principal,
@@ -2178,7 +1978,6 @@
   )
 )
 
-;; bids: new entry goes before the first strictly lower limit
 (define-private (insert-bid-step
     (entry {
       who: principal,
@@ -2205,7 +2004,6 @@
   )
 )
 
-;; y-walker's view of the x book: gather eligible asks in price order
 (define-private (collect-ask-step
     (maker principal)
     (acc {
@@ -2249,7 +2047,6 @@
   )
 )
 
-;; x-walker's view of the y book: gather eligible bids in price order
 (define-private (collect-bid-step
     (maker principal)
     (acc {
@@ -2326,15 +2123,6 @@
     ))
 )
 
-;; Cross the calling swapper's post-settlement remainder against the rolled
-;; opposite book, bounded by their own limit. Runs in the same tx as the
-;; settle; mid = the settlement's oracle price; events stamped with the
-;; settled cycle.
-;; Fold the walk's outcome into the settle tuple so a swap reports the whole
-;; fill: `received` = mid + walk, `rolled` = the sub-min residual that was
-;; refunded (nothing rolls for a taker), `rebate-refunded` = the unspent
-;; rebate crumbs. Every refund is in the deposit token, so the taker's true
-;; spend is amount - rolled - rebate-refunded.
 (define-private (swap-result-x
     (result {
       token-x-received: uint,
@@ -2381,17 +2169,10 @@
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
-  ;; are read AFTER it, once the fold has spent the pot and the deposit.
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
-      ;; the walk's payout accumulator starts clean for this swapper
       (reset (var-set walk-taker-received u0))
-      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
-      ;; clearing may already have filled them in full; then the walk has
-      ;; nothing to spend and every step would just burn three map reads per
-      ;; rolled maker. Skip the fold; sweep and assert below still run.
       (walked (and
         (> rolled u0)
         (begin
@@ -2409,13 +2190,9 @@
           true
         )
       ))
-      ;; rounding crumbs the walk did not consume
       (left (var-get pending-rebate-y))
-      ;; what the swapper still holds after the walk
       (rem (get-token-y-deposit cycle swapper))
     )
-    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
-    ;; into a later settlement's ride
     (and
       (> left u0)
       (try! (as-contract? ((with-stx left))
@@ -2423,14 +2200,6 @@
       ))
     )
     (var-set pending-rebate-y u0)
-    ;; the walker must end empty: swap flows are atomic, full fill or revert.
-    ;; Integer division leaves the y-walker a residual after a partial maker
-    ;; fill (floor to sats and back): a few uSTX that cannot buy one unit
-    ;; from anyone the walk could touch. Below the side's min deposit it is
-    ;; unfillable dust by construction - refund it so the swap exits clean.
-    ;; At or above min it is a genuine partial fill and reverts.
-    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
-    ;; clean full fill - rem u0 - passes here.)
     (asserts! (< rem (var-get min-token-y-deposit)) ERR_PARTIAL_FILL)
     (and
       (> rem u0)
@@ -2467,17 +2236,10 @@
     (t <ft-trait>)
     (tx-name (string-ascii 128))
   )
-  ;; Bindings run in order, so the walk itself is a binding: `left` and `rem`
-  ;; are read AFTER it, once the fold has spent the pot and the deposit.
   (let (
       (swapper tx-sender)
       (cycle (var-get current-cycle))
-      ;; the walk's payout accumulator starts clean for this swapper
       (reset (var-set walk-taker-received u0))
-      ;; `rolled` = the swapper's rolled amount from the settle result. Mid
-      ;; clearing may already have filled them in full; then the walk has
-      ;; nothing to spend and every step would just burn three map reads per
-      ;; rolled maker. Skip the fold; sweep and assert below still run.
       (walked (and
         (> rolled u0)
         (begin
@@ -2495,13 +2257,9 @@
           true
         )
       ))
-      ;; rounding crumbs the walk did not consume
       (left (var-get pending-rebate-x))
-      ;; what the swapper still holds after the walk
       (rem (get-token-x-deposit cycle swapper))
     )
-    ;; sweep: crumbs go back to the taker, pot zeroed so no stale value leaks
-    ;; into a later settlement's ride
     (and
       (> left u0)
       (try! (as-contract? ((with-ft (contract-of t) tx-name left))
@@ -2509,11 +2267,6 @@
       ))
     )
     (var-set pending-rebate-x u0)
-    ;; the walker must end empty: swap flows are atomic, full fill or revert.
-    ;; Mirror of the y-walker dust refund (the x walker rarely needs it - it
-    ;; clamps to the remainder exactly - but rounding safety is symmetric).
-    ;; (min-deposit is guaranteed > u0 by initialize and the setters, so a
-    ;; clean full fill - rem u0 - passes here.)
     (asserts! (< rem (var-get min-token-x-deposit)) ERR_PARTIAL_FILL)
     (and
       (> rem u0)
@@ -2628,13 +2381,6 @@
       (map filter-limit-violating-token-x-depositor
         (get-token-x-depositors cycle)
       )
-      ;; Small-share filter, after the limit filter so a depositor is
-      ;; measured against the in-range size of their own side. A swapper
-      ;; under 0.2% is not rolled: the filter raises `taker-too-small`
-      ;; instead (map drops the filters' results, so it cannot assert
-      ;; itself) and the tx reverts here. Bigger same-side size settles
-      ;; first; the small taker swaps next cycle. Cleared before the
-      ;; filters so no stale value can ever reach the assert.
       (var-set taker-too-small false)
       (map filter-small-token-y-depositor (get-token-y-depositors cycle))
       (map filter-small-token-x-depositor (get-token-x-depositors cycle))
@@ -2657,14 +2403,8 @@
           (token-x-fee (/ (* token-x-clearing FEE_BPS) BPS_PRECISION))
           (token-y-unfilled (- total-token-y token-y-clearing))
           (token-x-unfilled (- total-token-x token-x-clearing))
-          ;; Bound here because the vars are rewritten below, before the log.
           (rebate-x (var-get pending-rebate-x))
           (rebate-y (var-get pending-rebate-y))
-          ;; Only the taker's MID-FILLED share of the rebate rides the pool;
-          ;; the rest stays in pending-rebate-* (one division, then a
-          ;; subtraction, so ride + pending == rebate exactly) and is paid to
-          ;; the crossed makers during the remainder walk, each on the volume
-          ;; they fill. Whatever the walk does not consume refunds the taker.
           (ride-x (if (> total-token-x u0)
             (/ (* rebate-x token-x-clearing) total-token-x)
             u0
@@ -2674,9 +2414,6 @@
             u0
           ))
         )
-        ;; A swap in flight may face a maker side that is empty at the mid
-        ;; (all makers out of range): clearing is then zero on both legs,
-        ;; everything rolls, and the walk fills from the rolled makers.
         (asserts!
           (or
             (var-get crossing)
@@ -2713,10 +2450,6 @@
         (var-set settle-token-x-cleared token-x-clearing)
         (var-set settle-total-token-y total-token-y)
         (var-set settle-total-token-x total-token-x)
-        ;; The taker's rebate rides along with the pool it is paid out of: token-x
-        ;; the taker sent is what token-y depositors receive, so adding it here
-        ;; splits it across exactly the makers who filled, in proportion to their
-        ;; fill. Zeroed immediately so a later settlement cannot pay it twice.
         (var-set settle-token-x-after-fee
           (+ (- token-x-clearing token-x-fee) ride-x)
         )
@@ -2953,8 +2686,6 @@
       ERR_NOT_AUTHORIZED
     )
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
-    ;; a zero min would let dust deposits through and turns the remainder
-    ;; walk's "sub-min residual is unfillable dust" reasoning into nonsense
     (asserts! (and (> min-x u0) (> min-y u0)) ERR_ZERO_MIN_DEPOSIT)
     (var-set token-x x)
     (var-set token-y y)
@@ -3005,31 +2736,10 @@
   )
 )
 
-;; ---------------------------------------------------------------------------
-;; Taker capacity: a read-only quote for routers. How much a NEW taker on
-;; one side can deposit through `swap` at `mid` inside `limit` and still be
-;; filled in full, computed by the same rules settlement and the walk use:
-;;
-;;   mid   the opposite side's in-range size (bids with limit >= mid, asks
-;;         with limit <= mid, dust included since it settles) converted at
-;;         the mid, less the in-range size already resting on the taker's
-;;         own side (it clears pro rata with the taker). Zero when the
-;;         taker's own limit is out of range.
-;;   walk  the opposite side's out-of-range makers inside the taker's
-;;         limit, at or above min deposit (the walk skips dust), each at
-;;         its own limit.
-;;
-;; Both are in the deposit token, net of the taker rebate; `gross-cap` is
-;; what to pass to `swap` (the rebate comes off `amount` first). Sizing at
-;; `gross-cap` leaves at most sub-min rounding dust, which `swap` refunds.
-;; The 0.2% small-share rule is NOT modelled: a taker under it reverts
-;; `u1026` whatever the capacity says.
-
 (define-private (cap-scale)
   (* PRICE_PRECISION DECIMAL_FACTOR)
 )
 
-;; y side (bids, uSTX): in-range total, and the sats an x-taker can walk
 (define-private (cap-bid-fold
     (who principal)
     (acc {
@@ -3058,7 +2768,6 @@
   )
 )
 
-;; x side (asks, sats): in-range total, and the uSTX a y-taker can walk
 (define-private (cap-ask-fold
     (who principal)
     (acc {
@@ -3086,7 +2795,6 @@
   )
 )
 
-;; net -> gross so that gross - floor(gross * rebate) <= net
 (define-private (gross-up (net uint))
   (let (
       (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_BPS)))
@@ -3106,9 +2814,6 @@
   )
   (let (
       (cycle (var-get current-cycle))
-      ;; the opposite side gets the taker's limit (depth at the mid + the
-      ;; walk); the taker's own side only needs "in range or not", so it
-      ;; gets `mid` as its limit and its walk bucket stays empty
       (bids (fold cap-bid-fold (get-token-y-depositors cycle) {
         cycle: cycle,
         mid: mid,
@@ -3129,7 +2834,6 @@
         in-range: u0,
         walk: u0,
       }))
-      ;; what the opposite side's in-range size is worth in the taker's token
       (opposite (if deposit-x
         (/ (* (get in-range bids) (cap-scale)) mid)
         (/ (* (get in-range asks) mid) (cap-scale))
@@ -3161,10 +2865,6 @@
   )
 )
 
-;; The mid `swap` will settle at, from a signed Lazer update, verified and
-;; freshness-checked exactly as `swap` does it. A router calls this, then
-;; `get-taker-capacity`, then `swap` with the same update. Read-only is not
-;; possible: the oracle's verify is a public call.
 (define-public (refresh-mid (update (buff 8192)))
   (fresh-classification-price update)
 )

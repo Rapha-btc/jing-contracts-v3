@@ -173,8 +173,9 @@ remainder must clear the side's minimum; the whole size is refused with
 `u1030 ERR_USE_CANCEL`. The core logs `withdraw-x/y` with `remaining` and
 `parked` (`jing-core-v4` = v3 + `log-withdraw-x/y`) so the indexer shrinks the
 position instead of closing it. The v4 source binds `.jing-core-v4`: the core
-ships before the market. The source passed 100 KB, so harnesses deploy it
-with comment-only lines dropped (what the deployed bytes are anyway).
+ships before the market. Both v4 sources are comment-free and
+`clarinet format`ted (the market had passed the 100 KB deploy cap with the
+new functions; 81 KB now), so what is checked here is what gets deployed.
 
 Harness `simulations/verify-markets-v4-withdraw.js`, core-v4 + market
 UNPATCHED + a `MAX_DEPOSITORS u3` park instance under a throwaway deployer:
@@ -182,7 +183,7 @@ UNPATCHED + a `MAX_DEPOSITORS u3` park instance under a throwaway deployer:
 | tier | needs | result |
 |---|---|---|
 | L (live x), Y (live y): guards u1008/u1030/u1001/u1019, exact refund, size / totals / limit / list kept, core equity debited | no key (the opposite side is empty, nothing is priced) | 54/54, [902c1d03](https://stxer.xyz/simulations/mainnet/902c1d034c593162e1e427b3a63c714f) |
-| all tiers: L, Y + G (phase gate u1002 after close-deposits, cancel too), P / PX (parked y / x: withdraw while parked, whole size u1030, below min u1001, totals untouched, limit kept, readmit the shrunk size, live withdraw after readmit) | `PYTH_API_KEY` (park needs a priced newcomer; real signed update, market unpatched) | 98/98, [11ff4f59](https://stxer.xyz/simulations/mainnet/11ff4f5970cafa2203bb25c819af0c21) |
+| all tiers: L, Y + G (phase gate u1002 after close-deposits, cancel too), P / PX (parked y / x: withdraw while parked, whole size u1030, below min u1001, totals untouched, limit kept, readmit the shrunk size, live withdraw after readmit) | `PYTH_API_KEY` (park needs a priced newcomer; real signed update, market unpatched) | 98/98, [11ff4f59](https://stxer.xyz/simulations/mainnet/11ff4f5970cafa2203bb25c819af0c21) on the commented source; 98/98, [5c8d39ea](https://stxer.xyz/simulations/mainnet/5c8d39ea95306fc14ec380bdc623ff5c) on the comment-free, formatted source (the deploy bytes) |
 
 ## Coverage audit of the market (v4)
 

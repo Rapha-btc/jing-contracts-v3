@@ -520,10 +520,6 @@
   )
 )
 
-;; Partial withdrawal (markets v5+): `amount` refunded, `remaining` stays on
-;; the book at the same limit, `parked` says whether the position sits in
-;; the parked map rather than the live cycle. Same equity debit as a refund;
-;; the indexer shrinks the position instead of closing it.
 (define-public (log-withdraw-x
     (depositor principal)
     (amount uint)
@@ -739,8 +735,6 @@
   )
 )
 
-;; Auto-cross match: two RESTING deposits traded against each other at the
-;; out-of-range maker's limit (both legs leave escrow -> debit both equities).
 (define-public (log-match
     (taker principal)
     (maker principal)
@@ -794,11 +788,6 @@
     (y-unfilled uint)
     (x-fee uint)
     (y-fee uint)
-    ;; Taker rebates withheld at deposit time and paid out to the opposite
-    ;; side's filled depositors in this settlement. Reported separately from
-    ;; the fee because the treasury never receives them: they stay inside the
-    ;; pool and raise what the makers are paid. An indexer that reads only
-    ;; x-cleared/y-cleared understates maker proceeds by exactly this amount.
     (x-rebate uint)
     (y-rebate uint)
     (x-is-binding bool)
@@ -953,8 +942,6 @@
   )
 )
 
-;; RFQ event stream, mirrored verbatim from the deployed mainnet jing-core-v2
-;; so the local rfq-* contracts resolve against the same interface.
 (define-public (log-rfq-open
     (rfq-id uint)
     (client principal)
@@ -1339,8 +1326,6 @@
   )
 )
 
-;; v3 addition: vault-side swap/crossing-reprice equity event. Appended at
-;; the end to keep the diff against the deployed jing-core-v2 minimal.
 (define-public (log-jing-swap
     (msg-hash (buff 32))
     (market principal)
