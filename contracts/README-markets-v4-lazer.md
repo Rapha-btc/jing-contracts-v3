@@ -164,6 +164,26 @@ The counts are two lower than the local runs: the deploy steps are gone.
 PYTH_API_KEY=<key> DEPLOYED=1 npx tsx simulations/verify-swap-router-v2-lazer.js
 ```
 
+## Partial withdrawals + jing-core-v4 (next market deploy, 87cfd5d)
+
+`withdraw-token-x / withdraw-token-y (amount t asset-name)`: refund part of a
+resting position, the rest stays at the same limit. Live size in the deposit
+phase only (like cancel), parked escrow in any phase (then readmit). The
+remainder must clear the side's minimum; the whole size is refused with
+`u1030 ERR_USE_CANCEL`. The core logs `withdraw-x/y` with `remaining` and
+`parked` (`jing-core-v4` = v3 + `log-withdraw-x/y`) so the indexer shrinks the
+position instead of closing it. The v4 source binds `.jing-core-v4`: the core
+ships before the market. The source passed 100 KB, so harnesses deploy it
+with comment-only lines dropped (what the deployed bytes are anyway).
+
+Harness `simulations/verify-markets-v4-withdraw.js`, core-v4 + market
+UNPATCHED + a `MAX_DEPOSITORS u3` park instance under a throwaway deployer:
+
+| tier | needs | result |
+|---|---|---|
+| L (live x), Y (live y): guards u1008/u1030/u1001/u1019, exact refund, size / totals / limit / list kept, core equity debited | no key (the opposite side is empty, nothing is priced) | 54/54, [902c1d03](https://stxer.xyz/simulations/mainnet/902c1d034c593162e1e427b3a63c714f) |
+| G (phase gate u1002 after close-deposits), P / PX (parked y / x: withdraw while parked, totals untouched, readmit the shrunk size) | `PYTH_API_KEY` (park needs a priced newcomer) | pending |
+
 ## Coverage audit of the market (v4)
 
 Every public function is called by at least one harness. Error codes:
