@@ -9,15 +9,15 @@
 //      sub-min residual refunded to the taker), escrow conservation.
 //   S2 no-mid-liquidity edge: only out-of-range makers. The `crossing` flag
 //      lets settlement run with the maker side empty at the mid; A1 is too big
-//      for the crossable book within LT -> u1023 partial revert, atomic.
-//   S2b beyond-limit makers only -> u1023 partial revert, atomicity.
+//      for the crossable book within LT -> u1020 partial revert, atomic.
+//   S2b beyond-limit makers only -> u1020 partial revert, atomicity.
 //   S3 dust maker: walk leaves a maker below min-deposit; a later walk SKIPS
 //      that dust maker.
 //   S3b sub-min remainder: refunds silently, swap succeeds on the mid fill.
 //   S4 mirror direction: x-taker walks an out-of-range y bid at the bid's
 //      limit; x walker leaves zero residual.
 //   S5b cross-only, oversize: only Y1's rolled bid on the book, taker bigger
-//      than it can absorb -> u1023, atomic (cycle + Y1 unchanged).
+//      than it can absorb -> u1020, atomic (cycle + Y1 unchanged).
 //   S5 cross-only, sized: same book, taker fits -> settles with zero mid
 //      clearing and the walk does the WHOLE fill at Y1's limit; Y1 paid
 //      net-of-fee + 20bps rebate, taker residual 0.
@@ -31,11 +31,11 @@
 //      reprices to -1%, mid fills an in-range bid, remainder walks Y2 at LY1.
 //      (reprice-or-swap cannot take on a cross-only book: would-take-* only
 //      looks for a live maker at or inside the mid. Design note for Rapha.)
-//   S9 ERR_ZERO_MIN_DEPOSIT (u1025): both setters and initialize (fresh
+//   S9 ERR_ZERO_MIN_DEPOSIT (u1022): both setters and initialize (fresh
 //      deploy) reject a zero min.
 //   S8 (last) public settle with the flag false: a swap that reverts in the
 //      walk leaves `crossing` false; plain close-deposits + settle-with-refresh
-//      on an all-out-of-range book -> u1012, cycle unchanged.
+//      on an all-out-of-range book -> u1011, cycle unchanged.
 //
 // Hermes is key-gated since 2026-08-18, so the harness runs on the REAL
 // prices already in pyth-storage-v4 (read pre-run for exact expectations)
@@ -367,14 +367,14 @@ async function main() {
   b = evalM(`(stx-get-balance '${CID})`)(b); // escrow: 0 STX resting
   b = evalSbtcBal(CID)(b); // escrow: M2_LEFT + M3
 
-  // ---------- S2: only out-of-range makers -> walk runs, A1 too big -> u1023, atomic ----------
+  // ---------- S2: only out-of-range makers -> walk runs, A1 too big -> u1020, atomic ----------
   b = evalSbtcBal(STX_DEPOSITOR_1)(b);
   b = swap(STX_DEPOSITOR_1, A1, LT, false)(b); // book: M2_LEFT@L2, M3@L3, no in-range
   b = evalSbtcBal(STX_DEPOSITOR_1)(b); // unchanged
   b = evalM("(get-current-cycle)")(b); // still u1
   b = evalM(`(get-token-x-deposit u1 '${M2})`)(b); // unchanged
 
-  // ---------- S2b: in-range present, crossables beyond limit -> u1023 ----------
+  // ---------- S2b: in-range present, crossables beyond limit -> u1020 ----------
   b = depositX(X4, 1500n, 1n)(b); // in-range mid liquidity
   const xValue4 = (1500n * MID) / PPDF;
   const NET_T2 = xValue4 + (800n * L2) / PPDF; // remainder needs M2 but...
@@ -422,10 +422,10 @@ async function main() {
   b = evalM("(get-current-cycle)")(b); // u4
   b = evalM(`(get-token-x-deposit u4 '${SBTC_DEPOSITOR_1})`)(b); // 0 residual
 
-  // ---------- S5b: cross-only, oversize -> u1023 atomic ----------
+  // ---------- S5b: cross-only, oversize -> u1020 atomic ----------
   // Book in u4: Y1's rolled bid (1.14 STX, absorbs ~177 sats) plus a fresh
   // 20 STX bid at LY1, BOTH out of range. No in-range y at all, so before the
-  // `crossing` flag this died at settlement with u1012.
+  // `crossing` flag this died at settlement with u1011.
   const LX5 = (MID * 99n) / 100n; // x-taker floor, below LY1 -> crosses both
   const Y2_AMT = 20_000_000n;
   b = depositY(STX_DEPOSITOR_1, Y2_AMT, LY1)(b); // out-of-range bid 20 STX
@@ -433,7 +433,7 @@ async function main() {
   let A7 = (BIG5 * BPS) / (BPS - REB);
   while (A7 - (A7 * REB) / BPS < BIG5) A7 += 1n;
   b = evalM(`(get-token-y-deposit u4 '${Y1})`)(b); // Y1 rolled bid before
-  b = swap(SBTC_DEPOSITOR_1, A7, LX5, true)(b); // -> u1023
+  b = swap(SBTC_DEPOSITOR_1, A7, LX5, true)(b); // -> u1020
   b = evalM("(get-current-cycle)")(b); // still u4
   b = evalM(`(get-token-y-deposit u4 '${Y1})`)(b); // unchanged
 
@@ -464,7 +464,7 @@ async function main() {
 
   // ---------- S6: mirror cross-only, sized (y-taker vs out-of-range asks) ----------
   // Book in u5, x side: M2 dust (~400 @ L2), M3 2000 @ L3 (+2%), nothing in
-  // range. Fresh STX actor Y2 (no resting position -> passes u1024).
+  // range. Fresh STX actor Y2 (no resting position -> passes u1021).
   const Y2 = mkAddr(10);
   const LT6 = (MID * 103n) / 100n; // +3%, reaches L3
   const NET8 = 1_200_000n; // uSTX, buys ~1.8k sats of M3 at L3
@@ -530,21 +530,21 @@ async function main() {
 
   // ---------- S9: ERR_ZERO_MIN_DEPOSIT ----------
   const MARKET0 = `${MARKET}-zero`;
-  b = call(DEPLOYER, "set-min-token-y-deposit", [uintCV(0)])(b); // u1025
-  b = call(DEPLOYER, "set-min-token-x-deposit", [uintCV(0)])(b); // u1025
+  b = call(DEPLOYER, "set-min-token-y-deposit", [uintCV(0)])(b); // u1022
+  b = call(DEPLOYER, "set-min-token-x-deposit", [uintCV(0)])(b); // u1022
   b = b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET0, source_code: mktSrc });
   b = call(DEPLOYER, "initialize", [
     contractPrincipalCV(DEPLOYER, MARKET0),
     contractPrincipalCV(SBTC_ADDR, SBTC_NAME),
     contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(0), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
-  ], `${DEPLOYER}.${MARKET0}`)(b); // u1025
+  ], `${DEPLOYER}.${MARKET0}`)(b); // u1022
   b = call(DEPLOYER, "initialize", [
     contractPrincipalCV(DEPLOYER, MARKET0),
     contractPrincipalCV(SBTC_ADDR, SBTC_NAME),
     contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(MIN_SBTC), uintCV(0), uintCV(1n), uintCV(45n),
-  ], `${DEPLOYER}.${MARKET0}`)(b); // u1025
+  ], `${DEPLOYER}.${MARKET0}`)(b); // u1022
 
   // ---------- S8 (last): public settle with the flag false ----------
   // x side gets a 1500-sat ask at L3 so close-deposits sees min on both
@@ -554,10 +554,10 @@ async function main() {
   const NET9 = 1_500_000n;
   let A9 = (NET9 * BPS) / (BPS - REB);
   while (A9 - (A9 * REB) / BPS < NET9) A9 += 1n;
-  b = swap(X5, A9, LT, false)(b); // +1% < L3 -> walk finds nothing -> u1023
+  b = swap(X5, A9, LT, false)(b); // +1% < L3 -> walk finds nothing -> u1020
   b = evalM("(var-get crossing)")(b); // still false (revert unwound it)
   b = call(DEPLOYER, "close-deposits", [])(b); // ok (public)
-  b = settlePublic(DEPLOYER)(b); // u1012: flag false, both sides empty at mid
+  b = settlePublic(DEPLOYER)(b); // u1011: flag false, both sides empty at mid
   b = evalM("(get-current-cycle)")(b); // u8
 
   const sid = await b.run();
@@ -569,7 +569,7 @@ async function main() {
   if (!DEPLOYED) assert("deploy core", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED) assert("deploy market (patched)", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   assert("set-verified-contract", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1018)"));
+  assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
   for (let k = 0; k < 9; k++)
     assert(`funding tx ${k}`, decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
   assert("X1 in-range offer", decodeTx(s[i++]), `(ok u${X1_AMT})`);
@@ -605,14 +605,14 @@ async function main() {
   assert(`escrow sBTC == M2left+M3 (${M2_LEFT + M3_AMT})`, escrowSbtc, (v) => v === M2_LEFT + M3_AMT);
 
   const t2Before = uintOf(decodeEval(s[i++]));
-  assert("S2 no-mid-liquidity -> walk runs, partial -> u1023", decodeTx(s[i++]), "(err u1023)");
+  assert("S2 no-mid-liquidity -> walk runs, partial -> u1020", decodeTx(s[i++]), "(err u1020)");
   const t2After = uintOf(decodeEval(s[i++]));
   assert("S2 atomic (taker sBTC unchanged)", t2After - t2Before, (d) => d === 0n);
   assert("S2 cycle unchanged", decodeEval(s[i++]), "u1");
   assert("S2 M2 unchanged", decodeEval(s[i++]), `u${M2_LEFT}`);
 
   assert("X4 in-range offer", decodeTx(s[i++]), "(ok u1500)");
-  assert("S2b beyond-limit -> u1023", decodeTx(s[i++]), "(err u1023)");
+  assert("S2b beyond-limit -> u1020", decodeTx(s[i++]), "(err u1020)");
   assert("S2b cycle unchanged", decodeEval(s[i++]), "u1");
   assert("S2b X4 still resting", decodeEval(s[i++]), "u1500");
 
@@ -645,7 +645,7 @@ async function main() {
   assert("S5b 20 STX out-of-range bid", decodeTx(s[i++]), `(ok u${Y2_AMT})`);
   const y1Bid = uintOf(decodeEval(s[i++]));
   assert("S5b Y1 rolled bid rests (>= min)", y1Bid, (v) => v >= MIN_STX);
-  assert("S5b cross-only oversize -> u1023", decodeTx(s[i++]), "(err u1023)");
+  assert("S5b cross-only oversize -> u1020", decodeTx(s[i++]), "(err u1020)");
   assert("S5b cycle unchanged", decodeEval(s[i++]), "u4");
   assert("S5b Y1 bid unchanged", decodeEval(s[i++]), `u${y1Bid}`);
 
@@ -762,19 +762,19 @@ async function main() {
   assert("S7b rebate pot x zeroed", decodeEval(s[i++]), "u0");
 
   // S9
-  assert("S9 set-min-token-y-deposit u0 -> u1025", decodeTx(s[i++]), "(err u1025)");
-  assert("S9 set-min-token-x-deposit u0 -> u1025", decodeTx(s[i++]), "(err u1025)");
+  assert("S9 set-min-token-y-deposit u0 -> u1022", decodeTx(s[i++]), "(err u1022)");
+  assert("S9 set-min-token-x-deposit u0 -> u1022", decodeTx(s[i++]), "(err u1022)");
   assert("S9 deploy zero-min market", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
-  assert("S9 initialize min-x u0 -> u1025", decodeTx(s[i++]), "(err u1025)");
-  assert("S9 initialize min-y u0 -> u1025", decodeTx(s[i++]), "(err u1025)");
+  assert("S9 initialize min-x u0 -> u1022", decodeTx(s[i++]), "(err u1022)");
+  assert("S9 initialize min-y u0 -> u1022", decodeTx(s[i++]), "(err u1022)");
 
   // S8
   assert("S8 1500-sat ask at L3", decodeTx(s[i++]), "(ok u1500)");
   assert("S8 crossing false before", decodeEval(s[i++]), "false");
-  assert("S8 swap reverts in walk -> u1023", decodeTx(s[i++]), "(err u1023)");
+  assert("S8 swap reverts in walk -> u1020", decodeTx(s[i++]), "(err u1020)");
   assert("S8 crossing false after revert", decodeEval(s[i++]), "false");
   assert("S8 public close-deposits ok", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
-  assert("S8 public settle, all out of range -> u1012", decodeTx(s[i++]), "(err u1012)");
+  assert("S8 public settle, all out of range -> u1011", decodeTx(s[i++]), "(err u1011)");
   assert("S8 cycle unchanged", decodeEval(s[i++]), "u8");
 
   console.log(`\n${checks - failures}/${checks} checks green`);

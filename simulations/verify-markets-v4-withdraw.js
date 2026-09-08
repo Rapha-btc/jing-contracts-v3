@@ -163,15 +163,15 @@ async function main() {
   }
 
   // =============== L: live x position on MARKET (no y side, no oracle) ===============
-  tx("L1 withdraw-x with no deposit -> u1008", withdrawX(A, 1000n), "(err u1008)");
+  tx("L1 withdraw-x with no deposit -> u1007", withdrawX(A, 1000n), "(err u1007)");
   tx("L2 A rests 10000 sats at a dead ask", depositX(A, 10_000n, DEAD_X), "(ok u10000)");
   const aEqBefore = cap("A core equity-x after deposit", equityX(A), CORE_ID);
-  tx("L3 withdraw-x 0 -> u1008", withdrawX(A, 0n), "(err u1008)");
-  tx("L4 withdraw-x the whole size -> u1030 USE_CANCEL", withdrawX(A, 10_000n), "(err u1030)");
-  tx("L5 withdraw-x more than the size -> u1030", withdrawX(A, 20_000n), "(err u1030)");
+  tx("L3 withdraw-x 0 -> u1007", withdrawX(A, 0n), "(err u1007)");
+  tx("L4 withdraw-x the whole size -> u1027 USE_CANCEL", withdrawX(A, 10_000n), "(err u1027)");
+  tx("L5 withdraw-x more than the size -> u1027", withdrawX(A, 20_000n), "(err u1027)");
   tx("L6 withdraw-x leaving 500 < min 1000 -> u1001", withdrawX(A, 9_500n), "(err u1001)");
-  tx("L7 withdraw-x with the wrong trait -> u1019", withdrawX(A, 3_000n, CID, wstxTrait, wstxAsset), "(err u1019)");
-  tx("L8 B (no x position) withdraw-x -> u1008", withdrawX(B, 1000n), "(err u1008)");
+  tx("L7 withdraw-x with the wrong trait -> u1016", withdrawX(A, 3_000n, CID, wstxTrait, wstxAsset), "(err u1016)");
+  tx("L8 B (no x position) withdraw-x -> u1007", withdrawX(B, 1000n), "(err u1007)");
   const aBefore = cap("A sbtc before", `(get-balance '${A})`, SBTC_FQN);
   tx("L9 withdraw-x 3000 -> (ok u7000)", withdrawX(A, 3_000n), "(ok u7000)");
   const aAfter = cap("A sbtc after", `(get-balance '${A})`, SBTC_FQN);
@@ -189,11 +189,11 @@ async function main() {
   ev("L20 totals 0", "(get total-token-x (get-cycle-totals u0))", "u0");
 
   // =============== Y: live y position on PARK (no x side, no oracle) ===============
-  tx("Y1 withdraw-y with no deposit -> u1008", withdrawY(B, 1_000_000n, PID), "(err u1008)");
+  tx("Y1 withdraw-y with no deposit -> u1007", withdrawY(B, 1_000_000n, PID), "(err u1007)");
   tx("Y2 B rests 100 STX at a live bid", depositY(B, 100_000_000n, HUGE, PID), "(ok u100000000)");
-  tx("Y3 withdraw-y the whole size -> u1030", withdrawY(B, 100_000_000n, PID), "(err u1030)");
+  tx("Y3 withdraw-y the whole size -> u1027", withdrawY(B, 100_000_000n, PID), "(err u1027)");
   tx("Y4 withdraw-y leaving 0.5 STX -> u1001", withdrawY(B, 99_500_000n, PID), "(err u1001)");
-  tx("Y5 withdraw-y wrong trait -> u1019", withdrawY(B, 30_000_000n, PID, sbtcTrait, sbtcAsset), "(err u1019)");
+  tx("Y5 withdraw-y wrong trait -> u1016", withdrawY(B, 30_000_000n, PID, sbtcTrait, sbtcAsset), "(err u1016)");
   const bBefore = cap("B stx before", `(stx-get-balance '${B})`, PID);
   tx("Y6 withdraw-y 30 STX -> (ok u70000000)", withdrawY(B, 30_000_000n, PID), "(ok u70000000)");
   const bAfter = cap("B stx after", `(stx-get-balance '${B})`, PID);
@@ -204,14 +204,20 @@ async function main() {
   const bEq = cap("B core equity-y after withdraw", equityY(B), CORE_ID);
 
   if (WITH_KEY) {
-    // =============== G: phase gate on MARKET (needs a priced y deposit) ===============
+    // =============== G: nobody can park the book in the settle phase ===============
+    // close-deposits is private since the per-feed freshness / Digital Portal
+    // round: every close settles in the same tx, so the settle phase never
+    // exists between txs and the u1002 gate on withdraw/cancel is unreachable
+    // from outside. An outsider's call is refused as no such public function
+    // (engine error, no tx), the phase stays deposit, live withdraws still work.
     tx("G1 A rests 5000 sats again", depositX(A, 5_000n, DEAD_X), "(ok u5000)");
     tx("G2 G1 rests 2 STX dead bid (x present -> priced, real update)", depositY(G1, 2_000_000n, DEAD_Y), "(ok u2000000)");
-    tx("G3 close-deposits", call(DEPLOYER, "close-deposits", []), "(ok true)");
-    ev("G4 phase settle", "(get-cycle-phase)", "u2");
-    tx("G5 withdraw-x on live size in settle phase -> u1002", withdrawX(A, 1_000n), "(err u1002)");
-    tx("G6 withdraw-y on live size in settle phase -> u1002", withdrawY(G1, 500_000n), "(err u1002)");
-    tx("G7 cancel-x in settle phase -> u1002 (same gate)", cancelX(A), "(err u1002)");
+    tx("G3 outsider close-deposits -> refused (private)", call(DEPLOYER, "close-deposits", []), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
+    tx("G3b outsider cancel-cycle -> refused (removed)", call(DEPLOYER, "cancel-cycle", []), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
+    ev("G4 phase stays deposit", "(get-cycle-phase)", "u0");
+    tx("G5 withdraw-x on live size still works -> (ok u4000)", withdrawX(A, 1_000n), "(ok u4000)");
+    tx("G6 withdraw-y on live size still works -> (ok u1500000)", withdrawY(G1, 500_000n), "(ok u1500000)");
+    tx("G7 cancel-x still works -> (ok u4000)", cancelX(A), "(ok u4000)");
 
     // =============== P: parked y on PARK (MAX u3; B already holds one slot) ===============
     const LP1 = (MID * 90n) / 100n; // -10%: the farthest out of range
@@ -223,7 +229,7 @@ async function main() {
     ev("P5 P1 parked 2 STX", `(get-token-y-parked '${P1})`, "u2000000", PID);
     ev("P6 P1 off the cycle", `(get-token-y-deposit u0 '${P1})`, "u0", PID);
     const tot0 = cap("P totals before parked withdraw", "(get total-token-y (get-cycle-totals u0))", PID);
-    tx("P7 parked withdraw-y whole -> u1030", withdrawY(P1, 2_000_000n, PID), "(err u1030)");
+    tx("P7 parked withdraw-y whole -> u1027", withdrawY(P1, 2_000_000n, PID), "(err u1027)");
     tx("P8 parked withdraw-y leaving 0.5 STX -> u1001", withdrawY(P1, 1_500_000n, PID), "(err u1001)");
     const p1Before = cap("P1 stx before", `(stx-get-balance '${P1})`, PID);
     tx("P9 parked withdraw-y 0.5 STX -> (ok u1500000)", withdrawY(P1, 500_000n, PID), "(ok u1500000)");

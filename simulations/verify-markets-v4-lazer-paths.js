@@ -6,8 +6,8 @@
 // defensive (cannot be produced by a signed update) or dead.
 //
 //   L1 refresh-mid with the full update -> the mid the sim computed.
-//   L2 an update carrying BTC only -> u1029 ERR_FEED_MISSING (STX missing).
-//   L3 an update carrying BTC + USDC (feeds 1, 7) -> u1029 (STX missing).
+//   L2 an update carrying BTC only -> u1026 ERR_FEED_MISSING (STX missing).
+//   L3 an update carrying BTC + USDC (feeds 1, 7) -> u1026 (STX missing).
 //   L4 an update fetched WITHOUT the confidence property -> u1006
 //      ERR_PRICE_UNCERTAIN, on refresh-mid and on swap.
 //   L5 deposit gate: a bid with the no-confidence update on an EMPTY x side
@@ -88,12 +88,12 @@ async function main() {
     tx("deploy market v4 (unpatched)", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   }
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  tx("initialize (feeds u1/u45)", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1018)"));
+  tx("initialize (feeds u1/u45)", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
 
   // L1-L4: the oracle paths
   tx("L1 refresh-mid with the full update -> mid", call(T, "refresh-mid", [UPD]), `(ok u${MID})`);
-  tx("L2 refresh-mid with a BTC-only update -> u1029 feed missing", call(T, "refresh-mid", [U_BTC]), "(err u1029)");
-  tx("L3 refresh-mid with BTC + USDC (no STX) -> u1029", call(T, "refresh-mid", [U_BTC_USDC]), "(err u1029)");
+  tx("L2 refresh-mid with a BTC-only update -> u1026 feed missing", call(T, "refresh-mid", [U_BTC]), "(err u1026)");
+  tx("L3 refresh-mid with BTC + USDC (no STX) -> u1026", call(T, "refresh-mid", [U_BTC_USDC]), "(err u1026)");
   tx("L4 refresh-mid with an update lacking confidence -> u1006", call(T, "refresh-mid", [U_NOCONF]), "(err u1006)");
   // L8: per-feed freshness. publish-time on each shaped feed must be the
   // feed's own feedUpdateTimestamp in seconds (what the 80s checks read),
@@ -115,7 +115,7 @@ async function main() {
   ev("L8 chain clock (stacks-block-time)", "stacks-block-time", (v) => { const d = Number(uintOf(v)) - Number(FUT_Y); console.log(`       (chain clock minus STX feed time: ${d}s)`); return Math.abs(d) < 80; });
   ev("L8 STX feed time passes MAX_STALENESS against the chain clock", `(> u${FUT_Y} (- stacks-block-time u80))`, "true");
   ev("L8 a feed time 81s older than the chain clock fails it", `(> (- stacks-block-time u81) (- stacks-block-time u80))`, "false");
-  tx("L8 refresh-mid with an update lacking feedUpdateTimestamp -> u1031", call(T, "refresh-mid", [U_NOFUT]), "(err u1031)");
+  tx("L8 refresh-mid with an update lacking feedUpdateTimestamp -> u1028", call(T, "refresh-mid", [U_NOFUT]), "(err u1028)");
   // L6a read-onlys before any cycle activity
   ev("L6 get-min-deposits", "(get-min-deposits)", (v) => v.includes(`(min-token-x u${MIN_SBTC})`) && v.includes(`(min-token-y u${MIN_STX})`));
   ev("L6 get-cycle-start-block is set", "(get-cycle-start-block)", (v) => uintOf(v) > 0n);
@@ -146,7 +146,7 @@ async function main() {
   ev(`L6 get-settlement u0 clearing price == mid`, "(get-settlement u0)", (v) => v.includes(`u${MID}`));
   ev("L6 get-blocks-elapsed reset by the new cycle", "(get-blocks-elapsed)", (v) => uintOf(v) < 10n);
   tx("L7 settle-with-refresh right after a settlement -> u1003 (deposit phase shields u1004)", call(T, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), "(err u1003)");
-  tx("L7 close-and-settle-with-refresh on an empty cycle -> u1012 nothing to settle", call(T, "close-and-settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err u1012)" || v === "(err u1016)");
+  tx("L7 close-and-settle-with-refresh on an empty cycle -> u1011 nothing to settle", call(T, "close-and-settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err u1011)" || v === "(err u1013)");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -159,7 +159,7 @@ async function main() {
     i += 1;
     check(st.label, raw, st.want);
   }
-  console.log("\n  defensive / dead codes (documented, not reachable with a signed update): u1004 ERR_ALREADY_SETTLED (phase gate first), u1009 ERR_ZERO_PRICE, u1020 ERR_EXPO_MISMATCH (both Lazer feeds carry expo -8), u1021 ERR_NOTHING_FILLED (never raised)");
+  console.log("\n  defensive / dead codes (documented, not reachable with a signed update): u1004 ERR_ALREADY_SETTLED (phase gate first), u1008 ERR_ZERO_PRICE, u1017 ERR_EXPO_MISMATCH (both Lazer feeds carry expo -8), u1018 ERR_NOTHING_FILLED (never raised)");
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

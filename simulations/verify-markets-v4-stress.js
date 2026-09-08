@@ -43,7 +43,7 @@ const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta
 const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8");
 // the market's documented refusals a random action may legitimately hit
 // u1 / u3 are the token contracts' insufficient-balance refusals (a maker ran dry)
-const OK_ERRS = new Set(["u1", "u3", "u1001", "u1002", "u1003", "u1008", "u1012", "u1013", "u1016", "u1017", "u1022", "u1023", "u1024", "u1026", "u1027", "u1028"]);
+const OK_ERRS = new Set(["u1", "u3", "u1001", "u1002", "u1003", "u1007", "u1011", "u1012", "u1013", "u1014", "u1019", "u1020", "u1021", "u1023", "u1024", "u1025"]);
 
 function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const rnd = mulberry32(SEED);
@@ -83,7 +83,7 @@ async function main() {
     tx("deploy market v4", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   }
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  tx("initialize", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1018)"));
+  tx("initialize", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
   // fund the makers: 30 STX + 300k sats each, from S and T
   for (const m of makers) {
     tx(`fund ${m.slice(0, 8)} STX`, (bb) => bb.withSender(S).addSTXTransfer({ recipient: m, amount: 30_000_000 }), () => true);

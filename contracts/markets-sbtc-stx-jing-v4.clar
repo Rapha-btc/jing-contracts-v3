@@ -1,7 +1,5 @@
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 
-(define-constant CANCEL_THRESHOLD u42)
-
 (define-constant PHASE_DEPOSIT u0)
 (define-constant PHASE_SETTLE u2)
 
@@ -33,9 +31,6 @@
 (define-constant LAZER_ORACLE 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle)
 (define-constant LAZER_DECODER 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1)
 (define-constant MICROS_PER_SECOND u1000000)
-(define-constant ERR_FEED_MISSING (err u1029))
-(define-constant ERR_USE_CANCEL (err u1030))
-(define-constant ERR_FEED_TIMESTAMP_MISSING (err u1031))
 
 (define-constant ERR_DEPOSIT_TOO_SMALL (err u1001))
 (define-constant ERR_NOT_DEPOSIT_PHASE (err u1002))
@@ -43,26 +38,28 @@
 (define-constant ERR_ALREADY_SETTLED (err u1004))
 (define-constant ERR_STALE_PRICE (err u1005))
 (define-constant ERR_PRICE_UNCERTAIN (err u1006))
-(define-constant ERR_NOTHING_TO_WITHDRAW (err u1008))
-(define-constant ERR_ZERO_PRICE (err u1009))
-(define-constant ERR_PAUSED (err u1010))
-(define-constant ERR_NOT_AUTHORIZED (err u1011))
-(define-constant ERR_NOTHING_TO_SETTLE (err u1012))
-(define-constant ERR_QUEUE_FULL (err u1013))
-(define-constant ERR_CANCEL_TOO_EARLY (err u1014))
-(define-constant ERR_ALREADY_CLOSED (err u1016))
-(define-constant ERR_LIMIT_REQUIRED (err u1017))
-(define-constant ERR_ALREADY_INITIALIZED (err u1018))
-(define-constant ERR_WRONG_TRAIT (err u1019))
-(define-constant ERR_EXPO_MISMATCH (err u1020))
-(define-constant ERR_NOTHING_FILLED (err u1021))
-(define-constant ERR_MUST_USE_SWAP (err u1022))
-(define-constant ERR_PARTIAL_FILL (err u1023))
-(define-constant ERR_HAS_RESTING_POSITION (err u1024))
-(define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
-(define-constant ERR_TAKER_TOO_SMALL (err u1026))
-(define-constant ERR_PARKED (err u1027))
-(define-constant ERR_NOTHING_TO_READMIT (err u1028))
+(define-constant ERR_NOTHING_TO_WITHDRAW (err u1007))
+(define-constant ERR_ZERO_PRICE (err u1008))
+(define-constant ERR_PAUSED (err u1009))
+(define-constant ERR_NOT_AUTHORIZED (err u1010))
+(define-constant ERR_NOTHING_TO_SETTLE (err u1011))
+(define-constant ERR_QUEUE_FULL (err u1012))
+(define-constant ERR_ALREADY_CLOSED (err u1013))
+(define-constant ERR_LIMIT_REQUIRED (err u1014))
+(define-constant ERR_ALREADY_INITIALIZED (err u1015))
+(define-constant ERR_WRONG_TRAIT (err u1016))
+(define-constant ERR_EXPO_MISMATCH (err u1017))
+(define-constant ERR_NOTHING_FILLED (err u1018))
+(define-constant ERR_MUST_USE_SWAP (err u1019))
+(define-constant ERR_PARTIAL_FILL (err u1020))
+(define-constant ERR_HAS_RESTING_POSITION (err u1021))
+(define-constant ERR_ZERO_MIN_DEPOSIT (err u1022))
+(define-constant ERR_TAKER_TOO_SMALL (err u1023))
+(define-constant ERR_PARKED (err u1024))
+(define-constant ERR_NOTHING_TO_READMIT (err u1025))
+(define-constant ERR_FEED_MISSING (err u1026))
+(define-constant ERR_USE_CANCEL (err u1027))
+(define-constant ERR_FEED_TIMESTAMP_MISSING (err u1028))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -1575,7 +1572,11 @@
   )
 )
 
-(define-public (close-deposits)
+;; Private since the blind-auction era ended: every close settles in the same
+;; tx (swap, close-and-settle-with-refresh), so a closed-but-unsettled cycle
+;; can no longer exist between txs. Public, anyone could park the book in the
+;; settle phase and push router takers onto the AMMs (bounty, Digital Portal).
+(define-private (close-deposits)
   (let (
       (cycle (var-get current-cycle))
       (elapsed (get-blocks-elapsed))
@@ -2308,36 +2309,6 @@
     })
   )
 )
-(define-public (cancel-cycle)
-  (let (
-      (cycle (var-get current-cycle))
-      (closed-block (var-get deposits-closed-block))
-      (totals (get-cycle-totals cycle))
-      (totals-next (get-cycle-totals (+ cycle u1)))
-      (merged-x (+ (get total-token-x totals) (get total-token-x totals-next)))
-      (merged-y (+ (get total-token-y totals) (get total-token-y totals-next)))
-    )
-    (asserts! (> closed-block u0) ERR_NOT_SETTLE_PHASE)
-    (asserts! (>= stacks-block-height (+ closed-block CANCEL_THRESHOLD))
-      ERR_CANCEL_TOO_EARLY
-    )
-    (asserts! (is-none (map-get? settlements cycle)) ERR_ALREADY_SETTLED)
-    (map-set cycle-totals (+ cycle u1) {
-      total-token-x: merged-x,
-      total-token-y: merged-y,
-    })
-    (map-delete cycle-totals cycle)
-    (map roll-token-y-depositor (get-token-y-depositors cycle))
-    (map roll-token-x-depositor (get-token-x-depositors cycle))
-    (roll-depositor-lists cycle)
-    (advance-cycle)
-    (try! (contract-call? .jing-core-v4 log-cancel-cycle cycle merged-x merged-y
-      (var-get token-x) (var-get token-y)
-    ))
-    (ok true)
-  )
-)
-
 (define-private (execute-settlement
     (cycle uint)
     (feed-x {

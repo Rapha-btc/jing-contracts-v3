@@ -10,10 +10,10 @@
 //   B1 small-share filter at settlement, AFTER the limit filter (2989f6c):
 //      a 1000 STX bid at limit u1 (out of range, never fills) plus a 1.5 STX
 //      taker. Under the old close-time filter the taker was 0.15% of the
-//      raw side and got rolled -> u1023. Now the whale is limit-rolled
+//      raw side and got rolled -> u1020. Now the whale is limit-rolled
 //      first, the taker is 100% of the in-range side, and the swap fills
 //      by walking the +2% ask.
-//   B2 in-range whale + small taker -> u1026 ERR_TAKER_TOO_SMALL, atomic.
+//   B2 in-range whale + small taker -> u1023 ERR_TAKER_TOO_SMALL, atomic.
 //      The taker is under 0.2% of the in-range side; the filter flags it
 //      instead of rolling it and settlement reverts with the new error.
 //   B3 the filter no longer runs at close-deposits: a 1 STX fish rests next
@@ -29,10 +29,10 @@
 //      MAX_DEPOSITORS is patched to u3 (sim-only): full side + in-range
 //      newcomer parks the FARTHEST out-of-range bid (map only, escrow and
 //      limit kept, totals reduced); out-of-range newcomer gets the old
-//      smallest bump (u1013); parked maker cannot deposit (u1027) but can
-//      reprice; readmit needs a free slot (u1013) then succeeds; a parked
+//      smallest bump (u1012); parked maker cannot deposit (u1024) but can
+//      reprice; readmit needs a free slot (u1012) then succeeds; a parked
 //      maker cancels from any phase; readmit of a non-parked principal is
-//      u1028. X-side mirror: farthest out-of-range ask parked, cancel
+//      u1025. X-side mirror: farthest out-of-range ask parked, cancel
 //      refunds sBTC.
 //
 // Hermes is key-gated, so this runs on the REAL prices resting in
@@ -198,7 +198,7 @@ async function main() {
   // ---- actors ----
   const W = mkAddr(11); // 1000 STX whale bid
   const T1 = mkAddr(12); // B1 small taker (fills)
-  const T2 = mkAddr(13); // B2 small taker (u1026)
+  const T2 = mkAddr(13); // B2 small taker (u1023)
   const F = mkAddr(14); // 1 STX fish
   const AX = mkAddr(15); // +5% ask
   const BX = mkAddr(16); // +1% ask
@@ -333,10 +333,10 @@ async function main() {
   ev("B1 rebate pot y zeroed", "(var-get pending-rebate-y)", "u0");
   ev("B1 taker-too-small false at rest", "(var-get taker-too-small)", "false");
 
-  // =============== B2: in-range whale + small taker -> u1026 ===============
+  // =============== B2: in-range whale + small taker -> u1023 ===============
   tx("B2 W reprices to in-range (M ask not live)", setLimitY(W, HUGE), "(ok true)");
   const escBefore = cap("escrow STX before B2", `(stx-get-balance '${CID})`);
-  tx("B2 1.5 STX swap vs 1000 STX in-range side -> u1026", swap(T2, A1, LT, false), "(err u1026)");
+  tx("B2 1.5 STX swap vs 1000 STX in-range side -> u1023", swap(T2, A1, LT, false), "(err u1023)");
   const escAfter = cap("escrow STX after B2", `(stx-get-balance '${CID})`);
   ev("B2 cycle unchanged", "(get-current-cycle)", "u1");
   ev("B2 W unchanged", `(get-token-y-deposit u1 '${W})`, `u${W_AMT}`);
@@ -397,11 +397,11 @@ async function main() {
   ev("P list still 3", "(len (get-token-y-depositors u0))", "u3", PID);
   ev("P totals exclude parked (6 STX)", "(get total-token-y (get-cycle-totals u0))", "u6000000", PID);
   ev("P P1 limit kept", `(get-token-y-limit '${P1})`, `u${LP1}`, PID);
-  tx("P N2 out-of-range newcomer smaller than smallest -> u1013", depositY(N2, 1_500_000n, 1n, PID), "(err u1013)");
-  tx("P P1 deposits while parked -> u1027", depositY(P1, 2_000_000n, HUGE, PID), "(err u1027)");
+  tx("P N2 out-of-range newcomer smaller than smallest -> u1012", depositY(N2, 1_500_000n, 1n, PID), "(err u1012)");
+  tx("P P1 deposits while parked -> u1024", depositY(P1, 2_000_000n, HUGE, PID), "(err u1024)");
   tx("P P1 reprices while parked -> ok", setLimitY(P1, HUGE, PID), "(ok true)");
   ev("P P1 new limit", `(get-token-y-limit '${P1})`, `u${HUGE}`, PID);
-  tx("P readmit P1 with side full -> u1013", readmitY(DEPLOYER, P1), "(err u1013)");
+  tx("P readmit P1 with side full -> u1012", readmitY(DEPLOYER, P1), "(err u1012)");
   tx("P P2 cancels -> slot", cancelY(P2, PID), "(ok u2000000)");
   tx("P readmit P1 (keeper) -> ok", readmitY(DEPLOYER, P1), "(ok u2000000)");
   ev("P P1 unparked", `(get-token-y-parked '${P1})`, "u0", PID);
@@ -414,8 +414,8 @@ async function main() {
   tx("P P3 cancels while parked -> refund", cancelY(P3, PID), "(ok u2000000)");
   const p3After = cap("P3 stx after cancel", `(stx-get-balance '${P3})`, PID);
   ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
-  tx("P readmit P3 (no longer parked) -> u1028", readmitY(DEPLOYER, P3), "(err u1028)");
-  tx("P readmit P1 (live, not parked) -> u1028", readmitY(DEPLOYER, P1), "(err u1028)");
+  tx("P readmit P3 (no longer parked) -> u1025", readmitY(DEPLOYER, P3), "(err u1025)");
+  tx("P readmit P1 (live, not parked) -> u1025", readmitY(DEPLOYER, P1), "(err u1025)");
   // x mirror: clear the y side first so in-range asks pass the crossing gate
   tx("P P1 cancels", cancelY(P1, PID), "(ok u2000000)");
   tx("P N1 cancels", cancelY(N1, PID), "(ok u2000000)");
@@ -428,7 +428,7 @@ async function main() {
   ev("PX Q1 parked 3000", `(get-token-x-parked '${Q1})`, "u3000", PID);
   ev("PX Q3 still live", `(get-token-x-deposit u0 '${Q3})`, "u3000", PID);
   ev("PX totals exclude parked (9000)", "(get total-token-x (get-cycle-totals u0))", "u9000", PID);
-  tx("PX readmit Q1 full -> u1013", readmitX(DEPLOYER, Q1), "(err u1013)");
+  tx("PX readmit Q1 full -> u1012", readmitX(DEPLOYER, Q1), "(err u1012)");
   const q1Before = cap("Q1 sbtc before cancel", `(get-balance '${Q1})`, SBTC_FQN);
   tx("PX Q1 cancels while parked -> refund", cancelX(Q1, PID), "(ok u3000)");
   const q1After = cap("Q1 sbtc after cancel", `(get-balance '${Q1})`, SBTC_FQN);
