@@ -2,6 +2,14 @@
 // staleness window widened (this harness advances the clock by hours), one real
 // signed Lazer update (PYTH_API_KEY) replaces the dummy VAA; feed ids u1/u45.
 // Everything below is the v2 harness otherwise. Run: PYTH_API_KEY=<key> npx tsx simulations/verify-markets-v4-bounty-fixes.js
+//
+// REWRITTEN for 27e6f43 (close-deposits private, cancel-cycle removed, error
+// codes u1001..u1028): the market binds .jing-core-v4, so core-v4 is deployed
+// here; the source is read with comment lines stripped (>80KB raw). A cycle
+// can no longer sit closed-but-unsettled between txs (every close settles in
+// the same tx), so B3 no longer scripts a public close nor a cancel-cycle:
+// see B3 below. Cycle numbers from B4 on shift down by one (no cancel roll).
+//
 // verify-markets-v2-bounty-fixes.js
 // Self-verifying stxer mainnet-fork harness for the three changes that came
 // out of the aibtc audit bounty mtkrbts96d961f6fae5e on
@@ -16,10 +24,17 @@
 //   B2 in-range whale + small taker -> u1023 ERR_TAKER_TOO_SMALL, atomic.
 //      The taker is under 0.2% of the in-range side; the filter flags it
 //      instead of rolling it and settlement reverts with the new error.
-//   B3 the filter no longer runs at close-deposits: a 1 STX fish rests next
-//      to the 1000 STX whale; public close-deposits leaves the fish in the
-//      cycle (old code rolled it here). cancel-cycle after CANCEL_THRESHOLD
-//      rolls the stuck cycle forward.
+//   B3 the filter never runs on a close alone: a 1 STX fish rests next to
+//      the 1000 STX whale; an outsider (and the deployer) calling
+//      close-deposits is REFUSED (private since 27e6f43), the phase stays
+//      deposit and the fish is untouched; close-and-settle-with-refresh on
+//      this book (no ask in range at the mid) dies u1011 and its close is
+//      unwound with it: fish and whale still in cycle u1, y list still 2,
+//      phase u0. The whale then cancels straight from the deposit phase.
+//      (Was: public close-deposits ok -> fish not rolled -> cancel-cycle
+//      after CANCEL_THRESHOLD rolled the stuck cycle to u2 -> whale cancel.
+//      Both entry points are gone; nothing can be stuck between txs, so the
+//      book stays in cycle u1 and B4/B4b settle into u2/u3 instead of u3/u4.)
 //   B4 price-ordered walk (9f852d4): asks resting in arrival order +2%
 //      (M), +5% (A), +1% (B). A y-taker with a +5.5% limit fills B only;
 //      M and A untouched. Under list order M would have been hit first.
@@ -35,12 +50,10 @@
 //      u1025. X-side mirror: farthest out-of-range ask parked, cancel
 //      refunds sBTC.
 //
-// Hermes is key-gated, so this runs on the REAL prices resting in
-// pyth-storage-v4 with the two sim-only source patches from the v3 sim
-// pattern (MAX_STALENESS loosened, both verify-and-update calls no-op'd).
-// The park instance adds one more sim-only patch: MAX_DEPOSITORS u50 -> u3.
+// Sim-only source patches: MAX_STALENESS loosened (one Lazer update for the
+// whole run); the park instance adds MAX_DEPOSITORS u50 -> u3.
 //
-// Run: npx tsx simulations/verify-markets-v2-bounty-fixes.js
+// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-markets-v4-bounty-fixes.js
 import fs from "node:fs";
 import {
   uintCV,
@@ -84,7 +97,7 @@ const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : (getAdd
 const mkAddr = (n) =>
   getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 
-const CORE = "jing-core-v3";
+const CORE = "jing-core-v4"; // the v4 market binds .jing-core-v4
 const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
 // This harness advances the clock by hours, which the live 80 s staleness
 // window cannot survive, so in DEPLOYED mode it runs a test copy of the
@@ -117,18 +130,21 @@ const stxFeedBuf = bufferCV(Buffer.from(STX_USD_FEED_HEX, "hex"));
 let DUMMY_VAA = bufferCV(Buffer.from("00", "hex")); // replaced by the real Lazer update in main()
 
 // ---- sources + sim-only patches ----
+// the v4 market source is >80KB with comment lines: strip them for the deploy
+const stripComments = (src) => src.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
 const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
-let mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8");
+let mktSrc = stripComments(fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8"));
+if (!mktSrc.includes("(contract-call? .jing-core-v4")) throw new Error("market source does not bind .jing-core-v4");
 if (DEPLOYED) {
   const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22/${MARKET_LIVE}?proof=0`);
   mktSrc = (await r.json()).source;
   console.log(`DEPLOYED: clock-test copy ${MARKET} built from the live ${MARKET_LIVE} bytes (${mktSrc.length} chars), MAX_STALENESS widened only`);
 }
   // v4: signatures are REAL (a signed Lazer update, verified by the live
-  // oracle). ONE sim-only patch remains here: MAX_STALENESS is widened,
-  // because this harness advances the chain by 43 bitcoin blocks to reach
-  // CANCEL_THRESHOLD and no update fetched at build time can be fresh for
-  // a clock hours ahead. The 80 s window itself is proven in
+  // oracle). ONE sim-only patch remains here: MAX_STALENESS is widened, so
+  // the single update fetched at build time stays valid for the whole run
+  // (this harness no longer advances the clock: cancel-cycle and its
+  // CANCEL_THRESHOLD are gone). The 80 s window itself is proven in
   // verify-swap-router-v2-lazer.js (W10, stale fixture refused u1002).
   mktSrc = mktSrc.replace("(define-constant MAX_STALENESS u80)", "(define-constant MAX_STALENESS u999999999)");
   if (!mktSrc.includes("MAX_STALENESS u999999999")) throw new Error("staleness patch did not apply");
@@ -161,6 +177,9 @@ function decodeEval(s) {
 }
 const uintOf = (s) => BigInt((String(s).match(/u(\d+)/) || [, "0"])[1]);
 const okPrefix = (v) => String(v).startsWith("(ok");
+// a call to a private function: the engine refuses it (rendered "(err none)"
+// or an ENGINE-ERR string by the decoders above)
+const refused = (v) => v === "(err none)" || String(v).includes("ENGINE-ERR");
 
 let checks = 0;
 let failures = 0;
@@ -266,6 +285,8 @@ async function main() {
   const cancelY = (sender, cid = CID) => call(sender, "cancel-token-y-deposit", [wstxTrait, wstxAsset], cid);
   const cancelX = (sender, cid = CID) => call(sender, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], cid);
   const setLimitY = (sender, limit, cid = CID) => call(sender, "set-token-y-limit", [uintCV(limit), DUMMY_VAA], cid);
+  const closeAndSettle = (sender, cid = CID) =>
+    call(sender, "close-and-settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset], cid);
   const readmitY = (sender, who, cid = PID) => call(sender, "readmit-token-y", [standardPrincipalCV(who), DUMMY_VAA], cid);
   const readmitX = (sender, who, cid = PID) => call(sender, "readmit-token-x", [standardPrincipalCV(who), DUMMY_VAA], cid);
   const sbtcSend = (to, amt) => (b) =>
@@ -343,19 +364,25 @@ async function main() {
   ev("B2 T2 has no row", `(get-token-y-deposit u1 '${T2})`, "u0");
   ev("B2 flag unwound by the revert", "(var-get taker-too-small)", "false");
 
-  // =============== B3: no small-share roll at close-deposits ===============
+  // =============== B3: no close without a settle, no roll of the fish ===============
   tx("B3 F 1 STX in-range bid (0.1% of side)", depositY(F, MIN_STX, HUGE), `(ok u${MIN_STX})`);
-  tx("B3 public close-deposits", call(DEPLOYER, "close-deposits", []), "(ok true)");
-  ev("B3 fish still in cycle after close (not rolled)", `(get-token-y-deposit u1 '${F})`, `u${MIN_STX}`);
+  tx("B3 outsider close-deposits REFUSED (private)", call(T2, "close-deposits", []), refused);
+  tx("B3 deployer close-deposits REFUSED too", call(DEPLOYER, "close-deposits", []), refused);
+  ev("B3 phase stays deposit", "(get-cycle-phase)", "u0");
+  ev("B3 fish still in cycle u1 (not rolled)", `(get-token-y-deposit u1 '${F})`, `u${MIN_STX}`);
+  // the only close is the one that settles: at the mid no ask is in range
+  // (M rests at +2%), so the settle dies u1011 and the close unwinds with it
+  tx("B3 close-and-settle-with-refresh, x empty at mid -> u1011", closeAndSettle(DEPLOYER), "(err u1011)");
+  ev("B3 close unwound: phase u0", "(get-cycle-phase)", "u0");
+  ev("B3 closed-block u0", "(var-get deposits-closed-block)", "u0");
+  ev("B3 cycle still u1", "(get-current-cycle)", "u1");
+  ev("B3 fish still in cycle u1", `(get-token-y-deposit u1 '${F})`, `u${MIN_STX}`);
   ev("B3 fish not moved to u2", `(get-token-y-deposit u2 '${F})`, "u0");
+  ev("B3 W still in cycle u1", `(get-token-y-deposit u1 '${W})`, `u${W_AMT}`);
+  ev(`B3 M still in cycle u1 (${M_LEFT})`, `(get-token-x-deposit u1 '${M})`, `u${M_LEFT}`);
   ev("B3 y list still W + F", "(len (get-token-y-depositors u1))", "u2");
-  b = b.addAdvanceBlocks({ bitcoin_blocks: 43, stacks_blocks_per_bitcoin: 1 });
-  tx("B3 cancel-cycle after threshold", call(DEPLOYER, "cancel-cycle", []), "(ok true)");
-  ev("B3 cycle -> u2", "(get-current-cycle)", "u2");
-  ev("B3 fish rolled by cancel", `(get-token-y-deposit u2 '${F})`, `u${MIN_STX}`);
-  ev("B3 W rolled by cancel", `(get-token-y-deposit u2 '${W})`, `u${W_AMT}`);
-  ev(`B3 M rolled by cancel (${M_LEFT})`, `(get-token-x-deposit u2 '${M})`, `u${M_LEFT}`);
-  tx("B3 W cancels (deposit phase)", cancelY(W), `(ok u${W_AMT})`);
+  tx("B3 W cancels (deposit phase, nothing stuck)", cancelY(W), `(ok u${W_AMT})`);
+  ev("B3 y list now F only", "(len (get-token-y-depositors u1))", "u1");
 
   // =============== B4: price-ordered walk, asks ===============
   // list order on x: M (+2%, rolled), then A (+5%), then B (+1%)
@@ -364,25 +391,25 @@ async function main() {
   const t3Before = cap("T3 sbtc before", `(get-balance '${T3})`, SBTC_FQN);
   tx("B4 3 STX y-taker at +5.5% -> ok", swap(T3, A3, LT3, false), okPrefix);
   const t3After = cap("T3 sbtc after", `(get-balance '${T3})`, SBTC_FQN);
-  ev("B4 cycle -> u3", "(get-current-cycle)", "u3");
-  ev(`B4 B (+1%, best) filled: left ${B_LEFT}`, `(get-token-x-deposit u3 '${BX})`, `u${B_LEFT}`);
-  ev(`B4 M (+2%, list-first) untouched ${M_LEFT}`, `(get-token-x-deposit u3 '${M})`, `u${M_LEFT}`);
-  ev("B4 A (+5%) untouched", `(get-token-x-deposit u3 '${AX})`, "u5000");
-  ev("B4 taker residual refunded", `(get-token-y-deposit u3 '${T3})`, "u0");
-  ev("B4 fish rolled unfilled (mid cleared 0)", `(get-token-y-deposit u3 '${F})`, `u${MIN_STX}`);
+  ev("B4 cycle -> u2", "(get-current-cycle)", "u2");
+  ev(`B4 B (+1%, best) filled: left ${B_LEFT}`, `(get-token-x-deposit u2 '${BX})`, `u${B_LEFT}`);
+  ev(`B4 M (+2%, list-first) untouched ${M_LEFT}`, `(get-token-x-deposit u2 '${M})`, `u${M_LEFT}`);
+  ev("B4 A (+5%) untouched", `(get-token-x-deposit u2 '${AX})`, "u5000");
+  ev("B4 taker residual refunded", `(get-token-y-deposit u2 '${T3})`, "u0");
+  ev("B4 fish rolled unfilled (mid cleared 0)", `(get-token-y-deposit u2 '${F})`, `u${MIN_STX}`);
 
   // =============== B4b: price-ordered walk, bids (x-taker) ===============
   tx("B4b C 20 STX bid at -5% (first)", depositY(CY, 20_000_000n, LC), "(ok u20000000)");
   tx("B4b D 20 STX bid at -1% (second)", depositY(DY, 20_000_000n, LD), "(ok u20000000)");
   tx("B4b 2000-sat x-taker at -5.5% -> ok", swap(TX, AX_AMT, LTX, true), okPrefix);
-  ev("B4b cycle -> u4", "(get-current-cycle)", "u4");
-  ev("B4b C (-5%, list-first) untouched", `(get-token-y-deposit u4 '${CY})`, "u20000000");
-  ev("B4b D (-1%, best) filled", `(get-token-y-deposit u4 '${DY})`, (v) => {
+  ev("B4b cycle -> u3", "(get-current-cycle)", "u3");
+  ev("B4b C (-5%, list-first) untouched", `(get-token-y-deposit u3 '${CY})`, "u20000000");
+  ev("B4b D (-1%, best) filled", `(get-token-y-deposit u3 '${DY})`, (v) => {
     const left = uintOf(v);
     return left > 0n && left < 20_000_000n;
   });
-  ev("B4b x-walker residual 0", `(get-token-x-deposit u4 '${TX})`, "u0");
-  ev("B4b fish cleared at mid", `(get-token-y-deposit u4 '${F})`, "u0");
+  ev("B4b x-walker residual 0", `(get-token-x-deposit u3 '${TX})`, "u0");
+  ev("B4b fish cleared at mid", `(get-token-y-deposit u3 '${F})`, "u0");
 
   // =============== P: parked makers (MAX_DEPOSITORS u3) ===============
   tx("P1 bid 2 STX at -10% (gap 10%)", depositY(P1, 2_000_000n, LP1, PID), "(ok u2000000)");
@@ -441,14 +468,13 @@ async function main() {
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid);
   const s = res.steps;
-  if (s.length !== steps.length + 1) {
-    // +1 for the addAdvanceBlocks step, which also produces a result entry
-    console.log(`note: ${s.length} result steps vs ${steps.length} scripted (advance-blocks accounts for one)`);
+  if (s.length !== steps.length) {
+    console.log(`note: ${s.length} result steps vs ${steps.length} scripted`);
   }
 
   let i = 0;
   for (const st of steps) {
-    // skip the advance-blocks result entry (no Transaction, no Eval)
+    // skip any result entry that is neither a Transaction nor an Eval
     while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1;
     const raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]);
     i += 1;
