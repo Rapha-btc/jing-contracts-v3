@@ -31,15 +31,16 @@ payouts, amend / approve flow, error codes, events) is byte-for-byte v2.
 ## Verification
 
 `npx tsx simulations/verify-creator-escrow-v3.js` -- the full v2 scenario
-(31 checks) plus 16 checks for the new path: 47/47 on a stxer mainnet fork,
-`https://stxer.xyz/simulations/mainnet/f4f3acc52c3785110b132c5a54be73a5`.
+(31 checks) plus 16 checks for the new path: 47/47 on a stxer mainnet fork.
+Commented draft: `f4f3acc52c3785110b132c5a54be73a5`; final comment-free
+formatted bytes (what deploys): `12588b66ec96af51ab520fe18a08a287`.
 
 ## Deploy
 
 `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v3-jing` via
 faktory-dao `POST /api/bot/deploy-contract {"contractName":"creator-escrow-v3-jing"}`
-(Clarity 4, account 0 so OWNER = deployer, same as v1/v2). Deployed bytes =
-this file with `;;` comment lines stripped.
+(Clarity 4, account 0 so OWNER = deployer, same as v1/v2). The `.clar` is
+comment-free and `clarinet format`ed; deployed bytes == repo bytes verbatim.
 
 ## Off-chain side tables
 
