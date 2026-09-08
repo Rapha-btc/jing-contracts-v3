@@ -35,7 +35,7 @@ const DEPLOYED = process.env.DEPLOYED === "1";
 const CHAVITA = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 const DEPLOYER = DEPLOYED ? CHAVITA : getAddressFromPrivateKey("5".repeat(64) + "01", "mainnet");
 const CORE = "jing-core-v4";
-const MARKET_FILE = "markets-sbtc-stx-jing-v4";
+const MARKET_FILE = "markets-sbtc-stx-jing-v5";
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE;
 const CID = `${DEPLOYER}.${MARKET}`;
 const CORE_ID = `${DEPLOYER}.${CORE}`;

@@ -31,7 +31,7 @@ const DEPLOYER = getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet");
 const mkAddr = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 
 const CORE = "jing-core-v4";
-const MARKET = "markets-sbtc-stx-jing-v4";
+const MARKET = "markets-sbtc-stx-jing-v5";
 const PARK = "markets-sbtc-stx-jing-v4-park";
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const CID = `${DEPLOYER}.${MARKET}`;

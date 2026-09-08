@@ -1,6 +1,6 @@
 ;; jing-ladder
 ;;
-;; Registry of the pooled limit makers on markets-sbtc-stx-jing-v4: one
+;; Registry of the pooled limit makers on markets-sbtc-stx-jing-v5: one
 ;; jing-buy-stx (rests sBTC, buys STX) or jing-sell-stx (rests STX, sells
 ;; STX) contract per price, named the way the FE speaks. Anyone
 ;; deploys one from the template at a new price; it registers itself here at

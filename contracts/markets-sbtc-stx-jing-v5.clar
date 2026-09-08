@@ -1,10 +1,5 @@
 (use-trait ft-trait 'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait)
 
-(define-constant CANCEL_THRESHOLD u42)
-
-(define-constant PHASE_DEPOSIT u0)
-(define-constant PHASE_SETTLE u2)
-
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
 (define-constant TAKER_REBATE_BPS u20)
@@ -33,35 +28,32 @@
 (define-constant LAZER_ORACLE 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle)
 (define-constant LAZER_DECODER 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1)
 (define-constant MICROS_PER_SECOND u1000000)
-(define-constant ERR_FEED_MISSING (err u1029))
-(define-constant ERR_USE_CANCEL (err u1030))
 
 (define-constant ERR_DEPOSIT_TOO_SMALL (err u1001))
-(define-constant ERR_NOT_DEPOSIT_PHASE (err u1002))
-(define-constant ERR_NOT_SETTLE_PHASE (err u1003))
-(define-constant ERR_ALREADY_SETTLED (err u1004))
-(define-constant ERR_STALE_PRICE (err u1005))
-(define-constant ERR_PRICE_UNCERTAIN (err u1006))
-(define-constant ERR_NOTHING_TO_WITHDRAW (err u1008))
-(define-constant ERR_ZERO_PRICE (err u1009))
-(define-constant ERR_PAUSED (err u1010))
-(define-constant ERR_NOT_AUTHORIZED (err u1011))
-(define-constant ERR_NOTHING_TO_SETTLE (err u1012))
-(define-constant ERR_QUEUE_FULL (err u1013))
-(define-constant ERR_CANCEL_TOO_EARLY (err u1014))
-(define-constant ERR_ALREADY_CLOSED (err u1016))
-(define-constant ERR_LIMIT_REQUIRED (err u1017))
-(define-constant ERR_ALREADY_INITIALIZED (err u1018))
-(define-constant ERR_WRONG_TRAIT (err u1019))
-(define-constant ERR_EXPO_MISMATCH (err u1020))
-(define-constant ERR_NOTHING_FILLED (err u1021))
-(define-constant ERR_MUST_USE_SWAP (err u1022))
-(define-constant ERR_PARTIAL_FILL (err u1023))
-(define-constant ERR_HAS_RESTING_POSITION (err u1024))
-(define-constant ERR_ZERO_MIN_DEPOSIT (err u1025))
-(define-constant ERR_TAKER_TOO_SMALL (err u1026))
-(define-constant ERR_PARKED (err u1027))
-(define-constant ERR_NOTHING_TO_READMIT (err u1028))
+(define-constant ERR_ALREADY_SETTLED (err u1002))
+(define-constant ERR_STALE_PRICE (err u1003))
+(define-constant ERR_PRICE_UNCERTAIN (err u1004))
+(define-constant ERR_NOTHING_TO_WITHDRAW (err u1005))
+(define-constant ERR_ZERO_PRICE (err u1006))
+(define-constant ERR_PAUSED (err u1007))
+(define-constant ERR_NOT_AUTHORIZED (err u1008))
+(define-constant ERR_NOTHING_TO_SETTLE (err u1009))
+(define-constant ERR_QUEUE_FULL (err u1010))
+(define-constant ERR_LIMIT_REQUIRED (err u1011))
+(define-constant ERR_ALREADY_INITIALIZED (err u1012))
+(define-constant ERR_WRONG_TRAIT (err u1013))
+(define-constant ERR_EXPO_MISMATCH (err u1014))
+(define-constant ERR_NOTHING_FILLED (err u1015))
+(define-constant ERR_MUST_USE_SWAP (err u1016))
+(define-constant ERR_PARTIAL_FILL (err u1017))
+(define-constant ERR_HAS_RESTING_POSITION (err u1018))
+(define-constant ERR_ZERO_MIN_DEPOSIT (err u1019))
+(define-constant ERR_TAKER_TOO_SMALL (err u1020))
+(define-constant ERR_PARKED (err u1021))
+(define-constant ERR_NOTHING_TO_READMIT (err u1022))
+(define-constant ERR_FEED_MISSING (err u1023))
+(define-constant ERR_USE_CANCEL (err u1024))
+(define-constant ERR_FEED_TIMESTAMP_MISSING (err u1025))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -69,9 +61,6 @@
 (define-data-var min-token-y-deposit uint u0)
 (define-data-var min-token-x-deposit uint u0)
 (define-data-var current-cycle uint u0)
-(define-data-var cycle-start-block uint stacks-block-height)
-
-(define-data-var deposits-closed-block uint u0)
 
 (define-data-var settle-token-y-cleared uint u0)
 (define-data-var settle-token-x-cleared uint u0)
@@ -176,23 +165,6 @@
   (var-get current-cycle)
 )
 
-(define-read-only (get-cycle-start-block)
-  (var-get cycle-start-block)
-)
-
-(define-read-only (get-blocks-elapsed)
-  (- stacks-block-height (var-get cycle-start-block))
-)
-
-(define-read-only (get-cycle-phase)
-  (let ((closed-block (var-get deposits-closed-block)))
-    (if (is-eq closed-block u0)
-      PHASE_DEPOSIT
-      PHASE_SETTLE
-    )
-  )
-)
-
 (define-read-only (get-cycle-totals (cycle uint))
   (default-to {
     total-token-y: u0,
@@ -256,8 +228,6 @@
 (define-private (advance-cycle)
   (begin
     (var-set current-cycle (+ (var-get current-cycle) u1))
-    (var-set cycle-start-block stacks-block-height)
-    (var-set deposits-closed-block u0)
   )
 )
 
@@ -548,7 +518,9 @@
     expo: (get exponent f),
     ema-price: (default-to (get price f) (get ema-price f)),
     ema-conf: (default-to u0 (get ema-confidence f)),
-    publish-time: publish-time,
+    publish-time: (/ (unwrap! (get feed-update-timestamp f) ERR_FEED_TIMESTAMP_MISSING)
+      MICROS_PER_SECOND
+    ),
     prev-publish-time: u0,
   })
 )
@@ -693,7 +665,6 @@
       (tok-y (var-get token-y))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (>= amount (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
@@ -812,7 +783,6 @@
       (tok-x (var-get token-x))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (>= amount (var-get min-token-x-deposit)) ERR_DEPOSIT_TOO_SMALL)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
@@ -945,7 +915,6 @@
         (ok parked)
       )
       (begin
-        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
         (try! (as-contract? ((with-stx amount))
           (try! (stx-transfer? amount current-contract caller))
         ))
@@ -997,7 +966,6 @@
         (ok parked)
       )
       (begin
-        (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
         (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
           (try! (contract-call? t transfer amount current-contract caller none))
         ))
@@ -1046,9 +1014,6 @@
     )
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
     (asserts! (> have u0) ERR_NOTHING_TO_WITHDRAW)
-    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT))
-      ERR_NOT_DEPOSIT_PHASE
-    )
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (< amount have) ERR_USE_CANCEL)
     (asserts! (>= remaining (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
@@ -1100,9 +1065,6 @@
     )
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
     (asserts! (> have u0) ERR_NOTHING_TO_WITHDRAW)
-    (asserts! (or (not on-live) (is-eq (get-cycle-phase) PHASE_DEPOSIT))
-      ERR_NOT_DEPOSIT_PHASE
-    )
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (< amount have) ERR_USE_CANCEL)
     (asserts! (>= remaining (var-get min-token-x-deposit)) ERR_DEPOSIT_TOO_SMALL)
@@ -1143,7 +1105,6 @@
       (price (try! (fresh-classification-price update)))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
     (asserts! (not (would-take-as-y price limit)) ERR_MUST_USE_SWAP)
@@ -1184,7 +1145,6 @@
       (price (try! (fresh-classification-price update)))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
     (asserts! (not (would-take-as-x price limit)) ERR_MUST_USE_SWAP)
@@ -1217,7 +1177,6 @@
     (update (buff 8192))
   )
   (begin
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts!
       (or
@@ -1246,7 +1205,6 @@
     (update (buff 8192))
   )
   (begin
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts!
       (or
@@ -1282,7 +1240,6 @@
       (cycle (var-get current-cycle))
       (amount (get-token-y-deposit cycle tx-sender))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
@@ -1302,7 +1259,6 @@
         )
         (var-set pending-rebate-y rebate)
         (var-set crossing true)
-        (try! (close-deposits))
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-y result
             (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
@@ -1334,7 +1290,6 @@
       (cycle (var-get current-cycle))
       (amount (get-token-x-deposit cycle tx-sender))
     )
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_NOT_DEPOSIT_PHASE)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
     (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
@@ -1356,7 +1311,6 @@
         )
         (var-set pending-rebate-x rebate)
         (var-set crossing true)
-        (try! (close-deposits))
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-x result
             (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
@@ -1564,29 +1518,6 @@
   )
 )
 
-(define-public (close-deposits)
-  (let (
-      (cycle (var-get current-cycle))
-      (elapsed (get-blocks-elapsed))
-      (totals (get-cycle-totals cycle))
-    )
-    (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_DEPOSIT) ERR_ALREADY_CLOSED)
-    (asserts!
-      (and
-        (>= (get total-token-y totals) (var-get min-token-y-deposit))
-        (>= (get total-token-x totals) (var-get min-token-x-deposit))
-      )
-      ERR_NOTHING_TO_SETTLE
-    )
-    (var-set deposits-closed-block stacks-block-height)
-    (try! (contract-call? .jing-core-v4 log-close-deposits cycle stacks-block-height
-      elapsed (var-get token-x) (var-get token-y)
-    ))
-    (ok true)
-  )
-)
-
 (define-public (settle-with-refresh
     (update (buff 8192))
     (tx-trait <ft-trait>)
@@ -1636,19 +1567,6 @@
   )
 )
 
-(define-public (close-and-settle-with-refresh
-    (update (buff 8192))
-    (tx-trait <ft-trait>)
-    (tx-name (string-ascii 128))
-    (ty-trait <ft-trait>)
-    (ty-name (string-ascii 128))
-  )
-  (begin
-    (try! (close-deposits))
-    (settle-with-refresh update tx-trait tx-name ty-trait ty-name)
-  )
-)
-
 (define-public (swap
     (amount uint)
     (limit-price uint)
@@ -1693,7 +1611,6 @@
       )
     )
     (var-set crossing true)
-    (try! (close-deposits))
     (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
       (if deposit-x
         (ok (swap-result-x result
@@ -2297,36 +2214,6 @@
     })
   )
 )
-(define-public (cancel-cycle)
-  (let (
-      (cycle (var-get current-cycle))
-      (closed-block (var-get deposits-closed-block))
-      (totals (get-cycle-totals cycle))
-      (totals-next (get-cycle-totals (+ cycle u1)))
-      (merged-x (+ (get total-token-x totals) (get total-token-x totals-next)))
-      (merged-y (+ (get total-token-y totals) (get total-token-y totals-next)))
-    )
-    (asserts! (> closed-block u0) ERR_NOT_SETTLE_PHASE)
-    (asserts! (>= stacks-block-height (+ closed-block CANCEL_THRESHOLD))
-      ERR_CANCEL_TOO_EARLY
-    )
-    (asserts! (is-none (map-get? settlements cycle)) ERR_ALREADY_SETTLED)
-    (map-set cycle-totals (+ cycle u1) {
-      total-token-x: merged-x,
-      total-token-y: merged-y,
-    })
-    (map-delete cycle-totals cycle)
-    (map roll-token-y-depositor (get-token-y-depositors cycle))
-    (map roll-token-x-depositor (get-token-x-depositors cycle))
-    (roll-depositor-lists cycle)
-    (advance-cycle)
-    (try! (contract-call? .jing-core-v4 log-cancel-cycle cycle merged-x merged-y
-      (var-get token-x) (var-get token-y)
-    ))
-    (ok true)
-  )
-)
-
 (define-private (execute-settlement
     (cycle uint)
     (feed-x {
@@ -2356,9 +2243,16 @@
       (price-x (to-uint (get price feed-x)))
       (price-y (to-uint (get price feed-y)))
       (min-freshness (- stacks-block-time MAX_STALENESS))
+      (raw (get-cycle-totals cycle))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (is-eq (get-cycle-phase) PHASE_SETTLE) ERR_NOT_SETTLE_PHASE)
+    (asserts!
+      (and
+        (>= (get total-token-y raw) (var-get min-token-y-deposit))
+        (>= (get total-token-x raw) (var-get min-token-x-deposit))
+      )
+      ERR_NOTHING_TO_SETTLE
+    )
     (asserts! (is-none (map-get? settlements cycle)) ERR_ALREADY_SETTLED)
     (asserts! (> price-x u0) ERR_ZERO_PRICE)
     (asserts! (> price-y u0) ERR_ZERO_PRICE)

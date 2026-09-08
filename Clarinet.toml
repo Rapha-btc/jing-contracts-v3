@@ -327,3 +327,18 @@ epoch = "3.4"
 path = "contracts/jing-sell-stx.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v5]
+path = "contracts/markets-sbtc-stx-jing-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.swap-router-sbtc-stx-jing-v4]
+path = "contracts/swap-router-sbtc-stx-jing-v4.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.vault-sbtc-stx-v5]
+path = "contracts/vault-sbtc-stx-v5.clar"
+clarity_version = 5
+epoch = "3.4"

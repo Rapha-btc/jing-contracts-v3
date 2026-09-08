@@ -110,7 +110,7 @@ const X5 = mkAddr(8); // in-range x maker for S3b
 const Y1 = mkAddr(9); // out-of-range y bid for S4
 
 const CORE = "jing-core-v4"; // the market binds .jing-core-v4
-const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+const MARKET_FILE = "markets-sbtc-stx-jing-v5"; // Pyth Lazer, UNPATCHED (the local source)
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const CID = `${DEPLOYER}.${MARKET}`;
 const CORE_ID = `${DEPLOYER}.${CORE}`;

@@ -1,7 +1,7 @@
 ;; jing-sell-stx
 ;;
 ;; The mirror of jing-buy-stx: a pooled STX sell (STX resting, the market's y
-;; side) at ONE price on markets-sbtc-stx-jing-v4. The contract rests the
+;; side) at ONE price on markets-sbtc-stx-jing-v5. The contract rests the
 ;; pooled STX at its price, receives the sBTC fills at settlement, and hands
 ;; each member their share of both what is still resting and what was sold
 ;; (jing-sell-stx-320-00 = sell STX once it is at or above 320.00 sats;
@@ -25,7 +25,7 @@
 ;; withdraw. The pool is sold out, the next deposit starts a fresh epoch.
 (define-constant SOLD_OUT_INDEX u1000000)
 
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
@@ -131,14 +131,14 @@
 ;; live + parked size of this contract on the market
 (define-read-only (market-size)
   (+
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
       get-token-y-deposit
-      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
+      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
         get-current-cycle
       )
       current-contract
     )
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v4
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
       get-token-y-parked current-contract
     )
   )

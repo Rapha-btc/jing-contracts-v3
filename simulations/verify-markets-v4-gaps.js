@@ -100,7 +100,7 @@ const mkAddr = (n) =>
   getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 
 const CORE = "jing-core-v4"; // the v4 market binds .jing-core-v4
-const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+const MARKET_FILE = "markets-sbtc-stx-jing-v5"; // Pyth Lazer, UNPATCHED (the local source)
 // This harness advances the clock by hours, which the live 80 s staleness
 // window cannot survive, so in DEPLOYED mode it runs a test copy of the
 // LIVE bytes (fetched from chain, only MAX_STALENESS widened) deployed under

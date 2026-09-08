@@ -61,7 +61,7 @@ const DEPLOYED = process.env.DEPLOYED === "1";
 const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : (LIVE ? LIVE_DEPLOYER : getAddressFromPrivateKey(OWNER_PRIVKEY, "mainnet"));
 
 const CORE = "jing-core-v4"; // the market binds .jing-core-v4
-const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
+const MARKET_FILE = "markets-sbtc-stx-jing-v5"; // Pyth Lazer, UNPATCHED (the local source)
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const CID = `${DEPLOYER}.${MARKET}`;
 const CORE_ID = `${DEPLOYER}.${CORE}`;

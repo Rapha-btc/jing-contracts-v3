@@ -30,7 +30,7 @@ const CHAVITA = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 // a key no maker uses (makers are "1".."6" repeated); the deployer is also the treasury
 const DEPLOYER = DEPLOYED ? CHAVITA : getAddressFromPrivateKey("9a".repeat(32) + "01", "mainnet");
 const CORE = "jing-core-v4"; // the market binds .jing-core-v4
-const MARKET_FILE = "markets-sbtc-stx-jing-v4";
+const MARKET_FILE = "markets-sbtc-stx-jing-v5";
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE;
 const CID = `${DEPLOYER}.${MARKET}`;
 const CORE_ID = `${DEPLOYER}.${CORE}`;
