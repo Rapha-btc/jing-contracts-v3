@@ -54,7 +54,10 @@
 // MAX_STALENESS, no Pyth fee (the Lazer oracle fee is u0). W10 at the end
 // advances the chain past the window and expects the same update refused.
 //
-// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-swap-router-v2-lazer.js
+// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-swap-router-v3-lazer.js
+//   LIVE_V5=1 PYTH_API_KEY=<key> npx tsx simulations/verify-swap-router-v3-lazer.js
+//     -> the MAINNET pair markets-sbtc-stx-jing-v5 + swap-router-sbtc-stx-jing-v4
+//        on jing-core-v4 (see LIVE_V5 below)
 import fs from "node:fs";
 import {
   uintCV,
@@ -107,12 +110,31 @@ const DEPLOYED = process.env.DEPLOYED === "1";
 // the capacity call) deployed on the fork under chavita as
 // swap-router-sbtc-stx-jingswap-v1: the exact bytes and name mainnet gets.
 const DEPLOY_COPY = process.env.DEPLOY_COPY === "1";
+// LIVE_V5=1: the MAINNET pair deployed 2026-09-08 under chavita, nothing
+// deployed but the 1-step copy (built from the live router bytes):
+//   market markets-sbtc-stx-jing-v5 (contracts/markets-sbtc-stx-jing-v5.clar,
+//     PHASE-FREE: no close-deposits / get-cycle-phase / close-and-settle-*;
+//     the keeper entry is settle-with-refresh and `swap` calls it inline, so a
+//     taker swap still advances the cycle by one and rolls the maker's
+//     remainder into the next cycle exactly as the v4 harness expects; error
+//     codes renumbered u1001..u1025, see README-audit-bounty-lazer-v4.md)
+//   router swap-router-sbtc-stx-jing-v4 (= v3 bytes, JING_MARKET -> market v5)
+//   core jing-core-v4 (market already verified + initialized on mainnet:
+//     min-x u1000, min-y u1000000, feeds u1/u45)
+// The live market may carry resting makers by the time this runs: the
+// harness reads the live cycle + depositor lists first, offsets every
+// absolute cycle read by the live cycle, and cancels any resting maker by
+// impersonation (stxer signs nothing) so every wave starts on an empty book.
+const LIVE_V5 = process.env.LIVE_V5 === "1";
 const DEPLOYER = DEPLOYED ? "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22" : ("SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22");
 
-const CORE = "jing-core-v3";
-const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source) = the deployed markets-sbtc-stx-jingswap
-const MARKET = (DEPLOYED || DEPLOY_COPY) ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
-const ROUTER = DEPLOY_COPY ? "swap-router-sbtc-stx-jingswap-v1" : "swap-router-sbtc-stx-jing-v3"; // v3 = v2 + caller-supplied mid (no second oracle verification) + zero guards
+const CORE = LIVE_V5 ? "jing-core-v4" : "jing-core-v3";
+const MARKET_FILE = LIVE_V5 ? "markets-sbtc-stx-jing-v5" : "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source) = the deployed markets-sbtc-stx-jingswap
+const MARKET = LIVE_V5 ? "markets-sbtc-stx-jing-v5" : (DEPLOYED || DEPLOY_COPY) ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
+const ROUTER = LIVE_V5 ? "swap-router-sbtc-stx-jing-v4" : DEPLOY_COPY ? "swap-router-sbtc-stx-jingswap-v1" : "swap-router-sbtc-stx-jing-v3"; // v3 = v2 + caller-supplied mid (no second oracle verification) + zero guards
+// market error codes the harness expects directly (everything else the market
+// refuses is caught inside the router and surfaces as jing-ok false / u3002)
+const E_STALE = LIVE_V5 ? "(err u1003)" : "(err u1005)"; // ERR_STALE_PRICE: v5 renumbered, v4 u1005
 const CORE_ID = `${DEPLOYER}.${CORE}`;
 const CID = `${DEPLOYER}.${MARKET}`;
 const RID = `${DEPLOYER}.${DEPLOYED ? "swap-router-sbtc-stx-jingswap-v1" : ROUTER}`;
@@ -137,7 +159,10 @@ async function fetchLazerUpdate() {
   if (!key) throw new Error("PYTH_API_KEY is required (Pyth Pro key from pythdata.app)");
   const r = await fetch("https://pyth-lazer.dourolabs.app/v1/latest_price", { method: "POST",
     headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ priceFeedIds: [1, 45], properties: ["price", "exponent", "confidence", "publisherCount"], formats: ["evm"], channel: "fixed_rate@1000ms", jsonBinaryEncoding: "hex" }) });
+    // v5 (LIVE_V5) reads each feed's own feedUpdateTimestamp as its
+    // publish-time (audit fix: per-feed staleness) and refuses an update
+    // without it (ERR_FEED_TIMESTAMP_MISSING u1025); v4 ignores the property
+    body: JSON.stringify({ priceFeedIds: [1, 45], properties: ["price", "exponent", "confidence", "publisherCount", ...(LIVE_V5 ? ["feedUpdateTimestamp"] : [])], formats: ["evm"], channel: "fixed_rate@1000ms", jsonBinaryEncoding: "hex" }) });
   if (!r.ok) throw new Error(`Lazer ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const j = await r.json();
   const f = Object.fromEntries(j.parsed.priceFeeds.map((e) => [e.priceFeedId, e]));
@@ -191,7 +216,8 @@ async function storedPrice(feedHex) {
 }
 
 async function main() {
-  console.log("=== swap-router-sbtc-stx-jing-v3 (+ deployed market v4) SELF-VERIFYING stxer harness ===\n");
+  console.log(LIVE_V5 ? "=== LIVE swap-router-sbtc-stx-jing-v4 + markets-sbtc-stx-jing-v5 on jing-core-v4 (mainnet pair, nothing deployed) SELF-VERIFYING stxer harness ===\n"
+    : "=== swap-router-sbtc-stx-jing-v3 (+ deployed market v4) SELF-VERIFYING stxer harness ===\n");
   if (DEPLOYED) {
     const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${DEPLOYER}/${ROUTER_LIVE}?proof=0`);
     const live = (await r.json()).source;
@@ -199,6 +225,34 @@ async function main() {
     if (router1StepSrc === live) throw new Error("DLMM_MAX_STEPS patch did not apply to the live router");
     console.log(`DEPLOYED: market ${DEPLOYER}.${MARKET}, router ${DEPLOYER}.${ROUTER_LIVE}, 1-step copy from the live router bytes`);
   }
+  // LIVE_V5: the 1-step copy from the live router v4 bytes; the live cycle
+  // offsets every absolute cycle read; resting makers are cancelled first
+  let C0 = 0n; // the market's cycle when the harness starts
+  const liveMakers = { y: [], x: [] };
+  if (LIVE_V5) {
+    const r = await fetch(`${STACKS_NODE_API}/v2/contracts/source/${DEPLOYER}/${ROUTER}?proof=0`);
+    const live = (await r.json()).source;
+    if (!live || !live.includes(`.${MARKET})`)) throw new Error(`live ${ROUTER} not found or not bound to ${MARKET}`);
+    if (live.trim() !== routerSrc.trim()) console.log(`  note: live ${ROUTER} bytes differ from contracts/${ROUTER}.clar (1-step copy uses the LIVE bytes)`);
+    router1StepSrc = live.replace("(define-constant DLMM_MAX_STEPS u230)", "(define-constant DLMM_MAX_STEPS u1)");
+    if (router1StepSrc === live) throw new Error("DLMM_MAX_STEPS patch did not apply to the live router");
+    const ro = async (fn, args = []) => {
+      const q = await fetch(`${STACKS_NODE_API}/v2/contracts/call-read/${DEPLOYER}/${MARKET}/${fn}`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sender: DEPLOYER, arguments: args }) });
+      const j = await q.json();
+      if (!j.okay) throw new Error(`${fn}: ${JSON.stringify(j)}`);
+      return cvToJSON(deserializeCV(j.result));
+    };
+    C0 = BigInt((await ro("get-current-cycle")).value);
+    const cycleArg = "0x01" + C0.toString(16).padStart(32, "0");
+    const mins = (await ro("get-min-deposits")).value;
+    if (BigInt(mins["min-token-x"].value) !== MIN_SBTC || BigInt(mins["min-token-y"].value) !== MIN_STX) throw new Error(`live mins ${JSON.stringify(mins)} != harness ${MIN_SBTC}/${MIN_STX}`);
+    liveMakers.y = (await ro("get-token-y-depositors", [cycleArg])).value.map((e) => e.value);
+    liveMakers.x = (await ro("get-token-x-depositors", [cycleArg])).value.map((e) => e.value);
+    console.log(`LIVE_V5: market ${DEPLOYER}.${MARKET} (core ${CORE}) at cycle u${C0}, resting y ${liveMakers.y.length} / x ${liveMakers.x.length}; router ${DEPLOYER}.${ROUTER}; 1-step copy from the live router bytes`);
+  }
+  const cyc = (n) => `u${C0 + BigInt(n)}`; // absolute cycle read, offset by the live cycle
   const lz = await fetchLazerUpdate();
   DUMMY_VAA = bufferCV(Buffer.from(lz.hex, "hex"));
   PX = lz.px; PY = lz.py;
@@ -229,7 +283,7 @@ async function main() {
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), upd, wstxTrait, wstxAsset], CID);
 
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
-  if (DEPLOYED || DEPLOY_COPY) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET || (DEPLOYED && p.contract_name === ROUTER)) ? b : origDeploy(p); }
+  if (DEPLOYED || DEPLOY_COPY || LIVE_V5) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET || ((DEPLOYED || LIVE_V5) && p.contract_name === ROUTER)) ? b : origDeploy(p); }
   const tx = (label, fn, want) => { b = fn(b); const slot = { label, kind: "tx", want, raw: null }; steps.push(slot); return slot; };
   const ev = (label, code, want, cid = RID) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); };
   const cap = (label, code, cid) => { b = b.addEvalCode(cid, code); const slot = { label, kind: "eval", capture: true, value: null }; steps.push(slot); return slot; };
@@ -241,14 +295,26 @@ async function main() {
   // (patched) and the router from the local files; LIVE mode uses the
   // mainnet deployments of both and only verifies + initializes the market
   // on the fork (as chavita), which mainnet still has to do for real.
-  if (!DEPLOYED && !DEPLOY_COPY) tx("deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
-  if (!DEPLOYED) tx(DEPLOY_COPY ? "deploy router deploy-copy swap-router-sbtc-stx-jingswap-v1 (v3 bytes)" : "deploy router v3", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED && !DEPLOY_COPY && !LIVE_V5) tx("deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED && !LIVE_V5) tx(DEPLOY_COPY ? "deploy router deploy-copy swap-router-sbtc-stx-jingswap-v1 (v3 bytes)" : "deploy router v3", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
-  tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
-  tx("initialize market", call(DEPLOYER, "initialize", [
-    contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
-    uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
-  ], CID), "(ok true)");
+  if (!LIVE_V5) {
+    tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
+    tx("initialize market", call(DEPLOYER, "initialize", [
+      contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
+      uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
+    ], CID), "(ok true)");
+  } else {
+    // the live pair, already verified + initialized on mainnet: prove it on
+    // the fork, then empty the book so the waves below meet what they expect
+    ev("LIVE_V5 market verified in jing-core-v4", `(is-verified-contract '${CID})`, "true", CORE_ID);
+    ev("LIVE_V5 market initialized with the harness mins", "(get-min-deposits)", (v) => String(v).includes(`(min-token-x u${MIN_SBTC})`) && String(v).includes(`(min-token-y u${MIN_STX})`), CID);
+    ev(`LIVE_V5 market at cycle ${cyc(0)}`, "(get-current-cycle)", (v) => v === cyc(0), CID);
+    for (const who of liveMakers.y) tx(`LIVE_V5 resting bid ${who} cancelled (impersonated)`, call(who, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
+    for (const who of liveMakers.x) tx(`LIVE_V5 resting ask ${who} cancelled (impersonated)`, call(who, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), okPrefix);
+    ev("LIVE_V5 book empty on the y side", `(get-token-y-depositors ${cyc(0)})`, (v) => /^\(list\s*\)$/.test(v), CID);
+    ev("LIVE_V5 book empty on the x side", `(get-token-x-depositors ${cyc(0)})`, (v) => /^\(list\s*\)$/.test(v), CID);
+  }
   ev("wrapper reads market mins (read-only via literal id)", "(get-jing-min-deposits)", (v) => String(v).includes(`(min-token-x u${MIN_SBTC})`));
 
   // =============== W1: guards ===============
@@ -298,9 +364,9 @@ async function main() {
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u2000)") && String(v).includes("(dlmm-in u3000)") && String(v).includes("(unsold u0)"));
   const m1 = sbtcOf(S, "W4 maker after");
   const t1s = sbtcOf(T, "W4 taker after"); const t1x = stxOf(T, "W4 taker after");
-  ev("W4 market cycle advanced by the taker", "(get-current-cycle)", "u1", CID);
-  ev("W4 taker holds no x position", `(get-token-x-deposit u1 '${T})`, "u0", CID);
-  ev("W4 maker bid rolled (100 STX minus the fill)", `(get-token-y-deposit u1 '${S})`, (v) => uintOf(v) > 0n && uintOf(v) < BID, CID);
+  ev("W4 market cycle advanced by the taker", "(get-current-cycle)", (v) => v === cyc(1), CID);
+  ev("W4 taker holds no x position", `(get-token-x-deposit ${cyc(1)} '${T})`, "u0", CID);
+  ev("W4 maker bid rolled (100 STX minus the fill)", `(get-token-y-deposit ${cyc(1)} '${S})`, (v) => uintOf(v) > 0n && uintOf(v) < BID, CID);
 
   // =============== W5: empty book ===============
   tx("W5 maker cancels the rolled bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
@@ -310,8 +376,8 @@ async function main() {
   const r5 = tx("W5 Jing 4000 + XYK 1000, fallback none: XYK runs, Jing amount stays home", sellSbtc(T, 4000n, NONE, amts(0n, 1000n, 0n), ONES, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(xyk-in u1000)") && String(v).includes("(unsold u4000)"));
   const f2s = sbtcOf(T, "W5 after"); const f2x = stxOf(T, "W5 after");
-  ev("W5 market cycle unchanged (failed leg rolled back)", "(get-current-cycle)", "u1", CID);
-  ev("W5 no x position left on the market", `(get-token-x-deposit u1 '${T})`, "u0", CID);
+  ev("W5 market cycle unchanged (failed leg rolled back)", "(get-current-cycle)", (v) => v === cyc(1), CID);
+  ev("W5 no x position left on the market", `(get-token-x-deposit ${cyc(1)} '${T})`, "u0", CID);
   const h0s = sbtcOf(T, "W5f before"); const h0x = stxOf(T, "W5f before");
   const r5f = tx("W5f Jing mainly: 4000 Jing, fallback XYK, empty book -> all 4000 on XYK", sellSbtc(T, 4000n, fb(XYK), ZEROS, ONES, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(xyk-in u4000)") && String(v).includes("(unsold u0)"));
@@ -324,7 +390,7 @@ async function main() {
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u2000)") && String(v).includes("(dlmm-in u1500)") &&
     String(v).includes("(xyk-in u1500)") && String(v).includes("(velar-in u1000)") && String(v).includes("(unsold u0)"));
   const a1s = sbtcOf(T, "W7a after"); const a1x = stxOf(T, "W7a after");
-  ev("W7a taker holds no x position", `(get-token-x-deposit u2 '${T})`, "u0", CID);
+  ev("W7a taker holds no x position", `(get-token-x-deposit ${cyc(2)} '${T})`, "u0", CID);
   tx("W7a maker cancels the rolled bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), okPrefix);
   const e0s = sbtcOf(T, "W7e before"); const e0x = stxOf(T, "W7e before");
   const r7e = tx("W7e jing u0 + vaa none: 800 DLMM / 700 XYK / 500 Velar", sellSbtc(T, 0n, NONE, amts(800n, 700n, 500n), ONES, 1n, NO_VAA), (v) =>
@@ -338,7 +404,7 @@ async function main() {
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u5000000)") && String(v).includes("(dlmm-in u3000000)") &&
     String(v).includes("(xyk-in u2000000)") && String(v).includes("(velar-in u2000000)") && String(v).includes("(unsold u0)"));
   const c1s = sbtcOf(S, "W7c after"); const c1x = stxOf(S, "W7c after");
-  ev("W7c taker holds no y position", `(get-token-y-deposit u3 '${S})`, "u0", CID);
+  ev("W7c taker holds no y position", `(get-token-y-deposit ${cyc(3)} '${S})`, "u0", CID);
 
   // =============== W8: market get-taker-capacity is tight ===============
   // x-taker view with the x side emptied: a 100 STX bid in range and a 50
@@ -380,8 +446,8 @@ async function main() {
   const r8 = tx(`W8 sell exactly gross-cap (${gross8}) all via Jing -> full fill`, sellSbtc(T, gross8, NONE, ZEROS, ONES, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)"));
   const k2s = sbtcOf(T, "W8 after"); const k2x = stxOf(T, "W8 after");
-  ev("W8 S's bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
-  ev("W8 low bid fully walked (dust at most)", `(get-token-y-deposit u5 '${M8})`, (v) => uintOf(v) < MIN_STX, CID);
+  ev("W8 S's bid fully cleared (dust at most)", `(get-token-y-deposit ${cyc(4)} '${S})`, (v) => uintOf(v) < MIN_STX, CID);
+  ev("W8 low bid fully walked (dust at most)", `(get-token-y-deposit ${cyc(4)} '${M8})`, (v) => uintOf(v) < MIN_STX, CID);
 
   // =============== W9: smart swaps, split computed on chain ===============
   // The oracle is pinned at 337.29 sats/STX; the live AMMs trade near 332,
@@ -405,7 +471,7 @@ async function main() {
   const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const n1s = sbtcOf(T, "W9a after"); const n1x = stxOf(T, "W9a after");
-  ev("W9a bid fully cleared (dust at most)", `(get-token-y-deposit u5 '${S})`, (v) => uintOf(v) < MIN_STX, CID);
+  ev("W9a bid fully cleared (dust at most)", `(get-token-y-deposit ${cyc(5)} '${S})`, (v) => uintOf(v) < MIN_STX, CID);
   const r9b = tx("W9b smart sell 10000 sats, vaa none: no book leg, all XYK/Velar", smartSbtc(T, 10_000n, L_LOOSE, NO_VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
   const n2s = sbtcOf(T, "W9b after"); const n2x = stxOf(T, "W9b after");
@@ -423,7 +489,7 @@ async function main() {
   const r9d = tx("W9d smart sell 200 STX, limit 3% over the mid: book to capacity, DLMM next, rest XYK/Velar", smartStx(S, 200_000_000n, L_STX, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
-  ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit u6 '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
+  ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit ${cyc(6)} '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
   const L_NEAR = (MID * 98n) / 100n; // 2% under the mid; the live AMMs sit on the mid, so ~0.15 BTC of room
   // W9f: the four-venue happy path at today's prices, with the book walk boundary checked
   // from both sides. Three bids rest: S 100 STX at the mid (cleared at the
@@ -578,12 +644,12 @@ async function main() {
   const clock = cap("W10 fork stacks-block-time", "stacks-block-time", CID);
   const STALE = bufferCV(Buffer.from(fs.readFileSync(new URL("./fixtures/lazer-update-stale-btc-stx.hex", import.meta.url), "utf8").trim(), "hex"));
   tx("W10 refresh-mid with the fresh update", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
-  tx("W10 refresh-mid with the stale fixture -> refused", call(T, "refresh-mid", [STALE], CID), (v) => v === "(err u1002)" || v === "(err u1005)");
+  tx("W10 refresh-mid with the stale fixture -> refused", call(T, "refresh-mid", [STALE], CID), (v) => v === "(err u1002)" || v === E_STALE);
   tx("W10 swap with the stale fixture: book leg rolled back, nothing else planned -> u3002", sellSbtc(T, 4000n, NONE, ZEROS, ONES, 1n, someCV(STALE)), "(err u3002)");
   // a deposit only consults the price when the opposite side has makers (the
   // maker gate); rest an ask first so the bid must read it
   tx("W10 T rests an ask with the fresh update", call(T, "deposit-token-x", [uintCV(20_000n), uintCV(1n), DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
-  tx("W10 bid with the stale fixture against a resting ask -> refused", depositY(S, BID, HUGE, STALE), (v) => v === "(err u1002)" || v === "(err u1005)");
+  tx("W10 bid with the stale fixture against a resting ask -> refused", depositY(S, BID, HUGE, STALE), (v) => v === "(err u1002)" || v === E_STALE);
 
   // ---- run ----
   const sid = await b.run();
