@@ -189,19 +189,27 @@ repo with comment lines stripped, on `jing-core-v4`.
 | `be54295` | stress | 125/125 | `ce7fb99c22435eba817247acb7a69c4e` |
 | `be54295` | regression | 22/22 | `470cf13170a27df0e5ccdd896540df8c` |
 | `be54295` | multifill | 43/43 | `c92ec85063180a724f2c6559e1814e41` |
-| `aa5d4bf` phase machinery removed | all | **not yet run** | harness codes and read-only evals need remapping first |
+| `aa5d4bf` phase machinery removed | withdraw | 98/98 | `277dd5587b09c38ec7f2834750c8e227` |
+| `aa5d4bf` | lazer-paths | 34/34 | `599f15adaa453a0e2eed9bc734247921` |
+| `aa5d4bf` | gaps | 64/64 | `5b120dfa1f63ef899970973114d50293` |
+| `aa5d4bf` | bounty-fixes | 129/129 | `48d3e9deb8294f7dc74ca4aabe6106c4` |
+| `aa5d4bf` | remainder-cross | 115/115 | `2d8fb89823dcfd1deede03629436d892` |
+| `aa5d4bf` | stress | 125/125 | `e3bb13ebea9c3223efd5853a9f2cf5ec` |
+| `aa5d4bf` | regression | 22/22 | `df8ec54caba87cd658fba23d33906ae3` |
+| `aa5d4bf` | multifill | 43/43 | `e6eded13d0ec8f1f866c14d28ac4806f` |
 
 ## Still to do before the v5 deploy
 
-- Harnesses: remap literal codes to the 25-code block, drop evals of
-  `get-cycle-phase` / `get-blocks-elapsed` / `get-cycle-start-block`, rename
-  `close-and-settle-with-refresh` calls to `settle-with-refresh`, full run.
-- Frontend: update the `NEW` table in `config/market-errors.ts` to the
-  25-code block, rename the keeper call in `useAuctionTransactionsV3.ts`,
-  drop the phase read in `services/jingswap-market.ts`.
-- Backend (faktory-dao): rename the keeper call in `jing-v3-settle.ts`, drop
-  the `close-deposits` handler in the indexer, refresh the market template,
-  and the cycle-state route that read the phase.
+- Harnesses: done, see the `aa5d4bf` rows above.
+- Frontend: done, keyed by market name (jingswap-frontend `f0c0b40`): the
+  25-code table, `settleFunctionName`, phase read only on legacy markets.
+- Backend (faktory-dao `5f0a3a86`): keeper entry per market config
+  (`settleFn`, v5 entry added), cycle-state tolerates the missing
+  read-onlys. The `close-deposits` event handlers stay for v4. Still to
+  do: generate the v5 market template for the deploy route.
+- Bounty payout: done 2026-09-08, Violet Swift, tx
+  `2a33402a4b00f89fb836676258b907d91940d07bffd9c1e30e40f71ee8b9ba01`,
+  status paid.
 - Deploy set under repo names, on the existing `jing-core-v4`:
   `markets-sbtc-stx-jing-v5`, `swap-router-sbtc-stx-jing-v4` (rebound to the
   market), `vault-sbtc-stx-v5` (rebound, no logic). Core admin verifies the
@@ -209,5 +217,3 @@ repo with comment lines stripped, on `jing-core-v4`.
   `log-close-deposits` and `log-cancel-cycle` as unused public functions,
   and the repo copy stays matching the deployed bytes. Drop both from the
   core source at the next core deploy (`jing-core-v5`), not before.
-- Bounty payout: fund the poster wallet with at least 21,000 sats sBTC,
-  accept, pay Violet Swift, mark paid.
