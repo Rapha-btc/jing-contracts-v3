@@ -32,7 +32,7 @@ import { STX_DEPOSITOR_1, SBTC_DEPOSITOR_1, SBTC_ADDR, SBTC_NAME, SBTC_ASSET_NAM
 const DEPLOYED = process.env.DEPLOYED === "1";
 const CHAVITA = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 const DEPLOYER = DEPLOYED ? CHAVITA : getAddressFromPrivateKey("5".repeat(64) + "01", "mainnet");
-const CORE = "jing-core-v3";
+const CORE = "jing-core-v4";
 const MARKET_FILE = "markets-sbtc-stx-jing-v4";
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE;
 const CID = `${DEPLOYER}.${MARKET}`;
@@ -43,7 +43,7 @@ const MIN_SBTC = 1000n, MIN_STX = 1_000_000n, HUGE = 999_999_999_999_999n;
 const sbtcTrait = contractPrincipalCV(SBTC_ADDR, SBTC_NAME), wstxTrait = contractPrincipalCV(WSTX_ADDR, WSTX_NAME);
 const sbtcAsset = stringAsciiCV(SBTC_ASSET_NAME), wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
-const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8");
+const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8").split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
 
 let checks = 0, failures = 0;
 function check(label, actual, want) {
@@ -62,6 +62,10 @@ async function main() {
   const btcOnly = await fetchLazerUpdateOpts({ ids: [1] });
   const btcUsdc = await fetchLazerUpdateOpts({ ids: [1, 7] });
   const noConf = await fetchLazerUpdateOpts({ ids: [1, 45], properties: ["price", "exponent", "publisherCount"] });
+  const noFut = await fetchLazerUpdateOpts({ ids: [1, 45], properties: ["price", "exponent", "confidence", "publisherCount"] });
+  const U_NOFUT = bufferCV(Buffer.from(noFut.hex, "hex"));
+  const FUT_X = BigInt(Math.floor(full.futX / 1e6)), FUT_Y = BigInt(Math.floor(full.futY / 1e6));
+  console.log(`envelope ts ${Math.floor(full.ts)}; feedUpdateTimestamp BTC ${FUT_X} STX ${FUT_Y} (carried forward by ${Math.floor(full.ts) - Number(FUT_X)}s / ${Math.floor(full.ts) - Number(FUT_Y)}s)`);
   const UPD = bufferCV(Buffer.from(full.hex, "hex"));
   const U_BTC = bufferCV(Buffer.from(btcOnly.hex, "hex"));
   const U_BTC_USDC = bufferCV(Buffer.from(btcUsdc.hex, "hex"));
@@ -91,6 +95,27 @@ async function main() {
   tx("L2 refresh-mid with a BTC-only update -> u1029 feed missing", call(T, "refresh-mid", [U_BTC]), "(err u1029)");
   tx("L3 refresh-mid with BTC + USDC (no STX) -> u1029", call(T, "refresh-mid", [U_BTC_USDC]), "(err u1029)");
   tx("L4 refresh-mid with an update lacking confidence -> u1006", call(T, "refresh-mid", [U_NOCONF]), "(err u1006)");
+  // L8: per-feed freshness. publish-time on each shaped feed must be the
+  // feed's own feedUpdateTimestamp in seconds (what the 80s checks read),
+  // not the envelope timestamp, and must sit inside MAX_STALENESS of the
+  // chain clock the checks compare against.
+  ev("L8 feed-x publish-time == BTC feedUpdateTimestamp (s)", `(get publish-time (get feed-x (unwrap-panic (lazer-feeds ${"0x" + full.hex}))))`, `u${FUT_X}`);
+  ev("L8 feed-y publish-time == STX feedUpdateTimestamp (s)", `(get publish-time (get feed-y (unwrap-panic (lazer-feeds ${"0x" + full.hex}))))`, `u${FUT_Y}`);
+  // the numbers the freshness asserts see, side by side
+  ev("L8 freshness inputs", `(let ((feeds (unwrap-panic (lazer-feeds ${"0x" + full.hex}))) (min-freshness (- stacks-block-time u80))) { publish-time-x: (get publish-time (get feed-x feeds)), publish-time-y: (get publish-time (get feed-y feeds)), stacks-block-time: stacks-block-time, min-freshness: min-freshness, x-fresh: (> (get publish-time (get feed-x feeds)) min-freshness), y-fresh: (> (get publish-time (get feed-y feeds)) min-freshness) })`, (v) => {
+    const g = (k) => (String(v).match(new RegExp(`\\(${k} (u?\\d+|true|false)\\)`)) || [])[1];
+    console.log(`       publish-time-x   ${g("publish-time-x")}  (BTC feedUpdateTimestamp / 1e6)`);
+    console.log(`       publish-time-y   ${g("publish-time-y")}  (STX feedUpdateTimestamp / 1e6)`);
+    console.log(`       stacks-block-time ${g("stacks-block-time")}`);
+    console.log(`       min-freshness    ${g("min-freshness")}  (stacks-block-time - MAX_STALENESS u80)`);
+    console.log(`       publish-time-x > min-freshness: ${g("x-fresh")}   publish-time-y > min-freshness: ${g("y-fresh")}`);
+    return g("x-fresh") === "true" && g("y-fresh") === "true";
+  });
+  // the exact test fresh-classification-price makes, on the feed's own time
+  ev("L8 chain clock (stacks-block-time)", "stacks-block-time", (v) => { const d = Number(uintOf(v)) - Number(FUT_Y); console.log(`       (chain clock minus STX feed time: ${d}s)`); return Math.abs(d) < 80; });
+  ev("L8 STX feed time passes MAX_STALENESS against the chain clock", `(> u${FUT_Y} (- stacks-block-time u80))`, "true");
+  ev("L8 a feed time 81s older than the chain clock fails it", `(> (- stacks-block-time u81) (- stacks-block-time u80))`, "false");
+  tx("L8 refresh-mid with an update lacking feedUpdateTimestamp -> u1031", call(T, "refresh-mid", [U_NOFUT]), "(err u1031)");
   // L6a read-onlys before any cycle activity
   ev("L6 get-min-deposits", "(get-min-deposits)", (v) => v.includes(`(min-token-x u${MIN_SBTC})`) && v.includes(`(min-token-y u${MIN_STX})`));
   ev("L6 get-cycle-start-block is set", "(get-cycle-start-block)", (v) => uintOf(v) > 0n);

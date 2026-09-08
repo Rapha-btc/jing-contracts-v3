@@ -35,6 +35,7 @@
 (define-constant MICROS_PER_SECOND u1000000)
 (define-constant ERR_FEED_MISSING (err u1029))
 (define-constant ERR_USE_CANCEL (err u1030))
+(define-constant ERR_FEED_TIMESTAMP_MISSING (err u1031))
 
 (define-constant ERR_DEPOSIT_TOO_SMALL (err u1001))
 (define-constant ERR_NOT_DEPOSIT_PHASE (err u1002))
@@ -542,13 +543,23 @@
     })
     (publish-time uint)
   )
+  ;; Freshness is judged per feed, not per envelope. Lazer signs a new
+  ;; envelope every tick and, since 2026-03-23, carries a feed's last price
+  ;; forward inside it when no new aggregate was produced. Only the feed's
+  ;; own feed-update-timestamp (micros) says when that price was made, so
+  ;; that is what publish-time carries and what every MAX_STALENESS check
+  ;; downstream runs on. An update fetched without the feedUpdateTimestamp
+  ;; property is refused: without it a carried-forward price cannot be told
+  ;; from a fresh one. The envelope time (publish-time arg) is unused here.
   (ok {
     price: (get price f),
     conf: (unwrap! (get confidence f) ERR_PRICE_UNCERTAIN),
     expo: (get exponent f),
     ema-price: (default-to (get price f) (get ema-price f)),
     ema-conf: (default-to u0 (get ema-confidence f)),
-    publish-time: publish-time,
+    publish-time: (/ (unwrap! (get feed-update-timestamp f) ERR_FEED_TIMESTAMP_MISSING)
+      MICROS_PER_SECOND
+    ),
     prev-publish-time: u0,
   })
 )
