@@ -3,13 +3,14 @@
 // signed Lazer update (PYTH_API_KEY) replaces the dummy VAA; feed ids u1/u45.
 // Everything below is the v2 harness otherwise. Run: PYTH_API_KEY=<key> npx tsx simulations/verify-markets-v4-gaps.js
 //
-// REWRITTEN for 27e6f43 (close-deposits private, cancel-cycle removed, error
-// codes u1001..u1028): the market binds .jing-core-v4, so core-v4 is deployed
-// here; the source is read with comment lines stripped (>80KB raw). A cycle
-// can no longer sit closed-but-unsettled between txs: every close settles
-// in the same tx (swap, close-and-settle-with-refresh), so the phase read
-// between txs is always deposit (u0). Scenarios that scripted an outsider
-// close-deposits or a cancel-cycle were replaced or dropped as noted.
+// REWRITTEN for 27e6f43 / aa5d4bf (phase machinery removed, cancel-cycle
+// removed, error codes u1001..u1025): the market binds .jing-core-v4, so
+// core-v4 is deployed here; the source is read with comment lines stripped
+// (>80KB raw). There is no close and no phase any more: the book is open
+// between txs and settle-with-refresh is the public keeper entry (swap and
+// reprice-or-swap reach it internally). Scenarios that scripted a
+// close-deposits, close-and-settle-with-refresh, cancel-cycle or a phase
+// read were replaced or dropped as noted.
 //
 // verify-markets-v2-gaps.js
 // Self-verifying stxer mainnet-fork harness for the surface of
@@ -17,39 +18,37 @@
 // "What is left to test" 1, 2, 4 + the five uncovered public functions):
 //
 //   G1 operator role: set-paused / set-treasury / set-operator refuse a
-//      non-operator (u1010); treasury and operator retarget; the OLD
+//      non-operator (u1008); treasury and operator retarget; the OLD
 //      operator loses set-paused after handover; round trip back.
-//   G2 pause gates the close (b7cad2a, aibtc bounty): with a book resting
-//      on both sides, pause -> deposit u1009, swap u1009,
-//      close-and-settle-with-refresh u1009 (the private close is the first
-//      assert on that path), settle-with-refresh u1009; phase stays u0;
+//   G2 pause gates the settle (b7cad2a, aibtc bounty): with a book resting
+//      on both sides, pause -> deposit u1007, swap u1007, settle-with-refresh
+//      u1007 (ERR_PAUSED is the first assert in execute-settlement);
 //      set-token-x-limit still works (README note 9: limit edits move no
-//      funds); unpause -> close-and-settle-with-refresh is no longer
-//      pause-gated: it closes and dies u1011 on this book (nothing in range
-//      on x), phase back to u0. (Was: outsider close-deposits u1009 / ok.)
-//   G3 settle entry points at a fixed oracle price: settle-with-refresh in
-//      deposit phase u1003, wrong trait u1016; `close-and-settle-with-refresh`
-//      closes then dies u1011 on a book with nothing in range on x, and the
-//      close is unwound with it (phase back to deposit, closed-block u0);
-//      an outsider calling close-deposits is REFUSED (the function is
-//      private: the engine rejects the call) and the phase stays u0; cycle
-//      and both makers unchanged. (Dropped: second close u1013 and plain
-//      settle u1011 in the settle phase - that phase no longer exists
-//      between txs. The passive book never crosses at a FIXED price: a live
-//      maker at or inside the mid is refused at deposit with u1019 by the
-//      same comparison the settle filter uses.)
-//   G4 u1021 on a fork: the x maker rests in the current cycle, `swap` on
-//      the same side -> u1021, and nothing moved (deposit, limit, balance,
-//      cycle, crossing flag); a fresh y-taker passes u1021 and dies u1020.
+//      funds); unpause -> settle-with-refresh is past the pause gate and dies
+//      u1009 on this book (nothing in range on x). (Was: outsider
+//      close-deposits u1007 / ok, then close-and-settle-with-refresh.)
+//   G3 settle entry points at a fixed oracle price: settle-with-refresh dies
+//      u1009 on a book with nothing in range on x (the dead ask is
+//      limit-rolled, the post-filter x total is under min and nobody is
+//      crossing), wrong trait u1013; an outsider calling close-deposits is
+//      REFUSED (no such function); cycle and both makers unchanged. (Dropped:
+//      the phase / deposits-closed-block reads, the private-settle refusals
+//      and the close-and-settle duplicate - none of it exists any more. The
+//      passive book never crosses at a FIXED price: a live maker at or inside
+//      the mid is refused at deposit with u1016 by the same comparison the
+//      settle filter uses.)
+//   G4 u1018 on a fork: the x maker rests in the current cycle, `swap` on
+//      the same side -> u1018, and nothing moved (deposit, limit, balance,
+//      cycle, crossing flag); a fresh y-taker passes u1018 and dies u1017.
 //      (Was: cancel-cycle rolled the stuck cycle first; there is no stuck
 //      cycle any more, so the maker rests in cycle u0 throughout.)
-//   G6 phase and guard codes the fork never saw: initialize twice u1015,
-//      deposit below min u1001, swap of u0 u1001; outsider close-deposits
-//      refused, phase u0, cycle u0, x deposit intact; then the book is
-//      never locked between txs: both makers cancel in the deposit phase
-//      (funds back), lists empty, close-and-settle-with-refresh on the empty
-//      book -> u1011, phase u0. (Dropped: cancel-cycle u1003 / u1014 / ok and
-//      the eight settle-phase u1002 refusals - unreachable between txs.)
+//   G6 guard codes the fork never saw: initialize twice u1012, deposit
+//      below min u1001, swap of u0 u1001; outsider and deployer close-deposits
+//      refused (no such function), cycle u0, x deposit intact; then the book
+//      is never locked between txs: both makers cancel at will (funds back),
+//      lists empty, settle-with-refresh on the empty book -> u1009 (raw
+//      totals under min). (Dropped: cancel-cycle, the phase reads and the
+//      settle-phase refusals - the phase no longer exists.)
 //   G5 rebate pot fully consumed (README 4): not a sim step. The cap branch
 //      `(if (> r pending) pending r)` in execute-fill is unreachable: the
 //      pot is charged 20 bps on the GROSS amount and the walk draws 20 bps
@@ -247,13 +246,11 @@ async function main() {
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), DUMMY_VAA, wstxTrait, wstxAsset]);
   const swap = (sender, amount, limit, depositXSide) =>
     call(sender, "swap", [uintCV(amount), uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depositXSide ? trueCV() : falseCV()]);
-  // v4 has no storage-only settle: the public settlement entry is
-  // settle-with-refresh with a (fresh) Lazer update; the guard codes below
-  // are the same asserts, reached after the price check
+  // v4 has no storage-only settle: the public settlement entry (the keeper
+  // path) is settle-with-refresh with a (fresh) Lazer update; the guard
+  // codes below are the same asserts, reached after the trait + feed checks
   const settle = (sender, txT = sbtcTrait, txN = sbtcAsset) =>
     call(sender, "settle-with-refresh", [DUMMY_VAA, txT, txN, wstxTrait, wstxAsset]);
-  const closeAndSettle = (sender) =>
-    call(sender, "close-and-settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]);
   const setPaused = (sender, p) => call(sender, "set-paused", [p ? trueCV() : falseCV()]);
   const setTreasury = (sender, who) => call(sender, "set-treasury", [standardPrincipalCV(who)]);
   const setOperator = (sender, who) => call(sender, "set-operator", [standardPrincipalCV(who)]);
@@ -287,9 +284,9 @@ async function main() {
   tx("fund Y9 gas + 2 STX", stxSend(Y9, 5_000_000), okPrefix);
 
   // =============== G1: operator role ===============
-  tx("G1 outsider set-paused -> u1010", setPaused(OUTSIDER, true), "(err u1010)");
-  tx("G1 outsider set-treasury -> u1010", setTreasury(OUTSIDER, OUTSIDER), "(err u1010)");
-  tx("G1 outsider set-operator -> u1010", setOperator(OUTSIDER, OUTSIDER), "(err u1010)");
+  tx("G1 outsider set-paused -> u1008", setPaused(OUTSIDER, true), "(err u1008)");
+  tx("G1 outsider set-treasury -> u1008", setTreasury(OUTSIDER, OUTSIDER), "(err u1008)");
+  tx("G1 outsider set-operator -> u1008", setOperator(OUTSIDER, OUTSIDER), "(err u1008)");
   ev("G1 not paused", "(var-get paused)", "false");
   ev("G1 operator is deployer", "(var-get operator)", DEPLOYER);
   ev("G1 treasury is deployer", "(var-get treasury)", DEPLOYER);
@@ -297,88 +294,79 @@ async function main() {
   ev("G1 treasury retargeted", "(var-get treasury)", TREAS);
   tx("G1 operator hands over to OP2", setOperator(DEPLOYER, OP2), "(ok true)");
   ev("G1 operator is OP2", "(var-get operator)", OP2);
-  tx("G1 old operator set-paused -> u1010", setPaused(DEPLOYER, true), "(err u1010)");
-  tx("G1 old operator set-operator -> u1010", setOperator(DEPLOYER, DEPLOYER), "(err u1010)");
+  tx("G1 old operator set-paused -> u1008", setPaused(DEPLOYER, true), "(err u1008)");
+  tx("G1 old operator set-operator -> u1008", setOperator(DEPLOYER, DEPLOYER), "(err u1008)");
 
-  // =============== G2: pause gates close-deposits ===============
+  // =============== G2: pause gates the settle ===============
   tx("G2 x dead ask rests", depositX(SBTC_DEPOSITOR_1, X_AMT, DEAD_X), `(ok u${X_AMT})`);
   tx("G2 y live bid rests", depositY(STX_DEPOSITOR_1, Y_AMT, LIVE_Y), `(ok u${Y_AMT})`);
   tx("G2 OP2 pauses", setPaused(OP2, true), "(ok true)");
   ev("G2 paused", "(var-get paused)", "true");
-  tx("G2 deposit while paused -> u1009", depositY(STX_DEPOSITOR_1, MIN_STX, LIVE_Y), "(err u1009)");
-  tx("G2 swap while paused -> u1009", swap(Y9, 2_000_000n, HUGE, false), "(err u1009)");
-  tx("G2 close-and-settle-with-refresh while paused -> u1009", closeAndSettle(OUTSIDER), "(err u1009)");
-  tx("G2 settle-with-refresh from outside -> refused (private)", settle(OUTSIDER), refused);
-  ev("G2 still deposit phase", "(get-cycle-phase)", "u0");
+  tx("G2 deposit while paused -> u1007", depositY(STX_DEPOSITOR_1, MIN_STX, LIVE_Y), "(err u1007)");
+  tx("G2 swap while paused -> u1007", swap(Y9, 2_000_000n, HUGE, false), "(err u1007)");
+  tx("G2 settle-with-refresh while paused -> u1007", settle(OUTSIDER), "(err u1007)");
   tx("G2 set-token-x-limit not gated by pause", call(SBTC_DEPOSITOR_1, "set-token-x-limit", [uintCV(DEAD_X - 1n), DUMMY_VAA]), "(ok true)");
   ev("G2 limit moved while paused", `(get-token-x-limit '${SBTC_DEPOSITOR_1})`, `u${DEAD_X - 1n}`);
   tx("G2 OP2 unpauses", setPaused(OP2, false), "(ok true)");
   ev("G2 unpaused", "(var-get paused)", "false");
-  // unpaused: the close is no longer gated; it runs and the settle dies on
-  // the book (x has nothing in range at the mid), not on the pause
-  tx("G2 unpaused close-and-settle-with-refresh: past the pause gate, x empty at mid -> u1011", closeAndSettle(OUTSIDER), "(err u1011)");
-  ev("G2 phase back to deposit", "(get-cycle-phase)", "u0");
+  // unpaused: the settle is past the pause gate and dies on the book (x has
+  // nothing in range at the mid), not on the pause
+  tx("G2 unpaused settle-with-refresh: past the pause gate, x empty at mid -> u1009", settle(OUTSIDER), "(err u1009)");
 
   // =============== G3: settle entry points at a fixed price ===============
-  tx("G3 settle-with-refresh from outside -> refused (private)", settle(OUTSIDER), refused);
-  tx("G3 settle-with-refresh wrong trait from outside -> refused too (never reaches the trait check)", settle(OUTSIDER, wstxTrait, wstxAsset), refused);
-  tx("G3 close-and-settle-with-refresh: x empty at mid -> u1011", closeAndSettle(OUTSIDER), "(err u1011)");
-  ev("G3 close unwound with the settle (phase u0)", "(get-cycle-phase)", "u0");
-  ev("G3 deposits-closed-block still u0", "(var-get deposits-closed-block)", "u0");
-  tx("G3 outsider close-deposits REFUSED (private)", call(OUTSIDER, "close-deposits", []), refused);
-  ev("G3 phase stays deposit after the refused close", "(get-cycle-phase)", "u0");
+  tx("G3 settle-with-refresh: x empty at mid -> u1009", settle(OUTSIDER), "(err u1009)");
+  tx("G3 settle-with-refresh wrong trait -> u1013", settle(OUTSIDER, wstxTrait, wstxAsset), "(err u1013)");
+  tx("G3 outsider close-deposits REFUSED (no such function)", call(OUTSIDER, "close-deposits", []), refused);
   ev("G3 cycle unchanged u0", "(get-current-cycle)", "u0");
   ev("G3 x maker still in cycle 0", `(get-token-x-deposit u0 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
   ev("G3 y maker still in cycle 0", `(get-token-y-deposit u0 '${STX_DEPOSITOR_1})`, `u${Y_AMT}`);
 
-  // =============== G4: u1021 on a fork ===============
+  // =============== G4: u1018 on a fork ===============
   // no cancel-cycle any more: nothing is stuck, the x maker simply rests in
   // the current cycle (u0) and a swap on the same side is refused
   ev("G4 cycle u0", "(get-current-cycle)", "u0");
   ev("G4 x maker resting in u0", `(get-token-x-deposit u0 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
   const xBefore = cap("G4 x maker sbtc before", `(get-balance '${SBTC_DEPOSITOR_1})`, SBTC_FQN);
-  tx("G4 swap on the resting side -> u1021", swap(SBTC_DEPOSITOR_1, 1500n, 1n, true), "(err u1021)");
+  tx("G4 swap on the resting side -> u1018", swap(SBTC_DEPOSITOR_1, 1500n, 1n, true), "(err u1018)");
   const xAfter = cap("G4 x maker sbtc after", `(get-balance '${SBTC_DEPOSITOR_1})`, SBTC_FQN);
   ev("G4 deposit untouched", `(get-token-x-deposit u0 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
   ev("G4 limit untouched", `(get-token-x-limit '${SBTC_DEPOSITOR_1})`, `u${DEAD_X - 1n}`);
   ev("G4 cycle still u0", "(get-current-cycle)", "u0");
   ev("G4 crossing flag false", "(var-get crossing)", "false");
-  // the other side can still take: fresh y-taker swaps into nothing in range -> u1020, not u1021
-  tx("G4 fresh y-taker has no position: passes u1021, dies u1020", swap(Y9, 2_000_000n, (MID * 101n) / 100n, false), "(err u1020)");
+  // the other side can still take: fresh y-taker swaps into nothing in range -> u1017, not u1018
+  tx("G4 fresh y-taker has no position: passes u1018, dies u1017", swap(Y9, 2_000_000n, (MID * 101n) / 100n, false), "(err u1017)");
 
   // round trip the role
   tx("G1 OP2 hands back", setOperator(OP2, DEPLOYER), "(ok true)");
   ev("G1 operator is deployer again", "(var-get operator)", DEPLOYER);
 
-  // =============== G6: phase + guard codes ===============
+  // =============== G6: guard codes ===============
   // state: cycle u0, x ask 2000 @ DEAD_X-1 (SBTC_DEPOSITOR_1), y bid 100 STX (STX_DEPOSITOR_1)
-  tx("G6 initialize twice -> u1015", call(DEPLOYER, "initialize", [
+  tx("G6 initialize twice -> u1012", call(DEPLOYER, "initialize", [
     contractPrincipalCV(DEPLOYER, MARKET),
     contractPrincipalCV(SBTC_ADDR, SBTC_NAME),
     contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
-  ]), "(err u1015)");
+  ]), "(err u1012)");
   tx("G6 x deposit below min -> u1001", depositX(SBTC_DEPOSITOR_1, MIN_SBTC - 1n, DEAD_X), "(err u1001)");
   tx("G6 y deposit below min -> u1001", depositY(Y9, MIN_STX - 1n, LIVE_Y), "(err u1001)");
   tx("G6 swap of u0 -> u1001", swap(Y9, 0n, HUGE, false), "(err u1001)");
-  // the settle phase cannot be entered from outside: an outsider close is
-  // refused by the engine (private function) and the book stays open
-  tx("G6 outsider close-deposits REFUSED (private)", call(OUTSIDER, "close-deposits", []), refused);
+  // there is no close at all: the engine refuses the call (no such public
+  // function) and the book stays open
+  tx("G6 outsider close-deposits REFUSED (no such function)", call(OUTSIDER, "close-deposits", []), refused);
   tx("G6 deployer close-deposits REFUSED too (no operator backdoor)", call(DEPLOYER, "close-deposits", []), refused);
-  ev("G6 still deposit phase", "(get-cycle-phase)", "u0");
   ev("G6 still cycle u0", "(get-current-cycle)", "u0");
   ev("G6 x deposit intact", `(get-token-x-deposit u0 '${SBTC_DEPOSITOR_1})`, `u${X_AMT}`);
   // and so the book is never locked between txs: both makers cancel at will
   const yMakerBefore = cap("G6 y maker stx before cancel", `(stx-get-balance '${STX_DEPOSITOR_1})`);
-  tx("G6 y maker cancels in deposit phase", call(STX_DEPOSITOR_1, "cancel-token-y-deposit", [wstxTrait, wstxAsset]), `(ok u${Y_AMT})`);
+  tx("G6 y maker cancels (book always open)", call(STX_DEPOSITOR_1, "cancel-token-y-deposit", [wstxTrait, wstxAsset]), `(ok u${Y_AMT})`);
   const yMakerAfter = cap("G6 y maker stx after cancel", `(stx-get-balance '${STX_DEPOSITOR_1})`);
   const xMakerBefore = cap("G6 x maker sbtc before cancel", `(get-balance '${SBTC_DEPOSITOR_1})`, SBTC_FQN);
-  tx("G6 x maker cancels in deposit phase", call(SBTC_DEPOSITOR_1, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset]), `(ok u${X_AMT})`);
+  tx("G6 x maker cancels (book always open)", call(SBTC_DEPOSITOR_1, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset]), `(ok u${X_AMT})`);
   const xMakerAfter = cap("G6 x maker sbtc after cancel", `(get-balance '${SBTC_DEPOSITOR_1})`, SBTC_FQN);
   ev("G6 y list empty", "(len (get-token-y-depositors u0))", "u0");
   ev("G6 x list empty", "(len (get-token-x-depositors u0))", "u0");
-  tx("G6 close-and-settle-with-refresh on the empty book -> u1011", closeAndSettle(OUTSIDER), "(err u1011)");
-  ev("G6 still deposit phase, cycle u0", "(get-cycle-phase)", "u0");
+  tx("G6 settle-with-refresh on the empty book -> u1009 (raw totals under min)", settle(OUTSIDER), "(err u1009)");
   ev("G6 cycle u0", "(get-current-cycle)", "u0");
 
   // ---- run ----

@@ -43,7 +43,7 @@ const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta
 const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8").split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
 // the market's documented refusals a random action may legitimately hit
 // u1 / u3 are the token contracts' insufficient-balance refusals (a maker ran dry)
-const OK_ERRS = new Set(["u1", "u3", "u1001", "u1002", "u1003", "u1007", "u1011", "u1012", "u1013", "u1014", "u1019", "u1020", "u1021", "u1023", "u1024", "u1025"]);
+const OK_ERRS = new Set(["u1", "u3", "u1001", "u1005", "u1009", "u1010", "u1011", "u1016", "u1017", "u1018", "u1020", "u1021", "u1022"]);
 
 function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 const rnd = mulberry32(SEED);
@@ -83,7 +83,7 @@ async function main() {
     tx("deploy market v4", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   }
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  tx("initialize", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
+  tx("initialize", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1012)"));
   // fund the makers: 30 STX + 300k sats each, from S and T
   for (const m of makers) {
     tx(`fund ${m.slice(0, 8)} STX`, (bb) => bb.withSender(S).addSTXTransfer({ recipient: m, amount: 30_000_000 }), () => true);
@@ -136,7 +136,7 @@ async function main() {
     else if (r < 0.54) { const side = rnd() < 0.5 ? "y" : "x"; label = `#${k} ${who.slice(0, 6)} cancel ${side}`; fn = call(who, side === "y" ? "cancel-token-y-deposit" : "cancel-token-x-deposit", side === "y" ? [wstxTrait, wstxAsset] : [sbtcTrait, sbtcAsset]); }
     else if (r < 0.64) { const side = rnd() < 0.5 ? "y" : "x"; const l = limitNear(side); label = `#${k} ${who.slice(0, 6)} reprice ${side} -> ${l}`; fn = call(who, side === "y" ? "reprice-or-swap-token-y" : "reprice-or-swap-token-x", [uintCV(l), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
     else if (r < 0.84) { const depX = rnd() < 0.5; const taker = depX ? T : S; const amt = depX ? between(MIN_SBTC, 12_000n) : between(MIN_STX, 12_000_000n); const l = depX ? (MID * 97n) / 100n : (MID * 103n) / 100n; label = `#${k} ${depX ? "T sells sBTC" : "S sells STX"} ${amt} (swap, 3% limit)`; fn = call(taker, "swap", [uintCV(amt), uintCV(l), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depX ? trueCV() : falseCV()]); }
-    else if (r < 0.92) { label = `#${k} ${who.slice(0, 6)} close-and-settle`; fn = call(who, "close-and-settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
+    else if (r < 0.92) { label = `#${k} ${who.slice(0, 6)} settle-with-refresh`; fn = call(who, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
     else { const side = rnd() < 0.5 ? "y" : "x"; label = `#${k} ${who.slice(0, 6)} readmit ${side} ${pick(makers).slice(0, 6)}`; fn = call(who, side === "y" ? "readmit-token-y" : "readmit-token-x", [standardPrincipalCV(pick(makers)), UPD]); }
     const slot = tx(label, fn, (v) => String(v).startsWith("(ok") || OK_ERRS.has((String(v).match(/\(err (u\d+)\)/) || [])[1]));
     actions.push(slot);

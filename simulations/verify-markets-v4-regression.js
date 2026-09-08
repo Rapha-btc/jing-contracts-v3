@@ -228,13 +228,13 @@ async function main() {
 
   // --- cycle 0: maker gate + reprice ---
   b = depositY(STX_DEPOSITOR_1, STX_100, LIVE_Y, DUMMY_VAA)(b); // live bid rests
-  b = depositX(SBTC_DEPOSITOR_1, SBTC_2K, LIVE_X, vaaBuf)(b); // crossing -> u1019
+  b = depositX(SBTC_DEPOSITOR_1, SBTC_2K, LIVE_X, vaaBuf)(b); // crossing -> u1016
   b = depositX(SBTC_DEPOSITOR_1, SBTC_2K, DEAD_X, vaaBuf)(b); // dead -> ok
-  b = call(SBTC_DEPOSITOR_1, "set-token-x-limit", [uintCV(LIVE_X), vaaBuf])(b); // retarget live -> u1019
+  b = call(SBTC_DEPOSITOR_1, "set-token-x-limit", [uintCV(LIVE_X), vaaBuf])(b); // retarget live -> u1016
   b = repriceX(SBTC_DEPOSITOR_1, DEAD_X - 1, vaaBuf)(b); // plain reprice -> ok zero tuple
   b = b.addEvalCode(CID, `(get-token-x-limit '${SBTC_DEPOSITOR_1})`);
-  b = repriceX(SBTC_DEPOSITOR_1, 0, DUMMY_VAA)(b); // -> u1014
-  b = repriceX(STX_DEPOSITOR_1, DEAD_X, DUMMY_VAA)(b); // no x deposit -> u1007
+  b = repriceX(SBTC_DEPOSITOR_1, 0, DUMMY_VAA)(b); // -> u1011
+  b = repriceX(STX_DEPOSITOR_1, DEAD_X, DUMMY_VAA)(b); // no x deposit -> u1005
   b = b.addEvalCode(SBTC_FQN, `(get-balance '${STX_DEPOSITOR_1})`);
   b = repriceX(SBTC_DEPOSITOR_1, LIVE_X, vaaBuf)(b); // crossing -> FOK conversion
   b = b
@@ -249,7 +249,7 @@ async function main() {
   // partial-fill revert.
   b = depositY(STX_DEPOSITOR_1, STX_2, LIVE_Y, DUMMY_VAA)(b); // tiny fresh bid
   b = depositX(SBTC_DEPOSITOR_1, 100_000, DEAD_X, vaaBuf)(b); // oversize dead offer
-  b = repriceX(SBTC_DEPOSITOR_1, LIVE_X, vaaBuf)(b); // -> u1020 PARTIAL_FILL
+  b = repriceX(SBTC_DEPOSITOR_1, LIVE_X, vaaBuf)(b); // -> u1017 PARTIAL_FILL
   b = b.addEvalCode(CID, `(get-token-x-limit '${SBTC_DEPOSITOR_1})`);
 
   // --- swap taker path (same cycle, book still resting) ---
@@ -289,17 +289,17 @@ async function main() {
   if (!DEPLOYED) assert("deploy jing-core-v3", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED) assert("deploy market v2", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   assert("set-verified-contract", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
+  assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1012)"));
   assert("get-taker-rebate-bps", decodeEval(s[i++]), "u20");
   assert("y live bid rests", decodeTx(s[i++]), "(ok u100000000)");
-  assert("crossing x deposit -> MUST_USE_SWAP", decodeTx(s[i++]), "(err u1019)");
+  assert("crossing x deposit -> MUST_USE_SWAP", decodeTx(s[i++]), "(err u1016)");
   assert("dead x deposit ok", decodeTx(s[i++]), "(ok u2000)");
-  assert("set-limit live -> MUST_USE_SWAP", decodeTx(s[i++]), "(err u1019)");
+  assert("set-limit live -> MUST_USE_SWAP", decodeTx(s[i++]), "(err u1016)");
   assert("plain reprice zero tuple", decodeTx(s[i++]), (v) =>
     String(v).startsWith("(ok") && String(v).includes("(token-y-received u0)"));
   assert("limit retargeted", decodeEval(s[i++]), String(DEAD_X - 1));
-  assert("reprice limit 0 -> LIMIT_REQUIRED", decodeTx(s[i++]), "(err u1014)");
-  assert("reprice no deposit -> NOTHING_TO_WITHDRAW", decodeTx(s[i++]), "(err u1007)");
+  assert("reprice limit 0 -> LIMIT_REQUIRED", decodeTx(s[i++]), "(err u1011)");
+  assert("reprice no deposit -> NOTHING_TO_WITHDRAW", decodeTx(s[i++]), "(err u1005)");
   const makerSbtcBefore = decodeEval(s[i++]);
   const cross = decodeTx(s[i++]);
   assert("crossing reprice converts FOK", cross, (v) =>
@@ -318,7 +318,7 @@ async function main() {
   );
   assert("tiny y bid rests (cycle 1)", decodeTx(s[i++]), "(ok u2000000)");
   assert("oversize dead x deposit ok", decodeTx(s[i++]), "(ok u100000)");
-  assert("oversize crossing reprice -> PARTIAL_FILL", decodeTx(s[i++]), "(err u1020)");
+  assert("oversize crossing reprice -> PARTIAL_FILL", decodeTx(s[i++]), "(err u1017)");
   assert("failed conversion left old dead limit", decodeEval(s[i++]), String(DEAD_X));
   assert("fund third-party taker", decodeTx(s[i++]), "(ok true)");
   assert("swap FOK ok (third-party taker)", decodeTx(s[i++]), (v) =>

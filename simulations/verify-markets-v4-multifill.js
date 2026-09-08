@@ -7,9 +7,9 @@
 //   S1 happy walk: mid fill + partial crossed maker at the maker's limit,
 //      rebate split (ride to mid maker, 20bps to crossed maker, crumbs +
 //      sub-min residual refunded to the taker), escrow conservation.
-//   S2 no-mid-liquidity edge: only out-of-range makers -> u1011 (documented
+//   S2 no-mid-liquidity edge: only out-of-range makers -> u1009 (documented
 //      limitation: a swap cannot fill purely by crossing), full atomicity.
-//   S2b beyond-limit makers only -> u1020 partial revert, atomicity.
+//   S2b beyond-limit makers only -> u1017 partial revert, atomicity.
 //   S3 dust maker: walk leaves a maker below min-deposit; a later walk SKIPS
 //      that dust maker.
 //   S3b sub-min remainder: refunds silently, swap succeeds on the mid fill.

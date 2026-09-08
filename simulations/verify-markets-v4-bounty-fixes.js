@@ -3,12 +3,13 @@
 // signed Lazer update (PYTH_API_KEY) replaces the dummy VAA; feed ids u1/u45.
 // Everything below is the v2 harness otherwise. Run: PYTH_API_KEY=<key> npx tsx simulations/verify-markets-v4-bounty-fixes.js
 //
-// REWRITTEN for 27e6f43 (close-deposits private, cancel-cycle removed, error
-// codes u1001..u1028): the market binds .jing-core-v4, so core-v4 is deployed
-// here; the source is read with comment lines stripped (>80KB raw). A cycle
-// can no longer sit closed-but-unsettled between txs (every close settles in
-// the same tx), so B3 no longer scripts a public close nor a cancel-cycle:
-// see B3 below. Cycle numbers from B4 on shift down by one (no cancel roll).
+// REWRITTEN for 27e6f43 / aa5d4bf (phase machinery removed, cancel-cycle
+// removed, error codes u1001..u1025): the market binds .jing-core-v4, so
+// core-v4 is deployed here; the source is read with comment lines stripped
+// (>80KB raw). There is no close and no phase any more; settle-with-refresh
+// is the public keeper entry, so B3 no longer scripts a public close nor a
+// cancel-cycle: see B3 below. Cycle numbers from B4 on shift down by one
+// (no cancel roll).
 //
 // verify-markets-v2-bounty-fixes.js
 // Self-verifying stxer mainnet-fork harness for the three changes that came
@@ -18,19 +19,18 @@
 //   B1 small-share filter at settlement, AFTER the limit filter (2989f6c):
 //      a 1000 STX bid at limit u1 (out of range, never fills) plus a 1.5 STX
 //      taker. Under the old close-time filter the taker was 0.15% of the
-//      raw side and got rolled -> u1020. Now the whale is limit-rolled
+//      raw side and got rolled -> u1017. Now the whale is limit-rolled
 //      first, the taker is 100% of the in-range side, and the swap fills
 //      by walking the +2% ask.
-//   B2 in-range whale + small taker -> u1023 ERR_TAKER_TOO_SMALL, atomic.
+//   B2 in-range whale + small taker -> u1020 ERR_TAKER_TOO_SMALL, atomic.
 //      The taker is under 0.2% of the in-range side; the filter flags it
 //      instead of rolling it and settlement reverts with the new error.
-//   B3 the filter never runs on a close alone: a 1 STX fish rests next to
-//      the 1000 STX whale; an outsider (and the deployer) calling
-//      close-deposits is REFUSED (private since 27e6f43), the phase stays
-//      deposit and the fish is untouched; close-and-settle-with-refresh on
-//      this book (no ask in range at the mid) dies u1011 and its close is
-//      unwound with it: fish and whale still in cycle u1, y list still 2,
-//      phase u0. The whale then cancels straight from the deposit phase.
+//   B3 the filter never rolls the fish on its own: a 1 STX fish rests next
+//      to the 1000 STX whale; an outsider (and the deployer) calling
+//      close-deposits is REFUSED (no such function since aa5d4bf) and the
+//      fish is untouched; settle-with-refresh on this book (no ask in range
+//      at the mid) dies u1009 atomically: fish and whale still in cycle u1,
+//      y list still 2. The whale then cancels at will (book always open).
 //      (Was: public close-deposits ok -> fish not rolled -> cancel-cycle
 //      after CANCEL_THRESHOLD rolled the stuck cycle to u2 -> whale cancel.
 //      Both entry points are gone; nothing can be stuck between txs, so the
@@ -44,10 +44,10 @@
 //      MAX_DEPOSITORS is patched to u3 (sim-only): full side + in-range
 //      newcomer parks the FARTHEST out-of-range bid (map only, escrow and
 //      limit kept, totals reduced); out-of-range newcomer gets the old
-//      smallest bump (u1012); parked maker cannot deposit (u1024) but can
-//      reprice; readmit needs a free slot (u1012) then succeeds; a parked
+//      smallest bump (u1010); parked maker cannot deposit (u1021) but can
+//      reprice; readmit needs a free slot (u1010) then succeeds; a parked
 //      maker cancels from any phase; readmit of a non-parked principal is
-//      u1025. X-side mirror: farthest out-of-range ask parked, cancel
+//      u1022. X-side mirror: farthest out-of-range ask parked, cancel
 //      refunds sBTC.
 //
 // Sim-only source patches: MAX_STALENESS loosened (one Lazer update for the
@@ -217,7 +217,7 @@ async function main() {
   // ---- actors ----
   const W = mkAddr(11); // 1000 STX whale bid
   const T1 = mkAddr(12); // B1 small taker (fills)
-  const T2 = mkAddr(13); // B2 small taker (u1023)
+  const T2 = mkAddr(13); // B2 small taker (u1020)
   const F = mkAddr(14); // 1 STX fish
   const AX = mkAddr(15); // +5% ask
   const BX = mkAddr(16); // +1% ask
@@ -285,8 +285,8 @@ async function main() {
   const cancelY = (sender, cid = CID) => call(sender, "cancel-token-y-deposit", [wstxTrait, wstxAsset], cid);
   const cancelX = (sender, cid = CID) => call(sender, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], cid);
   const setLimitY = (sender, limit, cid = CID) => call(sender, "set-token-y-limit", [uintCV(limit), DUMMY_VAA], cid);
-  const closeAndSettle = (sender, cid = CID) =>
-    call(sender, "close-and-settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset], cid);
+  const settle = (sender, cid = CID) =>
+    call(sender, "settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset], cid);
   const readmitY = (sender, who, cid = PID) => call(sender, "readmit-token-y", [standardPrincipalCV(who), DUMMY_VAA], cid);
   const readmitX = (sender, who, cid = PID) => call(sender, "readmit-token-x", [standardPrincipalCV(who), DUMMY_VAA], cid);
   const sbtcSend = (to, amt) => (b) =>
@@ -354,34 +354,31 @@ async function main() {
   ev("B1 rebate pot y zeroed", "(var-get pending-rebate-y)", "u0");
   ev("B1 taker-too-small false at rest", "(var-get taker-too-small)", "false");
 
-  // =============== B2: in-range whale + small taker -> u1023 ===============
+  // =============== B2: in-range whale + small taker -> u1020 ===============
   tx("B2 W reprices to in-range (M ask not live)", setLimitY(W, HUGE), "(ok true)");
   const escBefore = cap("escrow STX before B2", `(stx-get-balance '${CID})`);
-  tx("B2 1.5 STX swap vs 1000 STX in-range side -> u1023", swap(T2, A1, LT, false), "(err u1023)");
+  tx("B2 1.5 STX swap vs 1000 STX in-range side -> u1020", swap(T2, A1, LT, false), "(err u1020)");
   const escAfter = cap("escrow STX after B2", `(stx-get-balance '${CID})`);
   ev("B2 cycle unchanged", "(get-current-cycle)", "u1");
   ev("B2 W unchanged", `(get-token-y-deposit u1 '${W})`, `u${W_AMT}`);
   ev("B2 T2 has no row", `(get-token-y-deposit u1 '${T2})`, "u0");
   ev("B2 flag unwound by the revert", "(var-get taker-too-small)", "false");
 
-  // =============== B3: no close without a settle, no roll of the fish ===============
+  // =============== B3: no close at all, no roll of the fish ===============
   tx("B3 F 1 STX in-range bid (0.1% of side)", depositY(F, MIN_STX, HUGE), `(ok u${MIN_STX})`);
-  tx("B3 outsider close-deposits REFUSED (private)", call(T2, "close-deposits", []), refused);
+  tx("B3 outsider close-deposits REFUSED (no such function)", call(T2, "close-deposits", []), refused);
   tx("B3 deployer close-deposits REFUSED too", call(DEPLOYER, "close-deposits", []), refused);
-  ev("B3 phase stays deposit", "(get-cycle-phase)", "u0");
   ev("B3 fish still in cycle u1 (not rolled)", `(get-token-y-deposit u1 '${F})`, `u${MIN_STX}`);
-  // the only close is the one that settles: at the mid no ask is in range
-  // (M rests at +2%), so the settle dies u1011 and the close unwinds with it
-  tx("B3 close-and-settle-with-refresh, x empty at mid -> u1011", closeAndSettle(DEPLOYER), "(err u1011)");
-  ev("B3 close unwound: phase u0", "(get-cycle-phase)", "u0");
-  ev("B3 closed-block u0", "(var-get deposits-closed-block)", "u0");
+  // the keeper settle: at the mid no ask is in range (M rests at +2%), so
+  // the settle dies u1009 and nothing moves
+  tx("B3 settle-with-refresh, x empty at mid -> u1009", settle(DEPLOYER), "(err u1009)");
   ev("B3 cycle still u1", "(get-current-cycle)", "u1");
   ev("B3 fish still in cycle u1", `(get-token-y-deposit u1 '${F})`, `u${MIN_STX}`);
   ev("B3 fish not moved to u2", `(get-token-y-deposit u2 '${F})`, "u0");
   ev("B3 W still in cycle u1", `(get-token-y-deposit u1 '${W})`, `u${W_AMT}`);
   ev(`B3 M still in cycle u1 (${M_LEFT})`, `(get-token-x-deposit u1 '${M})`, `u${M_LEFT}`);
   ev("B3 y list still W + F", "(len (get-token-y-depositors u1))", "u2");
-  tx("B3 W cancels (deposit phase, nothing stuck)", cancelY(W), `(ok u${W_AMT})`);
+  tx("B3 W cancels (book always open, nothing stuck)", cancelY(W), `(ok u${W_AMT})`);
   ev("B3 y list now F only", "(len (get-token-y-depositors u1))", "u1");
 
   // =============== B4: price-ordered walk, asks ===============
@@ -424,11 +421,11 @@ async function main() {
   ev("P list still 3", "(len (get-token-y-depositors u0))", "u3", PID);
   ev("P totals exclude parked (6 STX)", "(get total-token-y (get-cycle-totals u0))", "u6000000", PID);
   ev("P P1 limit kept", `(get-token-y-limit '${P1})`, `u${LP1}`, PID);
-  tx("P N2 out-of-range newcomer smaller than smallest -> u1012", depositY(N2, 1_500_000n, 1n, PID), "(err u1012)");
-  tx("P P1 deposits while parked -> u1024", depositY(P1, 2_000_000n, HUGE, PID), "(err u1024)");
+  tx("P N2 out-of-range newcomer smaller than smallest -> u1010", depositY(N2, 1_500_000n, 1n, PID), "(err u1010)");
+  tx("P P1 deposits while parked -> u1021", depositY(P1, 2_000_000n, HUGE, PID), "(err u1021)");
   tx("P P1 reprices while parked -> ok", setLimitY(P1, HUGE, PID), "(ok true)");
   ev("P P1 new limit", `(get-token-y-limit '${P1})`, `u${HUGE}`, PID);
-  tx("P readmit P1 with side full -> u1012", readmitY(DEPLOYER, P1), "(err u1012)");
+  tx("P readmit P1 with side full -> u1010", readmitY(DEPLOYER, P1), "(err u1010)");
   tx("P P2 cancels -> slot", cancelY(P2, PID), "(ok u2000000)");
   tx("P readmit P1 (keeper) -> ok", readmitY(DEPLOYER, P1), "(ok u2000000)");
   ev("P P1 unparked", `(get-token-y-parked '${P1})`, "u0", PID);
@@ -441,8 +438,8 @@ async function main() {
   tx("P P3 cancels while parked -> refund", cancelY(P3, PID), "(ok u2000000)");
   const p3After = cap("P3 stx after cancel", `(stx-get-balance '${P3})`, PID);
   ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
-  tx("P readmit P3 (no longer parked) -> u1025", readmitY(DEPLOYER, P3), "(err u1025)");
-  tx("P readmit P1 (live, not parked) -> u1025", readmitY(DEPLOYER, P1), "(err u1025)");
+  tx("P readmit P3 (no longer parked) -> u1022", readmitY(DEPLOYER, P3), "(err u1022)");
+  tx("P readmit P1 (live, not parked) -> u1022", readmitY(DEPLOYER, P1), "(err u1022)");
   // x mirror: clear the y side first so in-range asks pass the crossing gate
   tx("P P1 cancels", cancelY(P1, PID), "(ok u2000000)");
   tx("P N1 cancels", cancelY(N1, PID), "(ok u2000000)");
@@ -455,7 +452,7 @@ async function main() {
   ev("PX Q1 parked 3000", `(get-token-x-parked '${Q1})`, "u3000", PID);
   ev("PX Q3 still live", `(get-token-x-deposit u0 '${Q3})`, "u3000", PID);
   ev("PX totals exclude parked (9000)", "(get total-token-x (get-cycle-totals u0))", "u9000", PID);
-  tx("PX readmit Q1 full -> u1012", readmitX(DEPLOYER, Q1), "(err u1012)");
+  tx("PX readmit Q1 full -> u1010", readmitX(DEPLOYER, Q1), "(err u1010)");
   const q1Before = cap("Q1 sbtc before cancel", `(get-balance '${Q1})`, SBTC_FQN);
   tx("PX Q1 cancels while parked -> refund", cancelX(Q1, PID), "(ok u3000)");
   const q1After = cap("Q1 sbtc after cancel", `(get-balance '${Q1})`, SBTC_FQN);

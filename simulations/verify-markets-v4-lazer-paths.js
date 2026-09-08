@@ -6,19 +6,21 @@
 // defensive (cannot be produced by a signed update) or dead.
 //
 //   L1 refresh-mid with the full update -> the mid the sim computed.
-//   L2 an update carrying BTC only -> u1026 ERR_FEED_MISSING (STX missing).
-//   L3 an update carrying BTC + USDC (feeds 1, 7) -> u1026 (STX missing).
-//   L4 an update fetched WITHOUT the confidence property -> u1006
+//   L2 an update carrying BTC only -> u1023 ERR_FEED_MISSING (STX missing).
+//   L3 an update carrying BTC + USDC (feeds 1, 7) -> u1023 (STX missing).
+//   L4 an update fetched WITHOUT the confidence property -> u1004
 //      ERR_PRICE_UNCERTAIN, on refresh-mid and on swap.
 //   L5 deposit gate: a bid with the no-confidence update on an EMPTY x side
 //      is accepted (no price read); once an ask rests, the same bid is
-//      refused u1006 (the gate must read the price).
-//   L6 read-onlys: get-min-deposits, get-cycle-start-block,
-//      get-blocks-elapsed, would-take-as-x / -y truth at the live mid,
-//      get-token-x-depositors, get-settlement after a settled cycle.
-//   L7 settling an already-settled cycle is shielded by the phase gate:
-//      settle-with-refresh is private (refused from outside); (deposit
-//      phase), so u1004 ERR_ALREADY_SETTLED is defensive.
+//      refused u1004 (the gate must read the price).
+//   L6 read-onlys: get-min-deposits, would-take-as-x / -y truth at the
+//      live mid, get-token-x-depositors, get-settlement after a settled
+//      cycle. (No cycle clock any more: get-cycle-start-block and
+//      get-blocks-elapsed are gone with the phase machinery.)
+//   L7 settle-with-refresh is the public keeper entry (aa5d4bf): on an
+//      empty cycle it dies u1009 nothing to settle. A settled cycle is never
+//      the current one (advance-cycle runs in the same tx), so u1002
+//      ERR_ALREADY_SETTLED is defensive.
 //
 // DEPLOYED=1 runs against SPV9K21…markets-sbtc-stx-jingswap (verify +
 // initialize on the fork as chavita). Run:
@@ -88,13 +90,13 @@ async function main() {
     tx("deploy market v4 (unpatched)", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   }
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
-  tx("initialize (feeds u1/u45)", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1015)"));
+  tx("initialize (feeds u1/u45)", call(DEPLOYER, "initialize", [contractPrincipalCV(DEPLOYER, MARKET), contractPrincipalCV(SBTC_ADDR, SBTC_NAME), contractPrincipalCV(WSTX_ADDR, WSTX_NAME), uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n)]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1012)"));
 
   // L1-L4: the oracle paths
   tx("L1 refresh-mid with the full update -> mid", call(T, "refresh-mid", [UPD]), `(ok u${MID})`);
-  tx("L2 refresh-mid with a BTC-only update -> u1026 feed missing", call(T, "refresh-mid", [U_BTC]), "(err u1026)");
-  tx("L3 refresh-mid with BTC + USDC (no STX) -> u1026", call(T, "refresh-mid", [U_BTC_USDC]), "(err u1026)");
-  tx("L4 refresh-mid with an update lacking confidence -> u1006", call(T, "refresh-mid", [U_NOCONF]), "(err u1006)");
+  tx("L2 refresh-mid with a BTC-only update -> u1023 feed missing", call(T, "refresh-mid", [U_BTC]), "(err u1023)");
+  tx("L3 refresh-mid with BTC + USDC (no STX) -> u1023", call(T, "refresh-mid", [U_BTC_USDC]), "(err u1023)");
+  tx("L4 refresh-mid with an update lacking confidence -> u1004", call(T, "refresh-mid", [U_NOCONF]), "(err u1004)");
   // L8: per-feed freshness. publish-time on each shaped feed must be the
   // feed's own feedUpdateTimestamp in seconds (what the 80s checks read),
   // not the envelope timestamp, and must sit inside MAX_STALENESS of the
@@ -115,15 +117,9 @@ async function main() {
   ev("L8 chain clock (stacks-block-time)", "stacks-block-time", (v) => { const d = Number(uintOf(v)) - Number(FUT_Y); console.log(`       (chain clock minus STX feed time: ${d}s)`); return Math.abs(d) < 80; });
   ev("L8 STX feed time passes MAX_STALENESS against the chain clock", `(> u${FUT_Y} (- stacks-block-time u80))`, "true");
   ev("L8 a feed time 81s older than the chain clock fails it", `(> (- stacks-block-time u81) (- stacks-block-time u80))`, "false");
-  tx("L8 refresh-mid with an update lacking feedUpdateTimestamp -> u1028", call(T, "refresh-mid", [U_NOFUT]), "(err u1028)");
+  tx("L8 refresh-mid with an update lacking feedUpdateTimestamp -> u1025", call(T, "refresh-mid", [U_NOFUT]), "(err u1025)");
   // L6a read-onlys before any cycle activity
   ev("L6 get-min-deposits", "(get-min-deposits)", (v) => v.includes(`(min-token-x u${MIN_SBTC})`) && v.includes(`(min-token-y u${MIN_STX})`));
-  ev("L6 get-cycle-start-block is set", "(get-cycle-start-block)", (v) => uintOf(v) > 0n);
-  // the cycle clock starts at DEPLOY (var init) and on each roll; initialize
-  // does not reset it, so on the deployed market the first cycle already
-  // counts the blocks since deploy (harmless: an empty first cycle can be
-  // cancelled and rolls nothing)
-  ev("L6 get-blocks-elapsed on the first cycle (small locally, since-deploy on the deployed market)", "(get-blocks-elapsed)", (v) => DEPLOYED ? uintOf(v) >= 0n : uintOf(v) < 10n);
   // would-take-* also need a LIVE maker on the opposite side: false on an empty book
   ev("L6 would-take-as-x on an empty book -> false", `(would-take-as-x u${MID} u${(MID * 99n) / 100n})`, "false");
   ev("L6 would-take-as-y on an empty book -> false", `(would-take-as-y u${MID} u${(MID * 101n) / 100n})`, "false");
@@ -137,16 +133,14 @@ async function main() {
   ev("L6 get-token-x-depositors lists T", "(get-token-x-depositors u0)", (v) => v.includes(T));
   ev("L6 would-take-as-y with a live ask, cap over the mid -> true", `(would-take-as-y u${MID} u${(MID * 101n) / 100n})`, "true");
   ev("L6 would-take-as-y with a live ask, cap under the mid -> false", `(would-take-as-y u${MID} u${(MID * 99n) / 100n})`, "false");
-  tx("L5 the same bid against a resting ask -> u1006 (the gate must read the price)", depositY(S, 5_000_000n, HUGE, U_NOCONF), "(err u1006)");
-  tx("L4 swap with the no-confidence update -> u1006", swap(S, 5_000_000n, HUGE, U_NOCONF, false), "(err u1006)");
+  tx("L5 the same bid against a resting ask -> u1004 (the gate must read the price)", depositY(S, 5_000_000n, HUGE, U_NOCONF), "(err u1004)");
+  tx("L4 swap with the no-confidence update -> u1004", swap(S, 5_000_000n, HUGE, U_NOCONF, false), "(err u1004)");
   // L6b/L7: a real settlement, then the read-onlys and the phase gate
   tx("L6 S swaps 5 STX into T's ask with the full update", swap(S, 5_000_000n, HUGE, UPD, false), (v) => String(v).startsWith("(ok"));
   ev("L6 cycle advanced to u1", "(get-current-cycle)", "u1");
   ev("L6 get-settlement u0 is some tuple", "(get-settlement u0)", (v) => v.startsWith("(some (tuple"));
   ev(`L6 get-settlement u0 clearing price == mid`, "(get-settlement u0)", (v) => v.includes(`u${MID}`));
-  ev("L6 get-blocks-elapsed reset by the new cycle", "(get-blocks-elapsed)", (v) => uintOf(v) < 10n);
-  tx("L7 settle-with-refresh from outside -> refused (private; only swap and close-and-settle reach it)", call(T, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
-  tx("L7 close-and-settle-with-refresh on an empty cycle -> u1011 nothing to settle", call(T, "close-and-settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err u1011)" || v === "(err u1013)");
+  tx("L7 settle-with-refresh (public keeper entry) on an empty cycle -> u1009 nothing to settle", call(T, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), "(err u1009)");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -159,7 +153,7 @@ async function main() {
     i += 1;
     check(st.label, raw, st.want);
   }
-  console.log("\n  defensive / dead codes (documented, not reachable with a signed update): u1004 ERR_ALREADY_SETTLED (phase gate first), u1008 ERR_ZERO_PRICE, u1017 ERR_EXPO_MISMATCH (both Lazer feeds carry expo -8), u1018 ERR_NOTHING_FILLED (never raised)");
+  console.log("\n  defensive / dead codes (documented, not reachable with a signed update): u1002 ERR_ALREADY_SETTLED (the cycle advances in the same tx as its settle), u1006 ERR_ZERO_PRICE, u1014 ERR_EXPO_MISMATCH (both Lazer feeds carry expo -8), u1015 ERR_NOTHING_FILLED (never raised)");
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }
