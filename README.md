@@ -21,6 +21,20 @@ contracts/
 └── snpl-sbtc-stx-jing.clar     per-borrower swap-now-pay-later loan against sBTC
 ```
 
+## Deployed sBTC/STX set, September 2026
+
+All under `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22`, all logging through `jing-core-v4`.
+
+| Contract | Status |
+|---|---|
+| `jing-core-v4` | live, unchanged. Keeps `log-close-deposits` and `log-cancel-cycle` as dead public functions until a core v5. |
+| `markets-sbtc-stx-jing-v5` | **current market.** Phase-free, per-feed Lazer freshness, error codes `u1001`-`u1025`, keeper entry `settle-with-refresh`. |
+| `swap-router-sbtc-stx-jing-v4` | current router, bound to market v5. |
+| `vault-sbtc-stx-v5` | current vault, bound to market v5 and router v4. |
+| `markets-sbtc-stx-jing-v4` | **verified in the core but flawed. Do not route to it.** It carries the per-feed staleness bug (the envelope timestamp stood in for both feeds' `publish-time`, so a carried-forward Lazer price passed the 80 s check) and the public `close-deposits` that let anyone park the book in the settle phase. Both are documented in `README-audit-bounty-lazer-v4.md`. The core has no way to unverify a contract, so v4 stays verified for ever; retire it by pausing it on the market side once makers have exited. |
+| `swap-router-sbtc-stx-jing-v3`, `vault-sbtc-stx-v4` | bound to market v4, retired with it. |
+| `markets-sbtc-stx-jingswap`, `swap-router-sbtc-stx-jingswap`, `swap-router-sbtc-stx-jingswap-v1` | the earlier Lazer pair on `jing-core-v3`, retired. |
+
 ## What each piece does, from a user's point of view
 
 ### `jing-core`
