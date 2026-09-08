@@ -1,5 +1,10 @@
 # creator-escrow-v2
 
+> **Superseded by [`../creator-v3`](../creator-v3/README.md)** (2026-09-08).
+> v3 is this contract plus one rule: a round whose whole budget is paid
+> out counts as closed for `start-round` / `sweep`. Rounds 1-3 stay on v2
+> read-only.
+
 Round-2 of the JingSwap creator-escrow: a public USDCx escrow for
 commissioned content. OWNER (the buyer) deposits a per-video budget for a
 named pair of creators; creators submit deliveries on-chain and pull their

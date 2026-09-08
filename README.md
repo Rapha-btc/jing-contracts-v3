@@ -19,6 +19,10 @@ contracts/
 ├── snpl-trait.clar             interface the per-borrower loan implements
 ├── reserve-sbtc-stx-jing.clar  shared sBTC reserve (lender's pool)
 └── snpl-sbtc-stx-jing.clar     per-borrower swap-now-pay-later loan against sBTC
+
+creator-v2/creator-escrow-v2.clar   creator escrow (DEPLOYED, rounds 1-3, frozen)
+creator-v3/creator-escrow-v3.clar   creator escrow v3 = v2 + budget-exhausted round close
+                                    (see creator-v3/README.md; 47/47 stxer fork)
 ```
 
 ## Deployed sBTC/STX set, September 2026

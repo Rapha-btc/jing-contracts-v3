@@ -53,3 +53,19 @@ boolean -- exactly what the FE already shows.
 Before the next funded round, or before broadening the creator set
 beyond known partners. The frontend hook (`useCreatorEscrow.release`)
 will need a one-line update at that point to thread the hash through.
+
+## v3 (2026-09-08): budget-exhausted round close
+
+v2 closed rounds by height only (`ROUND_BURN_BLOCKS = 4200`). Round 3 was
+fully paid ($50/$50, 4/4 slots) with 409 blocks left and `start-round` for
+round 4 aborted `ERR_ROUND_ACTIVE (u103)`; the post-condition rolled the
+deposit back. Nothing can happen in a round once `paid-out == deposited`
+(submit / amend fail `ERR_OVER_CAPACITY`, release has no funds), so
+`creator-v3/creator-escrow-v3.clar` adds `is-round-closed` = window
+elapsed OR budget exhausted, used by `start-round` (still requires
+`pending == u0`) and `sweep`. A live round with money left still cannot
+be swept early -- that budget is the creators' guarantee for the window.
+Harness `simulations/verify-creator-escrow-v3.js`: 47/47 on a mainnet
+fork. Off-chain side tables are versioned (`version` column, `?v=2`)
+instead of renamed. `creator-bonus-jing` is bound to v2 -> no bonuses on
+v3 deliveries until a v3-bound bonus contract ships.
