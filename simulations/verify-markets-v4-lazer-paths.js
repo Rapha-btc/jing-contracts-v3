@@ -17,7 +17,7 @@
 //      get-blocks-elapsed, would-take-as-x / -y truth at the live mid,
 //      get-token-x-depositors, get-settlement after a settled cycle.
 //   L7 settling an already-settled cycle is shielded by the phase gate:
-//      settle-with-refresh right after a settlement -> u1003 (deposit
+//      settle-with-refresh is private (refused from outside); (deposit
 //      phase), so u1004 ERR_ALREADY_SETTLED is defensive.
 //
 // DEPLOYED=1 runs against SPV9K21…markets-sbtc-stx-jingswap (verify +
@@ -145,7 +145,7 @@ async function main() {
   ev("L6 get-settlement u0 is some tuple", "(get-settlement u0)", (v) => v.startsWith("(some (tuple"));
   ev(`L6 get-settlement u0 clearing price == mid`, "(get-settlement u0)", (v) => v.includes(`u${MID}`));
   ev("L6 get-blocks-elapsed reset by the new cycle", "(get-blocks-elapsed)", (v) => uintOf(v) < 10n);
-  tx("L7 settle-with-refresh right after a settlement -> u1003 (deposit phase shields u1004)", call(T, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), "(err u1003)");
+  tx("L7 settle-with-refresh from outside -> refused (private; only swap and close-and-settle reach it)", call(T, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
   tx("L7 close-and-settle-with-refresh on an empty cycle -> u1011 nothing to settle", call(T, "close-and-settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]), (v) => v === "(err u1011)" || v === "(err u1013)");
 
   const sid = await b.run();

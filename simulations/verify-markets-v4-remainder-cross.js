@@ -34,8 +34,9 @@
 //   S9 ERR_ZERO_MIN_DEPOSIT (u1022): both setters and initialize (fresh
 //      deploy) reject a zero min.
 //   S8 (last) public settle with the flag false: a swap that reverts in the
-//      walk leaves `crossing` false; plain close-deposits + settle-with-refresh
-//      on an all-out-of-range book -> u1011, cycle unchanged.
+//      walk leaves `crossing` false; close-deposits and settle-with-refresh are
+//      private (refused from outside); close-and-settle-with-refresh on an
+//      all-out-of-range book -> u1011, cycle unchanged.
 //
 // Hermes is key-gated since 2026-08-18, so the harness runs on the REAL
 // prices already in pyth-storage-v4 (read pre-run for exact expectations)
@@ -108,7 +109,7 @@ const X4 = mkAddr(7); // in-range x maker for S3
 const X5 = mkAddr(8); // in-range x maker for S3b
 const Y1 = mkAddr(9); // out-of-range y bid for S4
 
-const CORE = "jing-core-v3";
+const CORE = "jing-core-v4"; // the market binds .jing-core-v4
 const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const CID = `${DEPLOYER}.${MARKET}`;
@@ -151,7 +152,7 @@ if (LIVE) {
   mktSrc = fs.readFileSync(
     new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url),
     "utf8",
-  );
+  ).split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n"); // comment lines dropped, as deployed
   // v4: no sim patches, the market runs UNPATCHED on a real Lazer update
 }
 
@@ -459,8 +460,10 @@ async function main() {
     call(sender, "reprice-or-swap-token-y", [uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]);
   const repriceX = (sender, limit) =>
     call(sender, "reprice-or-swap-token-x", [uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]);
-  const settlePublic = (sender) => // v4 has no storage-only settle: the public entry is settle-with-refresh
+  const settlePublic = (sender) => // private since 27e6f43: the call is refused, kept to prove it
     call(sender, "settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]);
+  const closeAndSettle = (sender) => // the one public settle entry: closes and settles in the same tx
+    call(sender, "close-and-settle-with-refresh", [DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]);
 
   // ---------- S6: mirror cross-only, sized (y-taker vs out-of-range asks) ----------
   // Book in u5, x side: M2 dust (~400 @ L2), M3 2000 @ L3 (+2%), nothing in
@@ -556,8 +559,9 @@ async function main() {
   while (A9 - (A9 * REB) / BPS < NET9) A9 += 1n;
   b = swap(X5, A9, LT, false)(b); // +1% < L3 -> walk finds nothing -> u1020
   b = evalM("(var-get crossing)")(b); // still false (revert unwound it)
-  b = call(DEPLOYER, "close-deposits", [])(b); // ok (public)
-  b = settlePublic(DEPLOYER)(b); // u1011: flag false, both sides empty at mid
+  b = call(DEPLOYER, "close-deposits", [])(b); // refused: private since 27e6f43
+  b = settlePublic(DEPLOYER)(b); // refused: private too
+  b = closeAndSettle(DEPLOYER)(b); // u1011: flag false, both sides empty at mid, close unwinds
   b = evalM("(get-current-cycle)")(b); // u8
 
   const sid = await b.run();
@@ -773,8 +777,9 @@ async function main() {
   assert("S8 crossing false before", decodeEval(s[i++]), "false");
   assert("S8 swap reverts in walk -> u1020", decodeTx(s[i++]), "(err u1020)");
   assert("S8 crossing false after revert", decodeEval(s[i++]), "false");
-  assert("S8 public close-deposits ok", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
-  assert("S8 public settle, all out of range -> u1011", decodeTx(s[i++]), "(err u1011)");
+  assert("S8 close-deposits from outside -> refused (private)", decodeTx(s[i++]), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
+  assert("S8 settle-with-refresh from outside -> refused (private)", decodeTx(s[i++]), (v) => v === "(err none)" || String(v).includes("ENGINE-ERR"));
+  assert("S8 close-and-settle, all out of range -> u1011", decodeTx(s[i++]), "(err u1011)");
   assert("S8 cycle unchanged", decodeEval(s[i++]), "u8");
 
   console.log(`\n${checks - failures}/${checks} checks green`);

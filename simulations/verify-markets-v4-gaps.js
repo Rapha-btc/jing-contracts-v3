@@ -308,7 +308,7 @@ async function main() {
   tx("G2 deposit while paused -> u1009", depositY(STX_DEPOSITOR_1, MIN_STX, LIVE_Y), "(err u1009)");
   tx("G2 swap while paused -> u1009", swap(Y9, 2_000_000n, HUGE, false), "(err u1009)");
   tx("G2 close-and-settle-with-refresh while paused -> u1009", closeAndSettle(OUTSIDER), "(err u1009)");
-  tx("G2 settle-with-refresh while paused -> u1009", settle(OUTSIDER), "(err u1009)");
+  tx("G2 settle-with-refresh from outside -> refused (private)", settle(OUTSIDER), refused);
   ev("G2 still deposit phase", "(get-cycle-phase)", "u0");
   tx("G2 set-token-x-limit not gated by pause", call(SBTC_DEPOSITOR_1, "set-token-x-limit", [uintCV(DEAD_X - 1n), DUMMY_VAA]), "(ok true)");
   ev("G2 limit moved while paused", `(get-token-x-limit '${SBTC_DEPOSITOR_1})`, `u${DEAD_X - 1n}`);
@@ -320,8 +320,8 @@ async function main() {
   ev("G2 phase back to deposit", "(get-cycle-phase)", "u0");
 
   // =============== G3: settle entry points at a fixed price ===============
-  tx("G3 settle in deposit phase -> u1003", settle(OUTSIDER), "(err u1003)");
-  tx("G3 settle wrong x trait -> u1016", settle(OUTSIDER, wstxTrait, wstxAsset), "(err u1016)");
+  tx("G3 settle-with-refresh from outside -> refused (private)", settle(OUTSIDER), refused);
+  tx("G3 settle-with-refresh wrong trait from outside -> refused too (never reaches the trait check)", settle(OUTSIDER, wstxTrait, wstxAsset), refused);
   tx("G3 close-and-settle-with-refresh: x empty at mid -> u1011", closeAndSettle(OUTSIDER), "(err u1011)");
   ev("G3 close unwound with the settle (phase u0)", "(get-cycle-phase)", "u0");
   ev("G3 deposits-closed-block still u0", "(var-get deposits-closed-block)", "u0");

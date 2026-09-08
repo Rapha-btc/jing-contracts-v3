@@ -1599,7 +1599,7 @@
   )
 )
 
-(define-public (settle-with-refresh
+(define-private (settle-with-refresh
     (update (buff 8192))
     (tx-trait <ft-trait>)
     (tx-name (string-ascii 128))

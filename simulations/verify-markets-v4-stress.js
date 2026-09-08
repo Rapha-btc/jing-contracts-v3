@@ -29,7 +29,7 @@ const STEPS = Number(process.env.STEPS ?? 60);
 const CHAVITA = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 // a key no maker uses (makers are "1".."6" repeated); the deployer is also the treasury
 const DEPLOYER = DEPLOYED ? CHAVITA : getAddressFromPrivateKey("9a".repeat(32) + "01", "mainnet");
-const CORE = "jing-core-v3";
+const CORE = "jing-core-v4"; // the market binds .jing-core-v4
 const MARKET_FILE = "markets-sbtc-stx-jing-v4";
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE;
 const CID = `${DEPLOYER}.${MARKET}`;
@@ -40,7 +40,7 @@ const MIN_SBTC = 1000n, MIN_STX = 1_000_000n;
 const sbtcTrait = contractPrincipalCV(SBTC_ADDR, SBTC_NAME), wstxTrait = contractPrincipalCV(WSTX_ADDR, WSTX_NAME);
 const sbtcAsset = stringAsciiCV(SBTC_ASSET_NAME), wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
-const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8");
+const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8").split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
 // the market's documented refusals a random action may legitimately hit
 // u1 / u3 are the token contracts' insufficient-balance refusals (a maker ran dry)
 const OK_ERRS = new Set(["u1", "u3", "u1001", "u1002", "u1003", "u1007", "u1011", "u1012", "u1013", "u1014", "u1019", "u1020", "u1021", "u1023", "u1024", "u1025"]);

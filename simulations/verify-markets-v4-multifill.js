@@ -83,7 +83,7 @@ const X4 = mkAddr(7); // in-range x maker for S3
 const X5 = mkAddr(8); // in-range x maker for S3b
 const Y1 = mkAddr(9); // out-of-range y bid for S4
 
-const CORE = "jing-core-v3";
+const CORE = "jing-core-v4"; // the market binds .jing-core-v4
 const MARKET_FILE = "markets-sbtc-stx-jing-v4"; // Pyth Lazer, UNPATCHED (the local source)
 const MARKET = DEPLOYED ? "markets-sbtc-stx-jingswap" : MARKET_FILE; // the deployed name
 const CID = `${DEPLOYER}.${MARKET}`;
@@ -126,7 +126,7 @@ if (LIVE) {
   mktSrc = fs.readFileSync(
     new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url),
     "utf8",
-  );
+  ).split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
   // v4: no sim patches, the market runs UNPATCHED on a real Lazer update
 }
 
