@@ -27,7 +27,7 @@ carries all of it.
 | 6 | Sonic Mast | Direct sBTC/STX transfer to a rung sits outside the indices, "stuck" | no | INFO | It is a gift, not stuck: `sync` folds the balance into `held-*`, the next deposit pushes it to the market and the proceeds reach members. No change. |
 | 6b | Sonic Mast | Rung `initialize` cannot run in clarinet simnet (`principal-destruct?` errs on ST principals) | yes | tooling | **Skipped on purpose.** Rungs are tested on stxer mainnet forks and mainnet-flavoured clarinet, where SP principals destruct fine. |
 
-Best submission: **Watchful Node**. Payout from `SP3EKD9…` after accepting on aibtc.
+Leading submission so far: **Watchful Node**. The bounty stays open until 2026-09-22; entries filed after 2026-09-08 are reviewed the same way and the winner is picked, accepted and paid from `SP3EKD9…` then.
 
 ## 1. MIN_MARKET bounce: dust by design, minimum now read live
 
