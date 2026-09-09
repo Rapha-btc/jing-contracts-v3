@@ -42,8 +42,18 @@
 ;; market price unit is micro-STX per sat times 1e10; from hundredths of a
 ;; sat per STX: price = 1e6 * 1e10 * 100 / cents = 1e18 / cents
 (define-constant PRICE_NUMERATOR u1000000000000000000)
-;; the market's own minimum per maker (its min-token-y-deposit at initialize)
-(define-constant MIN_MARKET u1000000)
+;; the market's own minimum per maker, read live: the operator can raise it
+;; (set-min-token-y-deposit) and a stale constant would make the partial
+;; withdraw branch call the market with a remainder it rejects (u1004)
+;; literal principal on purpose: the node's read-only analysis rejects a
+;; contract-call? through a constant here (clarinet accepts it, mainnet does not)
+(define-read-only (min-market)
+  (get min-token-y
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+      get-min-deposits
+    )
+  )
+)
 ;; smallest member deposit, 0.1 STX: a dust guard, not a maths need
 (define-constant MIN_DEPOSIT u100000)
 
@@ -62,7 +72,7 @@
 )
 (define-data-var unfilled-index uint SCALE)
 (define-data-var proceeds-index uint u0)
-;; micro-STX kept in this contract, off the market (under MIN_MARKET, or refunds)
+;; micro-STX kept in this contract, off the market (under the market minimum, or refunds)
 (define-data-var held-ustx uint u0)
 ;; sats balance already folded into proceeds-index
 (define-data-var sats-accounted uint u0)
@@ -237,7 +247,7 @@
         (pos (position-of member))
         (epo (var-get epoch))
       )
-      (if (>= to-push MIN_MARKET)
+      (if (>= to-push (min-market))
         (begin
           (try! (as-contract? ((with-stx to-push))
             (try! (contract-call? MARKET deposit-token-y to-push p update WSTX WSTX_NAME))
@@ -253,7 +263,7 @@
       })
       (var-set total-shares (+ (var-get total-shares) shares))
       (contract-call? LADDER log-deposit member amount shares epo
-        (>= to-push MIN_MARKET) (var-get held-ustx)
+        (>= to-push (min-market)) (var-get held-ustx)
       )
     )
   )
@@ -382,7 +392,7 @@
           (on-market (market-size))
         )
         (asserts! (>= on-market gap) ERR_INSUFFICIENT)
-        (if (>= (- on-market gap) MIN_MARKET)
+        (if (>= (- on-market gap) (min-market))
           (begin
             (try! (as-contract? ()
               (try! (contract-call? MARKET withdraw-token-y gap WSTX WSTX_NAME))

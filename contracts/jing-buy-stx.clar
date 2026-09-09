@@ -23,9 +23,9 @@
 ;; difference in as a fill together with the STX that arrived.
 ;;
 ;; Where the sBTC sits: on the market whenever the pool is at or above the
-;; market's own minimum (MIN_MARKET), otherwise held here (`held-sats`) until a
+;; market's own minimum (the market minimum), otherwise held here (`held-sats`) until a
 ;; deposit lifts it back. A withdrawal that would leave the market position
-;; under MIN_MARKET cancels the whole position and holds the rest (partial
+;; under the market minimum cancels the whole position and holds the rest (partial
 ;; withdrawals on the market otherwise, withdraw-token-x). Nothing held here
 ;; fills; that is the cost of being under the minimum.
 ;;
@@ -66,8 +66,18 @@
 ;; market price unit is micro-STX per sat times 1e10; from hundredths of a
 ;; sat per STX: price = 1e6 * 1e10 * 100 / cents = 1e18 / cents
 (define-constant PRICE_NUMERATOR u1000000000000000000)
-;; the market's own minimum per maker (its min-token-x-deposit at initialize)
-(define-constant MIN_MARKET u1000)
+;; the market's own minimum per maker, read live: the operator can raise it
+;; (set-min-token-x-deposit) and a stale constant would make the partial
+;; withdraw branch call the market with a remainder it rejects (u1004)
+;; literal principal on purpose: the node's read-only analysis rejects a
+;; contract-call? through a constant here (clarinet accepts it, mainnet does not)
+(define-read-only (min-market)
+  (get min-token-x
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+      get-min-deposits
+    )
+  )
+)
 ;; smallest member deposit: a dust guard, not a maths need (shares are never
 ;; fewer than sats deposited; payouts round down by at most 1 unit)
 (define-constant MIN_DEPOSIT u100)
@@ -87,7 +97,7 @@
 )
 (define-data-var unfilled-index uint SCALE)
 (define-data-var proceeds-index uint u0)
-;; sats kept in this contract, off the market (under MIN_MARKET, or refunds)
+;; sats kept in this contract, off the market (under the market minimum, or refunds)
 (define-data-var held-sats uint u0)
 ;; micro-STX balance already folded into proceeds-index
 (define-data-var stx-accounted uint u0)
@@ -251,7 +261,7 @@
 ;; ---------- member actions ----------
 
 ;; Join the rung with `amount` sats. Goes to the market when the pool is at
-;; or above MIN_MARKET (pushing along anything held), else waits here.
+;; or above the market minimum (pushing along anything held), else waits here.
 (define-public (deposit
     (amount uint)
     (update (buff 8192))
@@ -271,7 +281,7 @@
         (pos (position-of member))
         (epo (var-get epoch))
       )
-      (if (>= to-push MIN_MARKET)
+      (if (>= to-push (min-market))
         (begin
           (try! (as-contract? ((with-ft SBTC SBTC_NAME to-push))
             (try! (contract-call? MARKET deposit-token-x to-push p update SBTC SBTC_NAME))
@@ -287,7 +297,7 @@
       })
       (var-set total-shares (+ (var-get total-shares) shares))
       (contract-call? LADDER log-deposit member amount shares epo
-        (>= to-push MIN_MARKET) (var-get held-sats)
+        (>= to-push (min-market)) (var-get held-sats)
       )
     )
   )
@@ -295,7 +305,7 @@
 
 ;; Take `amount` of your unsold sats back (and your STX). Comes from what is
 ;; held here first, then from the market by partial withdrawal; if that would
-;; leave the market position under MIN_MARKET the whole position is cancelled
+;; leave the market position under the market minimum the whole position is cancelled
 ;; and the rest held here for the others.
 (define-public (withdraw (amount uint))
   (let (
@@ -426,7 +436,7 @@
           (on-market (market-size))
         )
         (asserts! (>= on-market gap) ERR_INSUFFICIENT)
-        (if (>= (- on-market gap) MIN_MARKET)
+        (if (>= (- on-market gap) (min-market))
           (begin
             (try! (as-contract? ()
               (try! (contract-call? MARKET withdraw-token-x gap SBTC SBTC_NAME))
