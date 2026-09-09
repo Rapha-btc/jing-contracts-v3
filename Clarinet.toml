@@ -261,6 +261,11 @@ path = "contracts/jing-core-v4.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.jing-core-v5]
+path = "contracts/jing-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
 # Coverage-instrumented copy of vault-sbtc-stx-v2: identical source with the
 # SPV9K21 principal prefix rewritten to relative refs and the Bitflow venues
 # rewritten to the RV mocks (the wstx facade's is-standard rejects simnet's
@@ -335,6 +340,11 @@ epoch = "3.4"
 
 [contracts.markets-sbtc-stx-jing-v5]
 path = "contracts/markets-sbtc-stx-jing-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v6]
+path = "contracts/markets-sbtc-stx-jing-v6.clar"
 clarity_version = 5
 epoch = "3.4"
 
