@@ -12,7 +12,8 @@
     "verify:creator-escrow-v2": "tsx simulations/verify-creator-escrow-v2.js",
     "verify:creator-escrow-v3": "tsx simulations/verify-creator-escrow-v3.js",
     "verify:rungs-buy": "SIDE=buy tsx simulations/verify-rungs-keyless.js",
-    "verify:rungs-sell": "SIDE=sell tsx simulations/verify-rungs-keyless.js"
+    "verify:rungs-sell": "SIDE=sell tsx simulations/verify-rungs-keyless.js",
+    "verify:vault-v5-parked": "tsx simulations/verify-vault-sbtc-stx-v5-parked.js"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",

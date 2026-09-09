@@ -127,16 +127,32 @@ proceeds via a gift + claim, empty pool at the end.
 | sell rung, fix 1 | 31/31 | `722f9f6b16ee7ea2703781879394e9d0` |
 | buy rung, fix 1 + 2 | 30/30 | `ef196963e3b605f29bae6625716cc7f7` |
 | sell rung, fix 1 + 2 | 31/31 | `02b0d89df9feea63c076fe89ef4b4539` |
+| vault v5 parked order (fix 5) | 131/131 | `1fad866e001080ea09b7c46b21edb29c` |
 
 ```bash
 npm run verify:rungs-buy
 npm run verify:rungs-sell
+PYTH_API_KEY=... npm run verify:vault-v5-parked
 ```
 
 Not covered by the keyless harness: fills (need a taker update) and the
-parking path itself (needs a full book plus classification). The vault v5
-fix is clarinet-checked; a v5 vault fork harness with the parked case is
-pending a Pyth key session.
+parking path for rungs.
+
+The vault fix has its own fork harness with a REAL Lazer update:
+`simulations/verify-vault-sbtc-stx-v5-parked.js` (`PYTH_API_KEY=...`). It
+clears the live book, deploys vault v5 as is under a throwaway owner
+(chavita verifies it in jing-core-v4 on the fork), rests a 20k-sat ask at
++20%, checks set-limit on the LIVE order (amount 0 -> u6006, wrong -> u6022,
+right -> retargeted), then PARKS the vault for real: 49 fillers rest closer
+asks so the book holds 50, and a 50th newcomer with an in-range ask and a
+fresh update parks the farthest ask, the vault's (live 0, parked 20k). On
+the parked order: amount 0 -> u6006 and the limit is untouched (this is the
+finding; before the fix it passed), amount = parked -> ok and the limit
+moves, reprice -> market u1005, keeper cancel brings the 20k home.
+
+| Run | Result | Simulation |
+|-----|--------|------------|
+| vault v5 parked order | 131/131 | `1fad866e001080ea09b7c46b21edb29c` |
 
 ## Before deploy
 
