@@ -71,3 +71,20 @@ from `held-sats`. Same on the y side. Regression: buy 30/30
 `ef196963e3b605f29bae6625716cc7f7`, sell 31/31
 `02b0d89df9feea63c076fe89ef4b4539`. The parking path itself needs a full
 book plus classification (Pyth key), not covered by the keyless harness.
+
+## 3. G5 keeper can revoke the owner's intents (Celestial Shark, filed Low) -> by design, no change
+
+`revoke-intent` (`vault-sbtc-stx-v5.clar:186-196`) is gated
+`check-owner-or-keeper`. Correct as stated, and intended: the keeper is
+already trusted to execute every intent the owner signed and to reclaim
+resting orders (`cancel-jing-*`); revoking an intent it holds, in the
+owner's interest (a stale size, a superseded price), adds no trust. A
+hostile keeper can only make the owner re-sign with a new salt; funds never
+move. Owner replaces the keeper with `set-keeper`.
+
+## 4. E5 set-canonical silently replaces (Celestial Shark, filed Info) -> wrong
+
+`jing-ladder.clar:99-114` prints `{event: "canonical-set", side, contract}`
+on every call. The audit trail is there. Overwriting the previous canonical
+without a guard is the owner's job (one blessed deploy per side, replaced
+when a new template ships).
