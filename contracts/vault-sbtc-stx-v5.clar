@@ -287,6 +287,7 @@
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
       ERR_INVALID_SIDE
     )
+    (asserts! (> amount u0) ERR_NO_FUNDS)
     (asserts! (is-eq amount (resting side cycle)) ERR_AMOUNT_MISMATCH)
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
@@ -509,13 +510,22 @@
   )
 )
 
+;; The vault's whole maker position on `side`: live deposit PLUS parked.
+;; The market moves an order from live to parked when the book is full and
+;; set-limit acts on either, so binding the signed amount to live alone let
+;; a zero-amount intent reprice a fully parked order (audit finding, Watchful
+;; Node, 2026-09-08).
 (define-private (resting
     (side (string-ascii 128))
     (cycle uint)
   )
   (if (is-eq side ASSET_WSTX)
-    (contract-call? JING-MARKET get-token-y-deposit cycle current-contract)
-    (contract-call? JING-MARKET get-token-x-deposit cycle current-contract)
+    (+ (contract-call? JING-MARKET get-token-y-deposit cycle current-contract)
+      (contract-call? JING-MARKET get-token-y-parked current-contract)
+    )
+    (+ (contract-call? JING-MARKET get-token-x-deposit cycle current-contract)
+      (contract-call? JING-MARKET get-token-x-parked current-contract)
+    )
   )
 )
 

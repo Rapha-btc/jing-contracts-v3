@@ -88,3 +88,21 @@ move. Owner replaces the keeper with `set-keeper`.
 on every call. The audit trail is there. Overwriting the previous canonical
 without a guard is the owner's job (one blessed deploy per side, replaced
 when a new template ships).
+
+## 5. Zero-amount set-limit reprices a parked order (Watchful Node, filed Medium) -> correct, fixed
+
+`vault-sbtc-stx-v5.clar` bound the signed amount to `resting`, which read
+only the LIVE deposit; the market's `set-token-x/y-limit` acts on live OR
+parked. Once the book parked the vault's order, `resting` was 0 and an
+owner-signed `amount: u0` intent passed `ERR_AMOUNT_MISMATCH` and repriced
+the whole parked position. Side and price stay signed and the market still
+rejects a crossing limit, so no funds move, but the amount binding was void
+in exactly the state it exists for. The FE builds intents from the same
+live-only read, so it would have produced such intents by itself.
+
+Fix: `resting` = live + parked (both sides); `execute-jing-set-limit`
+asserts `amount > 0` (`ERR_NO_FUNDS u6006`) before the signature is
+consumed. `execute-jing-reprice` shares `resting` and now refuses a parked
+order at the market, which is right (reprice needs a live deposit).
+Verified: clarinet; a v5 vault fork harness with the parked case needs a
+full book plus a Lazer update (Pyth key), pending.
