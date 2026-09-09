@@ -281,7 +281,7 @@
         (pos (position-of member))
         (epo (var-get epoch))
       )
-      (if (>= to-push (min-market))
+      (if (and (>= to-push (min-market)) (readmit-if-parked update))
         (begin
           (try! (as-contract? ((with-ft SBTC SBTC_NAME to-push))
             (try! (contract-call? MARKET deposit-token-x to-push p update SBTC SBTC_NAME))
@@ -297,7 +297,7 @@
       })
       (var-set total-shares (+ (var-get total-shares) shares))
       (contract-call? LADDER log-deposit member amount shares epo
-        (>= to-push (min-market)) (var-get held-sats)
+        (is-eq (var-get held-sats) u0) (var-get held-sats)
       )
     )
   )
@@ -427,6 +427,17 @@
 ;; Make sure `held-sats` covers `amount`: partial-withdraw the gap from the market,
 ;; or cancel the whole market position when the remainder would sit under
 ;; the market minimum.
+;; A parked rung cannot deposit on the market (u1021): try to readmit it
+;; first (permissionless, needs the fresh update). If the book is still full
+;; or the update is stale the readmit errs, its state rolls back, and the
+;; deposit is held here instead of aborting for every member.
+(define-private (readmit-if-parked (update (buff 8192)))
+  (if (> (contract-call? MARKET get-token-x-parked current-contract) u0)
+    (is-ok (contract-call? MARKET readmit-token-x current-contract update))
+    true
+  )
+)
+
 (define-private (pull-to-held-sats (amount uint))
   (let ((have (var-get held-sats)))
     (if (>= have amount)

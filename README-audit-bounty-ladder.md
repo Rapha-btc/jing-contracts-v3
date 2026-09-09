@@ -60,5 +60,14 @@ What is true instead: a parked rung blocks DEPOSITS. `deposit-token-x`
 asserts `get-token-x-parked == 0` (line 879, `ERR_PARKED u1021`), and the
 rung's `deposit` calls it whenever the push reaches the minimum, so every
 member deposit aborts while parked until anyone calls the market's
-permissionless `readmit-token-x`. Fix: see the next commit
-(`readmit-if-parked` in `deposit`).
+permissionless `readmit-token-x`.
+
+Fix: `deposit` now pushes only if `(readmit-if-parked update)` is true: a
+parked rung tries the market's `readmit-token-x` first (permissionless, uses
+the deposit's own `update`); if the book is still full or the update is
+stale the readmit errs inside `is-ok`, rolls back, and the sats are held
+locally instead of the tx aborting. The ladder log's `pushed` flag reads
+from `held-sats`. Same on the y side. Regression: buy 30/30
+`ef196963e3b605f29bae6625716cc7f7`, sell 31/31
+`02b0d89df9feea63c076fe89ef4b4539`. The parking path itself needs a full
+book plus classification (Pyth key), not covered by the keyless harness.
