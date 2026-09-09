@@ -106,3 +106,22 @@ consumed. `execute-jing-reprice` shares `resting` and now refuses a parked
 order at the market, which is right (reprice needs a live deposit).
 Verified: clarinet; a v5 vault fork harness with the parked case needs a
 full book plus a Lazer update (Pyth key), pending.
+
+## 6. Sonic Mast: donation "stuck" (Info) -> it is a gift; simnet initialize -> skipped
+
+A stray sBTC/STX transfer to a rung is not stuck: `sync` folds the balance
+into `held-sats`, the next deposit pushes it to the market with the pool,
+and the proceeds reach the members through `proceeds-index`. A gift to the
+current members, both assets. No change.
+
+Their simnet blocker (`own-name` unwrap-panics on `principal-destruct?`
+for testnet-versioned principals) is real but irrelevant here: rungs are
+tested on stxer mainnet forks and mainnet-flavoured clarinet, where SP
+principals destruct fine. Skipped on purpose.
+
+## Verdict
+
+Celestial Shark: D1/D2 overstated (dust by design), F1 wrong and backwards,
+G5 by design, E5 wrong. Sonic Mast: confirmation pass, one gift, one
+tooling note. Watchful Node: the only novel, reproduced, correct finding
+(zero-amount set-limit on a parked order). Best submission: Watchful Node.
