@@ -246,11 +246,15 @@
         (pos (position-of member))
         (epo (var-get epoch))
       )
+      ;; the market's minimum is on the whole position (live + parked + new);
       ;; the market's deposit takes a parked position back by itself (a free
       ;; slot, else the smallest maker is bumped when the combined size is
       ;; bigger); if it refuses (queue full, crossing, stale update) the
       ;; funds are held here instead of aborting for every member
-      (if (and (>= to-push (min-market)) (is-ok (push-to-market to-push update)))
+      (if (and
+          (>= (+ to-push (market-size)) (min-market))
+          (is-ok (push-to-market to-push update))
+        )
         (var-set held-ustx u0)
         (var-set held-ustx to-push)
       )

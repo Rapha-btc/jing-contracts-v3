@@ -786,7 +786,9 @@
       (tok-y (var-get token-y))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (>= amount (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
+    (asserts! (>= (+ existing carry amount) (var-get min-token-y-deposit))
+      ERR_DEPOSIT_TOO_SMALL
+    )
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-y-parked tx-sender))
@@ -932,7 +934,9 @@
       (tok-x (var-get token-x))
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
-    (asserts! (>= amount (var-get min-token-x-deposit)) ERR_DEPOSIT_TOO_SMALL)
+    (asserts! (>= (+ existing carry amount) (var-get min-token-x-deposit))
+      ERR_DEPOSIT_TOO_SMALL
+    )
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-x-parked tx-sender))
