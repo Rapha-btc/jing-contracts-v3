@@ -1,15 +1,23 @@
-;; jing-buy-stx
+;; jing-buy-stx-market-spread
 ;;
-;; A pooled STX buy (sBTC resting, the market's x side) at ONE price on
-;; markets-sbtc-stx-jing-v5. Many users, one maker slot: the contract rests
-;; the pooled sBTC at its price, receives the STX fills at settlement, and
-;; hands each member their share of both what is still resting and what was
-;; bought. Deployed by anyone at a new price from this template
-;; (jing-buy-stx-331-50 = buy STX once it is at or under 331.50 sats). The
-;; name is the human price in hundredths of a sat per STX; `initialize`
-;; takes that same integer (u33150) and derives the market unit on chain,
-;; micro-STX per sat times 1e10 = 1e18 / 33150, so name and price agree by
-;; construction. Registered in jing-ladder against the canonical hash.
+;; A pooled STX buy (sBTC resting, the market's x side) PEGGED to the market
+;; mid on markets-sbtc-stx-jing-v6. Same pool as jing-buy-stx (one maker
+;; slot, reward-per-share on two indices, read that file for the design);
+;; the one difference is the order it rests. A fixed rung is a price; this
+;; rung is a spread: it asks mid + spread-bps, and v6 re-evaluates that
+;; against the fresh Lazer mid at every settlement (`spread-bps: (some s)`
+;; on the order). No keeper, no reprice transaction, the sBTC never leaves
+;; the market to follow the price. Deployed by anyone at a new spread from
+;; this template. The name carries both numbers the order rests with:
+;; jing-buy-stx-spread-20-floor-331-50 asks mid + 20 bps, and sits out
+;; whenever that would be under 331.50 sats per STX (the floor v6 wants next
+;; to a pegged ask: the price under which the peg does not fill on a mid it
+;; should not trust). `initialize` takes the same two integers (u20,
+;; u33150) and derives the floor in the market unit on chain, 1e18 / 33150,
+;; exactly as the fixed rung derives its price; name and order agree by
+;; construction. Registered in jing-ladder under side "buy-peg" against that
+;; side's canonical hash (the code differs from the fixed rung, so it cannot
+;; share "buy-stx"), keyed by the (spread, floor) pair packed into one uint.
 ;;
 ;; Accounting, the reward-per-share pattern on two indices:
 ;;   unfilled-index      what fraction of the pooled sBTC is still unsold, times
@@ -34,7 +42,7 @@
 ;; for a readmit, which anyone does on the market), u1002 (settle phase:
 ;; withdrawals wait for the next deposit phase).
 ;;
-;; No fee, no owner action after initialize, no reprice: a rung is a price.
+;; No fee, no owner action after initialize, no reprice: a rung is a spread.
 
 (define-constant ERR_NOT_AUTHORIZED (err u7001))
 (define-constant ERR_ALREADY_INITIALIZED (err u7002))
@@ -44,6 +52,7 @@
 (define-constant ERR_NO_POSITION (err u7006))
 (define-constant ERR_INSUFFICIENT (err u7007))
 (define-constant ERR_ZERO_PRICE (err u7008))
+(define-constant ERR_BAD_SPREAD (err u7010))
 (define-constant ERR_BAD_NAME (err u7009))
 
 ;; an epoch closes when the unsold fraction falls under this, i.e. unsold *
@@ -51,21 +60,25 @@
 ;; withdraw. The pool is sold out, the next deposit starts a fresh epoch.
 (define-constant SOLD_OUT_INDEX u1000000)
 
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant SIDE "buy-stx")
-;; the deploy name must be NAME_PREFIX + the price as named: jing-buy-stx-331-50
-(define-constant NAME_PREFIX "jing-buy-stx-")
+(define-constant SIDE "buy-peg")
+;; the deploy name must be NAME_PREFIX + spread + "-floor-" + the floor as named:
+;; jing-buy-stx-spread-20-floor-331-50
+(define-constant NAME_PREFIX "jing-buy-stx-spread-")
+(define-constant GUARD_INFIX "-floor-")
+;; v6 rejects a spread of 10000 bps or more (u1026)
+(define-constant BPS_PRECISION u10000)
+;; market price unit is micro-STX per sat times 1e10; from hundredths of a
+;; sat per STX: price = 1e6 * 1e10 * 100 / cents = 1e18 / cents
+(define-constant PRICE_NUMERATOR u1000000000000000000)
 
 ;; fixed-point precision of the two indices (12 decimals): fine enough that
 ;; no member's share rounds to nothing, small enough that shares * index *
 ;; SCALE stays far below uint128
 (define-constant SCALE u1000000000000)
-;; market price unit is micro-STX per sat times 1e10; from hundredths of a
-;; sat per STX: price = 1e6 * 1e10 * 100 / cents = 1e18 / cents
-(define-constant PRICE_NUMERATOR u1000000000000000000)
 ;; the market's own minimum per maker, read live: the operator can raise it
 ;; (set-min-token-x-deposit) and a stale constant would make the partial
 ;; withdraw branch call the market with a remainder it rejects (u1004)
@@ -73,7 +86,7 @@
 ;; contract-call? through a constant here (clarinet accepts it, mainnet does not)
 (define-read-only (min-market)
   (get min-token-x
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
       get-min-deposits
     )
   )
@@ -84,9 +97,12 @@
 
 (define-data-var initialized bool false)
 (define-constant DEPLOYER tx-sender)
-(define-data-var price uint u0)
-;; the price as named, in hundredths of a sat per STX (331.50 -> u33150)
-(define-data-var sats-per-stx-cents uint u0)
+;; distance from mid in basis points, as named (20 -> u20); zero sits at mid
+(define-data-var spread-bps uint u0)
+;; the floor as named, in hundredths of a sat per STX (331.50 -> u33150)
+(define-data-var floor-cents uint u0)
+;; the same floor in the market unit (1e18 / cents): what the order rests with
+(define-data-var floor uint u0)
 (define-data-var total-shares uint u0)
 ;; a sold-out pool closes its epoch: index and shares restart, old members
 ;; keep their claim against the epoch's final proceeds-index
@@ -113,18 +129,23 @@
 
 ;; ---------- reads ----------
 
-(define-read-only (get-price)
-  (var-get price)
+(define-read-only (get-spread-bps)
+  (var-get spread-bps)
 )
 
-(define-read-only (get-sats-per-stx-cents)
-  (var-get sats-per-stx-cents)
+(define-read-only (get-floor)
+  (var-get floor)
+)
+
+(define-read-only (get-floor-cents)
+  (var-get floor-cents)
 )
 
 (define-read-only (get-state)
   {
-    price: (var-get price),
-    sats-per-stx-cents: (var-get sats-per-stx-cents),
+    spread-bps: (var-get spread-bps),
+    floor: (var-get floor),
+    floor-cents: (var-get floor-cents),
     epoch: (var-get epoch),
     total-shares: (var-get total-shares),
     unfilled-index: (var-get unfilled-index),
@@ -166,14 +187,14 @@
 ;; live + parked size of this contract on the market
 (define-read-only (market-size)
   (+
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
       get-token-x-deposit
-      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
         get-current-cycle
       )
       current-contract
     )
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
       get-token-x-parked current-contract
     )
   )
@@ -186,18 +207,27 @@
 
 ;; ---------- lifecycle ----------
 
-;; Once, by the deployer: the price in the market unit, then register.
-(define-public (initialize (cents uint))
+;; Once, by the deployer: the spread as named, then register.
+(define-public (initialize
+    (bps uint)
+    (cents uint)
+  )
   (begin
     (asserts! (is-eq tx-sender DEPLOYER) ERR_NOT_AUTHORIZED)
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
+    (asserts! (< bps BPS_PRECISION) ERR_BAD_SPREAD)
     (asserts! (> cents u0) ERR_ZERO_PRICE)
-    (asserts! (is-eq (own-name) (expected-name cents)) ERR_BAD_NAME)
+    (asserts! (is-eq (own-name) (expected-name bps cents)) ERR_BAD_NAME)
     (let ((p (/ PRICE_NUMERATOR cents)))
-      (var-set sats-per-stx-cents cents)
-      (var-set price p)
+      (var-set spread-bps bps)
+      (var-set floor-cents cents)
+      (var-set floor p)
       (var-set initialized true)
-      (contract-call? LADDER register SIDE cents p)
+      ;; the ladder keys one rung per (side, value): the (spread, floor) pair
+      ;; packed into one uint so two rungs can share a spread at different
+      ;; floors; the market-price slot logs the floor in the market unit, as the
+      ;; fixed rung logs its price
+      (contract-call? LADDER register SIDE (+ (* cents BPS_PRECISION) bps) p)
     )
   )
 )
@@ -268,7 +298,6 @@
   )
   (let (
       (member tx-sender)
-      (p (var-get price))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
@@ -284,7 +313,7 @@
       (if (and (>= to-push (min-market)) (readmit-if-parked update))
         (begin
           (try! (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-            (try! (contract-call? MARKET deposit-token-x to-push p update SBTC SBTC_NAME))
+            (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) update SBTC SBTC_NAME))
           ))
           (var-set held-sats u0)
         )
@@ -372,8 +401,12 @@
   (default-to "" (get name (unwrap-panic (principal-destruct? current-contract))))
 )
 
-;; "jing-buy-stx-331-50" for u33150: whole sats, dash, two-digit hundredths
-(define-private (expected-name (cents uint))
+;; "jing-buy-stx-spread-20-floor-331-50" for (u20, u33150): the spread in
+;; basis points, then the floor as whole sats, dash, two-digit hundredths
+(define-private (expected-name
+    (bps uint)
+    (cents uint)
+  )
   (let (
       (whole (int-to-ascii (/ cents u100)))
       (frac (mod cents u100))
@@ -382,7 +415,10 @@
         (int-to-ascii frac)
       ))
     )
-    (concat (concat (concat NAME_PREFIX whole) "-") frac-str)
+    (concat
+      (concat (concat (concat NAME_PREFIX (int-to-ascii bps)) GUARD_INFIX) whole)
+      (concat "-" frac-str)
+    )
   )
 )
 

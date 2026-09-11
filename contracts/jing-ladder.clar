@@ -31,6 +31,10 @@
 
 (define-constant SIDE_BUY_STX "buy-stx")
 (define-constant SIDE_SELL_STX "sell-stx")
+;; pegged rungs (jing-buy/sell-stx-market-spread): own canonical per side,
+;; keyed by cents * 10000 + spread-bps
+(define-constant SIDE_BUY_PEG "buy-peg")
+(define-constant SIDE_SELL_PEG "sell-peg")
 
 (define-data-var contract-owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -91,7 +95,10 @@
 )
 
 (define-private (valid-side (side (string-ascii 8)))
-  (or (is-eq side SIDE_BUY_STX) (is-eq side SIDE_SELL_STX))
+  (or
+    (is-eq side SIDE_BUY_STX) (is-eq side SIDE_SELL_STX)
+    (is-eq side SIDE_BUY_PEG) (is-eq side SIDE_SELL_PEG)
+  )
 )
 
 ;; Owner: bless one deployed instance per side. Its code hash, read at
