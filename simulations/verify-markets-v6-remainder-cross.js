@@ -621,10 +621,10 @@ async function main() {
   assert("S2b cycle unchanged", decodeEval(s[i++]), "u1");
   assert("S2b X4 still resting", decodeEval(s[i++]), "u1500");
 
-  assert("S3 swap ok (leaves dust maker)", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
+  assert("S3 swap ok (the dust maker is refunded, v6)", decodeTx(s[i++]), (v) => String(v).startsWith("(ok"));
   assert("S3 cycle -> u2", decodeEval(s[i++]), "u2");
   const dust = uintOf(decodeEval(s[i++]));
-  assert(`S3 M2 dust ~400 (<${MIN_SBTC})`, dust, (v) => v > 0n && v < MIN_SBTC);
+  assert(`S3 M2 left under the minimum (~400 < ${MIN_SBTC}) is refunded: u0 (v6)`, dust, (v) => v === 0n);
   assert("S3 taker clean", decodeEval(s[i++]), "u0");
 
   assert("X5 in-range offer", decodeTx(s[i++]), "(ok u1200)");
@@ -672,7 +672,7 @@ async function main() {
   assert(`S5 20-STX bid paid at own limit net+rebate (${Y2_GAIN})`, y2SbtcAfter - y2SbtcBefore, (d) => d === Y2_GAIN);
   assert("S5 cycle -> u5", decodeEval(s[i++]), "u5");
   assert("S5 taker residual 0", decodeEval(s[i++]), "u0");
-  assert(`S5 Y1 left with crumbs (${y1Bid - Y6a})`, decodeEval(s[i++]), `u${y1Bid - Y6a}`);
+  assert(`S5 Y1 crumbs (${y1Bid - Y6a} < 1 STX) refunded: u0 (v6)`, decodeEval(s[i++]), "u0");
   assert(`S5 20-STX bid keeps the rest (${Y2_AMT - Y6b})`, decodeEval(s[i++]), `u${Y2_AMT - Y6b}`);
   assert("S5 rebate pot zeroed", decodeEval(s[i++]), "u0");
 

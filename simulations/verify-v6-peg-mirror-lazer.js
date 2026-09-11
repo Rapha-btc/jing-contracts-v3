@@ -14,7 +14,7 @@
 import fs from "node:fs";
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
-  noneCV, someCV, deserializeCV, cvToString, getAddressFromPrivateKey,
+  noneCV, someCV, deserializeCV, cvToString, hexToCV, getAddressFromPrivateKey,
 } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
@@ -35,6 +35,7 @@ function check(label, actual, want) { checks += 1; const ok = typeof want === "f
 const decodeTx = (s) => { const r = s?.Result?.Transaction; if (!r) return "<no tx>"; if ("Err" in r) return `ENGINE-ERR ${JSON.stringify(r.Err).slice(0, 120)}`; if (r.Ok?.vm_error) return `VM-ERR ${r.Ok.vm_error}`; try { return cvToString(deserializeCV(r.Ok.result)); } catch (e) { return `decode-failed ${e.message}`; } };
 const decodeEval = (s) => { const r = s?.Result?.Eval; if (!r) return "<no eval>"; if (!("Ok" in r)) return `EVAL-ERR ${JSON.stringify(r.Err).slice(0, 120)}`; try { return cvToString(deserializeCV(r.Ok)); } catch { return r.Ok; } };
 const uintOf = (s) => BigInt((String(s).match(/u(\d+)/) || [, "0"])[1]);
+const prints = (step) => (step?.Result?.Transaction?.Ok?.events || []).map((e) => { try { const o = typeof e === "string" ? JSON.parse(e) : e; const raw = o.contract_event?.raw_value; return raw ? cvToString(hexToCV(raw)) : ""; } catch { return ""; } });
 const field = (s, k) => (String(s).match(new RegExp(`\\(${k} (u?\\d+|none|\\(some u\\d+\\))\\)`)) || [])[1];
 
 async function main() {
@@ -104,12 +105,15 @@ async function main() {
   ev("R5 cycle advanced", "(get-current-cycle)", "u1");
   ev("R5 settlement at mid", "(get price (unwrap-panic (get-settlement u0)))", `u${MID}`);
   ev("R5 Y2's bid consumed (y binding: 4 STX is under 2000 sats)", `(get-token-y-deposit u1 '${Y2})`, "u0");
-  ev(`R5 A's ask left ${2000n - (4_000_000n * PPDF) / MID}`, `(get-token-x-deposit u1 '${A})`, `u${2000n - (4_000_000n * PPDF) / MID}`);
+  ev(`R5 A's ask left ${2000n - (4_000_000n * PPDF) / MID} sats, under the minimum: refunded in the batch (v6)`, `(get-token-x-deposit u1 '${A})`, "u0");
+  ev("R5 A's order deleted with the refund", `(get-token-x-order '${A})`, (v) => field(v, "limit") === "u0");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
-  for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); i += 1; if (!/^fund /.test(st.label)) check(st.label, st.raw, st.want); else if (/ERR|\(err/.test(String(st.raw))) check(st.label, st.raw, st.want); }
+  for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); st.idx = i; i += 1; if (!/^fund /.test(st.label)) check(st.label, st.raw, st.want); else if (/ERR|\(err/.test(String(st.raw))) check(st.label, st.raw, st.want); }
+  const refunds = prints(s[rs.idx]).filter((p) => p.includes('(event "refund-x")'));
+  check(`R5 refund-x logged for the ${2000n - (4_000_000n * PPDF) / MID} sats`, refunds.join("|"), (v) => v.includes(`(amount u${2000n - (4_000_000n * PPDF) / MID})`));
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

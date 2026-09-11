@@ -76,6 +76,8 @@
 (define-data-var acc-token-y-out uint u0)
 (define-data-var acc-token-y-rolled uint u0)
 (define-data-var acc-token-x-rolled uint u0)
+(define-data-var acc-token-y-refunded uint u0)
+(define-data-var acc-token-x-refunded uint u0)
 
 (define-data-var caller-token-x-received uint u0)
 (define-data-var caller-token-y-rolled uint u0)
@@ -1718,6 +1720,8 @@
       (var-set acc-token-y-out u0)
       (var-set acc-token-y-rolled u0)
       (var-set acc-token-x-rolled u0)
+      (var-set acc-token-y-refunded u0)
+      (var-set acc-token-x-refunded u0)
       (var-set caller-token-x-received u0)
       (var-set caller-token-y-rolled u0)
       (var-set caller-token-y-received u0)
@@ -1730,8 +1734,8 @@
       ))
       (try! (fold distribute-to-token-x-depositor (get-token-x-depositors cycle)
         (ok {
-          t: ty-trait,
-          name: ty-name,
+          t: tx-trait,
+          name: tx-name,
         })
       ))
       (try! (roll-and-sweep-dust tx-trait tx-name ty-trait ty-name))
@@ -1854,6 +1858,24 @@
         )
       ))
       (totals (get-cycle-totals cycle))
+      (y-left (- y-amt y-traded))
+      (x-left (- x-amt x-traded))
+      (y-refund (if (and
+          (not y-is-taker)
+          (> y-left u0)
+          (< y-left (var-get min-token-y-deposit))
+        )
+        y-left
+        u0
+      ))
+      (x-refund (if (and
+          y-is-taker
+          (> x-left u0)
+          (< x-left (var-get min-token-x-deposit))
+        )
+        x-left
+        u0
+      ))
     )
     (if (or (is-eq x-traded u0) (is-eq y-traded u0))
       (ok false)
@@ -1883,7 +1905,7 @@
               (- y-traded y-fee)
             ))
         )
-        (if (is-eq (- y-amt y-traded) u0)
+        (if (or (is-eq y-left u0) (> y-refund u0))
           (begin
             (map-delete token-y-deposits {
               cycle: cycle,
@@ -1899,10 +1921,10 @@
             cycle: cycle,
             depositor: y-who,
           }
-            (- y-amt y-traded)
+            y-left
           )
         )
-        (if (is-eq (- x-amt x-traded) u0)
+        (if (or (is-eq x-left u0) (> x-refund u0))
           (begin
             (map-delete token-x-deposits {
               cycle: cycle,
@@ -1918,13 +1940,35 @@
             cycle: cycle,
             depositor: x-who,
           }
-            (- x-amt x-traded)
+            x-left
           )
+        )
+        (if (> y-refund u0)
+          (begin
+            (try! (as-contract? ((with-stx y-refund))
+              (try! (stx-transfer? y-refund current-contract y-who))
+            ))
+            (try! (contract-call? .jing-core-v5 log-refund-y y-who y-refund cycle
+              (var-get token-x) (var-get token-y)
+            ))
+          )
+          true
+        )
+        (if (> x-refund u0)
+          (begin
+            (try! (as-contract? ((with-ft (contract-of t) tx-name x-refund))
+              (try! (contract-call? t transfer x-refund current-contract x-who none))
+            ))
+            (try! (contract-call? .jing-core-v5 log-refund-x x-who x-refund cycle
+              (var-get token-x) (var-get token-y)
+            ))
+          )
+          true
         )
         (map-set cycle-totals cycle
           (merge totals {
-            total-token-y: (- (get total-token-y totals) y-traded),
-            total-token-x: (- (get total-token-x totals) x-traded),
+            total-token-y: (- (get total-token-y totals) (+ y-traded y-refund)),
+            total-token-x: (- (get total-token-x totals) (+ x-traded x-refund)),
           })
         )
         (try! (contract-call? .jing-core-v5 log-match
@@ -2567,6 +2611,15 @@
         u0
       ))
       (my-token-y-cleared (- my-deposit my-token-y-unfilled))
+      (my-refund (if (and
+          (> my-token-y-unfilled u0)
+          (< my-token-y-unfilled (var-get min-token-y-deposit))
+          (not (and (var-get crossing) (is-eq depositor tx-sender)))
+        )
+        my-token-y-unfilled
+        u0
+      ))
+      (my-roll (- my-token-y-unfilled my-refund))
       (next-cycle (+ cycle u1))
     )
     (map-delete token-y-deposits {
@@ -2574,9 +2627,8 @@
       depositor: depositor,
     })
     (var-set acc-token-x-out (+ (var-get acc-token-x-out) my-token-x-received))
-    (var-set acc-token-y-rolled
-      (+ (var-get acc-token-y-rolled) my-token-y-unfilled)
-    )
+    (var-set acc-token-y-rolled (+ (var-get acc-token-y-rolled) my-roll))
+    (var-set acc-token-y-refunded (+ (var-get acc-token-y-refunded) my-refund))
     (if (is-eq depositor tx-sender)
       (begin
         (var-set caller-token-x-received my-token-x-received)
@@ -2594,13 +2646,13 @@
       ))
       true
     )
-    (if (> my-token-y-unfilled u0)
+    (if (> my-roll u0)
       (begin
         (map-set token-y-deposits {
           cycle: next-cycle,
           depositor: depositor,
         }
-          my-token-y-unfilled
+          my-roll
         )
         (map-set token-y-depositor-list next-cycle
           (unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor) u50))
@@ -2609,12 +2661,22 @@
       )
       (begin
         (map-delete token-y-deposit-limits depositor)
-        true
+        (if (> my-refund u0)
+          (begin
+            (try! (as-contract? ((with-stx my-refund))
+              (try! (stx-transfer? my-refund current-contract depositor))
+            ))
+            (try! (contract-call? .jing-core-v5 log-refund-y depositor my-refund cycle
+              (var-get token-x) (var-get token-y)
+            ))
+          )
+          true
+        )
       )
     )
     (try! (contract-call? .jing-core-v5 log-distribute-y-depositor depositor cycle
-      my-token-x-received my-token-y-cleared my-token-y-unfilled
-      (var-get token-x) (var-get token-y)
+      my-token-x-received my-token-y-cleared my-roll (var-get token-x)
+      (var-get token-y)
     ))
     (ok unwrapped)
   )
@@ -2645,6 +2707,15 @@
         u0
       ))
       (my-token-x-cleared (- my-deposit my-token-x-unfilled))
+      (my-refund (if (and
+          (> my-token-x-unfilled u0)
+          (< my-token-x-unfilled (var-get min-token-x-deposit))
+          (not (and (var-get crossing) (is-eq depositor tx-sender)))
+        )
+        my-token-x-unfilled
+        u0
+      ))
+      (my-roll (- my-token-x-unfilled my-refund))
       (next-cycle (+ cycle u1))
     )
     (map-delete token-x-deposits {
@@ -2652,9 +2723,8 @@
       depositor: depositor,
     })
     (var-set acc-token-y-out (+ (var-get acc-token-y-out) my-token-y-received))
-    (var-set acc-token-x-rolled
-      (+ (var-get acc-token-x-rolled) my-token-x-unfilled)
-    )
+    (var-set acc-token-x-rolled (+ (var-get acc-token-x-rolled) my-roll))
+    (var-set acc-token-x-refunded (+ (var-get acc-token-x-refunded) my-refund))
     (if (is-eq depositor tx-sender)
       (begin
         (var-set caller-token-y-received my-token-y-received)
@@ -2669,13 +2739,13 @@
       ))
       true
     )
-    (if (> my-token-x-unfilled u0)
+    (if (> my-roll u0)
       (begin
         (map-set token-x-deposits {
           cycle: next-cycle,
           depositor: depositor,
         }
-          my-token-x-unfilled
+          my-roll
         )
         (map-set token-x-depositor-list next-cycle
           (unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor) u50))
@@ -2684,12 +2754,25 @@
       )
       (begin
         (map-delete token-x-deposit-limits depositor)
-        true
+        (if (> my-refund u0)
+          (begin
+            (try! (as-contract?
+              ((with-ft (contract-of tt) (get name unwrapped) my-refund))
+              (try! (contract-call? tt transfer my-refund current-contract depositor
+                none
+              ))
+            ))
+            (try! (contract-call? .jing-core-v5 log-refund-x depositor my-refund cycle
+              (var-get token-x) (var-get token-y)
+            ))
+          )
+          true
+        )
       )
     )
     (try! (contract-call? .jing-core-v5 log-distribute-x-depositor depositor cycle
-      my-token-y-received my-token-x-cleared my-token-x-unfilled
-      (var-get token-x) (var-get token-y)
+      my-token-y-received my-token-x-cleared my-roll (var-get token-x)
+      (var-get token-y)
     ))
     (ok unwrapped)
   )
@@ -2706,12 +2789,12 @@
       (acc-token-x-rol (var-get acc-token-x-rolled))
       (token-y-payout-dust (- (var-get settle-token-y-after-fee) (var-get acc-token-y-out)))
       (token-y-roll-dust (- (- (var-get settle-total-token-y) (var-get settle-token-y-cleared))
-        acc-token-y-rol
+        (+ acc-token-y-rol (var-get acc-token-y-refunded))
       ))
       (token-y-dust (+ token-y-payout-dust token-y-roll-dust))
       (token-x-payout-dust (- (var-get settle-token-x-after-fee) (var-get acc-token-x-out)))
       (token-x-roll-dust (- (- (var-get settle-total-token-x) (var-get settle-token-x-cleared))
-        acc-token-x-rol
+        (+ acc-token-x-rol (var-get acc-token-x-refunded))
       ))
       (token-x-dust (+ token-x-payout-dust token-x-roll-dust))
       (next-cycle (+ (var-get current-cycle) u1))
