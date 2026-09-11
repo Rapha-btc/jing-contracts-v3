@@ -15,7 +15,7 @@
 //      leaves; live again with its order and its price at mid
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-peg-park-y-lazer.js
 import fs from "node:fs";
-import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV, someCV, deserializeCV, cvToString, getAddressFromPrivateKey } from "@stacks/transactions";
+import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV, someCV, deserializeCV, cvToString, hexToCV, getAddressFromPrivateKey } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
 
@@ -32,6 +32,9 @@ const PARKER = getAddressFromPrivateKey("8".repeat(64) + "01", "mainnet");
 const PARKER2 = getAddressFromPrivateKey("9".repeat(64) + "01", "mainnet");
 const P = getAddressFromPrivateKey("a".repeat(64) + "01", "mainnet");
 const F50 = getAddressFromPrivateKey((249).toString(16).padStart(64, "0") + "01", "mainnet");
+const F51 = getAddressFromPrivateKey((250).toString(16).padStart(64, "0") + "01", "mainnet");
+const Q = getAddressFromPrivateKey("b".repeat(64) + "01", "mainnet");
+const PARKER3 = getAddressFromPrivateKey("c".repeat(64) + "01", "mainnet");
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n, BPS = 20n, FILL = 1_500_000n, HUGE = 999_999_999_999_999n;
 const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
@@ -49,6 +52,8 @@ async function main() {
   const MID = (full.px * PP) / full.py;
   const OUT_C = (10n ** 18n) / ((MID * 90n) / 100n); // cap under the bid: inactive
   const RUNG = `jing-sell-stx-spread-${BPS}-cap-${centsName(OUT_C)}`, RID = `${DEP}.${RUNG}`;
+  const IN_C = (10n ** 18n) / ((MID * 110n) / 100n); // cap over the bid: in band
+  const RUNG2 = `jing-sell-stx-spread-${BPS}-cap-${centsName(IN_C)}`, RID2 = `${DEP}.${RUNG2}`;
   const BID_NEAR = (MID * 95n) / 100n, LOW_CAP = MID / 2n;
   console.log(`mid ${MID}; ${RUNG} (out of band); 49 fillers at -5%, parker in range`);
   const steps = []; let b = SimulationBuilder.new({ stacksNodeAPI: "http://77.42.3.101/stacks-api" });
@@ -63,7 +68,7 @@ async function main() {
   deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG, src("jing-sell-stx-market-spread"));
+  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG, src("jing-sell-stx-market-spread")); deploy(RUNG2, src("jing-sell-stx-market-spread"));
   tx("canonical sell-peg", call(DEP, "set-canonical", [stringAsciiCV("sell-peg"), contractPrincipalCV(DEP, RUNG)], LADDER), "(ok true)");
   tx(`init ${RUNG}`, call(DEP, "initialize", [uintCV(BPS), uintCV(OUT_C)], RID), "(ok true)");
 
@@ -87,15 +92,16 @@ async function main() {
   ev("Y2 market-size counts the parked balance: unfilled-index unchanged", "(get-state)", (v) => field(v, "unfilled-index") === `u${SCALE}` && field(v, "resting") === "u20000000", RID);
   tx("Y2 S withdraws 0.5 STX from the parked balance", call(S, "withdraw", [uintCV(500_000)], RID), "(ok true)");
   ev("Y2 parked now 19.5 STX", `(get-token-y-parked '${RID})`, "u19500000");
-  tx("Y2 S deposits 1 STX while the queue is full: readmit fails, held locally", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
-  ev("Y2 held 1 STX, still parked 19.5", "(get-state)", (v) => field(v, "held-ustx") === "u1000000", RID);
-  ev("Y2 parked unchanged", `(get-token-y-parked '${RID})`, "u19500000");
-  tx("Y2 a filler cancels: room in the queue", call(FILLERS[0], "cancel-token-y-deposit", [wstxT, wstxA]), `(ok u${FILL})`);
-  tx("Y2 S deposits 1 STX more: readmit succeeds, everything pushed", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
+  // v6: the market takes a parked position back on deposit; the queue is full
+  // and the peg is out of band, so the combined 20.5 STX bumps a 1.5 STX filler
+  tx("Y2 S deposits 1 STX while the queue is full: combined 20.5 STX bumps the smallest filler, live again", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
   ev("Y2 parked 0", `(get-token-y-parked '${RID})`, "u0");
-  ev("Y2 live again with 21.5 STX", `(get-token-y-deposit u0 '${RID})`, "u21500000");
+  ev("Y2 live with 20.5 STX", `(get-token-y-deposit u0 '${RID})`, "u20500000");
   ev("Y2 held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0", RID);
-  ev("Y2 queue full again (50)", "(len (get-token-y-depositors u0))", "u50");
+  ev("Y2 first filler bumped off", `(get-token-y-deposit u0 '${FILLERS[0]})`, "u0");
+  tx("Y2 S deposits 1 STX more: plain top-up", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
+  ev("Y2 live with 21.5 STX", `(get-token-y-deposit u0 '${RID})`, "u21500000");
+  ev("Y2 queue still 50", "(len (get-token-y-depositors u0))", "u50");
 
   // =============== Y3: direct maker, zero-spread peg through park and readmit ===============
   // the rung leaves first: while it is out of band its gap equals P's (both
@@ -128,10 +134,33 @@ async function main() {
   ev("Y3 P order (some u0), cap any", `(get-token-y-order '${P})`, (v) => field(v, "spread-bps") === "(some u0)" && field(v, "limit") === `u${HUGE}`);
   tx("Y3 readmit P again -> u1022 (not parked)", call(DEP, "readmit-token-y", [standardPrincipalCV(P), UPD]), "(err u1022)");
 
+  // =============== Y4: a small rung is held, then bumps; a direct maker deposits while parked ===============
+  tx("Y4 fund filler 51", stxSend(F51, FILL + 200_000n), (v) => String(v).startsWith("(ok"));
+  tx("Y4 filler 51 rests: full again", depY(F51, FILL, BID_NEAR, null), `(ok u${FILL})`);
+  ev("Y4 queue 50", "(len (get-token-y-depositors u0))", "u50");
+  tx(`init ${RUNG2} (in band)`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], RID2), "(ok true)");
+  tx("Y4 S deposits 1.2 STX into the in-band rung: new maker, full queue, 1.2 < 1.5 -> held", call(S, "deposit", [uintCV(1_200_000), UPD], RID2), "(ok true)");
+  ev("Y4 held 1.2 STX, nothing on the market", "(get-state)", (v) => field(v, "held-ustx") === "u1200000" && field(v, "resting") === "u0", RID2);
+  tx("Y4 S deposits 0.5 STX more: 1.7 > 1.5 -> bumps the smallest, live", call(S, "deposit", [uintCV(500_000), UPD], RID2), "(ok true)");
+  ev("Y4 rung 2 live with 1.7 STX", `(get-token-y-deposit u0 '${RID2})`, "u1700000");
+  ev("Y4 held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0", RID2);
+  tx("Y4 fund Q", stxSend(Q, 5_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("Y4 Q rests an out-of-band zero-spread peg 2 STX on the full queue: bumps the smallest", depY(Q, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
+  tx("Y4 fund parker 3", stxSend(PARKER3, 3_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("Y4 parker 3 rests in range: parks Q", depY(PARKER3, 2_000_000n, HUGE, null), "(ok u2000000)");
+  ev("Y4 Q parked 2 STX", `(get-token-y-parked '${Q})`, "u2000000");
+  const qdep = tx("Y4 Q deposits 1 STX while parked, full queue, out of range: combined 3 STX bumps the smallest -> live", depY(Q, 1_000_000n, LOW_CAP, 0n), "(ok u1000000)");
+  ev("Y4 Q parked 0", `(get-token-y-parked '${Q})`, "u0");
+  ev("Y4 Q live with 3 STX", `(get-token-y-deposit u0 '${Q})`, "u3000000");
+  ev("Y4 Q order kept (some u0)", `(get-token-y-order '${Q})`, (v) => field(v, "spread-bps") === "(some u0)");
+  ev("Y4 queue still 50", "(len (get-token-y-depositors u0))", "u50");
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
-  for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); i += 1; if (!/^(Y1 |Y3 )?fund |^Y1 filler/.test(st.label)) check(st.label, st.raw, st.want); else if (/ERR|\(err/.test(String(st.raw))) check(st.label, st.raw, st.want); }
+  for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); st.idx = i; i += 1; if (!/^(Y1 |Y3 |Y4 )?fund |^Y1 filler/.test(st.label)) check(st.label, st.raw, st.want); else if (/ERR|\(err/.test(String(st.raw))) check(st.label, st.raw, st.want); }
+  const readmits = (s[qdep.idx]?.Result?.Transaction?.Ok?.events || []).map((e) => { try { const o = typeof e === "string" ? JSON.parse(e) : e; const raw = o.contract_event?.raw_value; return raw ? cvToString(hexToCV(raw)) : ""; } catch { return ""; } }).filter((p) => p.includes('(event "readmit-y")'));
+  check("Y4 the parked deposit printed readmit-y with the parked amount", readmits.join("|"), (v) => v.includes("(amount u2000000)"));
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

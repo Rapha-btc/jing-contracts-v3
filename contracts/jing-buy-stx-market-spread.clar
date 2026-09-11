@@ -310,13 +310,12 @@
         (pos (position-of member))
         (epo (var-get epoch))
       )
-      (if (and (>= to-push (min-market)) (readmit-if-parked update))
-        (begin
-          (try! (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-            (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) update SBTC SBTC_NAME))
-          ))
-          (var-set held-sats u0)
-        )
+      ;; the market's deposit takes a parked position back by itself (a free
+      ;; slot, else the smallest maker is bumped when the combined size is
+      ;; bigger); if it refuses (queue full, crossing, stale update) the
+      ;; funds are held here instead of aborting for every member
+      (if (and (>= to-push (min-market)) (is-ok (push-to-market to-push update)))
+        (var-set held-sats u0)
         (var-set held-sats to-push)
       )
       (map-set positions member {
@@ -465,14 +464,17 @@
 ;; Make sure `held-sats` covers `amount`: partial-withdraw the gap from the market,
 ;; or cancel the whole market position when the remainder would sit under
 ;; the market minimum.
-;; A parked rung cannot deposit on the market (u1021): try to readmit it
-;; first (permissionless, needs the fresh update). If the book is still full
-;; or the update is stale the readmit errs, its state rolls back, and the
-;; deposit is held here instead of aborting for every member.
-(define-private (readmit-if-parked (update (buff 8192)))
-  (if (> (contract-call? MARKET get-token-x-parked current-contract) u0)
-    (is-ok (contract-call? MARKET readmit-token-x current-contract update))
-    true
+;; One attempt to push the pool onto the market. Its own function so the
+;; try! returns from here, not from deposit: a refusal is a value the caller
+;; can read (is-ok) and answer by holding, while the market's own state rolls
+;; back with the failed call. A parked position is taken back by the market
+;; inside this same deposit (free slot, else bump on the combined size).
+(define-private (push-to-market
+    (to-push uint)
+    (update (buff 8192))
+  )
+  (as-contract? ((with-ft SBTC SBTC_NAME to-push))
+    (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) update SBTC SBTC_NAME))
   )
 )
 

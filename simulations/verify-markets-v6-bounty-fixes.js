@@ -47,7 +47,8 @@
 //      MAX_DEPOSITORS is patched to u3 (sim-only): full side + in-range
 //      newcomer parks the FARTHEST out-of-range bid (map only, escrow and
 //      limit kept, totals reduced); out-of-range newcomer gets the old
-//      smallest bump (u1010); parked maker cannot deposit (u1021) but can
+//      smallest bump (u1010); a parked maker deposits straight back (v6:
+//      free slot or bump on the combined size) and can
 //      reprice; readmit needs a free slot (u1010) then succeeds; a parked
 //      maker cancels from any phase; readmit of a non-parked principal is
 //      u1022. X-side mirror: farthest out-of-range ask parked, cancel
@@ -425,7 +426,6 @@ async function main() {
   ev("P totals exclude parked (6 STX)", "(get total-token-y (get-cycle-totals u0))", "u6000000", PID);
   ev("P P1 limit kept", `(get-token-y-limit '${P1})`, `u${LP1}`, PID);
   tx("P N2 out-of-range newcomer smaller than smallest -> u1010", depositY(N2, 1_500_000n, 1n, PID), "(err u1010)");
-  tx("P P1 deposits while parked -> u1021", depositY(P1, 2_000_000n, HUGE, PID), "(err u1021)");
   tx("P P1 reprices while parked -> ok", setLimitY(P1, HUGE, PID), "(ok true)");
   ev("P P1 new limit", `(get-token-y-limit '${P1})`, `u${HUGE}`, PID);
   tx("P readmit P1 with side full -> u1010", readmitY(DEPLOYER, P1), "(err u1010)");
@@ -437,16 +437,22 @@ async function main() {
   ev("P list 3", "(len (get-token-y-depositors u0))", "u3", PID);
   tx("P N3 in-range newcomer -> parks P3 (only out-of-range)", depositY(N3, 2_000_000n, HUGE, PID), "(ok u2000000)");
   ev("P P3 parked", `(get-token-y-parked '${P3})`, "u2000000", PID);
-  const p3Before = cap("P3 stx before cancel", `(stx-get-balance '${P3})`, PID);
-  tx("P P3 cancels while parked -> refund", cancelY(P3, PID), "(ok u2000000)");
-  const p3After = cap("P3 stx after cancel", `(stx-get-balance '${P3})`, PID);
+  // v6: a parked maker deposits straight back. Out of range and the side full,
+  // the combined size (2 parked + 1 new) beats the smallest live maker (2 STX,
+  // N1 first in the list), which is bumped and refunded
+  const n1Before = cap("N1 stx before P3's bump", `(stx-get-balance '${N1})`, PID);
+  tx("P P3 deposits 1 STX while parked: side full, combined 3 STX bumps the smallest (N1) -> live", depositY(P3, 1_000_000n, LP3, PID), "(ok u1000000)");
+  const n1After = cap("N1 stx after the bump", `(stx-get-balance '${N1})`, PID);
   ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
+  ev("P P3 live with 3 STX", `(get-token-y-deposit u0 '${P3})`, "u3000000", PID);
+  ev("P N1 bumped off", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  ev("P totals 7 STX (P1 2 + N3 2 + P3 3)", "(get total-token-y (get-cycle-totals u0))", "u7000000", PID);
   tx("P readmit P3 (no longer parked) -> u1022", readmitY(DEPLOYER, P3), "(err u1022)");
   tx("P readmit P1 (live, not parked) -> u1022", readmitY(DEPLOYER, P1), "(err u1022)");
   // x mirror: clear the y side first so in-range asks pass the crossing gate
   tx("P P1 cancels", cancelY(P1, PID), "(ok u2000000)");
-  tx("P N1 cancels", cancelY(N1, PID), "(ok u2000000)");
   tx("P N3 cancels", cancelY(N3, PID), "(ok u2000000)");
+  tx("P P3 cancels", cancelY(P3, PID), "(ok u3000000)");
   ev("P y side empty", "(len (get-token-y-depositors u0))", "u0", PID);
   tx("PX Q1 ask 3000 at +10% (gap 10%)", depositX(Q1, 3000n, LQ1, PID), "(ok u3000)");
   tx("PX Q2 ask 3000 in range", depositX(Q2, 3000n, 1n, PID), "(ok u3000)");
@@ -490,7 +496,7 @@ async function main() {
   check(`B1 taker sBTC gain == ${T1_SBTC_GAIN}`, t1After.value - t1Before.value, (d) => d === T1_SBTC_GAIN);
   check("B2 escrow unchanged (atomic)", escAfter.value - escBefore.value, (d) => d === 0n);
   check(`B4 taker sBTC gain == ${XB - (XB * FEE) / BPS}`, t3After.value - t3Before.value, (d) => d === XB - (XB * FEE) / BPS);
-  check("P P3 refund landed (2 STX minus fee)", p3After.value - p3Before.value, (d) => d > 1_900_000n && d <= 2_000_000n);
+  check("P N1 bump refund landed (exactly 2 STX, P3 paid the fee)", n1After.value - n1Before.value, (d) => d === 2_000_000n);
   check("PX Q1 refund landed (3000 sats)", q1After.value - q1Before.value, (d) => d === 3000n);
 
   console.log(`\n${checks - failures}/${checks} checks green`);

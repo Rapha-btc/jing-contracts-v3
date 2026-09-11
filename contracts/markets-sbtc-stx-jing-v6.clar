@@ -50,7 +50,6 @@
 (define-constant ERR_HAS_RESTING_POSITION (err u1018))
 (define-constant ERR_ZERO_MIN_DEPOSIT (err u1019))
 (define-constant ERR_TAKER_TOO_SMALL (err u1020))
-(define-constant ERR_PARKED (err u1021))
 (define-constant ERR_NOTHING_TO_READMIT (err u1022))
 (define-constant ERR_FEED_MISSING (err u1023))
 (define-constant ERR_USE_CANCEL (err u1024))
@@ -775,6 +774,7 @@
     (amount uint)
     (limit-price uint)
     (spread-bps (optional uint))
+    (carry uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -789,6 +789,7 @@
     (asserts! (>= amount (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
+    (and (> carry u0) (map-delete token-y-parked tx-sender))
 
     (if (and (is-eq existing u0) (>= (len depositors) MAX_DEPOSITORS))
       (let (
@@ -800,7 +801,7 @@
           (smallest-amount (get smallest smallest-info))
           (smallest-who (get smallest-principal smallest-info))
         )
-        (asserts! (> amount smallest-amount) ERR_QUEUE_FULL)
+        (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
         (try! (as-contract? ((with-stx smallest-amount))
           (try! (stx-transfer? smallest-amount current-contract smallest-who))
         ))
@@ -820,17 +821,17 @@
           cycle: cycle,
           depositor: tx-sender,
         }
-          amount
+          (+ carry amount)
         )
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
         })
         (map-set cycle-totals cycle
-          (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) amount) })
+          (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) carry amount) })
         )
-        (try! (contract-call? .jing-core-v5 log-deposit-y tx-sender amount amount
-          limit-price cycle (some smallest-who) smallest-amount
+        (try! (contract-call? .jing-core-v5 log-deposit-y tx-sender (+ carry amount)
+          amount limit-price cycle (some smallest-who) smallest-amount
           (var-get token-x) tok-y
         ))
         (ok amount)
@@ -841,14 +842,14 @@
           cycle: cycle,
           depositor: tx-sender,
         }
-          (+ existing amount)
+          (+ existing carry amount)
         )
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
         })
         (map-set cycle-totals cycle
-          (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
+          (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
         )
         (if (is-eq existing u0)
           (map-set token-y-depositor-list cycle
@@ -856,8 +857,9 @@
           )
           true
         )
-        (try! (contract-call? .jing-core-v5 log-deposit-y tx-sender (+ existing amount)
-          amount limit-price cycle none u0 (var-get token-x) tok-y
+        (try! (contract-call? .jing-core-v5 log-deposit-y tx-sender
+          (+ existing carry amount) amount limit-price cycle none u0
+          (var-get token-x) tok-y
         ))
         (ok amount)
       )
@@ -875,6 +877,7 @@
   )
   (let (
       (cycle (var-get current-cycle))
+      (parked (get-token-y-parked tx-sender))
       (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
       (full (>= (len (get-token-y-depositors cycle)) MAX_DEPOSITORS))
       (price (if (or
@@ -886,7 +889,6 @@
       ))
       (bid (order-y-price limit-price spread-bps price))
     )
-    (asserts! (is-eq (get-token-y-parked tx-sender) u0) ERR_PARKED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-y price bid)) ERR_MUST_USE_SWAP)
     (and
@@ -895,8 +897,21 @@
       (>= bid price)
       (park-one-token-y cycle price)
     )
-    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps t asset-name))))
+    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
+      (and
+        (> parked u0)
+        (begin
+          (print {
+            event: "readmit-y",
+            who: tx-sender,
+            amount: parked,
+            cycle: cycle,
+            price: price,
+          })
+          true
+        )
+      )
       (ok deposited)
     )
   )
@@ -905,6 +920,7 @@
     (amount uint)
     (limit-price uint)
     (spread-bps (optional uint))
+    (carry uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -919,6 +935,7 @@
     (asserts! (>= amount (var-get min-token-x-deposit)) ERR_DEPOSIT_TOO_SMALL)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
+    (and (> carry u0) (map-delete token-x-parked tx-sender))
     (if (and (is-eq existing u0) (>= (len depositors) MAX_DEPOSITORS))
       (let (
           (smallest-info (fold find-smallest-token-x-fold depositors {
@@ -929,7 +946,7 @@
           (smallest-amount (get smallest smallest-info))
           (smallest-who (get smallest-principal smallest-info))
         )
-        (asserts! (> amount smallest-amount) ERR_QUEUE_FULL)
+        (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
         (try! (as-contract? ((with-ft (contract-of t) asset-name smallest-amount))
           (try! (contract-call? t transfer smallest-amount current-contract
             smallest-who none
@@ -951,17 +968,17 @@
           cycle: cycle,
           depositor: tx-sender,
         }
-          amount
+          (+ carry amount)
         )
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
         })
         (map-set cycle-totals cycle
-          (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) amount) })
+          (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) carry amount) })
         )
-        (try! (contract-call? .jing-core-v5 log-deposit-x tx-sender amount amount
-          limit-price cycle (some smallest-who) smallest-amount tok-x
+        (try! (contract-call? .jing-core-v5 log-deposit-x tx-sender (+ carry amount)
+          amount limit-price cycle (some smallest-who) smallest-amount tok-x
           (var-get token-y)
         ))
         (ok amount)
@@ -972,14 +989,14 @@
           cycle: cycle,
           depositor: tx-sender,
         }
-          (+ existing amount)
+          (+ existing carry amount)
         )
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
         })
         (map-set cycle-totals cycle
-          (merge totals { total-token-x: (+ (get total-token-x totals) amount) })
+          (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
         )
         (if (is-eq existing u0)
           (map-set token-x-depositor-list cycle
@@ -987,8 +1004,9 @@
           )
           true
         )
-        (try! (contract-call? .jing-core-v5 log-deposit-x tx-sender (+ existing amount)
-          amount limit-price cycle none u0 tok-x (var-get token-y)
+        (try! (contract-call? .jing-core-v5 log-deposit-x tx-sender
+          (+ existing carry amount) amount limit-price cycle none u0 tok-x
+          (var-get token-y)
         ))
         (ok amount)
       )
@@ -1006,6 +1024,7 @@
   )
   (let (
       (cycle (var-get current-cycle))
+      (parked (get-token-x-parked tx-sender))
       (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
       (full (>= (len (get-token-x-depositors cycle)) MAX_DEPOSITORS))
       (price (if (or
@@ -1017,7 +1036,6 @@
       ))
       (ask (order-x-price limit-price spread-bps price))
     )
-    (asserts! (is-eq (get-token-x-parked tx-sender) u0) ERR_PARKED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
     (and
@@ -1026,8 +1044,21 @@
       (<= ask price)
       (park-one-token-x cycle price)
     )
-    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps t asset-name))))
+    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
+      (and
+        (> parked u0)
+        (begin
+          (print {
+            event: "readmit-x",
+            who: tx-sender,
+            amount: parked,
+            cycle: cycle,
+            price: price,
+          })
+          true
+        )
+      )
       (ok deposited)
     )
   )
@@ -1776,12 +1807,12 @@
           ))
         )
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none tx-trait tx-name))
+        (try! (deposit-token-x-core net limit-price none u0 tx-trait tx-name))
       )
       (begin
         (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none ty-trait ty-name))
+        (try! (deposit-token-y-core net limit-price none u0 ty-trait ty-name))
       )
     )
     (var-set crossing true)

@@ -37,6 +37,8 @@ async function main() {
   const MID = (full.px * PP) / full.py;
   const OUT_C = (10n ** 18n) / ((MID * 110n) / 100n); // floor over the ask: inactive
   const RUNG = `jing-buy-stx-spread-${BPS}-floor-${centsName(OUT_C)}`, RID = `${DEP}.${RUNG}`;
+  const IN_C = (10n ** 18n) / ((MID * 90n) / 100n); // floor under the ask: in band
+  const RUNG2 = `jing-buy-stx-spread-${BPS}-floor-${centsName(IN_C)}`, RID2 = `${DEP}.${RUNG2}`;
   const ASK_NEAR = (MID * 105n) / 100n;
   console.log(`mid ${MID}; ${RUNG} (out of band); 49 fillers at +5%, parker in range`);
   const steps = []; let b = SimulationBuilder.new({ stacksNodeAPI: "http://77.42.3.101/stacks-api" }); // our node: 50 fresh accounts would trip Hiro's per-minute limit
@@ -48,7 +50,7 @@ async function main() {
   deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG, src("jing-buy-stx-market-spread"));
+  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG, src("jing-buy-stx-market-spread")); deploy(RUNG2, src("jing-buy-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, RUNG)], LADDER), "(ok true)");
   tx(`init ${RUNG}`, call(DEP, "initialize", [uintCV(BPS), uintCV(OUT_C)], RID), "(ok true)");
   tx("K1 A deposits 20000 sats: the peg rests, inactive at this mid", call(A, "deposit", [uintCV(20000), UPD], RID), "(ok true)");
@@ -68,13 +70,25 @@ async function main() {
   ev("K4 market-size counts the parked balance: unfilled-index unchanged", "(get-state)", (v) => field(v, "unfilled-index") === `u${SCALE}` && field(v, "resting") === "u20000", RID);
   tx("K5 A withdraws 500 from the parked balance", call(A, "withdraw", [uintCV(500)], RID), "(ok true)");
   ev("K5 parked now 19500", `(get-token-x-parked '${RID})`, "u19500");
-  tx("K6 A deposits 1000 while the queue is full: readmit fails, held locally", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
-  ev("K6 held 1000, still parked 19500", "(get-state)", (v) => field(v, "held-sats") === "u1000", RID);
-  tx("K7 a filler cancels: room in the queue", call(FILLERS[0], "cancel-token-x-deposit", [sbtcT, sbtcA]), `(ok u${FILL})`);
-  tx("K7 A deposits 1000 more: readmit succeeds, everything pushed", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
-  ev("K7 parked 0", `(get-token-x-parked '${RID})`, "u0");
-  ev("K7 live again with 21500", `(get-token-x-deposit u0 '${RID})`, "u21500");
-  ev("K7 held 0", "(get-state)", (v) => field(v, "held-sats") === "u0", RID);
+  // v6: the market takes a parked position back on deposit; the queue is full
+  // and the peg is out of range, so the combined 20500 bumps a 2000 filler
+  tx("K6 A deposits 1000 while the queue is full: combined 20500 bumps the smallest filler, live again", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
+  ev("K6 parked 0", `(get-token-x-parked '${RID})`, "u0");
+  ev("K6 live with 20500", `(get-token-x-deposit u0 '${RID})`, "u20500");
+  ev("K6 held 0", "(get-state)", (v) => field(v, "held-sats") === "u0", RID);
+  ev("K6 queue still 50", "(len (get-token-x-depositors u0))", "u50");
+  ev("K6 first filler bumped off", `(get-token-x-deposit u0 '${FILLERS[0]})`, "u0");
+  tx("K7 A deposits 1000 more: plain top-up", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
+  ev("K7 live with 21500", `(get-token-x-deposit u0 '${RID})`, "u21500");
+  // a second, in-band peg rung arriving on the full queue: too small to bump ->
+  // held inside the rung; big enough -> bumps and goes live
+  tx(`init ${RUNG2} (in band)`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], RID2), "(ok true)");
+  tx("K8 A deposits 1500 into the in-band rung: new maker, full queue, 1500 < 2000 -> held", call(A, "deposit", [uintCV(1500), UPD], RID2), "(ok true)");
+  ev("K8 held 1500, nothing on the market", "(get-state)", (v) => field(v, "held-sats") === "u1500" && field(v, "resting") === "u0", RID2);
+  tx("K9 A deposits 1000 more: 2500 > 2000 -> bumps the smallest, live", call(A, "deposit", [uintCV(1000), UPD], RID2), "(ok true)");
+  ev("K9 live with 2500", `(get-token-x-deposit u0 '${RID2})`, "u2500");
+  ev("K9 held 0", "(get-state)", (v) => field(v, "held-sats") === "u0", RID2);
+  ev("K9 queue still 50", "(len (get-token-x-depositors u0))", "u50");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
