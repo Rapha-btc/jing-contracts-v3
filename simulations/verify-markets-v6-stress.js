@@ -19,9 +19,9 @@
 // Every action's result must be (ok ...) or one of the market's documented
 // refusals; the distribution is printed. SEED=<n> changes the sequence,
 // STEPS=<n> its length. DEPLOYED=1 runs on SPV9K21…markets-sbtc-stx-jingswap.
-// Run: PYTH_API_KEY=<key> [DEPLOYED=1] [SEED=7] [STEPS=60] npx tsx simulations/verify-markets-v6-stress.js
+// Run: PYTH_API_KEY=<key> [DEPLOYED=1] [SEED=7] [STEPS=60] [PEGS=1] npx tsx simulations/verify-markets-v6-stress.js
 import fs from "node:fs";
-import { uintCV, contractPrincipalCV, stringAsciiCV, bufferCV, trueCV, falseCV, standardPrincipalCV, noneCV, cvToString, deserializeCV, getAddressFromPrivateKey } from "@stacks/transactions";
+import { uintCV, contractPrincipalCV, stringAsciiCV, bufferCV, trueCV, falseCV, standardPrincipalCV, noneCV, someCV, cvToString, deserializeCV, getAddressFromPrivateKey } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
 import { STX_DEPOSITOR_1, SBTC_DEPOSITOR_1, SBTC_ADDR, SBTC_NAME, SBTC_ASSET_NAME, SBTC_FQN, WSTX_ADDR, WSTX_NAME, WSTX_ASSET_NAME } from "./_setup.js";
@@ -29,6 +29,11 @@ import { STX_DEPOSITOR_1, SBTC_DEPOSITOR_1, SBTC_ADDR, SBTC_NAME, SBTC_ASSET_NAM
 const DEPLOYED = process.env.DEPLOYED === "1";
 const SEED = Number(process.env.SEED ?? 7);
 const STEPS = Number(process.env.STEPS ?? 60);
+// PEGS=1: half of the maker writes (deposits, reprices) carry a spread (0 / 5 / 20
+// / 50 / 150 bps) with the limit as the ceiling / floor, so the book mixes
+// pegged and fixed orders; I6 then checks every resting order's effective
+// price against a JS mirror of pegged-bid / pegged-ask, sentinels included.
+const PEGS = process.env.PEGS === "1";
 const CHAVITA = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
 // a key no maker uses (makers are "1".."6" repeated); the deployer is also the treasury
 const DEPLOYER = DEPLOYED ? CHAVITA : getAddressFromPrivateKey("9a".repeat(32) + "01", "mainnet");
@@ -66,7 +71,7 @@ const uintOf = (s) => BigInt((String(s).match(/u(\d+)/) || [, "0"])[1]);
 const field = (s, k) => BigInt((String(s).match(new RegExp(`\\(${k} u(\\d+)\\)`)) || [, "0"])[1]);
 
 async function main() {
-  console.log(`=== markets v4 STRESS (seed ${SEED}, ${STEPS} actions) ===`);
+  console.log(`=== markets v6 STRESS (seed ${SEED}, ${STEPS} actions${PEGS ? ", pegs on" : ""}) ===`);
   const lz = await fetchLazerUpdate();
   const UPD = bufferCV(Buffer.from(lz.hex, "hex"));
   const MID = (lz.px * PP) / lz.py;
@@ -118,6 +123,13 @@ async function main() {
       out.xNext[p] = cap(`${tag} x+1 ${p.slice(0, 6)}`, `(get-token-x-deposit (+ u1 (get-current-cycle)) '${p})`);
       out.yPark[p] = cap(`${tag} ypark ${p.slice(0, 6)}`, `(get-token-y-parked '${p})`);
       out.xPark[p] = cap(`${tag} xpark ${p.slice(0, 6)}`, `(get-token-x-parked '${p})`);
+      if (PEGS) {
+        out.orders = out.orders || {};
+        out.orders[p] = {
+          y: cap(`${tag} y order ${p.slice(0, 6)}`, `(get-token-y-order '${p})`), yAt: cap(`${tag} y limit-at ${p.slice(0, 6)}`, `(token-y-limit-at '${p} u${MID})`),
+          x: cap(`${tag} x order ${p.slice(0, 6)}`, `(get-token-x-order '${p})`), xAt: cap(`${tag} x limit-at ${p.slice(0, 6)}`, `(token-x-limit-at '${p} u${MID})`),
+        };
+      }
     }
     return out;
   };
@@ -125,6 +137,9 @@ async function main() {
   const snap0 = snap("start");
   const actions = [];
   const checkpoints = [];
+  const SPREADS = [0n, 5n, 20n, 50n, 150n];
+  const spreadCV = () => (PEGS && rnd() < 0.5 ? someCV(uintCV(pick(SPREADS))) : noneCV());
+  const MAX_UINT = 340282366920938463463374607431768211455n;
   const limitNear = (side) => { // maker limits around the mid, mostly in range, sometimes out
     const bps = BigInt(Math.floor(rnd() * 600) - 300); // -3% .. +3%
     const l = (MID * (10_000n + bps)) / 10_000n;
@@ -134,10 +149,10 @@ async function main() {
     const r = rnd();
     const who = pick(makers);
     let label, fn;
-    if (r < 0.22) { const amt = between(MIN_STX, 20_000_000n); const l = limitNear("y"); label = `#${k} ${who.slice(0, 6)} bid ${amt} @ ${l === 999_999_999_999_999n ? "any" : l}`; fn = call(who, "deposit-token-y", [uintCV(amt), uintCV(l), noneCV(), UPD, wstxTrait, wstxAsset]); }
-    else if (r < 0.44) { const amt = between(MIN_SBTC, 60_000n); const l = limitNear("x"); label = `#${k} ${who.slice(0, 6)} ask ${amt} @ ${l === 1n ? "any" : l}`; fn = call(who, "deposit-token-x", [uintCV(amt), uintCV(l), noneCV(), UPD, sbtcTrait, sbtcAsset]); }
+    if (r < 0.22) { const amt = between(MIN_STX, 20_000_000n); const l = limitNear("y"); label = `#${k} ${who.slice(0, 6)} bid ${amt} @ ${l === 999_999_999_999_999n ? "any" : l}`; fn = call(who, "deposit-token-y", [uintCV(amt), uintCV(l), spreadCV(), UPD, wstxTrait, wstxAsset]); }
+    else if (r < 0.44) { const amt = between(MIN_SBTC, 60_000n); const l = limitNear("x"); label = `#${k} ${who.slice(0, 6)} ask ${amt} @ ${l === 1n ? "any" : l}`; fn = call(who, "deposit-token-x", [uintCV(amt), uintCV(l), spreadCV(), UPD, sbtcTrait, sbtcAsset]); }
     else if (r < 0.54) { const side = rnd() < 0.5 ? "y" : "x"; label = `#${k} ${who.slice(0, 6)} cancel ${side}`; fn = call(who, side === "y" ? "cancel-token-y-deposit" : "cancel-token-x-deposit", side === "y" ? [wstxTrait, wstxAsset] : [sbtcTrait, sbtcAsset]); }
-    else if (r < 0.64) { const side = rnd() < 0.5 ? "y" : "x"; const l = limitNear(side); label = `#${k} ${who.slice(0, 6)} reprice ${side} -> ${l}`; fn = call(who, side === "y" ? "reprice-or-swap-token-y" : "reprice-or-swap-token-x", [uintCV(l), noneCV(), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
+    else if (r < 0.64) { const side = rnd() < 0.5 ? "y" : "x"; const l = limitNear(side); label = `#${k} ${who.slice(0, 6)} reprice ${side} -> ${l}`; fn = call(who, side === "y" ? "reprice-or-swap-token-y" : "reprice-or-swap-token-x", [uintCV(l), spreadCV(), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
     else if (r < 0.84) { const depX = rnd() < 0.5; const taker = depX ? T : S; const amt = depX ? between(MIN_SBTC, 12_000n) : between(MIN_STX, 12_000_000n); const l = depX ? (MID * 97n) / 100n : (MID * 103n) / 100n; label = `#${k} ${depX ? "T sells sBTC" : "S sells STX"} ${amt} (swap, 3% limit)`; fn = call(taker, "swap", [uintCV(amt), uintCV(l), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depX ? trueCV() : falseCV()]); }
     else if (r < 0.92) { label = `#${k} ${who.slice(0, 6)} settle-with-refresh`; fn = call(who, "settle-with-refresh", [UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset]); }
     else { const side = rnd() < 0.5 ? "y" : "x"; label = `#${k} ${who.slice(0, 6)} readmit ${side} ${pick(makers).slice(0, 6)}`; fn = call(who, side === "y" ? "readmit-token-y" : "readmit-token-x", [standardPrincipalCV(pick(makers)), UPD]); }
@@ -183,6 +198,26 @@ async function main() {
     if (dSTX !== 0n || dSBTC !== 0n) {
       for (const p of [...parties, DEPLOYER]) console.log(`      ${p === DEPLOYER ? "treasury" : p === S ? "S" : p === T ? "T" : p.slice(0, 8)} dSTX ${L.stx[p].value - snap0.stx[p].value} dSBTC ${L.sbtc[p].value - snap0.sbtc[p].value}`);
       console.log(`      contract dSTX ${L.stx.contract.value - snap0.stx.contract.value} dSBTC ${L.sbtc.contract.value - snap0.sbtc.contract.value}`);
+    }
+    if (PEGS) {
+      const mirror = (raw, side) => {
+        const limit = field(raw, "limit"); const sm = String(raw).match(/\(spread-bps \(some u(\d+)\)\)/);
+        if (!sm) return limit;
+        const sp_ = BigInt(sm[1]);
+        if (side === "y") { const pg = (MID * (10_000n - sp_)) / 10_000n; return pg <= limit ? pg : 0n; }
+        const pg = (MID * (10_000n + sp_)) / 10_000n; return pg >= limit ? pg : MAX_UINT;
+      };
+      let pegs = 0, orders = 0, mismatches = [];
+      for (const p of makers) {
+        const o = B.orders[p];
+        for (const side of ["y", "x"]) {
+          const raw = o[side].raw, at = o[side === "y" ? "yAt" : "xAt"].value;
+          if (field(raw, "limit") === 0n) continue;
+          orders += 1; if (/\(spread-bps \(some/.test(String(raw))) pegs += 1;
+          const want = mirror(raw, side); if (want !== at) mismatches.push(`${p.slice(0, 6)} ${side}: ${raw} -> ${at} want ${want}`);
+        }
+      }
+      check(`${tag} I6 effective prices match the mirror (${orders} orders, ${pegs} pegged)`, mismatches.join(" | "), (v) => v === "");
     }
     const tSTX = L.stx[DEPLOYER].value - snap0.stx[DEPLOYER].value, tSBTC = L.sbtc[DEPLOYER].value - snap0.sbtc[DEPLOYER].value;
     check(`${tag} I5 treasury never loses (STX ${tSTX}, sBTC ${tSBTC})`, [tSTX, tSBTC], ([a, c]) => a >= 0n && c >= 0n);

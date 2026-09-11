@@ -85,7 +85,9 @@ Inactive means, in this settlement:
 - `get-taker-capacity` does not count it, in-range or walk.
 - `would-take-as-x/y` does not see it as a live counterparty.
 - `park-one-token-x/y` treats it as the maker furthest from mid, so it is
-  the first to be parked when a full queue admits an in-range maker.
+  the first to be parked when a full queue admits an in-range maker. Two
+  inactive pegs are equally far (both at the sentinel); the fold keeps the
+  first at the largest gap, so the older one in the depositor list is parked.
 
 Funds stay in the contract the whole time. Nothing is cancelled.
 
@@ -208,6 +210,33 @@ is under 10000: `331500020` reads as 33150 | 0020. The ladder's
 market-price slot logs the guard in the market unit, like the fixed rung
 logs its price.
 
+## Findings from the fork runs (2026-09-11)
+
+No contract change came out of the fifteen harnesses. Four behaviours are
+worth knowing when reading the book or the logs:
+
+- **A zero-spread peg never appears in a match log.** It sits at mid, so it
+  is in range and clears in the batch step of the settlement, before the
+  walk. If a taker has a residual after the batch, every in-range order on
+  the other side is already exhausted. Fills of a zero-spread peg show up
+  as `distribute-*` events, not `match`.
+- **A keeper cannot settle an all-peg book.** With only spread-above-zero
+  pegs resting, nothing is in range, `settle-with-refresh` returns u1009
+  and reverts. Pegs trade through `swap`, which settles in crossing mode
+  and walks. A keeper cron should treat u1009 on a v6 market as "nothing
+  to do", not as a fault.
+- **Two inactive pegs are parked oldest first.** Out of band they both sit
+  at the sentinel, the same distance from mid; `park-one` keeps the first
+  maker at the largest gap, so the older one in the depositor list goes.
+- **A bid fully consumed by the walk keeps under one sat of dust** (v5
+  behaviour, unchanged). `execute-fill` sells the maker's whole capacity in
+  sats, floors the STX it charges, and the difference stays as a resting
+  deposit under the minimum: 2969, 2455 and 1945 uSTX in the walk-order
+  run. It never fills (the walk skips deposits under the minimum, the
+  settle filter rolls it) and cancel refunds it. The ask side has no dust:
+  sats are traded whole. An indexer should not render a deposit under the
+  market minimum as a live order.
+
 ## Verification (2026-09-11, stxer mainnet forks)
 
 The v4 market harness set ported mechanically to the v6 arity
@@ -250,6 +279,10 @@ The pegged path with a real mid (`PYTH_API_KEY`):
 | `verify-v6-rungs-fill-lazer.js` | fixed rungs on v6: ask 1% over / bid 1% under mid, taker walks each at the rung's price, sync, claim, balances move by the proceeds, the other rung rolls with its own limit, full exits | 40/40 | `cb96ea4d04a1328067e8792033ff8009` |
 | `verify-v6-peg-more-lazer.js` | `get-taker-capacity` against a pegged book (an in-band peg counts once the taker's limit reaches it, an out-of-band peg never); two members in one peg rung through a real fill: pro-rata unsold and proceeds, five 1-sat withdraws burn at least their value (fix 7 on the real market) and leave their rounding dust held for the next epoch, full exits leave total-shares 0 and the rung's sats equal to that dust; `reprice-or-swap-token-x` fixed -> 30 bps peg (plain reprice, no y side), u1026, then to a zero-spread peg against a resting bid: crosses and swaps | 51/51 | `a6d2976a187407d6e6a540b8befc5e70` |
 | `verify-v6-peg-park-lazer.js` | 49 fillers + an out-of-band peg rung fill the x queue; an in-range newcomer parks the inactive peg first; parked: sync counts it, a member withdraws from it, a deposit on the full queue is held, after a filler leaves the next deposit readmits and pushes everything | 27/27 | `4c46e5bd4b5f90d1c5e32f28b395af47` |
+| `verify-v6-peg-batch-lazer.js` | a zero-spread peg clears IN THE BATCH pro-rata next to a fixed bid (exact sats received, exact STX left); a tiny zero-spread peg is rolled by the small-share filter with its order intact; settlement price is the mid; `peg-y` logged only for `(some ..)` writes; an all-peg book: keeper `settle-with-refresh` u1009, a taker demanding 1 over the pegged bid u1017 (atomic), a taker at exactly the pegged bid fills, every other peg rolls intact; lifecycle: partial withdraw keeps the peg, cancel and full fill delete the order; exact arithmetic for one swap that clears the batch and walks a peg, both sides | 74/74 | `a0237fdf74f6a51482974d13a559951d` |
+| `verify-v6-peg-walk-order-lazer.js` | a mixed book (pegs +10/+20/+50 bps, fixed +15/+100, a +30 peg rung): a taker at +35 fills +10, +15, +20, +30 in that order (match log price sequence), never +50/+100; boundaries: 1 under the best ask u1017 (whole swap reverted), exactly the best ask fills that maker only; mirrored on the bid side with a sell-stx peg rung | 60/60 | `b64f98987bee55fc0ec0a4ece0f9d5f9` |
+| `verify-v6-peg-park-y-lazer.js` | y-side park: 49 fillers + an inactive sell-peg rung, an in-range newcomer parks the rung first; parked rung flows (sync, withdraw, held deposit, readmit + push); a direct out-of-band zero-spread peg bumps the smallest deposit on a full queue, is parked by the next in-range newcomer, re-pegs to zero spread while parked, readmit u1016 while an in-range ask rests, ok once it leaves, u1022 after | 53/53 | `8f58734cd60471394d3f418489ffd9f1` |
+| `verify-markets-v6-stress.js` `PEGS=1` | seed 7, 60 actions, half the maker writes carry a random spread (0 / 5 / 20 / 50 / 150 bps) with the limit as ceiling / floor; I1-I5 as before plus I6: every resting order's `token-*-limit-at` equals a JS mirror of `pegged-bid` / `pegged-ask` (sentinels included) at every checkpoint | 131/131 | `0508d14697c2d3770ceb7e82cae1e3ae` |
 
 ```bash
 npm run verify:markets-v6          # PYTH_API_KEY=...
@@ -258,6 +291,10 @@ npm run verify:v6-peg              # PYTH_API_KEY=...
 npm run verify:v6-rungs-fill       # PYTH_API_KEY=...
 npm run verify:v6-peg-park         # PYTH_API_KEY=... (uses the juice node: 50 fresh accounts trip Hiro's rate limit)
 npm run verify:v6-peg-more         # PYTH_API_KEY=...
+npm run verify:v6-peg-batch        # PYTH_API_KEY=...
+npm run verify:v6-peg-walk-order   # PYTH_API_KEY=...
+npm run verify:v6-peg-park-y       # PYTH_API_KEY=... (juice node, 50 fresh accounts)
+npm run verify:v6-stress-pegs      # PYTH_API_KEY=...
 ```
 
 Not covered yet: `reprice-or-swap-token-y` with a spread (the x side is), a

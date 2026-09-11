@@ -23,6 +23,10 @@
     "verify:v6-peg": "tsx simulations/verify-v6-peg-lazer.js",
     "verify:v6-peg-park": "tsx simulations/verify-v6-peg-park-lazer.js",
     "verify:v6-peg-more": "tsx simulations/verify-v6-peg-more-lazer.js",
+    "verify:v6-peg-batch": "tsx simulations/verify-v6-peg-batch-lazer.js",
+    "verify:v6-peg-walk-order": "tsx simulations/verify-v6-peg-walk-order-lazer.js",
+    "verify:v6-peg-park-y": "tsx simulations/verify-v6-peg-park-y-lazer.js",
+    "verify:v6-stress-pegs": "PEGS=1 tsx simulations/verify-markets-v6-stress.js",
     "verify:markets-v6": "for f in regression multifill withdraw lazer-paths gaps bounty-fixes remainder-cross stress; do tsx simulations/verify-markets-v6-$f.js || exit 1; done"
   },
   "dependencies": {
