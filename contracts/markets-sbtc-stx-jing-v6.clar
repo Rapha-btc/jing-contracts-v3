@@ -461,16 +461,12 @@
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (- (get total-token-y totals) amount) })
         )
-        (print {
-          event: "park-y",
-          who: who,
-          amount: amount,
-          cycle: cycle,
-          price: price,
-        })
-        true
+        (try! (contract-call? .jing-core-v5 log-park-y who amount cycle price
+          (var-get token-x) (var-get token-y)
+        ))
+        (ok true)
       )
-      false
+      (ok false)
     )
   )
 )
@@ -502,16 +498,12 @@
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (- (get total-token-x totals) amount) })
         )
-        (print {
-          event: "park-x",
-          who: who,
-          amount: amount,
-          cycle: cycle,
-          price: price,
-        })
-        true
+        (try! (contract-call? .jing-core-v5 log-park-x who amount cycle price
+          (var-get token-x) (var-get token-y)
+        ))
+        (ok true)
       )
-      false
+      (ok false)
     )
   )
 )
@@ -897,22 +889,15 @@
       new-maker
       full
       (>= bid price)
-      (park-one-token-y cycle price)
+      (try! (park-one-token-y cycle price))
     )
     (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
       (and
         (> parked u0)
-        (begin
-          (print {
-            event: "readmit-y",
-            who: tx-sender,
-            amount: parked,
-            cycle: cycle,
-            price: price,
-          })
-          true
-        )
+        (try! (contract-call? .jing-core-v5 log-readmit-y tx-sender parked cycle price
+          (var-get token-x) (var-get token-y)
+        ))
       )
       (ok deposited)
     )
@@ -1046,22 +1031,15 @@
       new-maker
       full
       (<= ask price)
-      (park-one-token-x cycle price)
+      (try! (park-one-token-x cycle price))
     )
     (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
       (and
         (> parked u0)
-        (begin
-          (print {
-            event: "readmit-x",
-            who: tx-sender,
-            amount: parked,
-            cycle: cycle,
-            price: price,
-          })
-          true
-        )
+        (try! (contract-call? .jing-core-v5 log-readmit-x tx-sender parked cycle price
+          (var-get token-x) (var-get token-y)
+        ))
       )
       (ok deposited)
     )
@@ -1300,13 +1278,9 @@
       (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
     )
     (map-delete token-y-parked who)
-    (print {
-      event: "readmit-y",
-      who: who,
-      amount: amount,
-      cycle: cycle,
-      price: price,
-    })
+    (try! (contract-call? .jing-core-v5 log-readmit-y who amount cycle price
+      (var-get token-x) (var-get token-y)
+    ))
     (ok amount)
   )
 )
@@ -1340,13 +1314,9 @@
       (merge totals { total-token-x: (+ (get total-token-x totals) amount) })
     )
     (map-delete token-x-parked who)
-    (print {
-      event: "readmit-x",
-      who: who,
-      amount: amount,
-      cycle: cycle,
-      price: price,
-    })
+    (try! (contract-call? .jing-core-v5 log-readmit-x who amount cycle price
+      (var-get token-x) (var-get token-y)
+    ))
     (ok amount)
   )
 )

@@ -664,6 +664,102 @@
   )
 )
 
+(define-public (log-park-x
+    (who principal)
+    (amount uint)
+    (cycle uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "park-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-readmit-x
+    (who principal)
+    (amount uint)
+    (cycle uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "readmit-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-park-y
+    (who principal)
+    (amount uint)
+    (cycle uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "park-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-readmit-y
+    (who principal)
+    (amount uint)
+    (cycle uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "readmit-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      amount: amount,
+      cycle: cycle,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-small-share-roll-x
     (depositor principal)
     (cycle uint)
