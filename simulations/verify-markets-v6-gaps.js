@@ -351,7 +351,11 @@ async function main() {
     contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
   ]), "(err u1012)");
-  tx("G6 x deposit below min -> u1001", depositX(SBTC_DEPOSITOR_1, MIN_SBTC - 1n, DEAD_X), "(err u1001)");
+  // v6: the minimum is on the whole position, so a top-up under it onto a live
+  // ask is fine; a fresh maker under it is still u1001 (Y9 below)
+  tx("G6 x top-up below min onto the live 2000 ask -> ok (v6)", depositX(SBTC_DEPOSITOR_1, MIN_SBTC - 1n, DEAD_X - 1n), `(ok u${MIN_SBTC - 1n})`);
+  ev("G6 position 2999", `(get-token-x-deposit u0 '${SBTC_DEPOSITOR_1})`, `u${X_AMT + MIN_SBTC - 1n}`);
+  tx("G6 withdraw the top-up back (state restored)", call(SBTC_DEPOSITOR_1, "withdraw-token-x", [uintCV(MIN_SBTC - 1n), sbtcTrait, sbtcAsset]), `(ok u${X_AMT})`);
   tx("G6 y deposit below min -> u1001", depositY(Y9, MIN_STX - 1n, LIVE_Y), "(err u1001)");
   tx("G6 swap of u0 -> u1001", swap(Y9, 0n, HUGE, false), "(err u1001)");
   // there is no close at all: the engine refuses the call (no such public
