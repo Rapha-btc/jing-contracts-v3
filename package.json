@@ -14,7 +14,15 @@
     "verify:rungs-buy": "SIDE=buy tsx simulations/verify-rungs-keyless.js",
     "verify:rungs-sell": "SIDE=sell tsx simulations/verify-rungs-keyless.js",
     "verify:rung-rounding": "tsx simulations/verify-rung-withdraw-rounding.js",
-    "verify:vault-v5-parked": "tsx simulations/verify-vault-sbtc-stx-v5-parked.js"
+    "verify:vault-v5-parked": "tsx simulations/verify-vault-sbtc-stx-v5-parked.js",
+    "verify:v6-rungs-buy": "RUNG=buy tsx simulations/verify-v6-rungs-keyless.js",
+    "verify:v6-rungs-sell": "RUNG=sell tsx simulations/verify-v6-rungs-keyless.js",
+    "verify:v6-rungs-buy-peg": "RUNG=buy-peg tsx simulations/verify-v6-rungs-keyless.js",
+    "verify:v6-rungs-sell-peg": "RUNG=sell-peg tsx simulations/verify-v6-rungs-keyless.js",
+    "verify:v6-rungs-fill": "tsx simulations/verify-v6-rungs-fill-lazer.js",
+    "verify:v6-peg": "tsx simulations/verify-v6-peg-lazer.js",
+    "verify:v6-peg-park": "tsx simulations/verify-v6-peg-park-lazer.js",
+    "verify:markets-v6": "for f in regression multifill withdraw lazer-paths gaps bounty-fixes remainder-cross stress; do tsx simulations/verify-markets-v6-$f.js || exit 1; done"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",

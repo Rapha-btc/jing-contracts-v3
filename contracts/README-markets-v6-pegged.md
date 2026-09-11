@@ -1,8 +1,9 @@
 # markets-sbtc-stx-jing-v6 + jing-core-v5: pegged orders
 
-Source only, not deployed. `clarinet check` clean on both files. No harness
-run yet: the stxer harnesses in `simulations/` still target v5 and need a
-v6 pass before deploy.
+Source only, not deployed. `clarinet check` clean on both files. Every
+harness below ran green on a stxer mainnet fork on 2026-09-11 (section
+"Verification" at the end): the v4/v5 market set ported to the v6 arity, the
+four rungs keyless, and three Lazer harnesses for the pegged path itself.
 
 ## Why a v6
 
@@ -180,11 +181,82 @@ its own mid, or the row shows the ceiling.
 1. `jing-core-v5`, then `set-verified-contract` for the v6 market hash.
 2. `markets-sbtc-stx-jing-v6`, `initialize` with the same feed ids as v5
    (BTC/USD `u1`, STX/USD `u45`).
-3. Rebind and re-arity anything that must point at v6: `swap-router-sbtc-stx-jing-v4`,
-   `jing-ladder`, `jing-buy-stx`, `jing-sell-stx`, `vault-sbtc-stx-v5` all
-   bind v5 today and call the v5 arities.
+3. `jing-buy-stx` / `jing-sell-stx` bind v6 (`none` in the spread slot);
+   `jing-ladder` accepts the peg sides `buy-peg` / `sell-peg`. Still on v5
+   and the v5 arities: `swap-router-sbtc-stx-jing-v4`, `vault-sbtc-stx-v5`.
 
-Deploy under the repo names. Before deploy: run the v4/v5 stxer harness
-set against v6, then add peg scenarios (in band, out of band both sides,
-zero spread against in-range liquidity, park of an inactive peg, peg to
-fixed and back).
+Deploy under the repo names.
+
+## Pooled peg rungs
+
+`jing-buy-stx-market-spread.clar` / `jing-sell-stx-market-spread.clar`: the
+pooled rungs with a spread instead of a price. Same pool and accounting as
+the fixed rungs; the order they rest is `(some spread-bps)` with the guard
+from the name in the market unit. The name carries both numbers, exactly
+as the fixed rung's name carries its price:
+
+```
+jing-buy-stx-spread-20-floor-331-50    initialize(u20, u33150)   asks mid + 20 bps, sits out under 331.50
+jing-sell-stx-spread-20-cap-331-50     initialize(u20, u33150)   bids mid - 20 bps, sits out over 331.50
+```
+
+`initialize` derives the guard as `1e18 / cents` and registers in the ladder
+under its own side (`buy-peg` / `sell-peg`: the code hash differs from the
+fixed rung, so it cannot share the fixed canonical) with the key
+`cents * 10000 + bps`. One uint, unique per (spread, guard) pair since bps
+is under 10000: `331500020` reads as 33150 | 0020. The ladder's
+market-price slot logs the guard in the market unit, like the fixed rung
+logs its price.
+
+## Verification (2026-09-11, stxer mainnet forks)
+
+The v4 market harness set ported mechanically to the v6 arity
+(`simulations/verify-markets-v6-*.js`: `none` inserted before the update
+argument of every deposit / set-limit / reprice call, core-v5 + v6
+deployed under a throwaway deployer, one real Lazer update). One porting
+gotcha: `swap` is unchanged, so its call must NOT get the extra argument
+(the first stress run failed with `IncorrectArgumentCount(8, 9)`).
+
+| Harness | Result | Simulation |
+|---------|--------|------------|
+| markets v6 regression | 22/22 | `d73cb424c786f7ed1e4754a9d1941c83` |
+| markets v6 multifill | 43/43 | `420df0cac20ce8f4a334c2f7f7f5b638` |
+| markets v6 withdraw | 98/98 | `cd06928b5f7f49e042fecafb6fb4464f` |
+| markets v6 lazer-paths | 34/34 | `c1edcd27c5a360439be29bf3c51fed75` |
+| markets v6 gaps | 64/64 | `63dae44d4bdffacd27638a28e96872d9` |
+| markets v6 bounty-fixes | 129/129 | `55f055e415440b2bc5c9847dea6e6465` |
+| markets v6 remainder-cross | 115/115 | `141e444a3e96a686d298e3bcb51f0efb` |
+| markets v6 stress (seed 7, 60 actions) | 125/125 | `dbaae30020e0e610e41e3db304f35eb2` |
+
+Rungs on v6, keyless (`verify-v6-rungs-keyless.js`, `RUNG=...`): deploys
+core-v5 + v6 + ladder + one rung, walks ladder gating, held vs pushed,
+the operator raising the minimum, partial / whole-cancel / full exit,
+second member, gift + claim; the peg rungs also read their order back off
+the market (limit = guard in market unit, `spread-bps (some u20)`) and the
+ladder key.
+
+| Rung | Result | Simulation |
+|------|--------|------------|
+| buy fixed | 37/37 | `0651915ab53b3e79c445ffc2d5da507e` |
+| sell fixed | 37/37 | `706f13c188c1b8f54b96aac1a288d8f4` |
+| buy peg | 40/40 | `f6cc6438f6f6590353955f9489a34d4a` |
+| sell peg | 40/40 | `051a42629d4e21936db3ed6ec7971211` |
+
+The pegged path with a real mid (`PYTH_API_KEY`):
+
+| Harness | Covers | Result | Simulation |
+|---------|--------|--------|------------|
+| `verify-v6-peg-lazer.js` | pegged-ask / pegged-bid maths and sentinels; four peg rungs in and out of band; the gate (a peg 20 bps above mid is not in-range liquidity, a zero-spread peg at mid is: u1016); a taker walks the in-band peg at mid + spread and skips the out-of-band one, the match log carries the pegged price, the rung folds the fill and the member claims; the mirror on the sell side; the settlement roll (sentinel for out of band, pegged price for the remainder); set-limit fixed -> peg -> fixed, u1026, u1011 | 76/76 | `671eea8cc199f44e6315bdadd89ec999` |
+| `verify-v6-rungs-fill-lazer.js` | fixed rungs on v6: ask 1% over / bid 1% under mid, taker walks each at the rung's price, sync, claim, balances move by the proceeds, the other rung rolls with its own limit, full exits | 40/40 | `cb96ea4d04a1328067e8792033ff8009` |
+| `verify-v6-peg-park-lazer.js` | 49 fillers + an out-of-band peg rung fill the x queue; an in-range newcomer parks the inactive peg first; parked: sync counts it, a member withdraws from it, a deposit on the full queue is held, after a filler leaves the next deposit readmits and pushes everything | 27/27 | `4c46e5bd4b5f90d1c5e32f28b395af47` |
+
+```bash
+npm run verify:markets-v6          # PYTH_API_KEY=...
+npm run verify:v6-rungs-buy        # keyless; -sell, -buy-peg, -sell-peg
+npm run verify:v6-peg              # PYTH_API_KEY=...
+npm run verify:v6-rungs-fill       # PYTH_API_KEY=...
+npm run verify:v6-peg-park         # PYTH_API_KEY=... (uses the juice node: 50 fresh accounts trip Hiro's rate limit)
+```
+
+Not covered yet: `reprice-or-swap-token-x/y` with a spread, `get-taker-capacity`
+against a pegged book, the vault on v6 (it binds v5).
