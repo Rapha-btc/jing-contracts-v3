@@ -250,6 +250,44 @@ aborting the member's transaction. Clarity note: a `try!` inside
 `as-contract?` returns from the enclosing function, so the attempt has to be
 its own function for the caller to observe a refusal.
 
+## Coverage status (2026-09-11)
+
+Covered on stxer mainnet forks, real Lazer updates, source deployed under a
+throwaway deployer: the whole v5 surface ported to the v6 arity (eight
+harnesses), the fixed rungs and the peg rungs on v6 + core-v5 (keyless
+gating, real fills, two members, parked flows both sides, held-then-bump),
+pegs in and out of band both sides, the deposit gate with zero spread,
+walks at the pegged price, the price-ordered mixed walk, boundary takers,
+the batch with zero-spread pegs, the all-peg book, the lifecycle of an
+order tuple, exact batch+walk arithmetic, deposit while parked (slot,
+bump, refusal), capacity against pegs, random spreads under the stress
+invariants. Twenty runs, all green, ids in the tables below.
+
+Still open, in order of value:
+
+1. **A peg following a real mid move.** Every run uses one Lazer update, so
+   re-centering is proven only by moving the guard. Two updates fetched
+   minutes apart, settled one after the other, would show the pegged price
+   tracking a real print.
+2. **The rung hold paths beyond `u1010`.** A zero-spread rung whose deposit
+   would cross (`u1016`) and a stale update (`u1003`) must both end as
+   held funds, not a failed member transaction.
+3. **A peg rung sold out through fills** (epoch close, new epoch deposits);
+   today the peg rung epochs close only through exits.
+4. **x-side mirrors** of y-only checks: readmit refused `u1016` for a
+   parked zero-spread ask, `reprice-or-swap-token-y` with a spread,
+   set-limit on a parked x peg.
+5. **Edges:** pegged price exactly on the guard (in band by definition),
+   spread 9999 both sides, a small taker against a big zero-spread peg
+   (`u1020`), a stranger calling the new core-v5 logs (`u5001`).
+6. **The refund of a maker left under the minimum by a fill** (batch and
+   walk), once written, with its own scenarios.
+
+Outside the market: router v4 and vault v5 bind market v5 and call the v5
+arities; retail trades through the router, so the deploy needs a router
+rebind to v6 and the router harness ported (about 250 checks), same for the
+vault.
+
 ## Findings from the fork runs (2026-09-11)
 
 No contract change came out of the fifteen harnesses. Four behaviours are
