@@ -248,6 +248,7 @@ The pegged path with a real mid (`PYTH_API_KEY`):
 |---------|--------|--------|------------|
 | `verify-v6-peg-lazer.js` | pegged-ask / pegged-bid maths and sentinels; four peg rungs in and out of band; the gate (a peg 20 bps above mid is not in-range liquidity, a zero-spread peg at mid is: u1016); a taker walks the in-band peg at mid + spread and skips the out-of-band one, the match log carries the pegged price, the rung folds the fill and the member claims; the mirror on the sell side; the settlement roll (sentinel for out of band, pegged price for the remainder); set-limit fixed -> peg -> fixed, u1026, u1011 | 76/76 | `671eea8cc199f44e6315bdadd89ec999` |
 | `verify-v6-rungs-fill-lazer.js` | fixed rungs on v6: ask 1% over / bid 1% under mid, taker walks each at the rung's price, sync, claim, balances move by the proceeds, the other rung rolls with its own limit, full exits | 40/40 | `cb96ea4d04a1328067e8792033ff8009` |
+| `verify-v6-peg-more-lazer.js` | `get-taker-capacity` against a pegged book (an in-band peg counts once the taker's limit reaches it, an out-of-band peg never); two members in one peg rung through a real fill: pro-rata unsold and proceeds, five 1-sat withdraws burn at least their value (fix 7 on the real market) and leave their rounding dust held for the next epoch, full exits leave total-shares 0 and the rung's sats equal to that dust; `reprice-or-swap-token-x` fixed -> 30 bps peg (plain reprice, no y side), u1026, then to a zero-spread peg against a resting bid: crosses and swaps | 51/51 | `a6d2976a187407d6e6a540b8befc5e70` |
 | `verify-v6-peg-park-lazer.js` | 49 fillers + an out-of-band peg rung fill the x queue; an in-range newcomer parks the inactive peg first; parked: sync counts it, a member withdraws from it, a deposit on the full queue is held, after a filler leaves the next deposit readmits and pushes everything | 27/27 | `4c46e5bd4b5f90d1c5e32f28b395af47` |
 
 ```bash
@@ -256,7 +257,8 @@ npm run verify:v6-rungs-buy        # keyless; -sell, -buy-peg, -sell-peg
 npm run verify:v6-peg              # PYTH_API_KEY=...
 npm run verify:v6-rungs-fill       # PYTH_API_KEY=...
 npm run verify:v6-peg-park         # PYTH_API_KEY=... (uses the juice node: 50 fresh accounts trip Hiro's rate limit)
+npm run verify:v6-peg-more         # PYTH_API_KEY=...
 ```
 
-Not covered yet: `reprice-or-swap-token-x/y` with a spread, `get-taker-capacity`
-against a pegged book, the vault on v6 (it binds v5).
+Not covered yet: `reprice-or-swap-token-y` with a spread (the x side is), a
+pegged order parked on the y side, the vault on v6 (it binds v5).

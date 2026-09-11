@@ -22,6 +22,7 @@
     "verify:v6-rungs-fill": "tsx simulations/verify-v6-rungs-fill-lazer.js",
     "verify:v6-peg": "tsx simulations/verify-v6-peg-lazer.js",
     "verify:v6-peg-park": "tsx simulations/verify-v6-peg-park-lazer.js",
+    "verify:v6-peg-more": "tsx simulations/verify-v6-peg-more-lazer.js",
     "verify:markets-v6": "for f in regression multifill withdraw lazer-paths gaps bounty-fixes remainder-cross stress; do tsx simulations/verify-markets-v6-$f.js || exit 1; done"
   },
   "dependencies": {
