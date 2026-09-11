@@ -320,9 +320,11 @@
     (let (
         (fi (var-get unfilled-index))
         (mine (/ (* (get shares pos) fi) SCALE))
+        ;; round the burn UP: a floor here paid `amount` for fewer shares than
+        ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
         (shares-out (if (>= amount mine)
           (get shares pos)
-          (/ (* amount SCALE) fi)
+          (/ (+ (* amount SCALE) (- fi u1)) fi)
         ))
         (take (if (>= amount mine)
           mine

@@ -13,6 +13,7 @@
     "verify:creator-escrow-v3": "tsx simulations/verify-creator-escrow-v3.js",
     "verify:rungs-buy": "SIDE=buy tsx simulations/verify-rungs-keyless.js",
     "verify:rungs-sell": "SIDE=sell tsx simulations/verify-rungs-keyless.js",
+    "verify:rung-rounding": "tsx simulations/verify-rung-withdraw-rounding.js",
     "verify:vault-v5-parked": "tsx simulations/verify-vault-sbtc-stx-v5-parked.js"
   },
   "dependencies": {

@@ -9,7 +9,8 @@ bind the LIVE pair deployed 2026-09-08 under
 audited in the previous bounty (`README-audit-bounty-lazer-v4.md`) and were
 out of scope.
 
-Three submissions: Celestial Shark, Watchful Node, Sonic Mast. Each finding
+Seven submissions so far: Celestial Shark, Watchful Node, Sonic Mast, Digital
+Sprite, Proud Haven, Stable Troll, Celestial Mast. Each finding
 was decompiled against the source one at a time; verdicts, decisions and
 fixes below. Every fix is in the current source on master. None of the four
 contracts is deployed yet, so there is nothing to migrate: the next deploy
@@ -25,9 +26,11 @@ carries all of it.
 | 4 | Celestial Shark | E5: `set-canonical` replaces without an event | no | INFO | `jing-ladder.clar:107` prints `canonical-set`. The trail is on-chain. |
 | 5 | Watchful Node | Zero-amount `jing-set-limit` intent reprices a nonzero parked vault order | yes | MEDIUM | **Fixed** (`a811789`). Best submission: novel, reproduced with a clarinet harness, and it broke the one thing the amount binding exists for. |
 | 6 | Sonic Mast | Direct sBTC/STX transfer to a rung sits outside the indices, "stuck" | no | INFO | It is a gift, not stuck: `sync` folds the balance into `held-*`, the next deposit pushes it to the market and the proceeds reach members. No change. |
+| 7 | Proud Haven | Partial withdraws burn too few shares once the index is under 1; 98 x `withdraw(u1)` takes 98 sats from a 66-sat position, the rest of the pool pays | yes | HIGH | **Fixed**: the share burn rounds up (section 7). Novel, mainnet-fork PoC, first to report. |
+| 7b | Stable Troll | Same finding, one day later, no PoC | yes | HIGH | Duplicate of 7. |
 | 6b | Sonic Mast | Rung `initialize` cannot run in clarinet simnet (`principal-destruct?` errs on ST principals) | yes | tooling | **Skipped on purpose.** Rungs are tested on stxer mainnet forks and mainnet-flavoured clarinet, where SP principals destruct fine. |
 
-Leading submission so far: **Watchful Node**. The bounty stays open until 2026-09-22; entries filed after 2026-09-08 are reviewed the same way and the winner is picked, accepted and paid from `SP3EKD9…` then.
+Leading submission so far: **Proud Haven** (7), ahead of Watchful Node (5). The bounty stays open until 2026-09-22; entries filed after 2026-09-08 are reviewed the same way and the winner is picked, accepted and paid from `SP3EKD9…` then.
 
 ## 1. MIN_MARKET bounce: dust by design, minimum now read live
 
@@ -96,6 +99,65 @@ rather than at the market. `execute-jing-reprice` shares `resting` and now
 refuses a parked order at the market (reprice needs a live deposit), which
 is right.
 
+## 7. Partial withdraw: the share burn rounds up
+
+Claim (Proud Haven, 2026-09-09; Stable Troll, 2026-09-10): after a partial
+fill a member can withdraw more than their entitlement by splitting the
+withdrawal into 1-sat pieces, and the shortfall is socialised to the other
+members at the next `sync`.
+
+Code: `withdraw` in `jing-buy-stx.clar` (mirrored line for line in
+`jing-sell-stx.clar`, only the asset differs). A partial withdraw pays the
+member exactly `amount` and burns `shares-out` shares. The burn was
+
+```clarity
+(/ (* amount SCALE) fi)
+```
+
+Clarity's `/` rounds down. While `fi` (the unfilled index) is `SCALE`, one
+share is one sat and the division is exact. After a fill `fi` drops below
+`SCALE`, one share is worth less than a sat, and the rounding starts to fall
+in the withdrawer's favour on every call.
+
+Worked example, the numbers from the PoC. `SCALE` = 1,000,000,000,000.
+A 500-of-1500 fill leaves `fi` = 666,666,666,666, so a share is worth
+0.667 sat. Member A holds 100 shares, entitlement 66 sats, and calls
+`withdraw u1`:
+
+```
+old:  1 * SCALE / fi            = 1.5  -> rounds down to 1 share burned
+      1 share is worth 0.667 sat, A is paid 1 sat: A is up 0.333 per call
+      98 calls: A receives 98 sats on a 66-sat position; B's shares now
+      map to 32 sats less than they should
+
+new:  (1 * SCALE + fi - 1) / fi = 2.499 -> rounds down to 2 shares burned
+      2 shares are worth 1.333 sat, A is paid 1 sat: the 0.333 stays in
+      the pool
+      50 calls empty A's position: A receives 50 sats, B's 1400 shares
+      still map to exactly 933 = 1400 * fi / SCALE
+```
+
+The fix is the integer ceiling, `ceil(a / b)` written as `(a + b - 1) / b`:
+
+```clarity
+(/ (+ (* amount SCALE) (- fi u1)) fi)
+```
+
+The invariant it restores: shares burned times value per share is never
+below the sats paid out. Rounding dust now always lands in the pool, never
+with the withdrawer. Exact divisions give the same answer as before, so
+the index-1 harness cases are unchanged. The partial branch only runs while
+`amount` is below the member's entitlement, and the ceiling then always
+lands at least one share short of their balance, so the subtraction cannot
+underflow; the index can only be zero when the entitlement is zero too,
+which routes to the full-exit branch, so `fi - 1` cannot underflow either.
+The one visible cost is self-inflicted: a member who splits a 66-sat exit
+into 1-sat calls at `fi` = 2/3 forfeits 16 sats to the pool; `withdraw u66`
+pays exactly 66.
+
+Same fix on `jing-sell-stx.clar`. The rung code hash changed again: the
+ladder's canonical must point at the new deploy.
+
 ## Decisions not to change anything
 
 - Keeper revoke (3): the keeper is the executor of everything the owner
@@ -128,11 +190,15 @@ proceeds via a gift + claim, empty pool at the end.
 | buy rung, fix 1 + 2 | 30/30 | `ef196963e3b605f29bae6625716cc7f7` |
 | sell rung, fix 1 + 2 | 31/31 | `02b0d89df9feea63c076fe89ef4b4539` |
 | vault v5 parked order (fix 5) | 131/131 | `1fad866e001080ea09b7c46b21edb29c` |
+| buy rung, fix 1 + 2 + 7 | 30/30 | `683b826045d945ec6b052b3d59fcdc93` |
+| sell rung, fix 1 + 2 + 7 | 31/31 | `9d154998c66767b69a9a88bf1ee93dbc` |
+| buy rung, withdraw rounding (fix 7) | 108/108 | `c11027620ffcdf00e7e2e727502af4a5` |
 
 ```bash
 npm run verify:rungs-buy
 npm run verify:rungs-sell
 PYTH_API_KEY=... npm run verify:vault-v5-parked
+npm run verify:rung-rounding
 ```
 
 Not covered by the keyless harness: fills (need a taker update) and the
@@ -153,6 +219,15 @@ moves, reprice -> market u1005, keeper cancel brings the 20k home.
 | Run | Result | Simulation |
 |-----|--------|------------|
 | vault v5 parked order | 131/131 | `1fad866e001080ea09b7c46b21edb29c` |
+
+`simulations/verify-rung-withdraw-rounding.js` (from Proud Haven's PoC, mock
+market with a `simulate-fill-x` entry point, no key needed) deploys the ladder
+and the buy rung on a fork, fills 500 of 1500 sats so the index sits at 2/3,
+then has a 100-share member call `withdraw u1` 98 times. Asserts the fixed
+behaviour: the first 50 calls pay 1 sat each, the 51st fails u7006 (position
+gone), the member received no more than the 66-sat entitlement, and the
+remaining member's pooled sats equal shares * index. Buy side only: the mock
+has no y side, and the sell rung's withdraw is the same code.
 
 ## Before deploy
 
