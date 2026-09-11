@@ -261,26 +261,17 @@ walks at the pegged price, the price-ordered mixed walk, boundary takers,
 the batch with zero-spread pegs, the all-peg book, the lifecycle of an
 order tuple, exact batch+walk arithmetic, deposit while parked (slot,
 bump, refusal), capacity against pegs, random spreads under the stress
-invariants. Twenty runs, all green, ids in the tables below.
+invariants. Ids in the tables below.
 
-Still open, in order of value:
+Closed since (2026-09-11, later the same day): a peg following a real mid
+move (`verify-v6-peg-track-lazer.js`), the rung hold paths beyond `u1010`
+(crossing and stale update), a peg rung sold out through fills, the x-side
+mirrors, and the edges (guard boundary, spread 9999, `u1020` against a
+zero-spread peg, core-v5 authority). Twenty-three runs, all green.
 
-1. **A peg following a real mid move.** Every run uses one Lazer update, so
-   re-centering is proven only by moving the guard. Two updates fetched
-   minutes apart, settled one after the other, would show the pegged price
-   tracking a real print.
-2. **The rung hold paths beyond `u1010`.** A zero-spread rung whose deposit
-   would cross (`u1016`) and a stale update (`u1003`) must both end as
-   held funds, not a failed member transaction.
-3. **A peg rung sold out through fills** (epoch close, new epoch deposits);
-   today the peg rung epochs close only through exits.
-4. **x-side mirrors** of y-only checks: readmit refused `u1016` for a
-   parked zero-spread ask, `reprice-or-swap-token-y` with a spread,
-   set-limit on a parked x peg.
-5. **Edges:** pegged price exactly on the guard (in band by definition),
-   spread 9999 both sides, a small taker against a big zero-spread peg
-   (`u1020`), a stranger calling the new core-v5 logs (`u5001`).
-6. **The refund of a maker left under the minimum by a fill** (batch and
+Still open:
+
+1. **The refund of a maker left under the minimum by a fill** (batch and
    walk), once written, with its own scenarios.
 
 Outside the market: router v4 and vault v5 bind market v5 and call the v5
@@ -361,6 +352,9 @@ The pegged path with a real mid (`PYTH_API_KEY`):
 | `verify-v6-peg-walk-order-lazer.js` | a mixed book (pegs +10/+20/+50 bps, fixed +15/+100, a +30 peg rung): a taker at +35 fills +10, +15, +20, +30 in that order (match log price sequence), never +50/+100; boundaries: 1 under the best ask u1017 (whole swap reverted), exactly the best ask fills that maker only; mirrored on the bid side with a sell-stx peg rung | 60/60 | `eb7b3af20efe5687758c0d92103eef4b` |
 | `verify-v6-peg-park-y-lazer.js` | y-side park: 49 fillers + an inactive sell-peg rung, an in-range newcomer parks the rung first; parked rung flows (sync, withdraw, a deposit on the full queue bumps a filler and the rung is live again); a direct out-of-band zero-spread peg bumps the smallest deposit on a full queue, is parked by the next in-range newcomer, re-pegs to zero spread while parked, readmit u1016 while an in-range ask rests, ok once it leaves, u1022 after; a second in-band rung too small for the full queue is held, then bumps; a parked direct maker deposits: combined size bumps, `readmit-y` printed | 70/70 | `badb446cc4889e6027771557cc80f7e6` |
 | `verify-markets-v6-stress.js` `PEGS=1` | seed 7, 60 actions, half the maker writes carry a random spread (0 / 5 / 20 / 50 / 150 bps) with the limit as ceiling / floor; I1-I5 as before plus I6: every resting order's `token-*-limit-at` equals a JS mirror of `pegged-bid` / `pegged-ask` (sentinels included) at every checkpoint | 131/131 | `948ef5c6e4d3d8e616513904122f700c` |
+| `verify-v6-peg-track-lazer.js` | a peg follows a REAL mid move: two Lazer prints 75 s apart in one fork (staleness widened, signatures real); a taker on print A fills the buy and sell peg rungs at mid_A +/- 20 bps, a taker on print B at mid_B +/- 20 bps, from the match logs; `token-*-limit-at` reads both prices at both mids; the prints moved (30264579644231 -> 30265820928180) and the fills moved with them | 30/30 | `75e21d3ac777184401cdecd8579eac1c` |
+| `verify-v6-peg-edges-lazer.js` | a peg rung sold out THROUGH FILLS (epoch closes, member claims, next epoch opens on the next deposit); guard edges (a pegged price exactly on the ceiling / floor is in band, one unit past is the sentinel; spread 9999 both sides, a 9999 bps peg rests); a 2 STX taker against a 2000 STX zero-spread peg on its own side u1020; the rung hold paths: a zero-spread rung whose deposit would cross (u1016) holds, a STALE update holds, a fresh deposit then pushes everything; core-v5 authority: stranger and deployer calling log-peg / log-park / log-readmit / log-set-limit u5001 | 55/55 | `6045a29a8abb5316e3c0a847cde55196` |
+| `verify-v6-peg-mirror-lazer.js` | x-side mirrors on a MAX 3 park instance: an out-of-band zero-spread ask is parked first, re-pegs to mid while parked, readmit u1016 while an in-range bid rests, ok once it leaves, a top-up under the minimum onto the live position; `reprice-or-swap-token-y` fixed -> 30 bps peg (plain), u1026, then to a zero-spread peg against an in-range ask: crosses and swaps at mid | 38/38 | `d74e79c61c197b70e6eeec8cdb46926e` |
 
 ```bash
 npm run verify:markets-v6          # PYTH_API_KEY=...
@@ -373,6 +367,9 @@ npm run verify:v6-peg-batch        # PYTH_API_KEY=...
 npm run verify:v6-peg-walk-order   # PYTH_API_KEY=...
 npm run verify:v6-peg-park-y       # PYTH_API_KEY=... (juice node, 50 fresh accounts)
 npm run verify:v6-stress-pegs      # PYTH_API_KEY=...
+npm run verify:v6-peg-track        # PYTH_API_KEY=... (waits WAIT=75 s between two prints)
+npm run verify:v6-peg-edges        # PYTH_API_KEY=...
+npm run verify:v6-peg-mirror       # PYTH_API_KEY=...
 ```
 
 Not covered yet: `reprice-or-swap-token-y` with a spread (the x side is), a
