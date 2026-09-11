@@ -1,1227 +1,893 @@
-(define-constant ERR_NOT_AUTHORIZED (err u5001))
-(define-constant ERR_INVALID_CONTRACT_HASH (err u5002))
-(define-constant ERR_ALREADY_REGISTERED (err u5003))
-(define-constant ERR_NOT_VERIFIED (err u5005))
-(define-constant ERR_HASH_MISMATCH (err u5006))
-(define-constant ERR_TIMELOCK_NOT_ELAPSED (err u5008))
-(define-constant ERR_PAUSED (err u5016))
-(define-constant ERR_NOT_PAUSED (err u5017))
-(define-constant ERR_NO_PENDING_OWNER (err u5018))
-(define-constant TIMELOCK_BURN_BLOCKS u144)
-(define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
-(define-data-var contract-owner principal tx-sender)
-(define-data-var pending-owner (optional principal) none)
-(define-map verified-contracts
-  principal
-  (buff 32)
+(define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5)
+(define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
+(define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
+(define-constant ASSET_SBTC "sbtc-token")
+(define-constant ASSET_WSTX "wstx")
+
+(define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2)
+(define-constant DLMM_POOL 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15)
+(define-constant DLMM_CORE 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1)
+(define-constant DLMM_MAX_STEPS u230)
+
+(define-constant XYK_CORE 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2)
+(define-constant XYK_POOL 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1)
+
+(define-constant VELAR_POOL 'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070)
+(define-constant VELAR_FEES 'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-fees-v1_0_0-0070)
+(define-constant VELAR_WSTX 'SP1Y5YSTAHZ88XYK1VPDH24GY0HPX5J4JECTMY4A1.wstx)
+
+(define-constant VENUE_DLMM u1)
+(define-constant VENUE_XYK u2)
+(define-constant VENUE_VELAR u3)
+
+(define-constant ERR_ZERO_AMOUNT (err u3001))
+(define-constant ERR_MIN_OUT (err u3002))
+(define-constant ERR_BAD_VENUE (err u3003))
+(define-constant ERR_SPLIT_MISMATCH (err u3004))
+(define-constant ERR_VAA_REQUIRED (err u3005))
+(define-constant ERR_ZERO_LIMIT (err u3006))
+(define-constant ERR_ZERO_MID (err u3007))
+
+(define-private (sbtc-balance (who principal))
+  (unwrap-panic (contract-call? SBTC get-balance who))
 )
-(define-data-var paused bool false)
-(define-data-var paused-at uint u0)
-(define-map registered-contracts
-  principal
-  bool
-)
-(define-map token-equity
-  {
-    token: principal,
-    owner: principal,
-  }
-  uint
-)
-(define-map total-token-equity
-  principal
-  uint
-)
-(define-read-only (is-verified-contract (contract principal))
-  (is-some (map-get? verified-contracts contract))
-)
-(define-read-only (get-verified-hash (contract principal))
-  (map-get? verified-contracts contract)
-)
-(define-read-only (get-contract-owner)
-  (var-get contract-owner)
-)
-(define-read-only (get-pending-owner)
-  (var-get pending-owner)
-)
-(define-read-only (is-paused)
-  (var-get paused)
-)
-(define-read-only (get-paused-at)
-  (var-get paused-at)
-)
-(define-read-only (get-unpause-eligible-at)
-  (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS)
-)
-(define-read-only (is-registered (p principal))
-  (default-to false (map-get? registered-contracts p))
-)
-(define-read-only (get-token-equity
-    (token principal)
-    (owner principal)
+
+(define-private (gain
+    (before uint)
+    (after uint)
   )
-  (default-to u0
-    (map-get? token-equity {
-      token: token,
-      owner: owner,
+  (if (> after before)
+    (- after before)
+    u0
+  )
+)
+
+(define-private (jing-swap
+    (amount uint)
+    (limit-price uint)
+    (update (buff 8192))
+    (deposit-x bool)
+  )
+  (match (contract-call? JING_MARKET swap amount limit-price update SBTC ASSET_SBTC WSTX
+    ASSET_WSTX deposit-x
+  )
+    res (some {
+      spent: (- amount
+        (if deposit-x
+          (get token-x-rolled res)
+          (get token-y-rolled res)
+        )
+        (get rebate-refunded res)
+      ),
+      out: (if deposit-x
+        (get token-y-received res)
+        (get token-x-received res)
+      ),
+    })
+    e none
+  )
+)
+
+(define-private (jing-spent (r (optional {
+  spent: uint,
+  out: uint,
+})))
+  (match r
+    v (get spent v)
+    u0
+  )
+)
+
+(define-private (jing-out (r (optional {
+  spent: uint,
+  out: uint,
+})))
+  (match r
+    v (get out v)
+    u0
+  )
+)
+
+(define-private (xyk-swap
+    (sell-sbtc bool)
+    (amount uint)
+    (min-received uint)
+  )
+  (let ((x-is-sbtc (is-eq (get x-token (unwrap-panic (contract-call? XYK_POOL get-pool))) SBTC)))
+    (if x-is-sbtc
+      (if sell-sbtc
+        (contract-call? XYK_CORE swap-x-for-y XYK_POOL SBTC WSTX amount
+          min-received
+        )
+        (contract-call? XYK_CORE swap-y-for-x XYK_POOL SBTC WSTX amount
+          min-received
+        )
+      )
+      (if sell-sbtc
+        (contract-call? XYK_CORE swap-y-for-x XYK_POOL WSTX SBTC amount
+          min-received
+        )
+        (contract-call? XYK_CORE swap-x-for-y XYK_POOL WSTX SBTC amount
+          min-received
+        )
+      )
+    )
+  )
+)
+
+(define-private (amm-sell-sbtc
+    (amount uint)
+    (min-received uint)
+    (venue uint)
+  )
+  (if (is-eq venue VENUE_DLMM)
+    (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL WSTX
+      SBTC amount min-received DLMM_MAX_STEPS none
+    )
+    (if (is-eq venue VENUE_XYK)
+      (ok {
+        in: amount,
+        out: (try! (xyk-swap true amount min-received)),
+      })
+      (ok {
+        in: amount,
+        out: (get amt-out
+          (try! (contract-call? VELAR_POOL swap SBTC VELAR_WSTX VELAR_FEES amount
+            min-received
+          ))
+        ),
+      })
+    )
+  )
+)
+
+(define-private (amm-sell-stx
+    (amount uint)
+    (min-received uint)
+    (venue uint)
+  )
+  (if (is-eq venue VENUE_DLMM)
+    (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL WSTX
+      SBTC amount min-received DLMM_MAX_STEPS none
+    )
+    (if (is-eq venue VENUE_XYK)
+      (ok {
+        in: amount,
+        out: (try! (xyk-swap false amount min-received)),
+      })
+      (ok {
+        in: amount,
+        out: (get amt-out
+          (try! (contract-call? VELAR_POOL swap VELAR_WSTX SBTC VELAR_FEES amount
+            min-received
+          ))
+        ),
+      })
+    )
+  )
+)
+
+(define-private (amm-floor (min-received uint))
+  (if (> min-received u0)
+    min-received
+    u1
+  )
+)
+
+(define-private (leg-sbtc
+    (amount uint)
+    (min-received uint)
+    (venue uint)
+  )
+  (if (> amount u0)
+    (amm-sell-sbtc amount (amm-floor min-received) venue)
+    (ok {
+      in: u0,
+      out: u0,
     })
   )
 )
-(define-read-only (get-total-token-equity (token principal))
-  (default-to u0 (map-get? total-token-equity token))
-)
-(define-read-only (get-balance (user principal))
-  (ok (get-token-equity SBTC_TOKEN user))
-)
-(define-private (credit
-    (token principal)
-    (who principal)
+
+(define-private (leg-stx
     (amount uint)
+    (min-received uint)
+    (venue uint)
   )
-  (let (
-      (current (get-token-equity token who))
-      (total (get-total-token-equity token))
+  (if (> amount u0)
+    (amm-sell-stx amount (amm-floor min-received) venue)
+    (ok {
+      in: u0,
+      out: u0,
+    })
+  )
+)
+
+(define-private (with-fallback
+    (planned uint)
+    (venue uint)
+    (fallback (optional uint))
+    (residual uint)
+  )
+  (if (is-eq (some venue) fallback)
+    (+ planned residual)
+    planned
+  )
+)
+
+(define-private (scale-min
+    (min-received uint)
+    (planned uint)
+    (actual uint)
+  )
+  (if (or (is-eq planned u0) (is-eq actual planned))
+    min-received
+    (/ (* min-received actual) planned)
+  )
+)
+
+(define-private (valid-fallback (fallback (optional uint)))
+  (match fallback
+    v (or
+      (is-eq v VENUE_DLMM)
+      (is-eq v VENUE_XYK)
+      (is-eq v VENUE_VELAR)
     )
-    (map-set token-equity {
-      token: token,
-      owner: who,
-    }
-      (+ current amount)
-    )
-    (map-set total-token-equity token (+ total amount))
     true
   )
 )
-(define-private (debit
-    (token principal)
-    (who principal)
+
+(define-public (swap-sbtc-for-stx
     (amount uint)
+    (jing-amount uint)
+    (limit-price uint)
+    (update (optional (buff 8192)))
+    (fallback (optional uint))
+    (amm-amounts {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (amm-mins {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (min-stx-out uint)
+  )
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (asserts!
+      (is-eq amount
+        (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
+          (get velar amm-amounts)
+        ))
+      ERR_SPLIT_MISMATCH
+    )
+    (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
+    (let (
+        (user tx-sender)
+        (stx-before (stx-get-balance user))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap! update ERR_VAA_REQUIRED)
+            true
+          )
+          none
+        ))
+        (jing-in (jing-spent jing))
+        (residual (- jing-amount jing-in))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (dlmm (try! (leg-sbtc dlmm-in
+          (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
+          VENUE_DLMM
+        )))
+        (xyk (try! (leg-sbtc xyk-in
+          (scale-min (get xyk amm-mins) (get xyk amm-amounts) xyk-in)
+          VENUE_XYK
+        )))
+        (velar (try! (leg-sbtc velar-in
+          (scale-min (get velar amm-mins) (get velar amm-amounts) velar-in)
+          VENUE_VELAR
+        )))
+        (out (gain stx-before (stx-get-balance user)))
+      )
+      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
+      (print {
+        topic: "swap-sbtc-for-stx",
+        user: user,
+        amount: amount,
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
+        out: out,
+      })
+    )
+  )
+)
+
+(define-public (swap-stx-for-sbtc
+    (amount uint)
+    (jing-amount uint)
+    (limit-price uint)
+    (update (optional (buff 8192)))
+    (fallback (optional uint))
+    (amm-amounts {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (amm-mins {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (min-sbtc-out uint)
+  )
+  (begin
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (asserts!
+      (is-eq amount
+        (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
+          (get velar amm-amounts)
+        ))
+      ERR_SPLIT_MISMATCH
+    )
+    (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
+    (let (
+        (user tx-sender)
+        (sbtc-before (sbtc-balance user))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap! update ERR_VAA_REQUIRED)
+            false
+          )
+          none
+        ))
+        (jing-in (jing-spent jing))
+        (residual (- jing-amount jing-in))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (dlmm (try! (leg-stx dlmm-in
+          (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
+          VENUE_DLMM
+        )))
+        (xyk (try! (leg-stx xyk-in
+          (scale-min (get xyk amm-mins) (get xyk amm-amounts) xyk-in)
+          VENUE_XYK
+        )))
+        (velar (try! (leg-stx velar-in
+          (scale-min (get velar amm-mins) (get velar amm-amounts) velar-in)
+          VENUE_VELAR
+        )))
+        (out (gain sbtc-before (sbtc-balance user)))
+      )
+      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
+      (print {
+        topic: "swap-stx-for-sbtc",
+        user: user,
+        amount: amount,
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (+ (if (is-none fallback)
+          residual
+          u0
+        )
+          (- dlmm-in (get in dlmm))
+        ),
+        out: out,
+      })
+    )
+  )
+)
+
+(define-constant PRICE_SCALE u10000000000) ;; PRICE_PRECISION * DECIMAL_FACTOR
+(define-constant BPS u10000)
+(define-constant CP_SAFETY u9980) ;; constant-product legs stop 20 bps short of the limit
+
+(define-private (xyk-keep (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
+    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
+      {
+        num: (- BPS (+ (get x-protocol-fee pool) (get x-provider-fee pool))),
+        den: BPS,
+      }
+      {
+        num: (- BPS (+ (get y-protocol-fee pool) (get y-provider-fee pool))),
+        den: BPS,
+      }
+    )
+  )
+)
+
+(define-private (velar-keep)
+  (let ((fees (unwrap-panic (contract-call? VELAR_FEES get-fees))))
+    {
+      num: (get num (get swap-fee fees)),
+      den: (get den (get swap-fee fees)),
+    }
+  )
+)
+
+(define-private (xyk-reserves (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
+    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
+      {
+        in: (get x-balance pool),
+        out: (get y-balance pool),
+      }
+      {
+        in: (get y-balance pool),
+        out: (get x-balance pool),
+      }
+    )
+  )
+)
+
+(define-private (velar-reserves (sell-sbtc bool))
+  (let ((pool (unwrap-panic (contract-call? VELAR_POOL get-pool))))
+    (if (is-eq (is-eq (get token0 pool) SBTC) sell-sbtc)
+      {
+        in: (get reserve0 pool),
+        out: (get reserve1 pool),
+      }
+      {
+        in: (get reserve1 pool),
+        out: (get reserve0 pool),
+      }
+    )
+  )
+)
+
+(define-private (cp-capacity
+    (r {
+      in: uint,
+      out: uint,
+    })
+    (k {
+      num: uint,
+      den: uint,
+    })
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (let ((top (if sell-sbtc
+      (/ (* (get out r) PRICE_SCALE (get num k)) (* limit (get den k)))
+      (/ (* (get out r) limit (get num k)) (* PRICE_SCALE (get den k)))
+    )))
+    (if (> top (get in r))
+      (/ (* (- top (get in r)) (get den k) CP_SAFETY) (* (get num k) BPS))
+      u0
+    )
+  )
+)
+
+(define-constant ROUND_SLACK u2)
+
+(define-private (limit-min
+    (leg uint)
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (let ((base (if (> leg ROUND_SLACK)
+      (- leg ROUND_SLACK)
+      u0
+    )))
+    (if sell-sbtc
+      (/ (* base limit) PRICE_SCALE)
+      (/ (* base PRICE_SCALE) limit)
+    )
+  )
+)
+
+(define-private (jing-size
+    (amount uint)
+    (limit uint)
+    (update (optional (buff 8192)))
+    (mid uint)
+    (sell-sbtc bool)
+  )
+  (match update
+    v (let (
+        (cap (get gross-cap
+          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc)
+        ))
+        (size (if (> cap amount)
+          amount
+          cap
+        ))
+        (net (- size (/ (* size u20) BPS)))
+        (mins (contract-call? JING_MARKET get-min-deposits))
+        (min-dep (if sell-sbtc
+          (get min-token-x mins)
+          (get min-token-y mins)
+        ))
+      )
+      (if (>= net min-dep)
+        size
+        u0
+      )
+    )
+    u0
+  )
+)
+
+(define-private (cp-split
+    (residual uint)
+    (cap-xyk uint)
+    (cap-velar uint)
+  )
+  (let ((total (+ cap-xyk cap-velar)))
+    (if (<= residual total)
+      (let ((xyk (if (> total u0)
+          (/ (* residual cap-xyk) total)
+          u0
+        )))
+        {
+          xyk: xyk,
+          velar: (- residual xyk),
+        }
+      )
+      {
+        xyk: cap-xyk,
+        velar: cap-velar,
+      }
+    )
+  )
+)
+
+(define-constant DLMM_PRICE_SCALE u100000000) ;; core PRICE_SCALE_BPS
+(define-constant DLMM_CENTER_BIN 500) ;; core CENTER_BIN_ID
+(define-constant DLMM_WALK_BINS (list
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
+  u21 u22 u23 u24 u25 u26 u27 u28 u29
+))
+
+(define-private (dlmm-bin-step
+    (i uint)
+    (acc {
+      bin: int,
+      up: bool,
+      threshold: uint,
+      initial-price: uint,
+      bin-step: uint,
+      fee: uint,
+      cap: uint,
+      done: bool,
+    })
+  )
+  (if (get done acc)
+    acc
+    (let (
+        (price (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price acc)
+          (get bin-step acc) (get bin acc)
+        )))
+        (bal (unwrap-panic (contract-call? DLMM_POOL get-bin-balances
+          (to-uint (+ (get bin acc) DLMM_CENTER_BIN))
+        )))
+        (ok-price (if (get up acc)
+          (<= price (get threshold acc))
+          (>= price (get threshold acc))
+        ))
+        (raw (if (get up acc)
+          (/ (+ (* (get x-balance bal) price) (- DLMM_PRICE_SCALE u1))
+            DLMM_PRICE_SCALE
+          )
+          (/ (+ (* (get y-balance bal) DLMM_PRICE_SCALE) (- price u1)) price)
+        ))
+        (grossed (if (> (get fee acc) u0)
+          (/ (* raw BPS) (- BPS (get fee acc)))
+          raw
+        ))
+      )
+      (if ok-price
+        (merge acc {
+          cap: (+ (get cap acc) grossed),
+          bin: (if (get up acc)
+            (+ (get bin acc) 1)
+            (- (get bin acc) 1)
+          ),
+        })
+        (merge acc { done: true })
+      )
+    )
+  )
+)
+
+(define-private (dlmm-capacity
+    (limit uint)
+    (sell-sbtc bool)
   )
   (let (
-      (current (get-token-equity token who))
-      (total (get-total-token-equity token))
-      (applied (if (> amount current)
-        current
-        amount
+      (pool (unwrap-panic (contract-call? DLMM_POOL get-pool)))
+      (fee (if sell-sbtc
+        (+ (get y-protocol-fee pool) (get y-provider-fee pool)
+          (get y-variable-fee pool)
+        )
+        (+ (get x-protocol-fee pool) (get x-provider-fee pool)
+          (get x-variable-fee pool)
+        )
       ))
     )
-    (map-set token-equity {
-      token: token,
-      owner: who,
-    }
-      (- current applied)
+    (get cap
+      (fold dlmm-bin-step DLMM_WALK_BINS {
+        bin: (get active-bin-id pool),
+        up: sell-sbtc,
+        threshold: (if sell-sbtc
+          (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) (- BPS fee)) BPS)
+          (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) BPS) (- BPS fee))
+        ),
+        initial-price: (get initial-price pool),
+        bin-step: (get bin-step pool),
+        fee: fee,
+        cap: u0,
+        done: false,
+      })
     )
-    (map-set total-token-equity token (- total applied))
-    true
   )
 )
-(define-private (credit-if-not-registered
-    (token principal)
-    (p principal)
+
+(define-private (amm-leg
     (amount uint)
+    (limit uint)
+    (sell-sbtc bool)
+    (venue uint)
   )
-  (if (is-registered p)
-    true
-    (credit token p amount)
-  )
-)
-(define-private (debit-if-not-registered
-    (token principal)
-    (p principal)
-    (amount uint)
-  )
-  (if (is-registered p)
-    true
-    (debit token p amount)
+  (if sell-sbtc
+    (leg-sbtc amount (limit-min amount limit true) venue)
+    (leg-stx amount (limit-min amount limit false) venue)
   )
 )
-(define-private (credit-if-registered
-    (token principal)
-    (p principal)
-    (amount uint)
+
+(define-private (dlmm-stage
+    (left uint)
+    (limit uint)
+    (sell-sbtc bool)
   )
-  (if (is-registered p)
-    (credit token p amount)
-    true
-  )
-)
-(define-private (check-not-paused)
-  (if (var-get paused)
-    ERR_PAUSED
-    (ok true)
-  )
-)
-(define-public (set-verified-contract (contract principal))
-  (let ((computed-hash (unwrap! (contract-hash? contract) ERR_INVALID_CONTRACT_HASH)))
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (is-none (map-get? verified-contracts contract))
-      ERR_ALREADY_REGISTERED
+  (if (is-eq left u0)
+    (ok {
+      cap: u0,
+      in: u0,
+      out: u0,
+    })
+    (let (
+        (cap (dlmm-capacity limit sell-sbtc))
+        (plan (if (> cap left)
+          left
+          cap
+        ))
+        (leg (try! (amm-leg plan limit sell-sbtc VENUE_DLMM)))
+      )
+      (ok {
+        cap: cap,
+        in: (get in leg),
+        out: (get out leg),
+      })
     )
-    (map-set verified-contracts contract computed-hash)
-    (print {
-      event: "verified-contract-set",
-      contract: contract,
-      hash: computed-hash,
-      by: tx-sender,
-    })
-    (ok true)
   )
 )
-(define-public (pause)
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (var-set paused true)
-    (var-set paused-at burn-block-height)
-    (print {
-      event: "paused",
-      by: tx-sender,
-      paused-at: burn-block-height,
-      eligible-at: (+ burn-block-height TIMELOCK_BURN_BLOCKS),
-    })
-    (ok true)
+
+(define-private (cp-stage
+    (left uint)
+    (limit uint)
+    (sell-sbtc bool)
   )
-)
-(define-public (unpause)
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (asserts! (var-get paused) ERR_NOT_PAUSED)
-    (asserts! (>= burn-block-height (+ (var-get paused-at) TIMELOCK_BURN_BLOCKS))
-      ERR_TIMELOCK_NOT_ELAPSED
+  (if (is-eq left u0)
+    (ok {
+      xyk-cap: u0,
+      velar-cap: u0,
+      xyk-in: u0,
+      xyk-out: u0,
+      velar-in: u0,
+      velar-out: u0,
+      unsold: u0,
+    })
+    (let (
+        (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit
+          sell-sbtc
+        ))
+        (cap-velar (cp-capacity (velar-reserves sell-sbtc) (velar-keep) limit sell-sbtc))
+        (plan (cp-split left cap-xyk cap-velar))
+        (xyk (try! (amm-leg (get xyk plan) limit sell-sbtc VENUE_XYK)))
+        (velar (try! (amm-leg (get velar plan) limit sell-sbtc VENUE_VELAR)))
+      )
+      (ok {
+        xyk-cap: cap-xyk,
+        velar-cap: cap-velar,
+        xyk-in: (get in xyk),
+        xyk-out: (get out xyk),
+        velar-in: (get in velar),
+        velar-out: (get out velar),
+        unsold: (- left (get xyk plan) (get velar plan)),
+      })
     )
-    (var-set paused false)
-    (print {
-      event: "unpaused",
-      by: tx-sender,
-    })
-    (ok true)
   )
 )
-(define-public (propose-owner (new-owner (optional principal)))
-  (begin
-    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
-    (var-set pending-owner new-owner)
-    (print {
-      event: "owner-proposed",
-      proposed-by: tx-sender,
-      pending-owner: new-owner,
-    })
-    (ok true)
-  )
-)
-(define-public (accept-owner)
-  (let ((pending (unwrap! (var-get pending-owner) ERR_NO_PENDING_OWNER)))
-    (asserts! (is-eq tx-sender pending) ERR_NOT_AUTHORIZED)
-    (var-set contract-owner pending)
-    (var-set pending-owner none)
-    (print {
-      event: "owner-accepted",
-      new-owner: pending,
-    })
-    (ok true)
-  )
-)
-(define-public (register (canonical principal))
-  (let (
-      (caller contract-caller)
-      (caller-hash (unwrap! (contract-hash? contract-caller) ERR_INVALID_CONTRACT_HASH))
-      (verified-hash (unwrap! (map-get? verified-contracts canonical) ERR_NOT_VERIFIED))
-    )
-    (asserts! (is-eq caller-hash verified-hash) ERR_HASH_MISMATCH)
-    (asserts! (is-none (map-get? registered-contracts caller))
-      ERR_ALREADY_REGISTERED
-    )
-    (map-set registered-contracts caller true)
-    (print {
-      event: "registered",
-      contract: caller,
-      canonical: canonical,
-      hash: caller-hash,
-    })
-    (ok true)
-  )
-)
-(define-public (log-deposit
-    (token principal)
-    (amount uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (credit token contract-caller amount)
-    (print {
-      event: "vault-deposit",
-      vault: contract-caller,
-      token: token,
-      amount: amount,
-      equity: (get-token-equity token contract-caller),
-    })
-    (ok true)
-  )
-)
-(define-public (log-withdraw
-    (token principal)
-    (amount uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit token contract-caller amount)
-    (print {
-      event: "vault-withdraw",
-      vault: contract-caller,
-      token: token,
-      amount: amount,
-      equity: (get-token-equity token contract-caller),
-    })
-    (ok true)
-  )
-)
-(define-public (log-revoke (target-hash (buff 32)))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "vault-revoke",
-      vault: contract-caller,
-      target-hash: target-hash,
-    })
-    (ok true)
-  )
-)
-(define-public (log-cancel
-    (market principal)
-    (token-in principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "vault-cancel",
-      vault: contract-caller,
-      market: market,
-      token-in: token-in,
-    })
-    (ok true)
-  )
-)
-(define-public (log-jing-deposit
-    (msg-hash (buff 32))
-    (market principal)
-    (token-in principal)
-    (token-out principal)
+
+(define-public (smart-swap-sbtc-for-stx
     (amount uint)
     (limit-price uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "vault-jing-deposit",
-      vault: contract-caller,
-      market: market,
-      msg-hash: msg-hash,
-      token-in: token-in,
-      token-out: token-out,
-      amount: amount,
-      limit-price: limit-price,
-    })
-    (ok true)
-  )
-)
-(define-public (log-bitflow-swap
-    (msg-hash (buff 32))
-    (token-in principal)
-    (token-out principal)
-    (amount uint)
-    (limit-price uint)
-    (out uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit token-in contract-caller amount)
-    (credit token-out contract-caller out)
-    (print {
-      event: "vault-bitflow-swap",
-      vault: contract-caller,
-      msg-hash: msg-hash,
-      token-in: token-in,
-      token-out: token-out,
-      amount: amount,
-      limit-price: limit-price,
-      out: out,
-      equity-in: (get-token-equity token-in contract-caller),
-      equity-out: (get-token-equity token-out contract-caller),
-    })
-    (ok true)
-  )
-)
-(define-public (log-deposit-x
-    (depositor principal)
-    (amount uint)
-    (delta uint)
-    (limit uint)
-    (cycle uint)
-    (bumped (optional principal))
-    (bumped-amount uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped
-      b (debit-if-not-registered token-x b bumped-amount)
-      true
-    )
-    (credit-if-not-registered token-x depositor delta)
-    (print {
-      event: "deposit-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      amount: amount,
-      delta: delta,
-      limit: limit,
-      cycle: cycle,
-      bumped: bumped,
-      bumped-amount: bumped-amount,
-      equity-x: (get-token-equity token-x depositor),
-      bumped-equity-x: (match bumped
-        b (some (get-token-equity token-x b))
-        none
-      ),
-    })
-    (ok true)
-  )
-)
-(define-public (log-deposit-y
-    (depositor principal)
-    (amount uint)
-    (delta uint)
-    (limit uint)
-    (cycle uint)
-    (bumped (optional principal))
-    (bumped-amount uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped
-      b (debit-if-not-registered token-y b bumped-amount)
-      true
-    )
-    (credit-if-not-registered token-y depositor delta)
-    (print {
-      event: "deposit-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      amount: amount,
-      delta: delta,
-      limit: limit,
-      cycle: cycle,
-      bumped: bumped,
-      bumped-amount: bumped-amount,
-      equity-y: (get-token-equity token-y depositor),
-      bumped-equity-y: (match bumped
-        b (some (get-token-equity token-y b))
-        none
-      ),
-    })
-    (ok true)
-  )
-)
-(define-public (log-refund-x
-    (depositor principal)
-    (amount uint)
-    (cycle uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit-if-not-registered token-x depositor amount)
-    (print {
-      event: "refund-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      amount: amount,
-      cycle: cycle,
-      equity-x: (get-token-equity token-x depositor),
-    })
-    (ok true)
-  )
-)
-(define-public (log-refund-y
-    (depositor principal)
-    (amount uint)
-    (cycle uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit-if-not-registered token-y depositor amount)
-    (print {
-      event: "refund-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      amount: amount,
-      cycle: cycle,
-      equity-y: (get-token-equity token-y depositor),
-    })
-    (ok true)
-  )
-)
-(define-public (log-set-limit-x
-    (depositor principal)
-    (limit uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "set-limit-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      limit: limit,
-    })
-    (ok true)
-  )
-)
-(define-public (log-set-limit-y
-    (depositor principal)
-    (limit uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "set-limit-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      limit: limit,
-    })
-    (ok true)
-  )
-)
-(define-public (log-close-deposits
-    (cycle uint)
-    (closed-at-block uint)
-    (elapsed-blocks uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "close-deposits",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      cycle: cycle,
-      closed-at-block: closed-at-block,
-      elapsed-blocks: elapsed-blocks,
-    })
-    (ok true)
-  )
-)
-(define-public (log-small-share-roll-x
-    (depositor principal)
-    (cycle uint)
-    (amount uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "small-share-roll-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      amount: amount,
-    })
-    (ok true)
-  )
-)
-(define-public (log-small-share-roll-y
-    (depositor principal)
-    (cycle uint)
-    (amount uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "small-share-roll-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      amount: amount,
-    })
-    (ok true)
-  )
-)
-(define-public (log-limit-roll-x
-    (depositor principal)
-    (cycle uint)
-    (amount uint)
-    (limit uint)
-    (clearing uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "limit-roll-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      amount: amount,
-      limit: limit,
-      clearing: clearing,
-    })
-    (ok true)
-  )
-)
-(define-public (log-limit-roll-y
-    (depositor principal)
-    (cycle uint)
-    (amount uint)
-    (limit uint)
-    (clearing uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "limit-roll-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      amount: amount,
-      limit: limit,
-      clearing: clearing,
-    })
-    (ok true)
-  )
-)
-(define-public (log-match
-    (taker principal)
-    (maker principal)
-    (y-is-taker bool)
-    (x-traded uint)
-    (y-traded uint)
-    (price uint)
+    (update (optional (buff 8192)))
     (mid uint)
-    (cycle uint)
-    (token-x principal)
-    (token-y principal)
+    (min-stx-out uint)
   )
   (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (if y-is-taker
-      (begin
-        (debit-if-not-registered token-y taker y-traded)
-        (debit-if-not-registered token-x maker x-traded)
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (asserts! (> limit-price u0) ERR_ZERO_LIMIT)
+    (asserts! (> mid u0) ERR_ZERO_MID)
+    (let (
+        (user tx-sender)
+        (stx-before (stx-get-balance user))
+        (jing-amount (jing-size amount limit-price update mid true))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap-panic update) true)
+          none
+        ))
+        (jing-in (jing-spent jing))
+        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price true)))
+        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price true)))
+        (out (gain stx-before (stx-get-balance user)))
       )
-      (begin
-        (debit-if-not-registered token-x taker x-traded)
-        (debit-if-not-registered token-y maker y-traded)
-      )
+      (asserts! (>= out min-stx-out) ERR_MIN_OUT)
+      (print {
+        topic: "smart-swap-sbtc-for-stx",
+        user: user,
+        amount: amount,
+        limit-price: limit-price,
+        jing-cap: jing-amount,
+        dlmm-cap: (get cap dlmm),
+        xyk-cap: (get xyk-cap cp),
+        velar-cap: (get velar-cap cp),
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
     )
-    (print {
-      event: "match",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      taker: taker,
-      maker: maker,
-      y-is-taker: y-is-taker,
-      x-traded: x-traded,
-      y-traded: y-traded,
-      price: price,
-      mid: mid,
-      cycle: cycle,
-    })
-    (ok true)
   )
 )
-(define-public (log-settlement
-    (cycle uint)
-    (oracle-price uint)
-    (clearing-price uint)
-    (x-cleared uint)
-    (y-cleared uint)
-    (x-unfilled uint)
-    (y-unfilled uint)
-    (x-fee uint)
-    (y-fee uint)
-    (x-rebate uint)
-    (y-rebate uint)
-    (x-is-binding bool)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "settlement",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      cycle: cycle,
-      oracle-price: oracle-price,
-      clearing-price: clearing-price,
-      x-cleared: x-cleared,
-      y-cleared: y-cleared,
-      x-unfilled: x-unfilled,
-      y-unfilled: y-unfilled,
-      x-fee: x-fee,
-      y-fee: y-fee,
-      x-rebate: x-rebate,
-      y-rebate: y-rebate,
-      binding-side: (if x-is-binding
-        "x"
-        "y"
-      ),
-    })
-    (ok true)
-  )
-)
-(define-public (log-distribute-x-depositor
-    (depositor principal)
-    (cycle uint)
-    (y-received uint)
-    (x-cleared uint)
-    (x-rolled uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (if (> x-cleared u0)
-      (debit token-x depositor x-cleared)
-      true
-    )
-    (credit-if-registered token-y depositor y-received)
-    (print {
-      event: "distribute-x-depositor",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      x-cleared: x-cleared,
-      y-received: y-received,
-      x-rolled: x-rolled,
-      equity-x: (get-token-equity token-x depositor),
-      equity-y: (get-token-equity token-y depositor),
-    })
-    (ok true)
-  )
-)
-(define-public (log-distribute-y-depositor
-    (depositor principal)
-    (cycle uint)
-    (x-received uint)
-    (y-cleared uint)
-    (y-rolled uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (if (> y-cleared u0)
-      (debit token-y depositor y-cleared)
-      true
-    )
-    (credit-if-registered token-x depositor x-received)
-    (print {
-      event: "distribute-y-depositor",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      cycle: cycle,
-      y-cleared: y-cleared,
-      x-received: x-received,
-      y-rolled: y-rolled,
-      equity-x: (get-token-equity token-x depositor),
-      equity-y: (get-token-equity token-y depositor),
-    })
-    (ok true)
-  )
-)
-(define-public (log-sweep-dust
-    (x-unfilled uint)
-    (y-unfilled uint)
-    (x-dust uint)
-    (x-payout-dust uint)
-    (x-roll-dust uint)
-    (y-dust uint)
-    (y-payout-dust uint)
-    (y-roll-dust uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "sweep-dust",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      x-unfilled: x-unfilled,
-      y-unfilled: y-unfilled,
-      x-dust: x-dust,
-      x-payout-dust: x-payout-dust,
-      x-roll-dust: x-roll-dust,
-      y-dust: y-dust,
-      y-payout-dust: y-payout-dust,
-      y-roll-dust: y-roll-dust,
-    })
-    (ok true)
-  )
-)
-(define-public (log-cancel-cycle
-    (cycle uint)
-    (x-rolled uint)
-    (y-rolled uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "cancel-cycle",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      cycle: cycle,
-      x-rolled: x-rolled,
-      y-rolled: y-rolled,
-    })
-    (ok true)
-  )
-)
-(define-public (log-rfq-open
-    (rfq-id uint)
-    (client principal)
-    (x-in uint)
-    (min-y-out uint)
-    (expiry uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "rfq-open",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      rfq-id: rfq-id,
-      client: client,
-      x-in: x-in,
-      min-y-out: min-y-out,
-      expiry: expiry,
-    })
-    (ok true)
-  )
-)
-(define-public (log-rfq-fill
-    (rfq-id uint)
-    (client principal)
-    (mm principal)
-    (x-in uint)
-    (y-out uint)
-    (y-fee uint)
-    (price uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "rfq-fill",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      rfq-id: rfq-id,
-      client: client,
-      mm: mm,
-      x-in: x-in,
-      y-out: y-out,
-      y-fee: y-fee,
-      price: price,
-    })
-    (ok true)
-  )
-)
-(define-public (log-rfq-cancel
-    (rfq-id uint)
-    (client principal)
-    (x-in uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "rfq-cancel",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      rfq-id: rfq-id,
-      client: client,
-      x-in: x-in,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-supply (amount uint))
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (credit SBTC_TOKEN contract-caller amount)
-    (print {
-      event: "reserve-supply",
-      reserve: contract-caller,
-      amount: amount,
-      sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller),
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-withdraw-sbtc (amount uint))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit SBTC_TOKEN contract-caller amount)
-    (print {
-      event: "reserve-withdraw-sbtc",
-      reserve: contract-caller,
-      amount: amount,
-      sbtc-equity: (get-token-equity SBTC_TOKEN contract-caller),
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-withdraw-stx (amount uint))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-withdraw-stx",
-      reserve: contract-caller,
-      amount: amount,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-open-credit-line
-    (snpl principal)
-    (borrower principal)
-    (cap-sbtc uint)
-    (interest-bps uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-open-credit-line",
-      reserve: contract-caller,
-      snpl: snpl,
-      borrower: borrower,
-      cap-sbtc: cap-sbtc,
-      interest-bps: interest-bps,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-set-credit-line-cap
-    (snpl principal)
-    (cap-sbtc uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-set-credit-line-cap",
-      reserve: contract-caller,
-      snpl: snpl,
-      cap-sbtc: cap-sbtc,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-set-credit-line-interest
-    (snpl principal)
-    (interest-bps uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-set-credit-line-interest",
-      reserve: contract-caller,
-      snpl: snpl,
-      interest-bps: interest-bps,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-close-credit-line (snpl principal))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-close-credit-line",
-      reserve: contract-caller,
-      snpl: snpl,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-set-paused (paused-state bool))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-set-paused",
-      reserve: contract-caller,
-      paused: paused-state,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-set-min-sbtc-draw (amount uint))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-set-min-sbtc-draw",
-      reserve: contract-caller,
-      amount: amount,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-draw
-    (snpl principal)
-    (amount uint)
-    (new-outstanding-sbtc uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-draw",
-      reserve: contract-caller,
-      snpl: snpl,
-      amount: amount,
-      new-outstanding-sbtc: new-outstanding-sbtc,
-    })
-    (ok true)
-  )
-)
-(define-public (log-reserve-notify-return
-    (snpl principal)
-    (amount uint)
-    (new-outstanding-sbtc uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "reserve-notify-return",
-      reserve: contract-caller,
-      snpl: snpl,
-      amount: amount,
-      new-outstanding-sbtc: new-outstanding-sbtc,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-set-reserve (reserve principal))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "snpl-set-reserve",
-      snpl: contract-caller,
-      reserve: reserve,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-borrow
-    (loan-id uint)
-    (borrower principal)
-    (amount uint)
-    (interest-bps uint)
-    (deadline uint)
-    (reserve principal)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "snpl-borrow",
-      snpl: contract-caller,
-      loan-id: loan-id,
-      borrower: borrower,
-      amount: amount,
-      interest-bps: interest-bps,
-      deadline: deadline,
-      reserve: reserve,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-swap-deposit
-    (loan-id uint)
-    (amount uint)
-    (limit uint)
-    (cycle uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "snpl-swap-deposit",
-      snpl: contract-caller,
-      loan-id: loan-id,
-      amount: amount,
-      limit: limit,
-      cycle: cycle,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-cancel-swap (loan-id uint))
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "snpl-cancel-swap",
-      snpl: contract-caller,
-      loan-id: loan-id,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-set-swap-limit
-    (loan-id uint)
-    (limit-price uint)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "snpl-set-swap-limit",
-      snpl: contract-caller,
-      loan-id: loan-id,
-      limit-price: limit-price,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-repay
-    (loan-id uint)
-    (payoff-sbtc uint)
-    (lender-payoff-sbtc uint)
-    (fee-sbtc uint)
-    (delta-sbtc uint)
-    (is-shortfall bool)
-    (token-y-released uint)
-    (reserve principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit token-y contract-caller token-y-released)
-    (print {
-      event: "snpl-repay",
-      snpl: contract-caller,
-      loan-id: loan-id,
-      payoff-sbtc: payoff-sbtc,
-      lender-payoff-sbtc: lender-payoff-sbtc,
-      fee-sbtc: fee-sbtc,
-      delta-sbtc: delta-sbtc,
-      is-shortfall: is-shortfall,
-      token-y: token-y,
-      token-y-released: token-y-released,
-      reserve: reserve,
-    })
-    (ok true)
-  )
-)
-(define-public (log-snpl-seize
-    (loan-id uint)
-    (token-y-seized uint)
-    (sbtc-seized uint)
-    (reserve principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit token-y contract-caller token-y-seized)
-    (print {
-      event: "snpl-seize",
-      snpl: contract-caller,
-      loan-id: loan-id,
-      token-y: token-y,
-      token-y-seized: token-y-seized,
-      sbtc-seized: sbtc-seized,
-      reserve: reserve,
-    })
-    (ok true)
-  )
-)
-(define-public (log-jing-swap
-    (msg-hash (buff 32))
-    (market principal)
-    (token-in principal)
-    (token-out principal)
+
+(define-public (smart-swap-stx-for-sbtc
     (amount uint)
     (limit-price uint)
-    (out uint)
+    (update (optional (buff 8192)))
+    (mid uint)
+    (min-sbtc-out uint)
   )
   (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (debit token-in contract-caller amount)
-    (credit token-out contract-caller out)
-    (print {
-      event: "vault-jing-swap",
-      vault: contract-caller,
-      market: market,
-      msg-hash: msg-hash,
-      token-in: token-in,
-      token-out: token-out,
-      amount: amount,
-      limit-price: limit-price,
-      out: out,
-      equity-in: (get-token-equity token-in contract-caller),
-      equity-out: (get-token-equity token-out contract-caller),
-    })
-    (ok true)
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (asserts! (> limit-price u0) ERR_ZERO_LIMIT)
+    (asserts! (> mid u0) ERR_ZERO_MID)
+    (let (
+        (user tx-sender)
+        (sbtc-before (sbtc-balance user))
+        (jing-amount (jing-size amount limit-price update mid false))
+        (jing (if (> jing-amount u0)
+          (jing-swap jing-amount limit-price (unwrap-panic update) false)
+          none
+        ))
+        (jing-in (jing-spent jing))
+        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price false)))
+        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price false)))
+        (out (gain sbtc-before (sbtc-balance user)))
+      )
+      (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
+      (print {
+        topic: "smart-swap-stx-for-sbtc",
+        user: user,
+        amount: amount,
+        limit-price: limit-price,
+        jing-cap: jing-amount,
+        dlmm-cap: (get cap dlmm),
+        xyk-cap: (get xyk-cap cp),
+        velar-cap: (get velar-cap cp),
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+      (ok {
+        jing-ok: (is-some jing),
+        jing-in: jing-in,
+        jing-out: (jing-out jing),
+        dlmm-in: (get in dlmm),
+        dlmm-out: (get out dlmm),
+        xyk-in: (get xyk-in cp),
+        xyk-out: (get xyk-out cp),
+        velar-in: (get velar-in cp),
+        velar-out: (get velar-out cp),
+        unsold: (get unsold cp),
+        out: out,
+      })
+    )
+  )
+)
+
+(define-read-only (get-jing-min-deposits)
+  (contract-call?
+    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v5
+    get-min-deposits
   )
 )
