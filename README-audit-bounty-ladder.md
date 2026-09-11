@@ -28,9 +28,13 @@ carries all of it.
 | 6 | Sonic Mast | Direct sBTC/STX transfer to a rung sits outside the indices, "stuck" | no | INFO | It is a gift, not stuck: `sync` folds the balance into `held-*`, the next deposit pushes it to the market and the proceeds reach members. No change. |
 | 7 | Proud Haven | Partial withdraws burn too few shares once the index is under 1; 98 x `withdraw(u1)` takes 98 sats from a 66-sat position, the rest of the pool pays | yes | HIGH | **Fixed**: the share burn rounds up (section 7). Novel, mainnet-fork PoC, first to report. |
 | 7b | Stable Troll | Same finding, one day later, no PoC | yes | HIGH | Duplicate of 7. |
+| 8 | Digital Sprite | Vault owner checks use `tx-sender`: an owner who calls an attacker's contract lets it call `set-owner-pubkey` / `set-keeper` and take over signing | no | HIGH | **Rejected, proxy class.** Needs the owner to sign a call into a hostile contract first; the owner only calls the vault from the known front end. Withdrawals pay the immutable OWNER either way. |
+| 8b | Celestial Mast | Same on `jing-ladder`: `propose-owner` / `set-canonical` through a proxy the owner calls | no | HIGH | Same class as 8, rejected. |
 | 6b | Sonic Mast | Rung `initialize` cannot run in clarinet simnet (`principal-destruct?` errs on ST principals) | yes | tooling | **Skipped on purpose.** Rungs are tested on stxer mainnet forks and mainnet-flavoured clarinet, where SP principals destruct fine. |
 
-Leading submission so far: **Proud Haven** (7), ahead of Watchful Node (5). The bounty stays open until 2026-09-22; entries filed after 2026-09-08 are reviewed the same way and the winner is picked, accepted and paid from `SP3EKD9…` then.
+Leading submission: **Proud Haven** (7), the only HIGH that holds, novel,
+first, with a mainnet-fork PoC; Watchful Node (5) second. Bounty closes
+2026-09-22. The bounty stays open until 2026-09-22; entries filed after 2026-09-08 are reviewed the same way and the winner is picked, accepted and paid from `SP3EKD9…` then.
 
 ## 1. MIN_MARKET bounce: dust by design, minimum now read live
 
@@ -170,6 +174,11 @@ ladder's canonical must point at the new deploy.
 - Stray transfers (6): a gift to the current members, both assets, converted
   at the rung price. A gift to an empty rung waits for the first member.
 - Simnet `principal-destruct?` (6b): mainnet only testing here.
+- Proxy / confused deputy (8, 8b): the precondition is the owner signing a
+  transaction into a contract they do not know, which is the same trust
+  failure as handing over the key. Admin calls come from the known front
+  end. Not accepted as a finding; `contract-caller` on the four admin
+  asserts stays an option if that ever changes.
 
 ## Verification
 
