@@ -329,6 +329,31 @@ worth knowing when reading the book or the logs:
   Closed by the under-minimum refund above: the crumb, and any partial
   remainder under the minimum, now goes back to the maker in the fill.
 
+## Sponsor-friendly deposits: `deposit(amount, 0x00)` + `push(update)`
+
+A member's rung deposit is a plain token transfer signed offline and
+sponsored by us; the member never fetches an oracle update. `deposit` takes
+the update argument as before, but the member passes an empty buffer
+(`0x00`). When the market needs no price (the other side is empty, the
+queue not full) the funds go straight onto the market; when it does, the
+market refuses the empty update and the rung holds the funds (shares
+minted, the position counts them). Any keeper then calls the new public
+`push (update)` on the rung: it syncs, and pushes everything held when the
+pool reaches the market minimum. `(ok true)` when pushed, `(ok false)` when
+nothing is held, the pool is under the minimum, or the market refuses (the
+funds stay held). The ladder logs `rung-push` (`keeper`, `amount`,
+`pushed`, `held`). All four rungs; `withdraw` and `claim` are unchanged.
+
+Proven by `verify-v6-rungs-push-lazer.js` (`1ce4e4882360121c6d2fa78f4ec12161`, 39/39):
+a 0x00 deposit held while the other side rests, `push(0x00)` refused,
+`push(update)` by a stranger pushes and logs, push with nothing held is
+`(ok false)`, a top-up under the minimum held then pushed onto the live
+position, the sell peg rung mirror, and the real flow: a deposit carrying a
+STALE but genuinely signed update (the member pre-signed, we broadcast
+later) lands the sats in the rung held (step 31), the keeper's push with
+the same stale update is refused (step 34), the push with a fresh update
+puts them on the market (step 35).
+
 ## Verification (2026-09-11, stxer mainnet forks, all rerun after the parked-deposit change)
 
 The v4 market harness set ported mechanically to the v6 arity
@@ -358,10 +383,10 @@ ladder key.
 
 | Rung | Result | Simulation |
 |------|--------|------------|
-| buy fixed | 37/37 | `385096157e4252c1b78e93d6ffaba404` |
-| sell fixed | 37/37 | `b29151793c790384bdddca8c9a7133e3` |
-| buy peg | 40/40 | `00f369c93f2efabee59836986da49890` |
-| sell peg | 40/40 | `3b57cbbcc49c70b0464a1d7e7f3504fb` |
+| buy fixed | 37/37 | `c4ecedffc880d61b0750f1ca9dce1f7a` |
+| sell fixed | 37/37 | `5aeef25f0b561c8f4455c7f9245dc173` |
+| buy peg | 40/40 | `c223128736f4b27d74018e74f37bdfc3` |
+| sell peg | 40/40 | `22c38ce345ee1e22f6678118a68cfcdf` |
 
 The pegged path with a real mid (`PYTH_API_KEY`):
 
@@ -393,6 +418,7 @@ npm run verify:v6-stress-pegs      # PYTH_API_KEY=...
 npm run verify:v6-peg-track        # PYTH_API_KEY=... (waits WAIT=75 s between two prints)
 npm run verify:v6-peg-edges        # PYTH_API_KEY=...
 npm run verify:v6-peg-mirror       # PYTH_API_KEY=...
+npm run verify:v6-rungs-push       # PYTH_API_KEY=...
 ```
 
 Not covered yet: `reprice-or-swap-token-y` with a spread (the x side is), a

@@ -309,6 +309,34 @@
 ;; held here first, then from the market by partial withdrawal; if that would
 ;; leave the market position under the market minimum the whole position is cancelled
 ;; and the rest held here for the others.
+;; Push what this contract holds onto the market. Sponsor-friendly deposits:
+;; a member's `deposit` with an empty update (0x00) needs no oracle read from
+;; the member; when the market needs a price the funds are held here, and
+;; any keeper pushes them later with a fresh update. (ok true) when pushed,
+;; (ok false) when there is nothing to push, the pool is under the market
+;; minimum, or the market refuses (the funds stay held).
+(define-public (push (update (buff 8192)))
+  (begin
+    (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+    (try! (sync))
+    (let (
+        (to-push (var-get held-sats))
+        (pushed (and
+          (> to-push u0)
+          (>= (+ to-push (market-size)) (min-market))
+          (is-ok (push-to-market to-push update))
+        ))
+      )
+      (if pushed
+        (var-set held-sats u0)
+        true
+      )
+      (try! (contract-call? LADDER log-push tx-sender to-push pushed (var-get held-sats)))
+      (ok pushed)
+    )
+  )
+)
+
 (define-public (withdraw (amount uint))
   (let (
       (member tx-sender)

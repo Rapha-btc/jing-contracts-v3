@@ -201,6 +201,27 @@
   )
 )
 
+(define-public (log-push
+    (keeper principal)
+    (amount uint)
+    (pushed bool)
+    (held uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-push",
+      rung: contract-caller,
+      side: (get side rung),
+      price: (get price rung),
+      keeper: keeper,
+      amount: amount,
+      pushed: pushed,
+      held: held,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-withdraw
     (member principal)
     (amount uint)
