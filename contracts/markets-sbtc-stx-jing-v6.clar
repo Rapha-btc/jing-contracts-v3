@@ -510,59 +510,6 @@
   )
 )
 
-(define-private (roll-token-y-depositor (depositor principal))
-  (let ((cycle (var-get current-cycle)))
-    (map-set token-y-deposits {
-      cycle: (+ cycle u1),
-      depositor: depositor,
-    }
-      (get-token-y-deposit cycle depositor)
-    )
-    (map-delete token-y-deposits {
-      cycle: cycle,
-      depositor: depositor,
-    })
-  )
-)
-
-(define-private (roll-token-x-depositor (depositor principal))
-  (let ((cycle (var-get current-cycle)))
-    (map-set token-x-deposits {
-      cycle: (+ cycle u1),
-      depositor: depositor,
-    }
-      (get-token-x-deposit cycle depositor)
-    )
-    (map-delete token-x-deposits {
-      cycle: cycle,
-      depositor: depositor,
-    })
-  )
-)
-
-(define-private (roll-depositor-lists (cycle uint))
-  (let ((next-cycle (+ cycle u1)))
-    (map-set token-y-depositor-list next-cycle
-      (unwrap-panic (as-max-len?
-        (concat (get-token-y-depositors next-cycle)
-          (get-token-y-depositors cycle)
-        )
-        u50
-      ))
-    )
-    (map-set token-x-depositor-list next-cycle
-      (unwrap-panic (as-max-len?
-        (concat (get-token-x-depositors next-cycle)
-          (get-token-x-depositors cycle)
-        )
-        u50
-      ))
-    )
-    (map-delete token-y-depositor-list cycle)
-    (map-delete token-x-depositor-list cycle)
-  )
-)
-
 (define-private (pick-feed
     (f {
       feed-id: uint,
