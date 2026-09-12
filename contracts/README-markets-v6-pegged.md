@@ -272,10 +272,8 @@ zero-spread peg, core-v5 authority). Twenty-three runs, all green.
 Closed as well: the under-minimum refund (section above), all 23 rerun
 green on it.
 
-Outside the market: router v4 and vault v5 bind market v5 and call the v5
-arities; retail trades through the router, so the deploy needs a router
-rebind to v6 and the router harness ported (about 250 checks), same for the
-vault.
+Outside the market: done as well, router v5 and vault v6 (section below),
+247/247 and 133/133 on the next stack from source.
 
 ## A maker left under the minimum is refunded
 
@@ -348,6 +346,33 @@ prune of cycles 0..4 by a stranger, lists and totals gone, the settlement
 price of a pruned cycle still reads, the open cycle and a future cycle
 refused, a repeat prune harmless, and a swap settling the open cycle right
 after the prune with the walk still finding its makers.
+
+## Router v5 and vault v6: the rest of the deploy set
+
+`swap-router-sbtc-stx-jing-v5.clar` is the router v4 bytes bound to
+`markets-sbtc-stx-jing-v6` (the constant and the literal in
+`get-jing-min-deposits`). The router only calls `swap`, `get-taker-capacity`
+and `get-min-deposits`, whose arities did not change, so nothing else moves.
+`vault-sbtc-stx-v6.clar` is the vault v5 source bound to market v6, router
+v5 and `jing-core-v5`, with `none` in the spread slot of its six market
+calls that carry a limit price (deposit, set-limit, reprice-or-swap, both
+sides): a vault order stays a fixed order. Router v4 and vault v5 stay in
+the repo as they are.
+
+| Harness | Stack | Result | Simulation |
+|---|---|---|---|
+| `verify-swap-router-v3-lazer.js` `V6=1` | core-v5 + market v6 + router v5 deployed from source under chavita; every market limit call passes `none`; two expectations moved: W9d's rolled dust is refunded by the v6 fill (nothing to cancel, u1005), W9f's XYK / Velar spill-over depends on the DLMM's room on the day | 247/247 | `ecb91152db7534fda4dcda733f04bb3f` |
+| `verify-vault-sbtc-stx-v6-parked.js` | the v5 parked-order harness on the next stack, deployed first on the fork (the live `jing-vault-auth` stays); P0 deploys instead of clearing a live book | 133/133 | `e4eb4ba0bd5fbf74035653f9d634a7ff` |
+
+```bash
+npm run verify:router-v5           # PYTH_API_KEY=... (V6=1 on the router harness)
+npm run verify:vault-v6-parked     # PYTH_API_KEY=...
+```
+
+Deploy order, repo names: `jing-core-v5`, `set-verified-contract` for each
+of market v6 and vault v6, `markets-sbtc-stx-jing-v6` + `initialize`
+(feeds u1 / u45), `swap-router-sbtc-stx-jing-v5`, `vault-sbtc-stx-v6` +
+`initialize`, then `jing-ladder` and the rungs.
 
 ## Sponsor-friendly deposits: `deposit(amount, 0x00)` + `push(update)`
 
