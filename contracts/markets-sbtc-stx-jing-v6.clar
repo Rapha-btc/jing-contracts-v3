@@ -55,6 +55,7 @@
 (define-constant ERR_USE_CANCEL (err u1024))
 (define-constant ERR_FEED_TIMESTAMP_MISSING (err u1025))
 (define-constant ERR_BAD_SPREAD (err u1026))
+(define-constant ERR_CYCLE_OPEN (err u1027))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -2966,6 +2967,23 @@
       gross-cap: (gross-up net-cap),
     }
   )
+)
+
+(define-private (prune-one
+    (cycle uint)
+    (acc (response uint uint))
+  )
+  (let ((pruned (try! acc)))
+    (asserts! (< cycle (var-get current-cycle)) ERR_CYCLE_OPEN)
+    (map-delete token-y-depositor-list cycle)
+    (map-delete token-x-depositor-list cycle)
+    (map-delete cycle-totals cycle)
+    (ok (+ pruned u1))
+  )
+)
+
+(define-public (prune-cycles (cycles (list 50 uint)))
+  (fold prune-one cycles (ok u0))
 )
 
 (define-public (refresh-mid (update (buff 8192)))

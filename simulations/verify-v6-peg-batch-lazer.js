@@ -16,11 +16,14 @@
 //   E  exact arithmetic when one swap clears the batch AND walks a peg: the
 //      fixed in-range maker clears at mid, the residual fills the peg at
 //      mid -/+ spread; both sides
+//   Q  prune-cycles: anyone deletes the depositor lists and totals of settled
+//      cycles; the open cycle and a future one are refused (u1027, atomic);
+//      settlements stay; the market settles the next cycle after the prune
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-peg-batch-lazer.js
 import fs from "node:fs";
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, trueCV, falseCV,
-  noneCV, someCV, deserializeCV, cvToString, hexToCV, getAddressFromPrivateKey,
+  noneCV, someCV, listCV, deserializeCV, cvToString, hexToCV, getAddressFromPrivateKey,
 } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
@@ -57,7 +60,7 @@ async function main() {
 
   // actors (fresh keys, funded in-sim)
   const Y1 = mk(61), Y3 = mk(63), X1 = mk(64), X2 = mk(65), T1 = mk(66), T2 = mk(67), T3 = mk(68);
-  const Y4 = mk(69), Y5 = mk(71), X4 = mk(72), X5 = mk(73), T4 = mk(74), S2 = mk(75), S3 = mk(76);
+  const Y4 = mk(69), Y5 = mk(71), X4 = mk(72), X5 = mk(73), T4 = mk(74), S2 = mk(75), S3 = mk(76), T5 = mk(77);
   const Y2 = S; // the 600 STX in-range bid comes straight from the STX whale
 
   // ---- Z sizing: x binding, Y3 under 0.2% of the side ----
@@ -176,6 +179,27 @@ async function main() {
   ev("E15 S2 nothing left", depOfY(5, S2), "u0");
   ev("E16 Y5 rolled intact through a settlement it did not touch", depOfY(5, Y5), `u${Y5_LEFT}`);
   ev(`E17 settlement u4 y-cleared ${E_YC}`, "(get token-y-cleared (unwrap-panic (get-settlement u4)))", `u${E_YC}`);
+
+  // =============== Q: prune settled cycles (permissionless) ===============
+  ev("Q0 cycle u5 open; cycle u0 list still stored", "(len (get-token-y-depositors u0))", (v) => uintOf(v) > 0n);
+  tx("Q1 prune u0..u4 by anyone -> (ok u5)", call(T3, "prune-cycles", [listCV([uintCV(0), uintCV(1), uintCV(2), uintCV(3), uintCV(4)])]), "(ok u5)");
+  ev("Q1 cycle u0 y list gone", "(len (get-token-y-depositors u0))", "u0");
+  ev("Q1 cycle u3 x list gone", "(len (get-token-x-depositors u3))", "u0");
+  ev("Q1 cycle u4 totals gone", "(get-cycle-totals u4)", (v) => field(v, "total-token-x") === "u0" && field(v, "total-token-y") === "u0");
+  ev("Q1 settlements kept (u4 price = mid)", "(get price (unwrap-panic (get-settlement u4)))", `u${MID}`);
+  ev("Q1 the open cycle untouched (Y5, X5 still resting)", "(len (get-token-y-depositors u5))", (v) => uintOf(v) > 0n);
+  tx("Q2 prune the open cycle u5 -> u1027, atomic", call(T3, "prune-cycles", [listCV([uintCV(1), uintCV(5)])]), "(err u1027)");
+  tx("Q3 prune u0 again (nothing there) -> (ok u1)", call(T3, "prune-cycles", [listCV([uintCV(0)])]), "(ok u1)");
+  tx("Q4 prune a future cycle u99 -> u1027", call(T3, "prune-cycles", [listCV([uintCV(99)])]), "(err u1027)");
+  tx("Q4 prune the open cycle alone -> u1027", call(T3, "prune-cycles", [listCV([uintCV(5)])]), "(err u1027)");
+  // the market keeps working with every settled cycle pruned: a swap settles u5
+  tx("Q5 fund T5", stxSend(T5, 1_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("Q5 fund T5 sats", satsSend(T5, 1100n), "(ok true)");
+  tx("Q5 T5 sells 1000 sats after the prune: cycle u5 settles, walks Y5 at mid - 30 bps", swap(T5, grossFor(1000n), PB(35n), true), (v) => String(v).startsWith("(ok"));
+  ev("Q5 cycle u6", "(get-current-cycle)", "u6");
+  ev("Q5 settlement u5 recorded at mid", "(get price (unwrap-panic (get-settlement u5)))", `u${MID}`);
+  ev(`Q5 Y5 walked: ${Y5_LEFT - (1000n * PB(30n)) / PPDF} left`, depOfY(6, Y5), `u${Y5_LEFT - (1000n * PB(30n)) / PPDF}`);
+  tx("Q5 prune u5 now that it is settled -> (ok u1)", call(T3, "prune-cycles", [listCV([uintCV(5)])]), "(ok u1)");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

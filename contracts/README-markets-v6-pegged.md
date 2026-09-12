@@ -329,6 +329,26 @@ worth knowing when reading the book or the logs:
   Closed by the under-minimum refund above: the crumb, and any partial
   remainder under the minimum, now goes back to the maker in the fill.
 
+## Pruning settled cycles
+
+Per settled cycle the market leaves three entries behind that nothing reads
+again: `token-x-depositor-list`, `token-y-depositor-list` and
+`cycle-totals` for that cycle (every map read in the contract is keyed by
+the current or the next cycle; the only mention of a past cycle is the
+number written into the `match` log). `prune-cycles (cycles (list 50 uint))`
+deletes them for any cycle strictly below the current one, callable by
+anyone. An open or future cycle in the list is `u1027 ERR_CYCLE_OPEN` and
+the call is atomic. `settlements` is never pruned: it is the on-chain
+history. Deposit entries need no pruning, they are deleted as each maker is
+processed. The three private roll helpers left from the v4 cancel-cycle
+(`roll-token-x/y-depositor`, `roll-depositor-lists`) are deleted.
+
+Proven in `verify-v6-peg-batch-lazer.js` section Q (`9f14470c9cbdbbcd5fd2793a335555d1`, 92/92):
+prune of cycles 0..4 by a stranger, lists and totals gone, the settlement
+price of a pruned cycle still reads, the open cycle and a future cycle
+refused, a repeat prune harmless, and a swap settling the open cycle right
+after the prune with the walk still finding its makers.
+
 ## Sponsor-friendly deposits: `deposit(amount, 0x00)` + `push(update)`
 
 A member's rung deposit is a plain token transfer signed offline and
@@ -396,7 +416,7 @@ The pegged path with a real mid (`PYTH_API_KEY`):
 | `verify-v6-rungs-fill-lazer.js` | fixed rungs on v6: ask 1% over / bid 1% under mid, taker walks each at the rung's price, sync, claim, balances move by the proceeds, the other rung rolls with its own limit, full exits | 40/40 | `ae7f70db63c2d1129beaeaf81a5d6608` |
 | `verify-v6-peg-more-lazer.js` | `get-taker-capacity` against a pegged book (an in-band peg counts once the taker's limit reaches it, an out-of-band peg never); two members in one peg rung through a real fill: pro-rata unsold and proceeds, five 1-sat withdraws burn at least their value (fix 7 on the real market) and leave their rounding dust held for the next epoch, full exits leave total-shares 0 and the rung's sats equal to that dust; `reprice-or-swap-token-x` fixed -> 30 bps peg (plain reprice, no y side), u1026, then to a zero-spread peg against a resting bid: crosses and swaps | 51/51 | `21b62ec9cc83d335be54d3b4004f1553` |
 | `verify-v6-peg-park-lazer.js` | 49 fillers + an out-of-band peg rung fill the x queue; an in-range newcomer parks the inactive peg first; parked: sync counts it, a member withdraws from it, a deposit on the full queue is held, after a filler leaves the next deposit readmits and pushes everything | 36/36 | `f8d0ef12f4a6d9f162f8f2f99eb32549` |
-| `verify-v6-peg-batch-lazer.js` | a zero-spread peg clears IN THE BATCH pro-rata next to a fixed bid (exact sats received, exact STX left); a tiny zero-spread peg is rolled by the small-share filter with its order intact; settlement price is the mid; `peg-y` logged only for `(some ..)` writes; an all-peg book: keeper `settle-with-refresh` u1009, a taker demanding 1 over the pegged bid u1017 (atomic), a taker at exactly the pegged bid fills, every other peg rolls intact; lifecycle: partial withdraw keeps the peg, cancel and full fill delete the order; exact arithmetic for one swap that clears the batch and walks a peg, both sides | 74/74 | `7e3d3de48e676b76d23e6912856d18c7` |
+| `verify-v6-peg-batch-lazer.js` | a zero-spread peg clears IN THE BATCH pro-rata next to a fixed bid (exact sats received, exact STX left); a tiny zero-spread peg is rolled by the small-share filter with its order intact; settlement price is the mid; `peg-y` logged only for `(some ..)` writes; an all-peg book: keeper `settle-with-refresh` u1009, a taker demanding 1 over the pegged bid u1017 (atomic), a taker at exactly the pegged bid fills, every other peg rolls intact; lifecycle: partial withdraw keeps the peg, cancel and full fill delete the order; exact arithmetic for one swap that clears the batch and walks a peg, both sides | 92/92 | `9f14470c9cbdbbcd5fd2793a335555d1` |
 | `verify-v6-peg-walk-order-lazer.js` | a mixed book (pegs +10/+20/+50 bps, fixed +15/+100, a +30 peg rung): a taker at +35 fills +10, +15, +20, +30 in that order (match log price sequence), never +50/+100; boundaries: 1 under the best ask u1017 (whole swap reverted), exactly the best ask fills that maker only; mirrored on the bid side with a sell-stx peg rung | 60/60 | `e95b46d52245f5759f8db2a69c081136` |
 | `verify-v6-peg-park-y-lazer.js` | y-side park: 49 fillers + an inactive sell-peg rung, an in-range newcomer parks the rung first; parked rung flows (sync, withdraw, a deposit on the full queue bumps a filler and the rung is live again); a direct out-of-band zero-spread peg bumps the smallest deposit on a full queue, is parked by the next in-range newcomer, re-pegs to zero spread while parked, readmit u1016 while an in-range ask rests, ok once it leaves, u1022 after; a second in-band rung too small for the full queue is held, then bumps; a parked direct maker deposits: combined size bumps, `readmit-y` printed | 70/70 | `abe05622800e6145fecbb3d02ac622e6` |
 | `verify-markets-v6-stress.js` `PEGS=1` | seed 7, 60 actions, half the maker writes carry a random spread (0 / 5 / 20 / 50 / 150 bps) with the limit as ceiling / floor; I1-I5 as before plus I6: every resting order's `token-*-limit-at` equals a JS mirror of `pegged-bid` / `pegged-ask` (sentinels included) at every checkpoint | 131/131 | `d0089123a22431bff7420dd8aab8b905` |
