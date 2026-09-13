@@ -62,6 +62,14 @@
 (define-data-var paused bool false)
 (define-data-var min-token-y-deposit uint u0)
 (define-data-var min-token-x-deposit uint u0)
+;; The N best-priced slots on a full book compete on PRICE: a newcomer that
+;; beats the N-th best price takes its slot, and the N-th best is demoted to
+;; the size region, where it stays if it is bigger than the smallest
+;; resident there (that one is parked) and is parked otherwise. Every other
+;; slot competes on SIZE. Whales outside the N best are never parked on
+;; price, so no ladder of small orders can drain them. 0 = size only.
+(define-data-var distance-slots uint u10)
+(define-read-only (get-distance-slots) (var-get distance-slots))
 (define-data-var current-cycle uint u0)
 
 (define-data-var settle-token-y-cleared uint u0)
@@ -399,115 +407,385 @@
   (not (is-eq entry (var-get bumped-token-x-principal)))
 )
 
-(define-private (find-parkable-token-y-fold
-    (depositor principal)
-    (acc {
-      price: uint,
-      gap: uint,
-      found: (optional principal),
-    })
-  )
-  (let ((limit (token-y-limit-at depositor (get price acc))))
-    (if (and (> (get price acc) limit) (> (- (get price acc) limit) (get gap acc)))
-      (merge acc {
-        gap: (- (get price acc) limit),
-        found: (some depositor),
-      })
-      acc
-    )
-  )
-)
-(define-private (find-parkable-token-x-fold
-    (depositor principal)
-    (acc {
-      price: uint,
-      gap: uint,
-      found: (optional principal),
-    })
-  )
-  (let ((limit (token-x-limit-at depositor (get price acc))))
-    (if (and (< (get price acc) limit) (> (- limit (get price acc)) (get gap acc)))
-      (merge acc {
-        gap: (- limit (get price acc)),
-        found: (some depositor),
-      })
-      acc
-    )
-  )
-)
 
-(define-private (park-one-token-y
-    (cycle uint)
-    (price uint)
+(define-private (top-y-insert
+    (entry {
+      who: principal,
+      l: uint,
+    })
+    (acc {
+      e: {
+        who: principal,
+        l: uint,
+      },
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+      placed: bool,
+    })
   )
-  (let ((depositors (get-token-y-depositors cycle)))
-    (match (get found
-      (fold find-parkable-token-y-fold depositors {
-        price: price,
-        gap: u0,
-        found: none,
-      })
-    )
-      who (let (
-          (amount (get-token-y-deposit cycle who))
-          (totals (get-cycle-totals cycle))
+  ;; bids: best = highest l; a new entry goes AFTER equals (time priority)
+  (if (and (not (get placed acc)) (> (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+(define-private (top-x-insert
+    (entry {
+      who: principal,
+      l: uint,
+    })
+    (acc {
+      e: {
+        who: principal,
+        l: uint,
+      },
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+      placed: bool,
+    })
+  )
+  ;; asks: best = lowest l; a new entry goes AFTER equals (time priority)
+  (if (and (not (get placed acc)) (< (get l (get e acc)) (get l entry)))
+    (merge acc {
+      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      placed: true,
+    })
+    (merge acc { out: (push-quote (get out acc) entry) })
+  )
+)
+;; Keeps the `slots` best-priced OUT-OF-RANGE residents, best first. In-range
+;; residents are not ranked: an out-of-range newcomer can never displace one.
+;; Switched-off residents are out of range at the worst price there is, so
+;; they only reach the top set when the side holds almost nothing alive.
+(define-private (top-y-fold
+    (maker principal)
+    (acc {
+      price: uint,
+      slots: uint,
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+    })
+  )
+  (let ((l (token-y-limit-at maker (get price acc))))
+    (if (>= l (get price acc))
+      acc
+      (let (
+          (r (fold top-y-insert (get out acc) {
+            e: {
+              who: maker,
+              l: l,
+            },
+            out: (list),
+            placed: false,
+          }))
+          (sorted (if (get placed r)
+            (get out r)
+            (push-quote (get out r) {
+              who: maker,
+              l: l,
+            })
+          ))
         )
-        (map-set token-y-parked who amount)
-        (map-delete token-y-deposits {
-          cycle: cycle,
-          depositor: who,
-        })
-        (var-set bumped-token-y-principal who)
-        (map-set token-y-depositor-list cycle
-          (filter not-eq-bumped-token-y depositors)
-        )
-        (map-set cycle-totals cycle
-          (merge totals { total-token-y: (- (get total-token-y totals) amount) })
-        )
-        (try! (contract-call? .jing-core-v5 log-park-y who amount cycle price
-          (var-get token-x) (var-get token-y)
-        ))
-        (ok true)
+        (merge acc { out: (unwrap-panic (slice? sorted u0 (if (> (len sorted) (get slots acc))
+          (get slots acc)
+          (len sorted)
+        ))) })
       )
-      (ok false)
     )
   )
 )
-(define-private (park-one-token-x
+(define-private (top-x-fold
+    (maker principal)
+    (acc {
+      price: uint,
+      slots: uint,
+      out: (list 50 {
+        who: principal,
+        l: uint,
+      }),
+    })
+  )
+  (let ((l (token-x-limit-at maker (get price acc))))
+    (if (<= l (get price acc))
+      acc
+      (let (
+          (r (fold top-x-insert (get out acc) {
+            e: {
+              who: maker,
+              l: l,
+            },
+            out: (list),
+            placed: false,
+          }))
+          (sorted (if (get placed r)
+            (get out r)
+            (push-quote (get out r) {
+              who: maker,
+              l: l,
+            })
+          ))
+        )
+        (merge acc { out: (unwrap-panic (slice? sorted u0 (if (> (len sorted) (get slots acc))
+          (get slots acc)
+          (len sorted)
+        ))) })
+      )
+    )
+  )
+)
+;; The tenth best (last of the top set), if it is alive-out-of-range and
+;; strictly worse than the newcomer: park it. In-range residents are never
+;; parked by an out-of-range newcomer (they rank above it, so if one is last
+;; the newcomer is not better than it).
+(define-private (smallest-outside-y-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      price: uint,
+      top: (list 50 principal),
+      smallest: uint,
+      found: (optional principal),
+    })
+  )
+  ;; the smallest OUT-OF-RANGE resident that is not in the price region
+  (if (or
+      (is-some (index-of? (get top acc) who))
+      (>= (token-y-limit-at who (get price acc)) (get price acc))
+    )
+    acc
+    (let ((amt (get-token-y-deposit (get cycle acc) who)))
+      (if (< amt (get smallest acc))
+        (merge acc {
+          smallest: amt,
+          found: (some who),
+        })
+        acc
+      )
+    )
+  )
+)
+(define-private (first-off-y-fold
+    (who principal)
+    (acc {
+      price: uint,
+      found: (optional principal),
+    })
+  )
+  ;; a switched-off resident (bid sentinel u0) leaves before anyone alive
+  (if (and (is-none (get found acc)) (is-eq (token-y-limit-at who (get price acc)) u0))
+    (merge acc { found: (some who) })
+    acc
+  )
+)
+(define-private (first-off-x-fold
+    (who principal)
+    (acc {
+      price: uint,
+      found: (optional principal),
+    })
+  )
+  ;; a switched-off resident (ask sentinel MAX_UINT) leaves before anyone alive
+  (if (and (is-none (get found acc)) (is-eq (token-x-limit-at who (get price acc)) MAX_UINT))
+    (merge acc { found: (some who) })
+    acc
+  )
+)
+(define-private (park-tenth-token-y
     (cycle uint)
     (price uint)
+    (bid uint)
+    (depositors (list 50 principal))
   )
-  (let ((depositors (get-token-x-depositors cycle)))
-    (match (get found
-      (fold find-parkable-token-x-fold depositors {
+  (let (
+      (top (get out (fold top-y-fold depositors {
         price: price,
-        gap: u0,
+        slots: (var-get distance-slots),
+        out: (list),
+      })))
+      (n (len top))
+      (off (get found (fold first-off-y-fold depositors {
+        price: price,
         found: none,
-      })
+      })))
     )
-      who (let (
-          (amount (get-token-x-deposit cycle who))
-          (totals (get-cycle-totals cycle))
-        )
-        (map-set token-x-parked who amount)
-        (map-delete token-x-deposits {
-          cycle: cycle,
-          depositor: who,
-        })
-        (var-set bumped-token-x-principal who)
-        (map-set token-x-depositor-list cycle
-          (filter not-eq-bumped-token-x depositors)
-        )
-        (map-set cycle-totals cycle
-          (merge totals { total-token-x: (- (get total-token-x totals) amount) })
-        )
-        (try! (contract-call? .jing-core-v5 log-park-x who amount cycle price
-          (var-get token-x) (var-get token-y)
-        ))
-        (ok true)
-      )
+    (if (is-eq n u0)
       (ok false)
+      (let ((last (unwrap-panic (element-at? top (- n u1)))))
+        (if (not (< (get l last) bid))
+          (ok false)
+          (match off
+            ;; a switched-off resident leaves before anyone alive
+            dead (park-token-y cycle price dead depositors)
+            ;; the N-th best is demoted to the size region: it stays if it is
+            ;; bigger than the smallest resident outside the region (that one
+            ;; is parked instead); otherwise the N-th best is parked. Never a
+            ;; refund: whoever leaves keeps funds and price, readmittable.
+            (let (
+              (outside (fold smallest-outside-y-fold depositors {
+                cycle: cycle,
+                price: price,
+                top: (map quote-who top),
+                smallest: u999999999999999999,
+                found: none,
+              }))
+            )
+            (match (get found outside)
+              small (if (> (get-token-y-deposit cycle (get who last)) (get smallest outside))
+                (park-token-y cycle price small depositors)
+                (park-token-y cycle price (get who last) depositors)
+              )
+              (park-token-y cycle price (get who last) depositors)
+            )
+          )
+          )
+        )
+      )
     )
+  )
+)
+(define-private (smallest-outside-x-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      price: uint,
+      top: (list 50 principal),
+      smallest: uint,
+      found: (optional principal),
+    })
+  )
+  ;; the smallest OUT-OF-RANGE resident that is not in the price region
+  (if (or
+      (is-some (index-of? (get top acc) who))
+      (<= (token-x-limit-at who (get price acc)) (get price acc))
+    )
+    acc
+    (let ((amt (get-token-x-deposit (get cycle acc) who)))
+      (if (< amt (get smallest acc))
+        (merge acc {
+          smallest: amt,
+          found: (some who),
+        })
+        acc
+      )
+    )
+  )
+)
+(define-private (park-tenth-token-x
+    (cycle uint)
+    (price uint)
+    (ask uint)
+    (depositors (list 50 principal))
+  )
+  (let (
+      (top (get out (fold top-x-fold depositors {
+        price: price,
+        slots: (var-get distance-slots),
+        out: (list),
+      })))
+      (n (len top))
+      (off (get found (fold first-off-x-fold depositors {
+        price: price,
+        found: none,
+      })))
+    )
+    (if (is-eq n u0)
+      (ok false)
+      (let ((last (unwrap-panic (element-at? top (- n u1)))))
+        (if (not (> (get l last) ask))
+          (ok false)
+          (match off
+            ;; a switched-off resident leaves before anyone alive
+            dead (park-token-x cycle price dead depositors)
+            ;; the N-th best is demoted to the size region: it stays if it is
+            ;; bigger than the smallest resident outside the region (that one
+            ;; is parked instead); otherwise the N-th best is parked. Never a
+            ;; refund: whoever leaves keeps funds and price, readmittable.
+            (let (
+              (outside (fold smallest-outside-x-fold depositors {
+                cycle: cycle,
+                price: price,
+                top: (map quote-who top),
+                smallest: u999999999999999999,
+                found: none,
+              }))
+            )
+            (match (get found outside)
+              small (if (> (get-token-x-deposit cycle (get who last)) (get smallest outside))
+                (park-token-x cycle price small depositors)
+                (park-token-x cycle price (get who last) depositors)
+              )
+              (park-token-x cycle price (get who last) depositors)
+            )
+          )
+          )
+        )
+      )
+    )
+  )
+)
+(define-private (park-token-y
+    (cycle uint)
+    (price uint)
+    (who principal)
+    (depositors (list 50 principal))
+  )
+  (let (
+      (amount (get-token-y-deposit cycle who))
+      (totals (get-cycle-totals cycle))
+    )
+    (map-set token-y-parked who amount)
+    (map-delete token-y-deposits {
+      cycle: cycle,
+      depositor: who,
+    })
+    (var-set bumped-token-y-principal who)
+    (map-set token-y-depositor-list cycle
+      (filter not-eq-bumped-token-y depositors)
+    )
+    (map-set cycle-totals cycle
+      (merge totals { total-token-y: (- (get total-token-y totals) amount) })
+    )
+    (try! (contract-call? .jing-core-v5 log-park-y who amount cycle price
+      (var-get token-x) (var-get token-y)
+    ))
+    (ok true)
+  )
+)
+(define-private (park-token-x
+    (cycle uint)
+    (price uint)
+    (who principal)
+    (depositors (list 50 principal))
+  )
+  (let (
+      (amount (get-token-x-deposit cycle who))
+      (totals (get-cycle-totals cycle))
+    )
+    (map-set token-x-parked who amount)
+    (map-delete token-x-deposits {
+      cycle: cycle,
+      depositor: who,
+    })
+    (var-set bumped-token-x-principal who)
+    (map-set token-x-depositor-list cycle
+      (filter not-eq-bumped-token-x depositors)
+    )
+    (map-set cycle-totals cycle
+      (merge totals { total-token-x: (- (get total-token-x totals) amount) })
+    )
+    (try! (contract-call? .jing-core-v5 log-park-x who amount cycle price
+      (var-get token-x) (var-get token-y)
+    ))
+    (ok true)
   )
 )
 
@@ -717,6 +995,7 @@
     (limit-price uint)
     (spread-bps (optional uint))
     (carry uint)
+    (price uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -746,8 +1025,11 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-        (try! (as-contract? ((with-stx smallest-amount))
-          (try! (stx-transfer? smallest-amount current-contract smallest-who))
+        ;; the smallest resident is PARKED, not refunded: funds and price
+        ;; kept, readmittable when a slot frees (2026-09-13; v5 refunded)
+        (map-set token-y-parked smallest-who smallest-amount)
+        (try! (contract-call? .jing-core-v5 log-park-y smallest-who smallest-amount cycle
+          price (var-get token-x) tok-y
         ))
         (try! (stx-transfer? amount tx-sender current-contract))
         (var-set bumped-token-y-principal smallest-who)
@@ -760,7 +1042,6 @@
           cycle: cycle,
           depositor: smallest-who,
         })
-        (map-delete token-y-deposit-limits smallest-who)
         (map-set token-y-deposits {
           cycle: cycle,
           depositor: tx-sender,
@@ -823,7 +1104,8 @@
       (cycle (var-get current-cycle))
       (parked (get-token-y-parked tx-sender))
       (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
-      (full (>= (len (get-token-y-depositors cycle)) MAX_DEPOSITORS))
+      (depositors (get-token-y-depositors cycle))
+      (full (>= (len depositors) MAX_DEPOSITORS))
       (price (if (or
           (> (len (get-token-x-depositors cycle)) u0)
           (and new-maker full)
@@ -835,17 +1117,20 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-y price bid)) ERR_MUST_USE_SWAP)
-    ;; Priority on a full book: in range parks the farthest resident; alive
-    ;; but out of range competes on size; switched off (sentinel) gets no
-    ;; slot at all. Without this a dead peg could bump a live maker.
+    ;; Priority on a full book: switched off (sentinel) gets no slot at all.
+    ;; In range, or out of range and better than the N-th best out-of-range
+    ;; price (N = distance-slots): a switched-off resident leaves first; else
+    ;; the N-th best is demoted (it stays if bigger than the smallest of the
+    ;; size region, which is parked; else it is parked). Otherwise, or with
+    ;; nobody out of range at all, park-tenth does nothing and the core's
+    ;; size rule decides.
     (asserts! (not (and new-maker full (is-eq bid u0))) ERR_QUEUE_FULL)
     (and
       new-maker
       full
-      (>= bid price)
-      (try! (park-one-token-y cycle price))
+      (try! (park-tenth-token-y cycle price bid depositors))
     )
-    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked t asset-name))))
+    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -862,6 +1147,7 @@
     (limit-price uint)
     (spread-bps (optional uint))
     (carry uint)
+    (price uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -890,10 +1176,10 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-        (try! (as-contract? ((with-ft (contract-of t) asset-name smallest-amount))
-          (try! (contract-call? t transfer smallest-amount current-contract
-            smallest-who none
-          ))
+        ;; the smallest resident is PARKED, not refunded (mirror of the y side)
+        (map-set token-x-parked smallest-who smallest-amount)
+        (try! (contract-call? .jing-core-v5 log-park-x smallest-who smallest-amount cycle
+          price tok-x (var-get token-y)
         ))
         (try! (contract-call? t transfer amount tx-sender current-contract none))
         (var-set bumped-token-x-principal smallest-who)
@@ -906,7 +1192,6 @@
           cycle: cycle,
           depositor: smallest-who,
         })
-        (map-delete token-x-deposit-limits smallest-who)
         (map-set token-x-deposits {
           cycle: cycle,
           depositor: tx-sender,
@@ -969,7 +1254,8 @@
       (cycle (var-get current-cycle))
       (parked (get-token-x-parked tx-sender))
       (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
-      (full (>= (len (get-token-x-depositors cycle)) MAX_DEPOSITORS))
+      (depositors (get-token-x-depositors cycle))
+      (full (>= (len depositors) MAX_DEPOSITORS))
       (price (if (or
           (> (len (get-token-y-depositors cycle)) u0)
           (and new-maker full)
@@ -981,16 +1267,16 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
-    ;; mirror of the y side: a switched-off ask (sentinel) gets no slot on a
-    ;; full book.
+    ;; mirror of the y side: switched off gets no slot; in range or better
+    ;; than the N-th best out-of-range ask -> a switched-off resident leaves
+    ;; first, else the N-th best is demoted; otherwise the core's size rule.
     (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
     (and
       new-maker
       full
-      (<= ask price)
-      (try! (park-one-token-x cycle price))
+      (try! (park-tenth-token-x cycle price ask depositors))
     )
-    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked t asset-name))))
+    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -1750,12 +2036,12 @@
           ))
         )
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none u0 tx-trait tx-name))
+        (try! (deposit-token-x-core net limit-price none u0 u0 tx-trait tx-name))
       )
       (begin
         (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none u0 ty-trait ty-name))
+        (try! (deposit-token-y-core net limit-price none u0 u0 ty-trait ty-name))
       )
     )
     (var-set crossing true)
@@ -2856,6 +3142,14 @@
     (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
     (asserts! (> amount u0) ERR_ZERO_MIN_DEPOSIT)
     (ok (var-set min-token-x-deposit amount))
+  )
+)
+
+(define-public (set-distance-slots (slots uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+    (asserts! (<= slots MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (ok (var-set distance-slots slots))
   )
 )
 
