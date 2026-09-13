@@ -14,8 +14,9 @@
 //   V2  keeper rests a 20k-sat ask far out of range (+20%)
 //   V3  LIVE order: set-limit amount 0 -> u6006, wrong amount -> u6022,
 //       right amount -> ok (limit retargeted)
-//   V4  PARK it: 49 fillers rest closer asks (book = 50), a 50th newcomer
-//       with an in-range ask (fresh update) parks the farthest = the vault
+//   V4  PARK it: 49 fillers rest closer asks (book = 50), distance-slots
+//       widened to 50, a 50th newcomer with an in-range ask (fresh update)
+//       demotes the N-th best = the vault, which is parked
 //   V5  PARKED order: set-limit amount 0 -> u6006 (the finding), amount =
 //       parked -> ok and the limit moves, reprice on parked -> market
 //       u1005 (needs a live deposit)
@@ -129,7 +130,14 @@ async function main() {
   });
   ev("V4 book full (50)", MARKET_ID, "(len (get-token-x-depositors (get-current-cycle)))", "u50");
   tx("V4 fund the parker", call(SBTC_DEPOSITOR_1, SBTC_FQN, "transfer", [uintCV(FILL), standardPrincipalCV(SBTC_DEPOSITOR_1), standardPrincipalCV(PARKER), noneCV()]), "(ok true)");
-  tx("V4 parker rests 2000 in range (-10%) with a fresh update -> parks the farthest ask", call(PARKER, MARKET_ID, "deposit-token-x", [uintCV(FILL), uintCV(ASK_IN), noneCV(), UPD, sbtcTrait, sbtcAsset]), `(ok u${FILL})`);
+  // distance-slots (2026-09-13): an in-range newcomer no longer parks the
+  // farthest ask but the N-th best out-of-range one. With N = 10 that is a
+  // +5% filler and the vault (+25%, the worst) stays: a whale outside the N
+  // best is only ever bumped on size. To exercise the parked flows the
+  // operator widens the price region to the whole book, so the vault IS the
+  // N-th best and is demoted; the size region is then empty -> parked.
+  tx("V4 operator sets distance-slots u50: the vault (+25%, the worst ask) becomes the N-th best", call(CHAVITA, MARKET_ID, "set-distance-slots", [uintCV(50)]), "(ok true)");
+  tx("V4 parker rests 2000 in range (-10%) with a fresh update -> the N-th best (the vault) is demoted, nobody outside the region -> parked", call(PARKER, MARKET_ID, "deposit-token-x", [uintCV(FILL), uintCV(ASK_IN), noneCV(), UPD, sbtcTrait, sbtcAsset]), `(ok u${FILL})`);
   ev("V4 vault live 0", MARKET_ID, `(get-token-x-deposit (get-current-cycle) '${VAULT_ID})`, "u0");
   ev("V4 vault parked 20k", MARKET_ID, `(get-token-x-parked '${VAULT_ID})`, "u20000");
 
