@@ -284,8 +284,8 @@ async function main() {
     call(sender, "deposit-token-x", [uintCV(amount), uintCV(limit), noneCV(), DUMMY_VAA, sbtcTrait, sbtcAsset], cid);
   const depositY = (sender, amount, limit, cid = CID) =>
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), noneCV(), DUMMY_VAA, wstxTrait, wstxAsset], cid);
-  const swap = (sender, amount, limit, depositXSide) =>
-    call(sender, "swap", [uintCV(amount), uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depositXSide ? trueCV() : falseCV()]);
+  const swap = (sender, amount, limit, depositXSide, cid = CID) =>
+    call(sender, "swap", [uintCV(amount), uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depositXSide ? trueCV() : falseCV()], cid);
   const cancelY = (sender, cid = CID) => call(sender, "cancel-token-y-deposit", [wstxTrait, wstxAsset], cid);
   const cancelX = (sender, cid = CID) => call(sender, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], cid);
   const setLimitY = (sender, limit, cid = CID) => call(sender, "set-token-y-limit", [uintCV(limit), noneCV(), DUMMY_VAA], cid);
@@ -437,6 +437,12 @@ async function main() {
   ev("P list 3", "(len (get-token-y-depositors u0))", "u3", PID);
   tx("P N3 in-range newcomer -> parks P3 (only out-of-range)", depositY(N3, 2_000_000n, HUGE, PID), "(ok u2000000)");
   ev("P P3 parked", `(get-token-y-parked '${P3})`, "u2000000", PID);
+  // bounty mtxs6nxg7a6d97081b11 (apeirs): a parked maker taking on the SAME side
+  // used to overwrite and then delete its own price row, stranding the parked
+  // amount without a price. swap now refuses parked like it refuses live.
+  tx("P P3 swaps STX while parked on y -> u1018", swap(P3, 1_000_000n, HUGE, false, PID), "(err u1018)");
+  ev("P P3 still parked after the refused swap", `(get-token-y-parked '${P3})`, "u2000000", PID);
+  ev("P P3 limit untouched", `(get-token-y-limit '${P3})`, `u${LP3}`, PID);
   // v6: a parked maker deposits straight back. Out of range and the side full,
   // the combined size (2 parked + 1 new) beats the smallest live maker (2 STX,
   // N1 first in the list), which is bumped and refunded
@@ -459,6 +465,8 @@ async function main() {
   tx("PX Q3 ask 3000 at +5% (gap 5%)", depositX(Q3, 3000n, LQ3, PID), "(ok u3000)");
   tx("PX N4 in-range newcomer -> parks Q1", depositX(N4, 3000n, 1n, PID), "(ok u3000)");
   ev("PX Q1 parked 3000", `(get-token-x-parked '${Q1})`, "u3000", PID);
+  tx("PX Q1 swaps sBTC while parked on x -> u1018", swap(Q1, 1000n, 1n, true, PID), "(err u1018)");
+  ev("PX Q1 still parked after the refused swap", `(get-token-x-parked '${Q1})`, "u3000", PID);
   ev("PX Q3 still live", `(get-token-x-deposit u0 '${Q3})`, "u3000", PID);
   ev("PX totals exclude parked (9000)", "(get total-token-x (get-cycle-totals u0))", "u9000", PID);
   tx("PX readmit Q1 full -> u1010", readmitX(DEPLOYER, Q1), "(err u1010)");

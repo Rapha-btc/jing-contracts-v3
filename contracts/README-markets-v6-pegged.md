@@ -250,6 +250,41 @@ aborting the member's transaction. Clarity note: a `try!` inside
 `as-contract?` returns from the enclosing function, so the attempt has to be
 its own function for the caller to observe a refusal.
 
+## A parked maker cannot swap on the same side
+
+`swap` refuses with `ERR_HAS_RESTING_POSITION` (u1018) when the caller has a
+live deposit OR a parked amount on the side it would deposit. Cancel or readmit
+first, then swap. The opposite side is not checked: a resting ask while you
+swap STX for sBTC is a different row and is left alone, even if the walk fills
+you against yourself.
+
+Why refuse instead of folding the parked amount into the swap, the way
+`deposit-token-x/y` folds it into a maker position:
+
+- A swap sizes from the router's `get-taker-capacity` quote for `amount`. If
+  the market silently added the parked amount to the taker leg, the user would
+  see a quote for X and trade X plus parked. The router would have to read
+  live + parked on the swap side and fold it into its allowance and its quote.
+  That is the real cost, and it lands in every integrator, not just ours.
+- The leftover rule of a swap is "refund under the minimum, else revert". A
+  folded lump is usually above the minimum after the walk, so most such swaps
+  would revert. Allowing it needs a second rule: taker input fills first, the
+  rest goes back to resting at the saved maker price. That is a rewrite of
+  `swap` and `cross-remainder-as-x/y`, on the audited crossing path.
+
+Before this rule (bounty mtxs6nxg7a6d97081b11, finding by Patient Reed / apeirs)
+`swap` only checked the live deposit. A parked maker could swap, the taker leg
+overwrote the maker's price row, the swap's end deleted it, and the parked
+amount was left with no price. A later `readmit-token-x/y` then installed a live
+order at limit u0, a value every deposit path forbids. No funds were lost (the
+owner could cancel or reprice) but the park/readmit loop would pick that order
+first every time. The fix is the parked check in `swap`: with it, no path
+leaves a parked amount without a price, so `readmit-token-x/y` stay as they
+are.
+
+Folding a resting or parked amount into a swap stays on the v7 list with the
+spec above.
+
 ## Coverage status (2026-09-11)
 
 Covered on stxer mainnet forks, real Lazer updates, source deployed under a

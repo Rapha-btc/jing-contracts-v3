@@ -1724,6 +1724,16 @@
       )
       ERR_HAS_RESTING_POSITION
     )
+    (asserts!
+      (is-eq
+        (if deposit-x
+          (get-token-x-parked tx-sender)
+          (get-token-y-parked tx-sender)
+        )
+        u0
+      )
+      ERR_HAS_RESTING_POSITION
+    )
     (if deposit-x
       (begin
         (and
