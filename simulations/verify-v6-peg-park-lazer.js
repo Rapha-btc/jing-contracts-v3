@@ -70,16 +70,18 @@ async function main() {
   ev("K4 market-size counts the parked balance: unfilled-index unchanged", "(get-state)", (v) => field(v, "unfilled-index") === `u${SCALE}` && field(v, "resting") === "u20000", RID);
   tx("K5 A withdraws 500 from the parked balance", call(A, "withdraw", [uintCV(500)], RID), "(ok true)");
   ev("K5 parked now 19500", `(get-token-x-parked '${RID})`, "u19500");
-  // v6: the market takes a parked position back on deposit; the queue is full
-  // and the peg is out of range, so the combined 20500 bumps a 2000 filler
-  tx("K6 A deposits 1000 while the queue is full: combined 20500 bumps the smallest filler, live again", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
-  ev("K6 parked 0", `(get-token-x-parked '${RID})`, "u0");
-  ev("K6 live with 20500", `(get-token-x-deposit u0 '${RID})`, "u20500");
-  ev("K6 held 0", "(get-state)", (v) => field(v, "held-sats") === "u0", RID);
+  // v6 (2026-09-13, bounty mtxs6nxg7a6d97081b11): the market takes a parked
+  // position back on deposit, but a SWITCHED-OFF peg (sentinel) gets no slot
+  // on a full queue whatever its size: a dead order must not bump a live
+  // filler. The market refuses u1010 and the rung holds the new money.
+  tx("K6 A deposits 1000 while the queue is full: the peg is out of band -> market u1010, rung HOLDS", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
+  ev("K6 still parked 19500", `(get-token-x-parked '${RID})`, "u19500");
+  ev("K6 not live", `(get-token-x-deposit u0 '${RID})`, "u0");
+  ev("K6 held 1000", "(get-state)", (v) => field(v, "held-sats") === "u1000", RID);
   ev("K6 queue still 50", "(len (get-token-x-depositors u0))", "u50");
-  ev("K6 first filler bumped off", `(get-token-x-deposit u0 '${FILLERS[0]})`, "u0");
-  tx("K7 A deposits 1000 more: plain top-up", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
-  ev("K7 live with 21500", `(get-token-x-deposit u0 '${RID})`, "u21500");
+  ev("K6 first filler NOT bumped (a dead peg cannot displace it)", `(get-token-x-deposit u0 '${FILLERS[0]})`, `u${FILL}`);
+  tx("K7 A deposits 1000 more: still out of band, still held", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
+  ev("K7 held 2000, still parked", "(get-state)", (v) => field(v, "held-sats") === "u2000", RID);
   // a second, in-band peg rung arriving on the full queue: too small to bump ->
   // held inside the rung; big enough -> bumps and goes live
   tx(`init ${RUNG2} (in band)`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], RID2), "(ok true)");

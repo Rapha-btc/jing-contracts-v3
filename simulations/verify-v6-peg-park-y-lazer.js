@@ -92,15 +92,16 @@ async function main() {
   ev("Y2 market-size counts the parked balance: unfilled-index unchanged", "(get-state)", (v) => field(v, "unfilled-index") === `u${SCALE}` && field(v, "resting") === "u20000000", RID);
   tx("Y2 S withdraws 0.5 STX from the parked balance", call(S, "withdraw", [uintCV(500_000)], RID), "(ok true)");
   ev("Y2 parked now 19.5 STX", `(get-token-y-parked '${RID})`, "u19500000");
-  // v6: the market takes a parked position back on deposit; the queue is full
-  // and the peg is out of band, so the combined 20.5 STX bumps a 1.5 STX filler
-  tx("Y2 S deposits 1 STX while the queue is full: combined 20.5 STX bumps the smallest filler, live again", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
-  ev("Y2 parked 0", `(get-token-y-parked '${RID})`, "u0");
-  ev("Y2 live with 20.5 STX", `(get-token-y-deposit u0 '${RID})`, "u20500000");
-  ev("Y2 held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0", RID);
-  ev("Y2 first filler bumped off", `(get-token-y-deposit u0 '${FILLERS[0]})`, "u0");
-  tx("Y2 S deposits 1 STX more: plain top-up", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
-  ev("Y2 live with 21.5 STX", `(get-token-y-deposit u0 '${RID})`, "u21500000");
+  // v6 (2026-09-13, bounty mtxs6nxg7a6d97081b11): a SWITCHED-OFF peg gets no
+  // slot on a full queue whatever its size (a dead order must not bump a live
+  // filler): the market refuses u1010 and the rung holds the new money.
+  tx("Y2 S deposits 1 STX while the queue is full: the peg is out of band -> market u1010, rung HOLDS", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
+  ev("Y2 still parked 19.5 STX", `(get-token-y-parked '${RID})`, "u19500000");
+  ev("Y2 not live", `(get-token-y-deposit u0 '${RID})`, "u0");
+  ev("Y2 held 1 STX", "(get-state)", (v) => field(v, "held-ustx") === "u1000000", RID);
+  ev("Y2 first filler NOT bumped", `(get-token-y-deposit u0 '${FILLERS[0]})`, `u${FILL}`);
+  tx("Y2 S deposits 1 STX more: still out of band, still held", call(S, "deposit", [uintCV(1_000_000), UPD], RID), "(ok true)");
+  ev("Y2 held 2 STX, still parked", "(get-state)", (v) => field(v, "held-ustx") === "u2000000", RID);
   ev("Y2 queue still 50", "(len (get-token-y-depositors u0))", "u50");
 
   // =============== Y3: direct maker, zero-spread peg through park and readmit ===============
@@ -108,13 +109,15 @@ async function main() {
   // sentinel u0), and park-one keeps the FIRST maker at the largest gap
   tx("Y3 S exits the rung entirely (whole cancel, off the market)", call(S, "withdraw", [uintCV(999_999_999)], RID), "(ok true)");
   ev("Y3 rung off the queue", `(get-token-y-deposit u0 '${RID})`, "u0");
-  ev("Y3 queue 49", "(len (get-token-y-depositors u0))", "u49");
-  tx("Y3 fund filler 50", stxSend(F50, FILL + 200_000n), (v) => String(v).startsWith("(ok"));
-  tx(`Y3 filler 50 rests ${FILL} at -5%: full again`, depY(F50, FILL, BID_NEAR, null), `(ok u${FILL})`);
+  ev("Y3 queue still 50 (the rung was parked, not live)", "(len (get-token-y-depositors u0))", "u50");
   tx("Y3 fund P", stxSend(P, 4_000_000n), (v) => String(v).startsWith("(ok"));
-  tx("Y3 P rests an out-of-band zero-spread peg (cap mid/2), 2 STX, on the full queue: not in range, so it bumps the smallest (a 1.5 STX filler)", depY(P, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
+  tx("Y3 P rests an out-of-band zero-spread peg (cap mid/2), 2 STX, on the FULL queue: switched off -> u1010, nobody bumped", depY(P, 2_000_000n, LOW_CAP, 0n), "(err u1010)");
+  ev("Y3 smallest filler still live", `(get-token-y-deposit u0 '${FILLERS[0]})`, `u${FILL}`);
+  tx("Y3 filler 1 cancels -> a slot", call(FILLERS[0], "cancel-token-y-deposit", [wstxT, wstxA]), `(ok u${FILL})`);
+  ev("Y3 queue 49", "(len (get-token-y-depositors u0))", "u49");
+  tx("Y3 P rests the same out-of-band zero-spread peg into the free slot -> ok", depY(P, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
   ev("Y3 P live", `(get-token-y-deposit u0 '${P})`, "u2000000");
-  ev("Y3 queue 50 (one filler bumped out)", "(len (get-token-y-depositors u0))", "u50");
+  ev("Y3 queue 50", "(len (get-token-y-depositors u0))", "u50");
   ev("Y3 P limit-at = u0 (cap under mid)", `(token-y-limit-at '${P} u${MID})`, "u0");
   tx("Y3 fund parker 2", stxSend(PARKER2, 3_000_000n), (v) => String(v).startsWith("(ok"));
   tx("Y3 parker 2 rests in range: parks the furthest = P (gap = the whole mid)", depY(PARKER2, 2_000_000n, HUGE, null), "(ok u2000000)");
@@ -145,14 +148,18 @@ async function main() {
   ev("Y4 rung 2 live with 1.7 STX", `(get-token-y-deposit u0 '${RID2})`, "u1700000");
   ev("Y4 held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0", RID2);
   tx("Y4 fund Q", stxSend(Q, 5_000_000n), (v) => String(v).startsWith("(ok"));
-  tx("Y4 Q rests an out-of-band zero-spread peg 2 STX on the full queue: bumps the smallest", depY(Q, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
+  tx("Y4 Q rests an out-of-band zero-spread peg 2 STX on the FULL queue: switched off -> u1010 (2026-09-13 rule)", depY(Q, 2_000_000n, LOW_CAP, 0n), "(err u1010)");
+  tx("Y4 filler 3 cancels -> a slot (fillers 1 and 2 already left: Y3 cancel, rung-2 bump)", call(FILLERS[2], "cancel-token-y-deposit", [wstxT, wstxA]), `(ok u${FILL})`);
+  tx("Y4 Q rests the same peg into the free slot -> ok", depY(Q, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
   tx("Y4 fund parker 3", stxSend(PARKER3, 3_000_000n), (v) => String(v).startsWith("(ok"));
   tx("Y4 parker 3 rests in range: parks Q", depY(PARKER3, 2_000_000n, HUGE, null), "(ok u2000000)");
   ev("Y4 Q parked 2 STX", `(get-token-y-parked '${Q})`, "u2000000");
-  const qdep = tx("Y4 Q deposits 1 STX while parked, full queue, out of range: combined 3 STX bumps the smallest -> live", depY(Q, 1_000_000n, LOW_CAP, 0n), "(ok u1000000)");
+  // a parked deposit that carries an ALIVE out-of-range peg (-5%, any cap)
+  // still competes on size: combined 3 STX bumps the smallest 1.5 STX filler
+  const qdep = tx("Y4 Q deposits 1 STX while parked, full queue, re-pegged to -5% (alive, out of range): combined 3 STX bumps the smallest -> live", depY(Q, 1_000_000n, HUGE, 500n), "(ok u1000000)");
   ev("Y4 Q parked 0", `(get-token-y-parked '${Q})`, "u0");
   ev("Y4 Q live with 3 STX", `(get-token-y-deposit u0 '${Q})`, "u3000000");
-  ev("Y4 Q order kept (some u0)", `(get-token-y-order '${Q})`, (v) => field(v, "spread-bps") === "(some u0)");
+  ev("Y4 Q order now (some u500)", `(get-token-y-order '${Q})`, (v) => field(v, "spread-bps") === "(some u500)");
   ev("Y4 queue still 50", "(len (get-token-y-depositors u0))", "u50");
 
   const sid = await b.run();

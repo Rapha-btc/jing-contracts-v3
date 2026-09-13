@@ -245,7 +245,12 @@ parked amount into the position (`carry` in the core). A free slot takes it
 back; otherwise the smallest live maker is bumped when parked + new is
 bigger; otherwise `u1010`. The order rule is whatever the deposit carries,
 as for any deposit. The gate runs on the combined order (crossing check,
-park of a farther maker when the newcomer is in range). Core-v5 logs
+park of a farther maker when the newcomer is in range). One exception since
+2026-09-13: a position whose peg is switched off right now (sentinel) gets
+no slot on a full book, parked or not, whatever its size, `u1010`; a rung
+holds the new money and pushes once the peg is back in band or a slot
+frees. A dead order must not bump a live one (see "Priority on a full
+book"). peg-park K6/K7 and peg-park-y Y2/Y3 cover the parked case. Core-v5 logs
 `deposit-x/y` with the full position as `amount` and the new money as
 `delta`, and core-v5 logs `readmit-x/y` with the parked amount so an
 indexer clears the parked state. `readmit-token-x/y` stays for keepers.
@@ -473,6 +478,41 @@ STALE but genuinely signed update (the member pre-signed, we broadcast
 later) lands the sats in the rung held (step 31), the keeper's push with
 the same stale update is refused (step 34), the push with a fresh update
 puts them on the market (step 35).
+
+## Full rerun 2026-09-13, after the three bounty fixes
+
+Every v6 harness rerun on the source at 8df8417 plus the park-harness
+rewrites below (parked-swap refusal a85b4dd, MAX_UINT sentinel skips 1a7fd37,
+switched-off newcomer refusal 8df8417). All green. The per-harness rows above
+keep their original ids; these are the current ones.
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 142/142 | `b2ef80f568f01c10c4a404a05c2beb91` |
+| markets v6 gaps | 66/66 | `0a3df0fcdab33f19befd763e483845e2` |
+| markets v6 lazer-paths | 34/34 | `34941e782d18f15197f075730d1eaec7` |
+| markets v6 multifill | 43/43 | `ea5912f54cce3ecf965154ada0ae190c` |
+| markets v6 regression | 22/22 | `b335900f90391c2beb275d33fda2493e` |
+| markets v6 remainder-cross | 115/115 | `25d2e4ea2af8aae53e55d14ecdd80b24` |
+| markets v6 stress | 125/125 | `2b7e04dcf46eb85d209a9d0991295a8c` |
+| markets v6 withdraw | 98/98 | `7670b369964edbac65f6fd29e127d82b` |
+| v6 peg-batch | 92/92 | `367be254806cd644de094df94cc7e6fa` |
+| v6 peg-edges | 60/60 | `437f1914902a30d42991ca8f3178f12e` |
+| v6 peg | 76/76 | `2c43e45e6475203a0ab93f921419d23d` |
+| v6 peg-mirror | 40/40 | `6b367e8515ac3550675c37880e702a8c` |
+| v6 peg-more | 51/51 | `cf0d54084a95d448a54b12d2d7dbb901` |
+| v6 peg-park | 36/36 | `fb40855a807e8a8513b202d7512f7a8a` (K6/K7 rewritten: a switched-off parked rung holds instead of bumping) |
+| v6 peg-park-y | 75/75 | `88eece118ecb89869a7084fa107ddb92` (Y2/Y3/Y4 rewritten: switched off -> u1010 on a full queue; an alive -5% peg still bumps on size) |
+| v6 peg-track | 30/30 | `38c4f3e62c198484fdb86d8d13bf4336` |
+| v6 peg-walk-order | 60/60 | `2c4f3a3357a933bd1c73f943b7f82276` |
+| v6 rungs-fill | 40/40 | `755c23d6cc4183103e142d91b194ef77` |
+| v6 rungs-keyless | 37 passed | `312b48ca1d18820f4ea052a5acdd633a` |
+| v6 rungs-push | 39/39 | `3e9ca09782f627aab3a9d5feebdea4e7` |
+| vault v6 parked | 133/133 | `966b1c49ebabdccc65df484ae9521723` |
+
+`verify-swap-router-v3-lazer.js` is historical (it redeploys the v4 market,
+now live on mainnet, so it cannot run on a fresh fork) and is not part of
+the v6 set.
 
 ## Verification (2026-09-11, stxer mainnet forks, all rerun after the parked-deposit change)
 
