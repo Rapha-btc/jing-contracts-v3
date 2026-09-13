@@ -396,18 +396,17 @@
     (delta uint)
     (limit uint)
     (cycle uint)
-    (bumped (optional principal))
-    (bumped-amount uint)
+    ;; the resident this deposit displaced on size, if any. It is PARKED
+    ;; (funds and price kept in the market, readmittable), not refunded, so
+    ;; its equity stays: no debit here. The market logs park-x for it.
+    (parked (optional principal))
+    (parked-amount uint)
     (token-x principal)
     (token-y principal)
   )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped
-      b (debit-if-not-registered token-x b bumped-amount)
-      true
-    )
     (credit-if-not-registered token-x depositor delta)
     (print {
       event: "deposit-x",
@@ -419,10 +418,10 @@
       delta: delta,
       limit: limit,
       cycle: cycle,
-      bumped: bumped,
-      bumped-amount: bumped-amount,
+      parked: parked,
+      parked-amount: parked-amount,
       equity-x: (get-token-equity token-x depositor),
-      bumped-equity-x: (match bumped
+      parked-equity-x: (match parked
         b (some (get-token-equity token-x b))
         none
       ),
@@ -437,18 +436,17 @@
     (delta uint)
     (limit uint)
     (cycle uint)
-    (bumped (optional principal))
-    (bumped-amount uint)
+    ;; the resident this deposit displaced on size, if any. It is PARKED
+    ;; (funds and price kept in the market, readmittable), not refunded, so
+    ;; its equity stays: no debit here. The market logs park-y for it.
+    (parked (optional principal))
+    (parked-amount uint)
     (token-x principal)
     (token-y principal)
   )
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (match bumped
-      b (debit-if-not-registered token-y b bumped-amount)
-      true
-    )
     (credit-if-not-registered token-y depositor delta)
     (print {
       event: "deposit-y",
@@ -460,10 +458,10 @@
       delta: delta,
       limit: limit,
       cycle: cycle,
-      bumped: bumped,
-      bumped-amount: bumped-amount,
+      parked: parked,
+      parked-amount: parked-amount,
       equity-y: (get-token-equity token-y depositor),
-      bumped-equity-y: (match bumped
+      parked-equity-y: (match parked
         b (some (get-token-equity token-y b))
         none
       ),

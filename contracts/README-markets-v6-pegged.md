@@ -191,6 +191,16 @@ transaction knows the order is fixed again. An indexer that shows a
 maker's price must read `peg-x/y` and compute the effective price from
 its own mid, or the row shows the ceiling.
 
+Deposit events, changed 2026-09-13 with the size rule parking instead of
+refunding: `log-deposit-x/y` take `(parked (optional principal))` and
+`(parked-amount uint)` where v4 had `bumped` / `bumped-amount`, the print
+carries `parked`, `parked-amount` and `parked-equity-x/y`, and the core no
+longer debits that maker's equity: its money stays in the market, parked,
+and the market logs `park-x/y` for it in the same transaction. An indexer
+that turned the old `bumped` into a refund row must turn `parked` into a
+parked row (fakdao `jing-core-events.ts` `bumpedRow` at the time of
+writing). Positional call sites are unchanged.
+
 ## Indexer notes
 
 - Every settlement emits a `limit-roll-x/y` for each peg that is outside
@@ -548,27 +558,27 @@ in-range residents count for neither region).
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 197/197 | `534583e0ea62e30d4e14dbc495ea2e61` |
-| markets v6 gaps | 66/66 | `86324df5f3760b05dfd4479657b7f623` |
-| markets v6 lazer-paths | 34/34 | `0e8570a2f64caf928baf9807dccf9eca` |
-| markets v6 multifill | 43/43 | `6b2551c4af7cc1b035993913b202d6af` |
-| markets v6 regression | 22/22 | `b8457df201e1d5f6c6586d316579ea13` |
-| markets v6 remainder-cross | 115/115 | `bb4cf2335cb402e6fddbd8588abbfceb` |
-| markets v6 stress | 125/125 | `d1c2de356783fef0ed2ad182b9088b92` |
-| markets v6 withdraw | 98/98 | `108f0a022b402055ad07adb3919c7658` |
-| v6 peg-batch | 92/92 | `69d761583cc5df778b4e182a9f254e94` |
-| v6 peg-edges | 60/60 | `55e00d4e70873a683032f3822019008b` |
-| v6 peg | 76/76 | `88754f69fc0517ba26fd4080c290e42e` |
-| v6 peg-mirror | 40/40 | `021fdc216773cfa022a7dc65f2317f05` |
-| v6 peg-more | 51/51 | `4e731fa23e0bfc38e210999c3057809d` |
-| v6 peg-park | 39/39 | `b68ae194589cdc4ae34deab4d6e2a4e0` |
-| v6 peg-park-y | 75/75 | `9a6bbfa71d5d2319aec10c07d5b4a2ca` |
-| v6 peg-track | 30/30 | `1b5f8d3be6e9f43d34c6578ffbb1c8d8` |
-| v6 peg-walk-order | 60/60 | `19bb8627ca4b2932764f8d1a3d19bfcf` |
-| v6 rungs-fill | 40/40 | `90ac3c4d7d2cf03ef55bcb0adf59b42b` |
-| v6 rungs-keyless | 37 passed | `227b1dc703849ddcfdf4ea4d69cb6ef1` |
-| v6 rungs-push | 39/39 | `0260aab80ff448329534f40517d8cf7b` |
-| vault v6 parked | 134/134 | `f4fcceb087e340f863aa44033ed8307d` |
+| markets v6 bounty-fixes | 197/197 | `06e2cab083600290c7379e9f24cddaf3` |
+| markets v6 gaps | 66/66 | `67e7761d9134dbfbba0bfcfaa9a0af79` |
+| markets v6 lazer-paths | 34/34 | `d139e6ffbc0e74ce5bb380ba3b95743d` |
+| markets v6 multifill | 43/43 | `2c32167c6a5bed86e2d7bbef6f8a61c2` |
+| markets v6 regression | 22/22 | `fff838c85ece3fe26379082b016d503a` |
+| markets v6 remainder-cross | 115/115 | `7b7d77250007c8acda9f514e359a743d` |
+| markets v6 stress | 125/125 | `8a357e76010796a8a0ce7f2f74cbef5d` |
+| markets v6 withdraw | 98/98 | `9e97b1945b556d37438f122579adffff` |
+| v6 peg-batch | 92/92 | `25e66eff27eff44a44f6a2f5c6a0839c` |
+| v6 peg-edges | 60/60 | `8a8a947ff6ef7b989a050b688216a8e3` |
+| v6 peg | 76/76 | `3f9b28ec5e14fc3c4182a259bb8aa531` |
+| v6 peg-mirror | 40/40 | `c127404cc367dcea88edd10fd5f5aebd` |
+| v6 peg-more | 51/51 | `c184578ba02d661e52fd3ee8677ef569` |
+| v6 peg-park | 39/39 | `6aa940d70f6899bdf22b2fe771c6dab4` |
+| v6 peg-park-y | 75/75 | `d71d4abd725057787238311e32654d07` |
+| v6 peg-track | 30/30 | `78ce44f76c4adce36004edfdcdaf3144` |
+| v6 peg-walk-order | 60/60 | `c05925602c716f703743813e1f1237da` |
+| v6 rungs-fill | 40/40 | `a19f4f952bcabd2647c708ee07a07df3` |
+| v6 rungs-keyless | 37 passed | `e5a05003335a37e8828e531a2423d2fc` |
+| v6 rungs-push | 39/39 | `4d8ef036c527bd08c5cda1bcd2de081b` |
+| vault v6 parked | 134/134 | `8eb7ab4350262df39014ee9c0ae114d9` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 
