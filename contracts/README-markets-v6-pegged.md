@@ -479,6 +479,34 @@ later) lands the sats in the rung held (step 31), the keeper's push with
 the same stale update is refused (step 34), the push with a fresh update
 puts them on the market (step 35).
 
+## Bounty mtxs6nxg7a6d97081b11: decision (2026-09-13)
+
+Five submissions, three real findings, all low severity, all fixed on
+master before deploy. The 21,000 sats go to **Celestial Shark**.
+
+Ranking by economic impact, which is the measure that matters for a live
+order book:
+
+1. **Celestial Shark**, switched-off peg newcomer bumps a live maker
+   (8df8417). The only finding that hurt someone other than the caller: a
+   dead order could take a slot from a maker who was there to fill, and the
+   book thinned by exactly that maker until the next in-range arrival. A
+   large enough out-of-band peg could do it to the smallest maker every
+   time. One paragraph, but the right paragraph.
+2. **Patient Reed / apeirs**, a parked maker swapping on the same side lost
+   its price row (a85b4dd). Deepest writeup on the board and a correct
+   trace, but the money at stake was the caller's own, never lost, one
+   cancel away. The "filled above the ceiling" branch was not reachable.
+3. **Light Brio**, the ask sentinel was skipped only by the taker's limit
+   (1a7fd37). Exact diagnosis and the exact fix we applied, mirrored from
+   the bid side. Impact was a self-inflicted revert for a caller passing
+   MAX_UINT as a limit; no state, no sats.
+
+Sonic Mast reported the same sentinel as informational; Celestial Mast
+confirmed the invariants without a new finding. Thank you to all five, and
+in particular to apeirs and Light Brio: both fixes are yours, the reward
+follows the harm.
+
 ## Full rerun 2026-09-13, after the three bounty fixes
 
 Every v6 harness rerun on the source at 8df8417 plus the park-harness
