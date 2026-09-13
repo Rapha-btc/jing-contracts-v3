@@ -58,7 +58,7 @@ async function main() {
   const rid = (n) => `${DEP}.${n}`;
   console.log(`mid ${MID}; ${RUNG20}; ${RUNG0}`);
 
-  const T = mk(101), X9 = mk(102);
+  const T = mk(101), X9 = mk(102), X8 = mk(103);
   const R_AMT = 3000n, Y_SOLD = (R_AMT * PA(20n)) / PPDF + 100_000n; // takes the whole rung, leftover under 1 STX
   const BIG = 2_000_000_000n, SMALL = 2_000_000n; // 2000 STX peg vs a 2 STX taker: 0.1% < MIN_SHARE_BPS 0.2%
 
@@ -84,6 +84,8 @@ async function main() {
   tx("fund T stx", stxSend(T, SMALL + 2_000_000n), (v) => String(v).startsWith("(ok"));
   tx("fund X9 stx", stxSend(X9, 1_000_000n), (v) => String(v).startsWith("(ok"));
   tx("fund X9 sats", satsSend(X9, 1100n), "(ok true)");
+  tx("fund X8 stx", stxSend(X8, 1_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("fund X8 sats", satsSend(X8, 1100n), "(ok true)");
 
   // =============== O: sold out through fills ===============
   tx("O1 A deposits 3000 sats into the 20 bps rung", call(A, "deposit", [uintCV(R_AMT), UPD], rid(RUNG20)), "(ok true)");
@@ -111,6 +113,15 @@ async function main() {
   tx("G4 X9 rests a 9999 bps peg ask (widest peg) 1000 sats", depX(X9, 1000n, 1n, 9999n), "(ok u1000)");
   ev("G4 order (some u9999)", `(get-token-x-order '${X9})`, (v) => field(v, "spread-bps") === "(some u9999)");
   ev(`G4 limit-at = ${(MID * 19999n) / 10000n}`, `(token-x-limit-at '${X9} u${MID})`, `u${(MID * 19999n) / 10000n}`);
+  // G5 (bounty mtxs6nxg7a6d97081b11, Light Brio): the inactive-ask sentinel is
+  // MAX_UINT. A taker limit of exactly MAX_UINT used to list it in the sort and
+  // the walk, and cap-ask-fold multiplied amt * MAX_UINT -> runtime overflow,
+  // so get-taker-capacity aborted. The ask side now skips the sentinel
+  // explicitly, mirroring the bid side's u0 checks.
+  tx("G5 X8 rests a 30 bps peg ask with the floor one unit over mid+30bps -> out of band", depX(X8, 1000n, PA(30n) + 1n, 30n), "(ok u1000)");
+  ev("G5 X8 limit-at = MAX_UINT (inactive)", `(token-x-limit-at '${X8} u${MID})`, `u${MAX_UINT}`);
+  const capHuge = ev("G5 capacity at limit HUGE (baseline)", `(get-taker-capacity u${MID} u${HUGE} false)`, (v) => String(v).startsWith("(tuple"));
+  const capMax = ev("G5 capacity at limit MAX_UINT returns instead of overflowing on the sentinel", `(get-taker-capacity u${MID} u${MAX_UINT} false)`, (v) => String(v).startsWith("(tuple"));
 
   // =============== U: small taker vs a big zero-spread peg on its own side ===============
   tx("U1 S rests a 2000 STX zero-spread peg bid (asks rest above mid: no cross)", depY(S, BIG, HUGE, 0n), `(ok u${BIG})`);
@@ -145,6 +156,7 @@ async function main() {
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
   for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); i += 1; if (!/^fund /.test(st.label)) check(st.label, st.raw, st.want); else if (/ERR|\(err/.test(String(st.raw))) check(st.label, st.raw, st.want); }
   check("O4 A's STX grew by the claim", uintOf(a1.raw) - uintOf(a0.raw), (d) => d > 0n);
+  check("G5 walk-cap at MAX_UINT == walk-cap at HUGE (X8's sentinel counted in neither)", field(capMax.raw, "walk-cap"), (v) => v === field(capHuge.raw, "walk-cap") && v !== undefined);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

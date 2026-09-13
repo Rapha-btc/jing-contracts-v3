@@ -1972,6 +1972,7 @@
           (is-eq rem u0)
           (is-eq maker takr)
           (< m-amt (var-get min-token-x-deposit))
+          (is-eq l MAX_UINT)
           (<= l (get mid st))
           (> l (get limit st))
         )
@@ -2120,6 +2121,7 @@
     )
     (if (or
         (< m-amt (var-get min-token-x-deposit))
+        (is-eq l MAX_UINT)
         (<= l (get mid acc))
         (> l (get limit acc))
       )
@@ -2899,6 +2901,7 @@
     (if (<= l (get mid acc))
       (merge acc { in-range: (+ (get in-range acc) amt) })
       (if (and
+          (not (is-eq l MAX_UINT))
           (<= l (get limit acc))
           (>= amt (var-get min-token-x-deposit))
         )
