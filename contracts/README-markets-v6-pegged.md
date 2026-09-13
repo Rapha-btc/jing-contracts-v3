@@ -264,6 +264,32 @@ aborting the member's transaction. Clarity note: a `try!` inside
 `as-contract?` returns from the enclosing function, so the attempt has to be
 its own function for the caller to observe a refusal.
 
+## Priority on a full book
+
+A new maker arriving when the side holds MAX_DEPOSITORS orders:
+
+| newcomer's price right now | outcome |
+|---|---|
+| in range (bid at or over mid, ask at or under mid) | park step: the resident farthest out of range is parked (funds and price kept, readmittable); the newcomer takes the slot |
+| alive but out of range (a fixed order past mid, or a peg in band but past mid) | size rule: bigger than the smallest resident bumps it with a refund, else u1010 |
+| switched off (peg out of band: bid sentinel u0, ask sentinel MAX_UINT) | refused, u1010, funds stay in the wallet; try again in band or when a slot frees |
+
+The third row is new on 2026-09-13 (bounty mtxs6nxg7a6d97081b11, Celestial
+Shark). Before it, a switched-off newcomer skipped the park step, which only
+runs for in-range newcomers, and fell into the size rule, so a dead order
+could bump a live maker. The park step then took it back out at the next
+in-range arrival, but the bumped maker had already lost the slot. One assert
+per side in the public deposit closes it; bounty-fixes P/PX cover both sides.
+
+Why size, not distance, between two alive out-of-range orders: size is the
+one tie-break that cannot be laddered. Any "closer wins" rule lets a
+minimum-size order that is a hair closer park a whale, and a spammer can
+repeat that up the book. The cost of the size rule is that a whale far from
+mid can keep a small order near mid out; the answer to that is a rung, one
+slot shared by any number of makers, which no direct order can park. Direct
+maker priority, and enter-as-parked for a switched-off newcomer, are v7
+items.
+
 ## A parked maker cannot swap on the same side
 
 `swap` refuses with `ERR_HAS_RESTING_POSITION` (u1018) when the caller has a
@@ -464,7 +490,7 @@ gotcha: `swap` is unchanged, so its call must NOT get the extra argument
 | markets v6 withdraw | 98/98 | `2d23439b7eb6b5de5def1c93e6189bb5` |
 | markets v6 lazer-paths | 34/34 | `1205f76581d3a00f19fccfc6d2adc954` |
 | markets v6 gaps | 66/66 | `b27e408f1413fc9fdb1ff39e6392b6ef` |
-| markets v6 bounty-fixes | 136/136 | `5ce256e34dd9f50c128c35b71131f87a` (2026-09-13: + parked maker swaps on y and on x -> u1018, position untouched) |
+| markets v6 bounty-fixes | 142/142 | `63206d614d611de40d5a64b2ce7bee82` (2026-09-13: + parked maker swaps on y and on x -> u1018, position untouched; + switched-off peg newcomer bigger than the smallest on a full book -> u1010, no bump, both sides) |
 | markets v6 remainder-cross | 115/115 | `1530095ec9875dc772b936746fae66ff` (2026-09-13, after the parked-swap check) |
 | markets v6 stress (seed 7, 60 actions) | 125/125 | `1ca4b515c6307e7266d3f9313d24a903` |
 

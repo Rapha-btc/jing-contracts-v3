@@ -835,6 +835,10 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-y price bid)) ERR_MUST_USE_SWAP)
+    ;; Priority on a full book: in range parks the farthest resident; alive
+    ;; but out of range competes on size; switched off (sentinel) gets no
+    ;; slot at all. Without this a dead peg could bump a live maker.
+    (asserts! (not (and new-maker full (is-eq bid u0))) ERR_QUEUE_FULL)
     (and
       new-maker
       full
@@ -977,6 +981,9 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
+    ;; mirror of the y side: a switched-off ask (sentinel) gets no slot on a
+    ;; full book.
+    (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
     (and
       new-maker
       full

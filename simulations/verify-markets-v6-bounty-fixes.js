@@ -68,6 +68,7 @@ import {
   trueCV,
   falseCV,
   noneCV,
+  someCV,
   cvToString,
   cvToJSON,
   deserializeCV,
@@ -284,6 +285,10 @@ async function main() {
     call(sender, "deposit-token-x", [uintCV(amount), uintCV(limit), noneCV(), DUMMY_VAA, sbtcTrait, sbtcAsset], cid);
   const depositY = (sender, amount, limit, cid = CID) =>
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), noneCV(), DUMMY_VAA, wstxTrait, wstxAsset], cid);
+  const depositYPeg = (sender, amount, cap, spread, cid = CID) =>
+    call(sender, "deposit-token-y", [uintCV(amount), uintCV(cap), someCV(uintCV(spread)), DUMMY_VAA, wstxTrait, wstxAsset], cid);
+  const depositXPeg = (sender, amount, floor, spread, cid = CID) =>
+    call(sender, "deposit-token-x", [uintCV(amount), uintCV(floor), someCV(uintCV(spread)), DUMMY_VAA, sbtcTrait, sbtcAsset], cid);
   const swap = (sender, amount, limit, depositXSide, cid = CID) =>
     call(sender, "swap", [uintCV(amount), uintCV(limit), DUMMY_VAA, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, depositXSide ? trueCV() : falseCV()], cid);
   const cancelY = (sender, cid = CID) => call(sender, "cancel-token-y-deposit", [wstxTrait, wstxAsset], cid);
@@ -339,7 +344,7 @@ async function main() {
     [TX, 1_000_000, 3000n],
     [P1, 3_500_000, 0n], [P2, 3_500_000, 0n], [P3, 3_500_000, 0n],
     [N1, 3_500_000, 0n], [N2, 3_500_000, 0n], [N3, 3_500_000, 0n],
-    [Q1, 1_000_000, 3000n], [Q2, 1_000_000, 3000n], [Q3, 1_000_000, 3000n], [N4, 1_000_000, 4000n],
+    [Q1, 1_000_000, 3500n], [Q2, 1_000_000, 3000n], [Q3, 1_000_000, 3000n], [N4, 1_000_000, 4000n],
   ]) {
     tx(`fund ${who.slice(0, 6)} stx`, stxSend(who, ustx), okPrefix);
     if (sats > 0n) tx(`fund ${who.slice(0, 6)} sbtc`, sbtcSend(who, sats), okPrefix);
@@ -426,6 +431,13 @@ async function main() {
   ev("P totals exclude parked (6 STX)", "(get total-token-y (get-cycle-totals u0))", "u6000000", PID);
   ev("P P1 limit kept", `(get-token-y-limit '${P1})`, `u${LP1}`, PID);
   tx("P N2 out-of-range newcomer smaller than smallest -> u1010", depositY(N2, 1_500_000n, 1n, PID), "(err u1010)");
+  // bounty mtxs6nxg7a6d97081b11 (Celestial Shark): a newcomer whose peg is
+  // switched off (cap under mid - 30 bps -> bid sentinel u0) used to skip the
+  // park step and bump the smallest live maker on size. Dead orders get no
+  // slot on a full book now, whatever their size.
+  tx("P N2 switched-off peg newcomer (3 STX > smallest 2 STX) on a full book -> u1010, no bump", depositYPeg(N2, 3_000_000n, LP1, 30n, PID), "(err u1010)");
+  ev("P smallest live maker (N1) still on the book", `(get-token-y-deposit u0 '${N1})`, "u2000000", PID);
+  ev("P book still 3", "(len (get-token-y-depositors u0))", "u3", PID);
   tx("P P1 reprices while parked -> ok", setLimitY(P1, HUGE, PID), "(ok true)");
   ev("P P1 new limit", `(get-token-y-limit '${P1})`, `u${HUGE}`, PID);
   tx("P readmit P1 with side full -> u1010", readmitY(DEPLOYER, P1), "(err u1010)");
@@ -474,6 +486,9 @@ async function main() {
   tx("PX Q1 cancels while parked -> refund", cancelX(Q1, PID), "(ok u3000)");
   const q1After = cap("Q1 sbtc after cancel", `(get-balance '${Q1})`, SBTC_FQN);
   ev("PX Q1 parked cleared", `(get-token-x-parked '${Q1})`, "u0", PID);
+  tx("PX Q1 returns as a switched-off peg ask (floor +10% over mid+30bps -> MAX_UINT), 3500 > smallest 3000, full book -> u1010, no bump", depositXPeg(Q1, 3500n, LQ1, 30n, PID), "(err u1010)");
+  ev("PX smallest live ask (Q2) still on the book", `(get-token-x-deposit u0 '${Q2})`, "u3000", PID);
+  ev("PX x book still 3", "(len (get-token-x-depositors u0))", "u3", PID);
   tx("PX Q2 cancels -> slot", cancelX(Q2, PID), "(ok u3000)");
   tx("PX N4 top-up (existing) needs no park", depositX(N4, 1000n, 1n, PID), "(ok u1000)");
 
