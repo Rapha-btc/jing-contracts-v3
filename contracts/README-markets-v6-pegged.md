@@ -276,7 +276,7 @@ A new maker arriving when the side holds MAX_DEPOSITORS orders:
 | newcomer's price right now | outcome |
 |---|---|
 | in range (bid at or over mid, ask at or under mid) | park step: the resident farthest out of range is parked (funds and price kept, readmittable); the newcomer takes the slot |
-| alive but out of range (a fixed order past mid, or a peg in band but past mid) | size rule: bigger than the smallest resident bumps it with a refund, else u1010 |
+| alive but out of range (a fixed order past mid, or a peg in band but past mid) | the `distance-slots` best-priced residents (default 10, operator-settable, at most MAX_DEPOSITORS) compete on price: a newcomer that beats the N-th best price takes its slot, and the N-th best is demoted to the size region: it stays if it is bigger than the smallest resident outside the N best (that smallest is parked), else it is parked itself. Funds and price kept either way, readmittable. Otherwise the size rule: bigger than the smallest resident bumps it with a refund, else u1010 |
 | switched off (peg out of band: bid sentinel u0, ask sentinel MAX_UINT) | refused, u1010, funds stay in the wallet; try again in band or when a slot frees |
 
 The third row is new on 2026-09-13 (bounty mtxs6nxg7a6d97081b11, Celestial
@@ -286,14 +286,29 @@ could bump a live maker. The park step then took it back out at the next
 in-range arrival, but the bumped maker had already lost the slot. One assert
 per side in the public deposit closes it; bounty-fixes P/PX cover both sides.
 
-Why size, not distance, between two alive out-of-range orders: size is the
-one tie-break that cannot be laddered. Any "closer wins" rule lets a
-minimum-size order that is a hair closer park a whale, and a spammer can
-repeat that up the book. The cost of the size rule is that a whale far from
-mid can keep a small order near mid out; the answer to that is a rung, one
-slot shared by any number of makers, which no direct order can park. Direct
-maker priority, and enter-as-parked for a switched-off newcomer, are v7
-items.
+Why the N best prices compete on price and every other slot on size: "closer
+wins" on its own can be laddered, a minimum-size order a hair closer parks a
+whale and a spammer repeats that up the book. Size on its own lets a whale
+far from mid keep a small order near mid out forever. Ranking the N best
+prices as one region and letting a newcomer displace only the worst of that
+region bounds both: the order that leaves the region is the current N-th
+best, and it then competes on size with the rest of the book, so the order
+that leaves the book is always the smallest of the N-th best and the size
+region, parked, never refunded. A whale outside the N best can only be
+bumped on size by a bigger newcomer. A whale that chooses to sit inside the N best accepts price
+competition there. Ties: a newcomer at the same price as the N-th best does
+not beat it (strict), and among equal prices the latest arrival ranks last,
+so time priority holds within a price. In-range residents are outside both regions: they are not ranked for the
+price region and never chosen as the smallest of the size region, so an
+in-range order is never parked by an out-of-range newcomer.
+Switched-off residents rank last of all, so they go first when the region
+reaches them. The operator dials N with `set-distance-slots`; 0 = size
+only. Rungs remain the answer for pooled depth: one slot, any number of
+makers. Enter-as-parked for a switched-off newcomer is a v7 item. Covered by
+bounty-fixes section D (D5b: with two price slots and residents at -1%,
+-5% and -6%, a newcomer at -3% displaces the -5% one, not the farthest;
+D5c/D5d: the demoted N-th best is parked when smaller than the smallest
+outside, and stays while that smallest is parked when bigger).
 
 ## A parked maker cannot swap on the same side
 
@@ -506,6 +521,41 @@ Sonic Mast reported the same sentinel as informational; Celestial Mast
 confirmed the invariants without a new finding. Thank you to all five, and
 in particular to apeirs and Light Brio: both fixes are yours, the reward
 follows the harm.
+
+## Rerun after `distance-slots` (2026-09-13, later)
+
+Every v6 harness rerun with the N-best-prices rule and the demotion cascade
+(`distance-slots`, default 10; price region = the N best out-of-range
+prices, size region = every other out-of-range resident, in-range residents
+in neither). Three harnesses changed their expectations, each where a small
+in-band rung or maker on a full queue used to be held and now displaces the
+N-th best: peg-park K8/K9, peg-park-y Y4, bounty-fixes section D (new: D5b
+tells "the N-th best" from "the farthest"; D5c/D5d the cascade; D5e that
+in-range residents count for neither region).
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 191/191 | `dd7aa8f57903ad4a07aa90857690f119` |
+| markets v6 gaps | 66/66 | `a1e74b234b47b10f22a75ba155cad129` |
+| markets v6 lazer-paths | 34/34 | `13aa8da8c4fe4084a1dc163d66c1e77f` |
+| markets v6 multifill | 43/43 | `b363575ecfb321c2e5872291dc7e9546` |
+| markets v6 regression | 22/22 | `3b1bc108112bbf15c4b30a59b8f4fe89` |
+| markets v6 remainder-cross | 115/115 | `b8a7be64530bf549940763ff018ace68` |
+| markets v6 stress | 125/125 | `bd9476e87a651d16f95ca0b4dd693c3b` |
+| markets v6 withdraw | 98/98 | `0e3a95015bc45d6877d2e6bfc879855b` |
+| v6 peg-batch | 92/92 | `cc2ae30a931fac9d5df68affc61d2251` |
+| v6 peg-edges | 60/60 | `091a7f7d9380e4944acd5a849bad3cfd` |
+| v6 peg | 76/76 | `e92be6c05ab35cfbc7c792d98033501e` |
+| v6 peg-mirror | 40/40 | `ee8339848b209348e05a96f96aa0a847` |
+| v6 peg-more | 51/51 | `609cbe85cb00e3b8cd441505c6f9ec7a` |
+| v6 peg-park | 39/39 | `aa8805fae117038bb38428f9a8474ed2` |
+| v6 peg-park-y | 75/75 | `aa1fd0cf804f3ac0aa26a98952954a07` |
+| v6 peg-track | 30/30 | `694b7b4b1a59f0c4d602b5146a66e7ff` |
+| v6 peg-walk-order | 60/60 | `53d594a37a139f639889b398fbe736d3` |
+| v6 rungs-fill | 40/40 | `9a12b1aefb10952232352cd1621cff35` |
+| v6 rungs-keyless | 37 passed | `bf9a0e95246b3c22b45a80208b290f3e` |
+| v6 rungs-push | 39/39 | `2b96b2d300e0e6b9b4aee00f321c12fa` |
+| vault v6 parked | 133/133 | `bcfba8cca57acd4f1390197bb71b3e77` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

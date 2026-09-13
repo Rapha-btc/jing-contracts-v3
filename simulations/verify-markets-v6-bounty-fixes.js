@@ -492,6 +492,81 @@ async function main() {
   tx("PX Q2 cancels -> slot", cancelX(Q2, PID), "(ok u3000)");
   tx("PX N4 top-up (existing) needs no park", depositX(N4, 1000n, 1n, PID), "(ok u1000)");
 
+  // =============== D: distance-slots (price-first within N slots, then size) ===============
+  // y side is empty here. Book of 3: P1 at -10%, P2 at -5%, P3 in range.
+  const LP7 = (MID * 93n) / 100n, LP12 = (MID * 88n) / 100n, LP6 = (MID * 94n) / 100n, LP1PCT = (MID * 99n) / 100n, LP3PCT = (MID * 97n) / 100n;
+  ev("D0 distance-slots default 10", "(get-distance-slots)", "u10", PID);
+  tx("D1 P1 bid 2 STX at -10%", depositY(P1, 2_000_000n, LP1, PID), "(ok u2000000)");
+  tx("D1 P2 bid 2 STX at -5%", depositY(P2, 2_000_000n, LP3, PID), "(ok u2000000)");
+  tx("D1 P3 bid 2 STX at -1% (closest; an in-range ask rests, so in range would be u1016)", depositY(P3, 2_000_000n, LP1PCT, PID), "(ok u2000000)");
+  ev("D1 book full (3)", "(len (get-token-y-depositors u0))", "u3", PID);
+  // N1: smaller than the smallest (1.6 < 2) but closer than P1: 2 residents
+  // closer (P2, P3) < 10 slots -> parks P1 (the only one farther), takes the slot
+  tx("D2 N1 1.6 STX at -7%: smaller than everyone, beats the worst of the top set (P1 at -10%) -> parks P1, in", depositY(N1, 1_600_000n, LP7, PID), "(ok u1600000)");
+  ev("D2 P1 parked 2 STX", `(get-token-y-parked '${P1})`, "u2000000", PID);
+  ev("D2 N1 live 1.6 STX", `(get-token-y-deposit u0 '${N1})`, "u1600000", PID);
+  ev("D2 book still 3", "(len (get-token-y-depositors u0))", "u3", PID);
+  // N2 farther than everyone: nobody to park -> size rule -> 1.6 not > 1.6 -> u1010
+  tx("D3 N2 1.6 STX at -12%: worse than the worst of the top set -> size rule -> u1010", depositY(N2, 1_600_000n, LP12, PID), "(err u1010)");
+  // operator dials the slots down to 1: N3 at -6% has 2 closer (P2, P3) >= 1 -> size rule
+  tx("D4 operator sets distance-slots u1", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
+  tx("D4 N3 1.6 STX at -6%: the single price slot is P3 at -1%, not beaten -> size rule -> 1.6 not > 1.6 -> u1010", depositY(N3, 1_600_000n, LP6, PID), "(err u1010)");
+  tx("D5 N3 2.5 STX at -6%: size rule -> bumps the smallest (N1, 1.6)", depositY(N3, 2_500_000n, LP6, PID), "(ok u2500000)");
+  ev("D5 N1 bumped off", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  ev("D5 N3 live 2.5 STX", `(get-token-y-deposit u0 '${N3})`, "u2500000", PID);
+  // the distinguishing case: book = {P3 -1%, P2 -5%, N3 -6% (2.5 STX, the
+  // biggest)}; 2 price slots = {P3, P2}; the second best is P2. N2 at -3%
+  // beats it -> parks P2 (2nd best), NOT N3, the farthest and biggest, which
+  // sits outside the price slots and can only be bumped on size.
+  tx("D5b operator sets distance-slots u2", call(DEPLOYER, "set-distance-slots", [uintCV(2)], PID), "(ok true)");
+  tx("D5b N2 1.6 STX at -3%: beats the 2nd best (P2 at -5%) -> parks P2; N3 (-6%, biggest) outside the price slots is not touched", depositY(N2, 1_600_000n, LP3PCT, PID), "(ok u1600000)");
+  ev("D5b P2 parked 2 STX (funds and price kept)", `(get-token-y-parked '${P2})`, "u2000000", PID);
+  ev("D5b N2 live 1.6 STX", `(get-token-y-deposit u0 '${N2})`, "u1600000", PID);
+  ev("D5b N3 (-6%, outside the 2 price slots) untouched", `(get-token-y-deposit u0 '${N3})`, "u2500000", PID);
+  ev("D5b book still 3", "(len (get-token-y-depositors u0))", "u3", PID);
+  // the demotion cascade. Book: P3 -1% (2), N2 -3% (1.6), N3 -6% (2.5, the
+  // biggest, outside the 2 price slots).
+  // C1: N1 3 STX at -2% beats the 2nd best (N2). N2 is demoted: 1.6 is not
+  // bigger than the smallest outside (N3, 2.5) -> N2 is parked.
+  const LP2PCT = (MID * 98n) / 100n, LP15 = (MID * 985n) / 1000n, LP4 = (MID * 96n) / 100n;
+  tx("D5c N1 3 STX at -2%: beats the 2nd best (N2, 1.6); N2 demoted, smaller than the smallest outside (N3, 2.5) -> N2 parked", depositY(N1, 3_000_000n, LP2PCT, PID), "(ok u3000000)");
+  ev("D5c N2 parked 1.6 STX", `(get-token-y-parked '${N2})`, "u1600000", PID);
+  ev("D5c N3 still live 2.5 STX", `(get-token-y-deposit u0 '${N3})`, "u2500000", PID);
+  ev("D5c N1 live 3 STX", `(get-token-y-deposit u0 '${N1})`, "u3000000", PID);
+  // C2: P2 (parked 2 STX) deposits 0.5 more at -1.5%: combined 2.5, beats the
+  // 2nd best (N1 at -2%, 3 STX). N1 is demoted: 3 > smallest outside (N3,
+  // 2.5) -> N3 is parked, N1 stays in the size region.
+  tx("D5d P2 (parked 2) deposits 0.5 STX at -1.5%: beats the 2nd best (N1, 3 STX); N1 demoted, bigger than the smallest outside (N3, 2.5) -> N3 parked, N1 stays", depositY(P2, 500_000n, LP15, PID), "(ok u500000)");
+  ev("D5d N3 parked 2.5 STX", `(get-token-y-parked '${N3})`, "u2500000", PID);
+  ev("D5d N1 still live 3 STX (demoted, survives on size)", `(get-token-y-deposit u0 '${N1})`, "u3000000", PID);
+  ev("D5d P2 live 2.5 STX, parked cleared", `(get-token-y-deposit u0 '${P2})`, "u2500000", PID);
+  ev("D5d P2 parked 0", `(get-token-y-parked '${P2})`, "u0", PID);
+  ev("D5d book still 3", "(len (get-token-y-depositors u0))", "u3", PID);
+  // D5e: in-range residents are outside both regions. Book: P3 and N1 in
+  // range, P2 at -5%; one price slot. N2 (parked 1.6) tops up 0.4 at -4%:
+  // the price region is {P2} (in-range not ranked), -4% beats -5% -> P2 is
+  // demoted, nobody out of range outside the region -> P2 parked. With
+  // in-range residents ranked, the region would be {P3} and N2 would fall to
+  // the size rule (2.0 not > 2) -> u1010.
+  tx("D5e P3 cancels", cancelY(P3, PID), "(ok u2000000)");
+  tx("D5e N1 cancels", cancelY(N1, PID), "(ok u3000000)");
+  tx("D5e P2 cancels", cancelY(P2, PID), "(ok u2500000)");
+  tx("D5e N4 cancels its in-range ask so in-range bids can rest", cancelX(N4, PID), "(ok u4000)");
+  tx("D5e operator sets distance-slots u1", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
+  tx("D5e P3 bid 2 STX in range", depositY(P3, 2_000_000n, HUGE, PID), "(ok u2000000)");
+  tx("D5e N1 bid 2 STX in range", depositY(N1, 2_000_000n, HUGE, PID), "(ok u2000000)");
+  tx("D5e P2 bid 2 STX at -5%", depositY(P2, 2_000_000n, LP3, PID), "(ok u2000000)");
+  ev("D5e book full (3)", "(len (get-token-y-depositors u0))", "u3", PID);
+  tx("D5e N2 (parked 1.6) tops up 0.4 at -4%: beats the only out-of-range price (P2, -5%) -> P2 parked, in-range pair untouched", depositY(N2, 400_000n, LP4, PID), "(ok u400000)");
+  ev("D5e P2 parked 2 STX", `(get-token-y-parked '${P2})`, "u2000000", PID);
+  ev("D5e N2 live 2 STX (1.6 carried + 0.4)", `(get-token-y-deposit u0 '${N2})`, "u2000000", PID);
+  ev("D5e P3 still live", `(get-token-y-deposit u0 '${P3})`, "u2000000", PID);
+  ev("D5e N1 still live", `(get-token-y-deposit u0 '${N1})`, "u2000000", PID);
+  tx("D6 set-distance-slots over MAX_DEPOSITORS -> u1010", call(DEPLOYER, "set-distance-slots", [uintCV(51)], PID), "(err u1010)");
+  tx("D6 stranger cannot set distance-slots", call(N2, "set-distance-slots", [uintCV(5)], PID), (v) => String(v).startsWith("(err"));
+  tx("D6 operator restores to MAX_DEPOSITORS of this instance (u3; u10 default exceeds the patched cap)", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
+  ev("D6 distance-slots 3", "(get-distance-slots)", "u3", PID);
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

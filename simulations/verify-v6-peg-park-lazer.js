@@ -82,12 +82,18 @@ async function main() {
   ev("K6 first filler NOT bumped (a dead peg cannot displace it)", `(get-token-x-deposit u0 '${FILLERS[0]})`, `u${FILL}`);
   tx("K7 A deposits 1000 more: still out of band, still held", call(A, "deposit", [uintCV(1000), UPD], RID), "(ok true)");
   ev("K7 held 2000, still parked", "(get-state)", (v) => field(v, "held-sats") === "u2000", RID);
-  // a second, in-band peg rung arriving on the full queue: too small to bump ->
-  // held inside the rung; big enough -> bumps and goes live
+  // a second, in-band peg rung arriving on the full queue. distance-slots
+  // (2026-09-13): its ask at mid + 20 bps beats the tenth best price (a +5%
+  // filler), so it parks that filler and rests, whatever its size. Before,
+  // 1500 < 2000 was held.
   tx(`init ${RUNG2} (in band)`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], RID2), "(ok true)");
-  tx("K8 A deposits 1500 into the in-band rung: new maker, full queue, 1500 < 2000 -> held", call(A, "deposit", [uintCV(1500), UPD], RID2), "(ok true)");
-  ev("K8 held 1500, nothing on the market", "(get-state)", (v) => field(v, "held-sats") === "u1500" && field(v, "resting") === "u0", RID2);
-  tx("K9 A deposits 1000 more: 2500 > 2000 -> bumps the smallest, live", call(A, "deposit", [uintCV(1000), UPD], RID2), "(ok true)");
+  tx("K8 A deposits 1500 into the in-band rung: full queue, 0 residents closer < distance-slots -> parks the farthest filler (+5%), live with 1500", call(A, "deposit", [uintCV(1500), UPD], RID2), "(ok true)");
+  ev("K8 live 1500, held 0", "(get-state)", (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u1500", RID2);
+  ev("K8 rung 2 on the market with 1500", `(get-token-x-deposit u0 '${RID2})`, "u1500");
+  // before K8: 49 fillers + the parker, 2000 each = 100000 (the rung is parked, not in totals)
+  ev("K8 x total 99500: one 2000 filler parked, 1500 rung in", "(get total-token-x (get-cycle-totals u0))", "u99500");
+  ev("K8 queue still 50", "(len (get-token-x-depositors u0))", "u50");
+  tx("K9 A deposits 1000 more: plain top-up on the live position", call(A, "deposit", [uintCV(1000), UPD], RID2), "(ok true)");
   ev("K9 live with 2500", `(get-token-x-deposit u0 '${RID2})`, "u2500");
   ev("K9 held 0", "(get-state)", (v) => field(v, "held-sats") === "u0", RID2);
   ev("K9 queue still 50", "(len (get-token-x-depositors u0))", "u50");

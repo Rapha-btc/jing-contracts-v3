@@ -142,14 +142,17 @@ async function main() {
   tx("Y4 filler 51 rests: full again", depY(F51, FILL, BID_NEAR, null), `(ok u${FILL})`);
   ev("Y4 queue 50", "(len (get-token-y-depositors u0))", "u50");
   tx(`init ${RUNG2} (in band)`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], RID2), "(ok true)");
-  tx("Y4 S deposits 1.2 STX into the in-band rung: new maker, full queue, 1.2 < 1.5 -> held", call(S, "deposit", [uintCV(1_200_000), UPD], RID2), "(ok true)");
-  ev("Y4 held 1.2 STX, nothing on the market", "(get-state)", (v) => field(v, "held-ustx") === "u1200000" && field(v, "resting") === "u0", RID2);
-  tx("Y4 S deposits 0.5 STX more: 1.7 > 1.5 -> bumps the smallest, live", call(S, "deposit", [uintCV(500_000), UPD], RID2), "(ok true)");
+  // distance-slots (2026-09-13): the in-band rung bids mid - 20 bps, better
+  // than the tenth best price (a -5% filler), so it parks that filler and
+  // rests at any size. Before, 1.2 < 1.5 was held.
+  tx("Y4 S deposits 1.2 STX into the in-band rung: full queue, 0 residents closer < distance-slots -> parks the farthest filler (-5%), live with 1.2 STX", call(S, "deposit", [uintCV(1_200_000), UPD], RID2), "(ok true)");
+  ev("Y4 live 1.2 STX, held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u1200000", RID2);
+  tx("Y4 S deposits 0.5 STX more: plain top-up on the live position", call(S, "deposit", [uintCV(500_000), UPD], RID2), "(ok true)");
   ev("Y4 rung 2 live with 1.7 STX", `(get-token-y-deposit u0 '${RID2})`, "u1700000");
   ev("Y4 held 0", "(get-state)", (v) => field(v, "held-ustx") === "u0", RID2);
   tx("Y4 fund Q", stxSend(Q, 5_000_000n), (v) => String(v).startsWith("(ok"));
   tx("Y4 Q rests an out-of-band zero-spread peg 2 STX on the FULL queue: switched off -> u1010 (2026-09-13 rule)", depY(Q, 2_000_000n, LOW_CAP, 0n), "(err u1010)");
-  tx("Y4 filler 3 cancels -> a slot (fillers 1 and 2 already left: Y3 cancel, rung-2 bump)", call(FILLERS[2], "cancel-token-y-deposit", [wstxT, wstxA]), `(ok u${FILL})`);
+  tx("Y4 filler 3 cancels -> a slot (filler 1 cancelled in Y3; if rung 2 parked filler 3 this is u1005 and the run says so)", call(FILLERS[2], "cancel-token-y-deposit", [wstxT, wstxA]), `(ok u${FILL})`);
   tx("Y4 Q rests the same peg into the free slot -> ok", depY(Q, 2_000_000n, LOW_CAP, 0n), "(ok u2000000)");
   tx("Y4 fund parker 3", stxSend(PARKER3, 3_000_000n), (v) => String(v).startsWith("(ok"));
   tx("Y4 parker 3 rests in range: parks Q", depY(PARKER3, 2_000_000n, HUGE, null), "(ok u2000000)");
