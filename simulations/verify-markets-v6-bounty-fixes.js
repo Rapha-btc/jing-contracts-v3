@@ -459,11 +459,16 @@ async function main() {
   // the combined size (2 parked + 1 new) beats the smallest live maker (2 STX,
   // N1 first in the list), which is bumped and refunded
   const n1Before = cap("N1 stx before P3's bump", `(stx-get-balance '${N1})`, PID);
-  tx("P P3 deposits 1 STX while parked: side full, combined 3 STX bumps the smallest (N1) -> live", depositY(P3, 1_000_000n, LP3, PID), "(ok u1000000)");
+  // size rule (2026-09-13): the bumped smallest is PARKED, not refunded
+  tx("P P3 deposits 1 STX while parked: side full, combined 3 STX beats the smallest (N1) on size -> N1 parked, P3 live", depositY(P3, 1_000_000n, LP3, PID), "(ok u1000000)");
   const n1After = cap("N1 stx after the bump", `(stx-get-balance '${N1})`, PID);
   ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
   ev("P P3 live with 3 STX", `(get-token-y-deposit u0 '${P3})`, "u3000000", PID);
-  ev("P N1 bumped off", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  ev("P N1 off the book", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  ev("P N1 parked 2 STX (funds and price kept)", `(get-token-y-parked '${N1})`, "u2000000", PID);
+  ev("P N1 limit kept", `(get-token-y-limit '${N1})`, `u${HUGE}`, PID);
+  tx("P N1 cancels its parked 2 STX -> refund", cancelY(N1, PID), "(ok u2000000)");
+  ev("P N1 parked cleared", `(get-token-y-parked '${N1})`, "u0", PID);
   ev("P totals 7 STX (P1 2 + N3 2 + P3 3)", "(get total-token-y (get-cycle-totals u0))", "u7000000", PID);
   tx("P readmit P3 (no longer parked) -> u1022", readmitY(DEPLOYER, P3), "(err u1022)");
   tx("P readmit P1 (live, not parked) -> u1022", readmitY(DEPLOYER, P1), "(err u1022)");
@@ -511,8 +516,9 @@ async function main() {
   // operator dials the slots down to 1: N3 at -6% has 2 closer (P2, P3) >= 1 -> size rule
   tx("D4 operator sets distance-slots u1", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
   tx("D4 N3 1.6 STX at -6%: the single price slot is P3 at -1%, not beaten -> size rule -> 1.6 not > 1.6 -> u1010", depositY(N3, 1_600_000n, LP6, PID), "(err u1010)");
-  tx("D5 N3 2.5 STX at -6%: size rule -> bumps the smallest (N1, 1.6)", depositY(N3, 2_500_000n, LP6, PID), "(ok u2500000)");
-  ev("D5 N1 bumped off", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  tx("D5 N3 2.5 STX at -6%: size rule -> the smallest (N1, 1.6) is parked", depositY(N3, 2_500_000n, LP6, PID), "(ok u2500000)");
+  ev("D5 N1 off the book", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
+  ev("D5 N1 parked 1.6 STX", `(get-token-y-parked '${N1})`, "u1600000", PID);
   ev("D5 N3 live 2.5 STX", `(get-token-y-deposit u0 '${N3})`, "u2500000", PID);
   // the distinguishing case: book = {P3 -1%, P2 -5%, N3 -6% (2.5 STX, the
   // biggest)}; 2 price slots = {P3, P2}; the second best is P2. N2 at -3%
@@ -526,10 +532,12 @@ async function main() {
   ev("D5b book still 3", "(len (get-token-y-depositors u0))", "u3", PID);
   // the demotion cascade. Book: P3 -1% (2), N2 -3% (1.6), N3 -6% (2.5, the
   // biggest, outside the 2 price slots).
-  // C1: N1 3 STX at -2% beats the 2nd best (N2). N2 is demoted: 1.6 is not
+  // C1: N1 (parked 1.6 by D5) tops up 1.4 at -2%, 3 STX in all, beats the
+  // 2nd best (N2). N2 is demoted: 1.6 is not
   // bigger than the smallest outside (N3, 2.5) -> N2 is parked.
   const LP2PCT = (MID * 98n) / 100n, LP15 = (MID * 985n) / 1000n, LP4 = (MID * 96n) / 100n;
-  tx("D5c N1 3 STX at -2%: beats the 2nd best (N2, 1.6); N2 demoted, smaller than the smallest outside (N3, 2.5) -> N2 parked", depositY(N1, 3_000_000n, LP2PCT, PID), "(ok u3000000)");
+  tx("D5c N1 (parked 1.6) deposits 1.4 at -2% = 3 STX: beats the 2nd best (N2, 1.6); N2 demoted, smaller than the smallest outside (N3, 2.5) -> N2 parked", depositY(N1, 1_400_000n, LP2PCT, PID), "(ok u1400000)");
+  ev("D5c N1 parked cleared (carried in)", `(get-token-y-parked '${N1})`, "u0", PID);
   ev("D5c N2 parked 1.6 STX", `(get-token-y-parked '${N2})`, "u1600000", PID);
   ev("D5c N3 still live 2.5 STX", `(get-token-y-deposit u0 '${N3})`, "u2500000", PID);
   ev("D5c N1 live 3 STX", `(get-token-y-deposit u0 '${N1})`, "u3000000", PID);
@@ -594,7 +602,7 @@ async function main() {
   check(`B1 taker sBTC gain == ${T1_SBTC_GAIN}`, t1After.value - t1Before.value, (d) => d === T1_SBTC_GAIN);
   check("B2 escrow unchanged (atomic)", escAfter.value - escBefore.value, (d) => d === 0n);
   check(`B4 taker sBTC gain == ${XB - (XB * FEE) / BPS}`, t3After.value - t3Before.value, (d) => d === XB - (XB * FEE) / BPS);
-  check("P N1 bump refund landed (exactly 2 STX, P3 paid the fee)", n1After.value - n1Before.value, (d) => d === 2_000_000n);
+  check("P N1 wallet unchanged by the size bump (parked, not refunded)", n1After.value - n1Before.value, (d) => d === 0n);
   check("PX Q1 refund landed (3000 sats)", q1After.value - q1Before.value, (d) => d === 3000n);
 
   console.log(`\n${checks - failures}/${checks} checks green`);

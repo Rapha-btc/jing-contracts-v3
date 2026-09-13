@@ -995,6 +995,7 @@
     (limit-price uint)
     (spread-bps (optional uint))
     (carry uint)
+    (price uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1024,8 +1025,11 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-        (try! (as-contract? ((with-stx smallest-amount))
-          (try! (stx-transfer? smallest-amount current-contract smallest-who))
+        ;; the smallest resident is PARKED, not refunded: funds and price
+        ;; kept, readmittable when a slot frees (2026-09-13; v5 refunded)
+        (map-set token-y-parked smallest-who smallest-amount)
+        (try! (contract-call? .jing-core-v5 log-park-y smallest-who smallest-amount cycle
+          price (var-get token-x) tok-y
         ))
         (try! (stx-transfer? amount tx-sender current-contract))
         (var-set bumped-token-y-principal smallest-who)
@@ -1038,7 +1042,6 @@
           cycle: cycle,
           depositor: smallest-who,
         })
-        (map-delete token-y-deposit-limits smallest-who)
         (map-set token-y-deposits {
           cycle: cycle,
           depositor: tx-sender,
@@ -1127,7 +1130,7 @@
       full
       (try! (park-tenth-token-y cycle price bid depositors))
     )
-    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked t asset-name))))
+    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -1144,6 +1147,7 @@
     (limit-price uint)
     (spread-bps (optional uint))
     (carry uint)
+    (price uint)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1172,10 +1176,10 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-        (try! (as-contract? ((with-ft (contract-of t) asset-name smallest-amount))
-          (try! (contract-call? t transfer smallest-amount current-contract
-            smallest-who none
-          ))
+        ;; the smallest resident is PARKED, not refunded (mirror of the y side)
+        (map-set token-x-parked smallest-who smallest-amount)
+        (try! (contract-call? .jing-core-v5 log-park-x smallest-who smallest-amount cycle
+          price tok-x (var-get token-y)
         ))
         (try! (contract-call? t transfer amount tx-sender current-contract none))
         (var-set bumped-token-x-principal smallest-who)
@@ -1188,7 +1192,6 @@
           cycle: cycle,
           depositor: smallest-who,
         })
-        (map-delete token-x-deposit-limits smallest-who)
         (map-set token-x-deposits {
           cycle: cycle,
           depositor: tx-sender,
@@ -1273,7 +1276,7 @@
       full
       (try! (park-tenth-token-x cycle price ask depositors))
     )
-    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked t asset-name))))
+    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -2033,12 +2036,12 @@
           ))
         )
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none u0 tx-trait tx-name))
+        (try! (deposit-token-x-core net limit-price none u0 u0 tx-trait tx-name))
       )
       (begin
         (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none u0 ty-trait ty-name))
+        (try! (deposit-token-y-core net limit-price none u0 u0 ty-trait ty-name))
       )
     )
     (var-set crossing true)

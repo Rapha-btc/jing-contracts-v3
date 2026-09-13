@@ -286,13 +286,15 @@ new maker, side full
   |     |- nobody out of range at all                -> size rule
   |- else                                            -> size rule
 
-size rule (the core, unchanged): bigger than the smallest resident bumps
-it with a refund, else u1010.
+size rule (the core): bigger than the smallest resident PARKS it and takes
+its slot, else u1010.
 ```
 
-Parked = funds and price kept, readmittable when a slot frees. Refunded =
-money returned, order gone. In-range residents are in neither region and
-are never displaced by a newcomer's priority, only by size.
+Parked = funds and price kept, readmittable when a slot frees. Nothing on
+a full book is refunded any more (v5 refunded the size-bumped maker; since
+2026-09-13 it is parked like everyone else, so a bumped whale keeps its
+price and comes back when a slot frees). In-range residents are in neither
+region and are never displaced by a newcomer's priority, only by size.
 
 History. v5 had: in range parks the farthest resident, everything else
 size. 2026-09-13 (bounty mtxs6nxg7a6d97081b11) added: switched off is
@@ -538,35 +540,35 @@ follows the harm.
 Every v6 harness rerun with the N-best-prices rule and the demotion cascade
 (`distance-slots`, default 10; price region = the N best out-of-range
 prices, size region = every other out-of-range resident, in-range residents
-in neither; in-range newcomers use the same region). Four harnesses changed their expectations, each where a small
+in neither; in-range newcomers use the same region). Five harnesses changed their expectations, each where a small
 in-band rung or maker on a full queue used to be held and now displaces the
-N-th best: peg-park K8/K9, peg-park-y Y4, vault-parked V4 (region widened to 50 so the vault is the N-th best), bounty-fixes section D (new: D5b
+N-th best: peg-park K8/K9, peg-park-y Y4, vault-parked V4 (region widened to 50 so the vault is the N-th best), and every size-bump check (the bumped smallest is now parked, not refunded), bounty-fixes section D (new: D5b
 tells "the N-th best" from "the farthest"; D5c/D5d the cascade; D5e that
 in-range residents count for neither region).
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 191/191 | `5a03aab62b991bf7144d7726762fad84` |
-| markets v6 gaps | 66/66 | `e86d7d734313afee30deeb734cf4a410` |
-| markets v6 lazer-paths | 34/34 | `593885f818c8ce131467f41753651eda` |
-| markets v6 multifill | 43/43 | `b79e249a43bf271b5687d6240564ba5e` |
-| markets v6 regression | 22/22 | `24b4df02b0aaa392749f3f8959d74495` |
-| markets v6 remainder-cross | 115/115 | `bb8e1ccf933c41dc015aa434e49ddd2e` |
-| markets v6 stress | 125/125 | `32371c3cfb0fbfec3fda3a6a0b4d6d64` |
-| markets v6 withdraw | 98/98 | `ed889cd3cb265cceec87ccb1e60dd332` |
-| v6 peg-batch | 92/92 | `50f3d749980619632304e04a2fc1e16d` |
-| v6 peg-edges | 60/60 | `d6ed850e75e1665bf78140cd6f17ee67` |
-| v6 peg | 76/76 | `931b4d5a9a4ff54cf086659437c016db` |
-| v6 peg-mirror | 40/40 | `6f3791271756d0d0c0c18d4287a09d84` |
-| v6 peg-more | 51/51 | `89ad4c5aac19f91a5a1474e388d29423` |
-| v6 peg-park | 39/39 | `873a0aa1a6adf106a1466a6ec814f3d3` |
-| v6 peg-park-y | 75/75 | `e566ad214e18acb4d3818230431d706d` |
-| v6 peg-track | 30/30 | `2015a338146f40f9118450b4bac2f66a` |
-| v6 peg-walk-order | 60/60 | `69316f3ab491c03d15235b5f35fd2a81` |
-| v6 rungs-fill | 40/40 | `93f98acaaf6d1ed8a10c84a04cc5c55f` |
-| v6 rungs-keyless | 37 passed | `ca870a0be6c0ac266908d8618f4af3bb` |
-| v6 rungs-push | 39/39 | `673294009139a1c371dabfa6d759f739` |
-| vault v6 parked | 134/134 | `35c49069b81a59b033492b5d8538a859` |
+| markets v6 bounty-fixes | 197/197 | `534583e0ea62e30d4e14dbc495ea2e61` |
+| markets v6 gaps | 66/66 | `86324df5f3760b05dfd4479657b7f623` |
+| markets v6 lazer-paths | 34/34 | `0e8570a2f64caf928baf9807dccf9eca` |
+| markets v6 multifill | 43/43 | `6b2551c4af7cc1b035993913b202d6af` |
+| markets v6 regression | 22/22 | `b8457df201e1d5f6c6586d316579ea13` |
+| markets v6 remainder-cross | 115/115 | `bb4cf2335cb402e6fddbd8588abbfceb` |
+| markets v6 stress | 125/125 | `d1c2de356783fef0ed2ad182b9088b92` |
+| markets v6 withdraw | 98/98 | `108f0a022b402055ad07adb3919c7658` |
+| v6 peg-batch | 92/92 | `69d761583cc5df778b4e182a9f254e94` |
+| v6 peg-edges | 60/60 | `55e00d4e70873a683032f3822019008b` |
+| v6 peg | 76/76 | `88754f69fc0517ba26fd4080c290e42e` |
+| v6 peg-mirror | 40/40 | `021fdc216773cfa022a7dc65f2317f05` |
+| v6 peg-more | 51/51 | `4e731fa23e0bfc38e210999c3057809d` |
+| v6 peg-park | 39/39 | `b68ae194589cdc4ae34deab4d6e2a4e0` |
+| v6 peg-park-y | 75/75 | `9a6bbfa71d5d2319aec10c07d5b4a2ca` |
+| v6 peg-track | 30/30 | `1b5f8d3be6e9f43d34c6578ffbb1c8d8` |
+| v6 peg-walk-order | 60/60 | `19bb8627ca4b2932764f8d1a3d19bfcf` |
+| v6 rungs-fill | 40/40 | `90ac3c4d7d2cf03ef55bcb0adf59b42b` |
+| v6 rungs-keyless | 37 passed | `227b1dc703849ddcfdf4ea4d69cb6ef1` |
+| v6 rungs-push | 39/39 | `0260aab80ff448329534f40517d8cf7b` |
+| vault v6 parked | 134/134 | `f4fcceb087e340f863aa44033ed8307d` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 
