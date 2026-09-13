@@ -445,13 +445,13 @@ gotcha: `swap` is unchanged, so its call must NOT get the extra argument
 
 | Harness | Result | Simulation |
 |---------|--------|------------|
-| markets v6 regression | 22/22 | `23a7d4ef30085e91da6dc7dec85b7b7d` |
+| markets v6 regression | 22/22 | `6cd87b6bfcfceeb887095dda66858c1a` (2026-09-13, after the parked-swap check) |
 | markets v6 multifill | 43/43 | `32e4a488b94b13fa9717597fc2899f41` |
 | markets v6 withdraw | 98/98 | `2d23439b7eb6b5de5def1c93e6189bb5` |
 | markets v6 lazer-paths | 34/34 | `1205f76581d3a00f19fccfc6d2adc954` |
 | markets v6 gaps | 66/66 | `b27e408f1413fc9fdb1ff39e6392b6ef` |
-| markets v6 bounty-fixes | 131/131 | `1f4aa374a342f7a0c9859a269e5ef281` |
-| markets v6 remainder-cross | 115/115 | `19cd40a3539cfbdb7be77633b0f7f09d` |
+| markets v6 bounty-fixes | 136/136 | `5ce256e34dd9f50c128c35b71131f87a` (2026-09-13: + parked maker swaps on y and on x -> u1018, position untouched) |
+| markets v6 remainder-cross | 115/115 | `1530095ec9875dc772b936746fae66ff` (2026-09-13, after the parked-swap check) |
 | markets v6 stress (seed 7, 60 actions) | 125/125 | `1ca4b515c6307e7266d3f9313d24a903` |
 
 Rungs on v6, keyless (`verify-v6-rungs-keyless.js`, `RUNG=...`): deploys
