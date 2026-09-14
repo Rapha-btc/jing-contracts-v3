@@ -48,10 +48,9 @@ async function main() {
   const swap = (sender, amount, limit, depX) => call(sender, "swap", [uintCV(amount), uintCV(limit), UPD, sbtcT, sbtcA, wstxT, wstxA, depX ? trueCV() : falseCV()]);
   const cap = (limit) => `(get-taker-capacity u${MID} u${limit} false)`;
 
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
-  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(RIN, src("jing-buy-stx-market-spread")); deploy(ROUT, src("jing-buy-stx-market-spread"));
+  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)"); deploy(RIN, src("jing-buy-stx-market-spread")); deploy(ROUT, src("jing-buy-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, RIN)], LADDER), "(ok true)");
   tx(`init ${RIN}`, call(DEP, "initialize", [uintCV(BPS), uintCV(IN_C)], rid(RIN)), "(ok true)");
   tx(`init ${ROUT}`, call(DEP, "initialize", [uintCV(BPS), uintCV(OUT_C)], rid(ROUT)), "(ok true)");

@@ -209,9 +209,11 @@
     (var-set initialized true)
     ;; no cap stored yet: the first push derives it from the miner band.
     ;; The ladder keys one rung per (side, spread); the market-price slot
-    ;; logs u0 for the same reason. Registering IS the seat: the market asks
-    ;; the ladder whether a maker is the current band rung for its spread.
-    (contract-call? LADDER register SIDE bps u0)
+    ;; logs u0 for the same reason. Registering IS the seat; the market keeps
+    ;; a local copy of who holds one, so tell it about ourselves.
+    (try! (contract-call? LADDER register SIDE bps u0))
+    (try! (contract-call? MARKET sync-seat current-contract))
+    (ok true)
   )
 )
 

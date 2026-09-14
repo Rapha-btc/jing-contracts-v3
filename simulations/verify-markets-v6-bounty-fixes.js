@@ -210,6 +210,7 @@ async function storedPrice(feedHex) {
   return BigInt(j.value.value.price.value);
 }
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log("=== bounty-fixes SELF-VERIFYING stxer harness ===\n");
   const lz = await fetchLazerUpdate();
@@ -323,8 +324,12 @@ async function main() {
 
   // ---- deploy both instances ----
   if (!DEPLOYED) tx("deploy core", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+  tx("deploy jing-ladder", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc }), (v) => !String(v).includes("ERR"));
+  tx("sim-only: seats 0 on the ladder (the 3-slot park instance cannot reserve 10)", call(DEPLOYER, "set-max-band-per-side", [uintCV(0)], `${DEPLOYER}.jing-ladder`), "(ok true)");
   tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy park market (MAX u3)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: PARK, source_code: parkSrc }), (v) => !String(v).includes("ERR"));
+  tx("sim-only: main market syncs the count", call(DEPLOYER, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
+  tx("sim-only: park market syncs the count", call(DEPLOYER, "sync-seat-count", [], PID), (v) => String(v).startsWith("(ok"));
   for (const [name, cid] of [[MARKET, CID], [PARK, PID]]) {
     tx(`verify ${name} in core`, call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, name)], CORE_ID), "(ok true)");
     tx(`initialize ${name}`, call(DEPLOYER, "initialize", [

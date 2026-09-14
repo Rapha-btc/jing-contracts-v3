@@ -46,8 +46,9 @@
 ;; and a new canonical rung at an existing spread REPLACES the old one (the
 ;; upgrade path: bless the new code, deploy it at the same spread; the old
 ;; rung keeps its funds and its resting order, only its band status goes)
-(define-constant MAX_BAND_PER_SIDE u10)
+(define-data-var max-band-per-side uint u10)
 (define-map band-count (string-ascii 8) uint)
+(define-read-only (get-max-band-per-side) (var-get max-band-per-side))
 
 (define-data-var contract-owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -186,11 +187,11 @@
     (asserts! (is-none (map-get? registered caller)) ERR_ALREADY_REGISTERED)
     (if (is-band-side side)
       ;; a band spread: taken -> the newer canonical replaces the holder;
-      ;; free -> one more spread, up to MAX_BAND_PER_SIDE
+      ;; free -> one more spread, up to max-band-per-side
       (match holder
         old (map-delete registered old)
         (begin
-          (asserts! (< (get-band-count side) MAX_BAND_PER_SIDE) ERR_BAND_FULL)
+          (asserts! (< (get-band-count side) (var-get max-band-per-side)) ERR_BAND_FULL)
           (map-set band-count side (+ (get-band-count side) u1))
         )
       )
@@ -215,6 +216,57 @@
       contract: caller,
       hash: caller-hash,
       replaced: (if (is-band-side side) holder none),
+    })
+    (ok true)
+  )
+)
+
+;; The number of band seats per side: the one number the market reads to
+;; size its reservation. Owner only. It cannot go under the seats a side
+;; already holds: that would leave rungs on the book with no reservation
+;; behind them.
+(define-public (set-max-band-per-side (n uint))
+  (begin
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts!
+      (and
+        (>= n (get-band-count SIDE_BUY_BAND))
+        (>= n (get-band-count SIDE_SELL_BAND))
+      )
+      ERR_BAND_FULL
+    )
+    (print {
+      event: "max-band-per-side-set",
+      max: n,
+    })
+    (ok (var-set max-band-per-side n))
+  )
+)
+
+;; Owner: retire a band spread. The rung at it loses its seat and its ladder
+;; entry and is an ordinary maker from then on (funds and resting order
+;; untouched); the spread is free again and the count goes down.
+(define-public (retire-band
+    (side (string-ascii 8))
+    (spread uint)
+  )
+  (let (
+      (key {
+        side: side,
+        price: spread,
+      })
+      (holder (unwrap! (map-get? rungs key) ERR_NOT_REGISTERED))
+    )
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (is-band-side side) ERR_BAD_SIDE)
+    (map-delete rungs key)
+    (map-delete registered holder)
+    (map-set band-count side (- (get-band-count side) u1))
+    (print {
+      event: "band-retired",
+      side: side,
+      spread: spread,
+      contract: holder,
     })
     (ok true)
   )

@@ -222,6 +222,7 @@ function capBranchHits(maxGross) {
   return { hits, worst };
 }
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log("=== markets-v2 GAPS SELF-VERIFYING stxer harness ===\n");
   const lz = await fetchLazerUpdate();
@@ -275,6 +276,7 @@ async function main() {
 
   // ---- deploy ----
   if (!DEPLOYED) tx("deploy core", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+  tx("deploy jing-ladder", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), "(ok true)");
   tx("initialize", call(DEPLOYER, "initialize", [

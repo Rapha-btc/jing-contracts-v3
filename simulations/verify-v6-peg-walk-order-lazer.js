@@ -89,10 +89,9 @@ async function main() {
   const satsSend = (to, sats) => call(A, "transfer", [uintCV(sats), standardPrincipalCV(A), standardPrincipalCV(to), noneCV()], SBTC);
   const depOfX = (who) => `(get-token-x-deposit (get-current-cycle) '${who})`, depOfY = (who) => `(get-token-y-deposit (get-current-cycle) '${who})`;
 
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
-  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(BUY_RUNG, src("jing-buy-stx-market-spread")); deploy(SELL_RUNG, src("jing-sell-stx-market-spread"));
+  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1), uintCV(45)]), "(ok true)"); deploy(BUY_RUNG, src("jing-buy-stx-market-spread")); deploy(SELL_RUNG, src("jing-sell-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, BUY_RUNG)], LADDER), "(ok true)");
   tx("canonical sell-peg", call(DEP, "set-canonical", [stringAsciiCV("sell-peg"), contractPrincipalCV(DEP, SELL_RUNG)], LADDER), "(ok true)");
   tx(`init ${BUY_RUNG}`, call(DEP, "initialize", [uintCV(RUNG_BPS), uintCV(BUY_C)], rid(BUY_RUNG)), "(ok true)");

@@ -60,7 +60,8 @@ let UPDATE = bufferCV(Buffer.from("00", "hex")); // real Lazer update when a key
 // bytes are. Code lines are untouched.
 const stripComments = (src) => src.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
 const coreSrc = fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8");
-const mktSrc = stripComments(fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8"));
+let mktSrc = stripComments(fs.readFileSync(new URL(`../contracts/${MARKET}.clar`, import.meta.url), "utf8"));
+
 if (Buffer.byteLength(mktSrc) > 100_000) throw new Error(`market source still ${Buffer.byteLength(mktSrc)} bytes`);
 if (!mktSrc.includes("(contract-call? .jing-core-v5")) throw new Error("market source does not bind .jing-core-v5");
 if (!mktSrc.includes("(define-constant MAX_DEPOSITORS u50)")) throw new Error("MAX_DEPOSITORS anchor missing");
@@ -89,6 +90,7 @@ function check(label, actual, want) {
   else { failures += 1; console.log(`  FAIL ${label}: got "${actual}" want "${want}"`); }
 }
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log("=== markets-v4 partial withdrawals: SELF-VERIFYING stxer harness ===\n");
   let MID = 0n;
@@ -145,8 +147,12 @@ async function main() {
 
   // ---- deploy ----
   tx("deploy jing-core-v5", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+  tx("deploy jing-ladder", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc }), (v) => !String(v).includes("ERR"));
+  tx("sim-only: seats 0 on the ladder (this harness fills the side)", call(DEPLOYER, "set-max-band-per-side", [uintCV(0)], `${DEPLOYER}.jing-ladder`), "(ok true)");
   tx("deploy market v4 (unpatched, on core-v4)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy park market (MAX u3)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: PARK, source_code: parkSrc }), (v) => !String(v).includes("ERR"));
+  tx("sim-only: market syncs the count", call(DEPLOYER, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
+  tx("sim-only: park market syncs the count", call(DEPLOYER, "sync-seat-count", [], `${DEPLOYER}.${PARK}`), (v) => String(v).startsWith("(ok"));
   for (const [name, cid] of [[MARKET, CID], [PARK, PID]]) {
     tx(`verify ${name} in core-v4`, call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, name)], CORE_ID), "(ok true)");
     tx(`initialize ${name}`, call(DEPLOYER, "initialize", [

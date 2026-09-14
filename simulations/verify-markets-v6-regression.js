@@ -161,6 +161,7 @@ function assert(label, actual, want) {
   }
 }
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   const lz = await fetchLazerUpdate();
   DUMMY_VAA = bufferCV(Buffer.from(lz.hex, "hex"));
@@ -209,6 +210,7 @@ async function main() {
   b = b
     .withSender(DEPLOYER)
     .addContractDeploy({ contract_name: CORE, source_code: coreSrc })
+    .addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc })
     .addContractDeploy({ contract_name: MARKET, source_code: mktSrc })
     .addContractCall({
       contract_id: CORE_ID,
@@ -290,6 +292,7 @@ async function main() {
 
   let i = 0;
   if (!DEPLOYED) assert("deploy jing-core-v3", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) assert("deploy jing-ladder", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED) assert("deploy market v2", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   assert("set-verified-contract", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
   assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1012)"));

@@ -77,10 +77,9 @@ async function main() {
   const swap = (sender, amount, limit, depX) => call(sender, "swap", [uintCV(amount), uintCV(limit), UPD, sbtcT, sbtcA, wstxT, wstxA, depX ? trueCV() : falseCV()]);
 
   // ---- stack ----
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder"));
   for (const n of [BUY_IN, BUY_OUT]) deploy(n, src("jing-buy-stx-market-spread"));
   for (const n of [SELL_IN, SELL_OUT]) deploy(n, src("jing-sell-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, BUY_IN)], LADDER), "(ok true)");

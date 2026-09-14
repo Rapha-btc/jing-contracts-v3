@@ -101,7 +101,7 @@ async function main() {
   const ordY = (who) => `(get-token-y-order '${who})`, ordX = (who) => `(get-token-x-order '${who})`;
   const depOfY = (c, who) => `(get-token-y-deposit u${c} '${who})`, depOfX = (c, who) => `(get-token-x-deposit u${c} '${who})`;
 
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1), uintCV(45)]), "(ok true)");
   for (const [who, ustx, sats] of [

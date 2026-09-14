@@ -74,10 +74,9 @@ async function main() {
   const stxSend = (to, ustx) => (bb) => bb.withSender(S).addSTXTransfer({ recipient: to, amount: Number(ustx) });
   const satsSend = (to, sats) => call(A, "transfer", [uintCV(sats), standardPrincipalCV(A), standardPrincipalCV(to), noneCV()], SBTC);
 
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
-  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG20, src("jing-buy-stx-market-spread")); deploy(RUNG0, src("jing-buy-stx-market-spread"));
+  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)"); deploy(RUNG20, src("jing-buy-stx-market-spread")); deploy(RUNG0, src("jing-buy-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, RUNG20)], LADDER), "(ok true)");
   tx(`init ${RUNG20}`, call(DEP, "initialize", [uintCV(20), uintCV(IN_C)], rid(RUNG20)), "(ok true)");
   tx(`init ${RUNG0} (spread 0 is a valid rung)`, call(DEP, "initialize", [uintCV(0), uintCV(IN_C)], rid(RUNG0)), "(ok true)");

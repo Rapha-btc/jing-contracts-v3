@@ -83,13 +83,13 @@ function stxGift(from, to, ustx) { b.withSender(from).addSTXTransfer({ recipient
 
 // ---- 1. the v6 stack: core-v5, market, verify, initialize (fresh, empty book) ----
 deploy(DEP, CORE, src(CORE));
+deploy(DEP, "jing-ladder", src("jing-ladder")); // before the market: it asks the ladder who holds a band seat
 deploy(DEP, MKT, src(MKT));
 call("core-v5: verify the v6 market hash", DEP, CORE_ID, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], "(ok true)");
 call("v6 initialize (sbtc / wstx, min 1000 sats / 1 STX, feeds 1 / 45)", DEP, MARKET, "initialize",
   [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], "(ok true)");
 
 // ---- 2. ladder + rung, hash-gated register ----
-deploy(DEP, "jing-ladder", src("jing-ladder"));
 deploy(DEP, RUNG, src(rungFile));
 deploy(DEP, RUNG_BAD, src(rungFile));
 call("initialize before canonical -> ERR_NOT_VERIFIED u6003", DEP, RID, "initialize", initArgs(CENTS), "(err u6003)");

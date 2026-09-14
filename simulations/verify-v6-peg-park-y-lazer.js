@@ -37,6 +37,7 @@ const Q = getAddressFromPrivateKey("b".repeat(64) + "01", "mainnet");
 const PARKER3 = getAddressFromPrivateKey("c".repeat(64) + "01", "mainnet");
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n, BPS = 20n, FILL = 1_500_000n, HUGE = 999_999_999_999_999n;
 const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
@@ -65,10 +66,11 @@ async function main() {
   const depY = (who, amt, limit, spread) => call(who, "deposit-token-y", [uintCV(amt), uintCV(limit), sp(spread), UPD, wstxT, wstxA]);
   const stxSend = (to, ustx) => (bb) => bb.withSender(S).addSTXTransfer({ recipient: to, amount: Number(ustx) });
 
-  deploy(CORE, src(CORE)); deploy(MKT, src(MKT));
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
+  tx("sim-only: seats 0 on the ladder (this harness fills all 50 slots; seats are covered by verify-v6-rungs-miner-band)", call(DEP, "set-max-band-per-side", [uintCV(0)], `${DEP}.jing-ladder`), "(ok true)");
+  tx("sim-only: market syncs the count", call(DEP, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
-  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
-  deploy("jing-ladder", src("jing-ladder")); deploy(RUNG, src("jing-sell-stx-market-spread")); deploy(RUNG2, src("jing-sell-stx-market-spread"));
+  tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)"); deploy(RUNG, src("jing-sell-stx-market-spread")); deploy(RUNG2, src("jing-sell-stx-market-spread"));
   tx("canonical sell-peg", call(DEP, "set-canonical", [stringAsciiCV("sell-peg"), contractPrincipalCV(DEP, RUNG)], LADDER), "(ok true)");
   tx(`init ${RUNG}`, call(DEP, "initialize", [uintCV(BPS), uintCV(OUT_C)], RID), "(ok true)");
 

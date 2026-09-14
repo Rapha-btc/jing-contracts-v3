@@ -333,6 +333,72 @@ switched-off newcomer is a v7 item. Covered by bounty-fixes section D
 (D5b: N-th best, not the farthest; D5c/D5d: the demotion; D5e: in-range
 residents count for neither region), peg-park K3/K8, peg-park-y Y1/Y3/Y4.
 
+## Protected seats: the band rungs
+
+A number of slots per side, the ladder's `max-band-per-side` (u10 at
+deploy, owner-settable, never under the seats a side holds, mirrored into the
+market by `sync-seat` as `protected-seats`, clamped to MAX_DEPOSITORS), is
+reserved for miner-band rungs,
+`jing-buy-stx-core-spread` on x and `jing-sell-stx-core-spread` on y: pooled
+pegs at mid +/- spread with no guard in their name. Their floor (buy) or cap
+(sell) is read on every push from the deployed RFQ native oracle
+(`rfq-sbtc-stx-jing-v2-3 get-native-price`, what Stacks miners are paying
+for STX, in the market's own unit; within 4% of the Pyth mid on
+2026-09-13), halved or doubled: a fat-finger Pyth print cannot fill them,
+an honest one always passes. Anyone can refresh the stored guard
+(`refresh-guard`). Ten spreads per side, 0 to 90 bps, is the intended set.
+
+A protected maker is never displaced: skipped by the price region, by the
+size region, by dead-first and by the core's size rule. The other
+MAX_DEPOSITORS minus that number slots run the rules above unchanged, and
+they are full for everyone else even while seats stand empty
+(`side-full-x/y`), so a rung always finds room when it pushes.
+
+No list in the market. The ladder owns the seats: its owner blesses one
+code hash per band side (`buy-band` / `sel-band`); `register` from a
+byte-identical rung takes the (side, spread) key, at most
+`max-band-per-side` spreads per side (u6011 past that; the same number the
+market reserves); and a register at a spread that already has a rung
+REPLACES it, the old rung loses its band status and its ladder entry, keeps
+its funds and its resting order. That is the upgrade: bless the new code,
+deploy it at the same spreads, members of the old rungs withdraw and join,
+withdraw needs no oracle. The owner can also retire a spread
+(`retire-band`): its rung loses the seat and the ladder entry, keeps its
+funds and its resting order as an ordinary maker, the spread is free and
+the count goes down. The market keeps a LOCAL COPY: one short list of
+seat holders per side (`seated-x/y`, at most the seat count) and the seat
+count, so a deposit never calls the ladder and every fold tests membership
+in a list it reads once, no storage per resident. `sync-seat who` (anyone;
+a band rung calls it on itself from its initialize) only ever ADDS: the
+ladder must seat `who` (u1028 otherwise), and a sync rebuilds and prunes
+the list of the side the ladder seats `who` on (only that side), so a
+replaced rung drops out the moment its successor syncs and a retired one
+the next time anyone syncs a seated rung on that side. Every sync also
+refreshes the seat count from the ladder (clamped to MAX_DEPOSITORS);
+`sync-seat-count` refreshes the count alone; the ladder's register and
+retire events say when to call either.
+Only the ladder owner may initialize a band rung (its `initialize` checks
+tx-sender against the ladder's `get-owner`), since registering at a taken
+spread replaces the holder and must not be open to anyone who can redeploy
+the blessed code. Deploy order: the ladder before the market, since the
+market references it.
+
+Why not the market's farthest-parks rule for these: a rung at mid + 20 bps
+is out of range by construction, and under the price region a closer small
+order would demote it, then a bigger one bump it; pooled depth that any
+retail deposit can knock off the book is not depth. Why not an operator
+list: a permanent seat should not be a favour.
+
+Sim note: harnesses that fill all fifty slots to test parking set the
+ladder's `max-band-per-side` to u0 after deploying it and sync each market
+instance (sim-only, like the MAX_DEPOSITORS u3 instances); the
+reservation itself is proven in `verify-v6-rungs-miner-band-lazer.js`
+section S: forty fillers take the open region, the forty-first is refused
+with forty-one resting, the rung tops up past that, an in-range newcomer
+parks a filler and never the rung, a second rung takes seat two, and a
+fresh deploy of the same code at spread 30 by another deployer replaces
+the first spread-30 rung: the seat moves, the count does not.
+
 ## A parked maker cannot swap on the same side
 
 `swap` refuses with `ERR_HAS_RESTING_POSITION` (u1018) when the caller has a
@@ -545,7 +611,7 @@ confirmed the invariants without a new finding. Thank you to all five, and
 in particular to apeirs and Light Brio: both fixes are yours, the reward
 follows the harm.
 
-## Rerun after `distance-slots` (2026-09-13, later)
+## Rerun after `distance-slots`, the size rule parking, and the protected seats (2026-09-13, later; ids from the final seated-list shape)
 
 Every v6 harness rerun with the N-best-prices rule and the demotion cascade
 (`distance-slots`, default 10; price region = the N best out-of-range
@@ -558,27 +624,28 @@ in-range residents count for neither region).
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 197/197 | `06e2cab083600290c7379e9f24cddaf3` |
-| markets v6 gaps | 66/66 | `67e7761d9134dbfbba0bfcfaa9a0af79` |
-| markets v6 lazer-paths | 34/34 | `d139e6ffbc0e74ce5bb380ba3b95743d` |
-| markets v6 multifill | 43/43 | `2c32167c6a5bed86e2d7bbef6f8a61c2` |
-| markets v6 regression | 22/22 | `fff838c85ece3fe26379082b016d503a` |
-| markets v6 remainder-cross | 115/115 | `7b7d77250007c8acda9f514e359a743d` |
-| markets v6 stress | 125/125 | `8a357e76010796a8a0ce7f2f74cbef5d` |
-| markets v6 withdraw | 98/98 | `9e97b1945b556d37438f122579adffff` |
-| v6 peg-batch | 92/92 | `25e66eff27eff44a44f6a2f5c6a0839c` |
-| v6 peg-edges | 60/60 | `8a8a947ff6ef7b989a050b688216a8e3` |
-| v6 peg | 76/76 | `3f9b28ec5e14fc3c4182a259bb8aa531` |
-| v6 peg-mirror | 40/40 | `c127404cc367dcea88edd10fd5f5aebd` |
-| v6 peg-more | 51/51 | `c184578ba02d661e52fd3ee8677ef569` |
-| v6 peg-park | 39/39 | `6aa940d70f6899bdf22b2fe771c6dab4` |
-| v6 peg-park-y | 75/75 | `d71d4abd725057787238311e32654d07` |
-| v6 peg-track | 30/30 | `78ce44f76c4adce36004edfdcdaf3144` |
-| v6 peg-walk-order | 60/60 | `c05925602c716f703743813e1f1237da` |
-| v6 rungs-fill | 40/40 | `a19f4f952bcabd2647c708ee07a07df3` |
-| v6 rungs-keyless | 37 passed | `e5a05003335a37e8828e531a2423d2fc` |
-| v6 rungs-push | 39/39 | `4d8ef036c527bd08c5cda1bcd2de081b` |
-| vault v6 parked | 134/134 | `8eb7ab4350262df39014ee9c0ae114d9` |
+| markets v6 bounty-fixes | 201/201 | `b5b47896d6f9b7b7950966272b5f4139` |
+| markets v6 gaps | 67/67 | `f70b890925f89befbd9a1905abfd969c` |
+| markets v6 lazer-paths | 35/35 | `c014c74195d0c8967ae6627082aa1d3a` |
+| markets v6 multifill | 44/44 | `10c0491fca5c06fff97d511d6c2608da` |
+| markets v6 regression | 23/23 | `0b0f9ec5f2d6c6875d27c1d34b4c06b2` |
+| markets v6 remainder-cross | 116/116 | `4d6123bc03d053ad12d70148740dddac` |
+| markets v6 stress | 126/126 | `4cff58c2aa1ae09bf2b0ff31a19266fb` |
+| markets v6 withdraw | 102/102 | `918374a3b1ca97e73790ae03334a970a` |
+| v6 peg-batch | 93/93 | `c5ffb1f43c9dcb6b9f050fe3863132ea` |
+| v6 peg-edges | 60/60 | `55d6ade325cb4a7524c77db485db65f2` |
+| v6 peg | 76/76 | `40a2b33e3ee3b274479f22ea7bb1f037` |
+| v6 peg-mirror | 44/44 | `858d7bf8e0be112c1d0a2b3097ba526c` |
+| v6 peg-more | 51/51 | `398efea3dd2bfe10a2b6897f4a54834e` |
+| v6 peg-park | 41/41 | `8f9edc37f9b18dda559b8571490cc983` |
+| v6 peg-park-y | 77/77 | `7357090247937f7251cd1102861ef8a2` |
+| v6 peg-track | 30/30 | `f3402b3b0b2ca362a5e2f799e6a732aa` |
+| v6 peg-walk-order | 60/60 | `961d511471355e650567772b0726d632` |
+| v6 rungs-fill | 40/40 | `1844de3cb7b94f03e6d7f6cb89d4893d` |
+| v6 rungs-keyless | 37 passed | `e1958ed0c1eb8735e57db9c546cace5e` |
+| v6 rungs-push | 39/39 | `06b5e9e0bb4e1ee1da4578760d25650e` |
+| v6 rungs-miner-band (band rungs, seats, upgrade, retire) | 172/172 | `b0bd067c5adff10ec5bb4025885bb393` |
+| vault v6 parked | 137/137 | `7468b9d40a901057fb8ef9a51c8848f4` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

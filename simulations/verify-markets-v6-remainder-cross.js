@@ -213,6 +213,7 @@ async function storedPrice(feedHex) {
   return BigInt(t.price.value);
 }
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log("=== remainder-cross SELF-VERIFYING stxer harness ===\n");
   console.log(`throwaway deployer = ${DEPLOYER}`);
@@ -321,6 +322,7 @@ async function main() {
   b = b
     .withSender(DEPLOYER)
     .addContractDeploy({ contract_name: CORE, source_code: coreSrc })
+    .addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc })
     .addContractDeploy({ contract_name: MARKET, source_code: mktSrc })
     .addContractCall({
       contract_id: CORE_ID,
@@ -572,6 +574,7 @@ async function main() {
 
   let i = 0;
   if (!DEPLOYED) assert("deploy core", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
+  if (!DEPLOYED) assert("deploy jing-ladder", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED) assert("deploy market (patched)", decodeTx(s[i++]), (v) => !String(v).includes("ERR"));
   assert("set-verified-contract", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));
   assert("initialize", decodeTx(s[i++]), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u1012)"));

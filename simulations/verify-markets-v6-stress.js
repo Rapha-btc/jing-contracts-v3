@@ -70,6 +70,7 @@ const decodeEval = (s) => { const r = s?.Result?.Eval; if (!r) return "<no eval>
 const uintOf = (s) => BigInt((String(s).match(/u(\d+)/) || [, "0"])[1]);
 const field = (s, k) => BigInt((String(s).match(new RegExp(`\\(${k} u(\\d+)\\)`)) || [, "0"])[1]);
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log(`=== markets v6 STRESS (seed ${SEED}, ${STEPS} actions${PEGS ? ", pegs on" : ""}) ===`);
   const lz = await fetchLazerUpdate();
@@ -88,6 +89,7 @@ async function main() {
 
   if (!DEPLOYED) {
     tx("deploy core", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: coreSrc }), (v) => !String(v).includes("ERR"));
+    tx("deploy jing-ladder", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc }), (v) => !String(v).includes("ERR"));
     tx("deploy market v4", (bb) => bb.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   }
   tx("verify market in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, MARKET)], CORE_ID), (v) => v === "(ok true)" || (DEPLOYED && v === "(err u5002)"));

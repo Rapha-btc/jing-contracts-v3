@@ -30,6 +30,7 @@ const S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";  // STX whale: funds STX
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 const PP = 100_000_000n, PPDF = PP * 100n, BPS = 10_000n, HUGE = 999_999_999_999_999n, MAX_UINT = 340282366920938463463374607431768211455n;
 const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
 const decodeTx = (s) => { const r = s?.Result?.Transaction; if (!r) return "<no tx>"; if ("Err" in r) return `ENGINE-ERR ${JSON.stringify(r.Err).slice(0, 120)}`; if (r.Ok?.vm_error) return `VM-ERR ${r.Ok.vm_error}`; try { return cvToString(deserializeCV(r.Ok.result)); } catch (e) { return `decode-failed ${e.message}`; } };
@@ -63,7 +64,10 @@ async function main() {
   const stxSend = (to, ustx) => (bb) => bb.withSender(S).addSTXTransfer({ recipient: to, amount: Number(ustx) });
   const satsSend = (to, sats) => call(A, "transfer", [uintCV(sats), standardPrincipalCV(A), standardPrincipalCV(to), noneCV()], SBTC);
 
-  deploy(CORE, src(CORE)); deploy(MKT, mktSrc); deploy(PARK, parkSrc);
+  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, mktSrc); deploy(PARK, parkSrc);
+  tx("sim-only: seats 0 on the ladder (a 3-slot book cannot reserve 10)", call(DEP, "set-max-band-per-side", [uintCV(0)], `${DEP}.jing-ladder`), "(ok true)");
+  tx("sim-only: main market syncs the count", call(DEP, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
+  tx("sim-only: park market syncs the count", call(DEP, "sync-seat-count", [], `${DEP}.${PARK}`), (v) => String(v).startsWith("(ok"));
   for (const [name, cid] of [[MKT, MARKET], [PARK, PID]]) {
     tx(`core-v5 verifies ${name}`, call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, name)], CORE_ID), "(ok true)");
     tx(`initialize ${name}`, call(DEP, "initialize", [contractPrincipalCV(DEP, name), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], cid), "(ok true)");

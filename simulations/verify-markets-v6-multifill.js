@@ -188,6 +188,7 @@ async function storedPrice(feedHex) {
 }
 
 
+const ladderSrc = fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8"); // the market asks the ladder who holds a band seat: deploy it first
 async function main() {
   console.log("=== multi-fill walk harness (8 makers, one swap) ===\n");
   const lz = await fetchLazerUpdate();
@@ -216,6 +217,7 @@ async function main() {
   b = b
     .withSender(DEPLOYER)
     .addContractDeploy({ contract_name: CORE, source_code: coreSrc })
+    .addContractDeploy({ contract_name: "jing-ladder", source_code: ladderSrc })
     .addContractDeploy({ contract_name: MARKET, source_code: mktSrc })
     .addContractCall({ contract_id: CORE_ID, function_name: "set-verified-contract", function_args: [marketCV] })
     .addContractCall({ contract_id: CID, function_name: "initialize", function_args: [
@@ -253,7 +255,7 @@ async function main() {
   const res = await getSimulationResult(sid);
   const s2 = res.steps;
   let i = 0;
-  for (let k = 0; k < (DEPLOYED ? 2 : 4); k++) assert(`setup ${k}`, decodeTx(s2[i++]), (v) => String(v).startsWith("(ok")); // DEPLOYED: no core/market deploy steps
+  for (let k = 0; k < (DEPLOYED ? 2 : 5); k++) assert(`setup ${k}`, decodeTx(s2[i++]), (v) => String(v).startsWith("(ok")); // DEPLOYED: no core/ladder/market deploy steps
   for (let k = 0; k < N * 2; k++) assert(`fund ${k}`, decodeTx(s2[i++]), (v) => String(v).startsWith("(ok"));
   assert("in-range offer", decodeTx(s2[i++]), "(ok u2000)");
   for (let k = 0; k < N; k++) assert(`maker ${k} rests`, decodeTx(s2[i++]), `(ok u${AMT})`);

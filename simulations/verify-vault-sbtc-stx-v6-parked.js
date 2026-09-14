@@ -96,9 +96,12 @@ async function main() {
 
   // ---- P0 the next stack, deployed on the fork under chavita ----
   tx("P0 deploy jing-core-v5", (b) => b.withSender(CHAVITA).addContractDeploy({ contract_name: CORE_NAME, source_code: srcOf(CORE_NAME), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
+  tx("P0 deploy jing-ladder (the market asks it who holds a band seat)", (b) => b.withSender(CHAVITA).addContractDeploy({ contract_name: "jing-ladder", source_code: srcOf("jing-ladder"), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
+  tx("P0 sim-only: seats 0 on the ladder (this harness fills the side)", call(CHAVITA, `${CHAVITA}.jing-ladder`, "set-max-band-per-side", [uintCV(0)]), "(ok true)");
   tx("P0 deploy markets-sbtc-stx-jing-v6", (b) => b.withSender(CHAVITA).addContractDeploy({ contract_name: MARKET_NAME, source_code: srcOf(MARKET_NAME), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
   tx("P0 core-v5 verifies the market", call(CHAVITA, CORE_ID, "set-verified-contract", [contractPrincipalCV(CHAVITA, MARKET_NAME)]), "(ok true)");
   tx("P0 initialize the market (mins 1000 / 1 STX, feeds 1 / 45)", call(CHAVITA, MARKET_ID, "initialize", [contractPrincipalCV(CHAVITA, MARKET_NAME), sbtcTrait, wstxTrait, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)");
+  tx("P0 sim-only: market syncs the count", call(CHAVITA, MARKET_ID, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
   tx("P0 deploy swap-router-sbtc-stx-jing-v5", (b) => b.withSender(CHAVITA).addContractDeploy({ contract_name: ROUTER_NAME, source_code: srcOf(ROUTER_NAME), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
   ev("P0 x book empty", MARKET_ID, "(len (get-token-x-depositors (get-current-cycle)))", "u0");
 
