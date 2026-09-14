@@ -477,15 +477,15 @@
     (acc {
       cycle: uint,
       seated: (list 50 principal),
-      smallest: uint,
-      smallest-principal: principal,
+      amt: uint,
+      who: principal,
     })
   )
   (let ((amount (get-token-y-deposit (get cycle acc) depositor)))
-    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get smallest acc)))
+    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get amt acc)))
       (merge acc {
-        smallest: amount,
-        smallest-principal: depositor,
+        amt: amount,
+        who: depositor,
       })
       acc
     )
@@ -497,15 +497,15 @@
     (acc {
       cycle: uint,
       seated: (list 50 principal),
-      smallest: uint,
-      smallest-principal: principal,
+      amt: uint,
+      who: principal,
     })
   )
   (let ((amount (get-token-x-deposit (get cycle acc) depositor)))
-    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get smallest acc)))
+    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get amt acc)))
       (merge acc {
-        smallest: amount,
-        smallest-principal: depositor,
+        amt: amount,
+        who: depositor,
       })
       acc
     )
@@ -521,19 +521,47 @@
 )
 
 
-(define-private (top-y-insert
+;; One pass over the residents for the full-book rules. Each ordinary
+;; resident costs one deposit read and one order read; a seated rung costs
+;; nothing. The pass keeps: the `slots` best-priced OUT-OF-RANGE residents
+;; (best first, ties by time), the first switched-off resident, the smallest
+;; out-of-range resident that fell out of the top set (ties by list order),
+;; and the smallest resident of all (the core's size rule).
+(define-private (push-row
+    (lst (list 50 {
+      who: principal,
+      l: uint,
+      amt: uint,
+      i: uint,
+    }))
+    (e {
+      who: principal,
+      l: uint,
+      amt: uint,
+      i: uint,
+    })
+  )
+  (unwrap-panic (as-max-len? (append lst e) u50))
+)
+(define-private (scan-y-insert
     (entry {
       who: principal,
       l: uint,
+      amt: uint,
+      i: uint,
     })
     (acc {
       e: {
         who: principal,
         l: uint,
+        amt: uint,
+        i: uint,
       },
       out: (list 50 {
         who: principal,
         l: uint,
+        amt: uint,
+        i: uint,
       }),
       placed: bool,
     })
@@ -541,25 +569,31 @@
   ;; bids: best = highest l; a new entry goes AFTER equals (time priority)
   (if (and (not (get placed acc)) (> (get l (get e acc)) (get l entry)))
     (merge acc {
-      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      out: (push-row (push-row (get out acc) (get e acc)) entry),
       placed: true,
     })
-    (merge acc { out: (push-quote (get out acc) entry) })
+    (merge acc { out: (push-row (get out acc) entry) })
   )
 )
-(define-private (top-x-insert
+(define-private (scan-x-insert
     (entry {
       who: principal,
       l: uint,
+      amt: uint,
+      i: uint,
     })
     (acc {
       e: {
         who: principal,
         l: uint,
+        amt: uint,
+        i: uint,
       },
       out: (list 50 {
         who: principal,
         l: uint,
+        amt: uint,
+        i: uint,
       }),
       placed: bool,
     })
@@ -567,157 +601,216 @@
   ;; asks: best = lowest l; a new entry goes AFTER equals (time priority)
   (if (and (not (get placed acc)) (< (get l (get e acc)) (get l entry)))
     (merge acc {
-      out: (push-quote (push-quote (get out acc) (get e acc)) entry),
+      out: (push-row (push-row (get out acc) (get e acc)) entry),
       placed: true,
     })
-    (merge acc { out: (push-quote (get out acc) entry) })
+    (merge acc { out: (push-row (get out acc) entry) })
   )
 )
-;; Keeps the `slots` best-priced OUT-OF-RANGE residents, best first. In-range
-;; residents are not ranked: an out-of-range newcomer can never displace one.
-;; Switched-off residents are out of range at the worst price there is, so
-;; they only reach the top set when the side holds almost nothing alive.
-(define-private (top-y-fold
-    (maker principal)
+;; the row that fell out of the top set joins the size region: smallest
+;; amount wins, the earlier resident on a tie (list order, as before)
+(define-private (take-cut
     (acc {
+      cycle: uint,
       price: uint,
       slots: uint,
       seated: (list 50 principal),
-      out: (list 50 {
+      i: uint,
+      top: (list 50 {
         who: principal,
         l: uint,
+        amt: uint,
+        i: uint,
       }),
+      dead: (optional principal),
+      out-amt: uint,
+      out-i: uint,
+      out-who: (optional principal),
+      min-amt: uint,
+      min-who: principal,
+    })
+    (sorted (list 50 {
+      who: principal,
+      l: uint,
+      amt: uint,
+      i: uint,
+    }))
+  )
+  (let (
+      (n (len sorted))
+      (cut (unwrap-panic (element-at? sorted (- n u1))))
+      (better (or
+        (< (get amt cut) (get out-amt acc))
+        (and (is-eq (get amt cut) (get out-amt acc)) (< (get i cut) (get out-i acc)))
+      ))
+    )
+    (merge acc {
+      top: (unwrap-panic (slice? sorted u0 (get slots acc))),
+      out-amt: (if better
+        (get amt cut)
+        (get out-amt acc)
+      ),
+      out-i: (if better
+        (get i cut)
+        (get out-i acc)
+      ),
+      out-who: (if better
+        (some (get who cut))
+        (get out-who acc)
+      ),
     })
   )
-  (let ((l (token-y-limit-at maker (get price acc))))
-    (if (or (is-some (index-of? (get seated acc) maker)) (>= l (get price acc)))
-      acc
-      (let (
-          (r (fold top-y-insert (get out acc) {
-            e: {
-              who: maker,
-              l: l,
-            },
-            out: (list),
-            placed: false,
-          }))
-          (sorted (if (get placed r)
-            (get out r)
-            (push-quote (get out r) {
-              who: maker,
-              l: l,
-            })
-          ))
-        )
-        (merge acc { out: (unwrap-panic (slice? sorted u0 (if (> (len sorted) (get slots acc))
-          (get slots acc)
-          (len sorted)
-        ))) })
-      )
-    )
-  )
 )
-(define-private (top-x-fold
-    (maker principal)
-    (acc {
-      price: uint,
-      slots: uint,
-      seated: (list 50 principal),
-      out: (list 50 {
-        who: principal,
-        l: uint,
-      }),
-    })
-  )
-  (let ((l (token-x-limit-at maker (get price acc))))
-    (if (or (is-some (index-of? (get seated acc) maker)) (<= l (get price acc)))
-      acc
-      (let (
-          (r (fold top-x-insert (get out acc) {
-            e: {
-              who: maker,
-              l: l,
-            },
-            out: (list),
-            placed: false,
-          }))
-          (sorted (if (get placed r)
-            (get out r)
-            (push-quote (get out r) {
-              who: maker,
-              l: l,
-            })
-          ))
-        )
-        (merge acc { out: (unwrap-panic (slice? sorted u0 (if (> (len sorted) (get slots acc))
-          (get slots acc)
-          (len sorted)
-        ))) })
-      )
-    )
-  )
-)
-;; The tenth best (last of the top set), if it is alive-out-of-range and
-;; strictly worse than the newcomer: park it. In-range residents are never
-;; parked by an out-of-range newcomer (they rank above it, so if one is last
-;; the newcomer is not better than it).
-(define-private (smallest-outside-y-fold
+(define-private (scan-y-fold
     (who principal)
     (acc {
       cycle: uint,
       price: uint,
-      top: (list 50 principal),
+      slots: uint,
       seated: (list 50 principal),
-      smallest: uint,
-      found: (optional principal),
+      i: uint,
+      top: (list 50 {
+        who: principal,
+        l: uint,
+        amt: uint,
+        i: uint,
+      }),
+      dead: (optional principal),
+      out-amt: uint,
+      out-i: uint,
+      out-who: (optional principal),
+      min-amt: uint,
+      min-who: principal,
     })
   )
-  ;; the smallest OUT-OF-RANGE resident that is not in the price region
-  (if (or
-      (is-some (index-of? (get seated acc) who))
-      (is-some (index-of? (get top acc) who))
-      (>= (token-y-limit-at who (get price acc)) (get price acc))
-    )
+  (if (is-some (index-of? (get seated acc) who))
     acc
-    (let ((amt (get-token-y-deposit (get cycle acc) who)))
-      (if (< amt (get smallest acc))
-        (merge acc {
-          smallest: amt,
-          found: (some who),
-        })
-        acc
+    (let (
+        (i (get i acc))
+        (amt (get-token-y-deposit (get cycle acc) who))
+        (l (token-y-limit-at who (get price acc)))
+        (a1 (merge acc {
+          i: (+ i u1),
+          min-amt: (if (< amt (get min-amt acc))
+            amt
+            (get min-amt acc)
+          ),
+          min-who: (if (< amt (get min-amt acc))
+            who
+            (get min-who acc)
+          ),
+        }))
+      )
+      (if (>= l (get price acc))
+        a1
+        (let (
+            (a2 (if (and (is-none (get dead a1)) (is-eq l u0))
+              (merge a1 { dead: (some who) })
+              a1
+            ))
+            (row {
+              who: who,
+              l: l,
+              amt: amt,
+              i: i,
+            })
+            (r (fold scan-y-insert (get top a2) {
+              e: row,
+              out: (list),
+              placed: false,
+            }))
+            (sorted (if (get placed r)
+              (get out r)
+              (push-row (get out r) row)
+            ))
+          )
+          (if (> (len sorted) (get slots a2))
+            (take-cut a2 sorted)
+            (merge a2 { top: sorted })
+          )
+        )
       )
     )
   )
 )
-(define-private (first-off-y-fold
+(define-private (scan-x-fold
     (who principal)
     (acc {
+      cycle: uint,
       price: uint,
+      slots: uint,
       seated: (list 50 principal),
-      found: (optional principal),
+      i: uint,
+      top: (list 50 {
+        who: principal,
+        l: uint,
+        amt: uint,
+        i: uint,
+      }),
+      dead: (optional principal),
+      out-amt: uint,
+      out-i: uint,
+      out-who: (optional principal),
+      min-amt: uint,
+      min-who: principal,
     })
   )
-  ;; a switched-off resident (bid sentinel u0) leaves before anyone alive
-  (if (and (is-none (get found acc)) (is-none (index-of? (get seated acc) who)) (is-eq (token-y-limit-at who (get price acc)) u0))
-    (merge acc { found: (some who) })
+  (if (is-some (index-of? (get seated acc) who))
     acc
+    (let (
+        (i (get i acc))
+        (amt (get-token-x-deposit (get cycle acc) who))
+        (l (token-x-limit-at who (get price acc)))
+        (a1 (merge acc {
+          i: (+ i u1),
+          min-amt: (if (< amt (get min-amt acc))
+            amt
+            (get min-amt acc)
+          ),
+          min-who: (if (< amt (get min-amt acc))
+            who
+            (get min-who acc)
+          ),
+        }))
+      )
+      (if (<= l (get price acc))
+        a1
+        (let (
+            (a2 (if (and (is-none (get dead a1)) (is-eq l MAX_UINT))
+              (merge a1 { dead: (some who) })
+              a1
+            ))
+            (row {
+              who: who,
+              l: l,
+              amt: amt,
+              i: i,
+            })
+            (r (fold scan-x-insert (get top a2) {
+              e: row,
+              out: (list),
+              placed: false,
+            }))
+            (sorted (if (get placed r)
+              (get out r)
+              (push-row (get out r) row)
+            ))
+          )
+          (if (> (len sorted) (get slots a2))
+            (take-cut a2 sorted)
+            (merge a2 { top: sorted })
+          )
+        )
+      )
+    )
   )
 )
-(define-private (first-off-x-fold
-    (who principal)
-    (acc {
-      price: uint,
-      seated: (list 50 principal),
-      found: (optional principal),
-    })
-  )
-  ;; a switched-off resident (ask sentinel MAX_UINT) leaves before anyone alive
-  (if (and (is-none (get found acc)) (is-none (index-of? (get seated acc) who)) (is-eq (token-x-limit-at who (get price acc)) MAX_UINT))
-    (merge acc { found: (some who) })
-    acc
-  )
-)
+;; The N-th best (last of the top set), if it is out of range and strictly
+;; worse than the newcomer: a switched-off resident leaves first; else the
+;; N-th best is demoted to the size region, where the smaller of it and the
+;; smallest resident outside the region is parked. Returns none when someone
+;; was parked (the side has room now), else the smallest resident for the
+;; core's size rule, so the core never folds again.
 (define-private (park-tenth-token-y
     (cycle uint)
     (price uint)
@@ -725,81 +818,46 @@
     (depositors (list 50 principal))
   )
   (let (
-      (seated (var-get seated-y))
-      (top (get out (fold top-y-fold depositors {
+      (scan (fold scan-y-fold depositors {
+        cycle: cycle,
         price: price,
         slots: (var-get distance-slots),
-        seated: seated,
-        out: (list),
-      })))
+        seated: (var-get seated-y),
+        i: u0,
+        top: (list),
+        dead: none,
+        out-amt: u999999999999999999,
+        out-i: u0,
+        out-who: none,
+        min-amt: u999999999999999999,
+        min-who: tx-sender,
+      }))
+      (top (get top scan))
       (n (len top))
-      (off (get found (fold first-off-y-fold depositors {
-        price: price,
-        seated: seated,
-        found: none,
-      })))
+      (min-info (some {
+        who: (get min-who scan),
+        amt: (get min-amt scan),
+      }))
     )
     (if (is-eq n u0)
-      (ok false)
+      (ok min-info)
       (let ((last (unwrap-panic (element-at? top (- n u1)))))
         (if (not (< (get l last) bid))
-          (ok false)
-          (match off
-            ;; a switched-off resident leaves before anyone alive
-            dead (park-token-y cycle price dead depositors)
-            ;; the N-th best is demoted to the size region: it stays if it is
-            ;; bigger than the smallest resident outside the region (that one
-            ;; is parked instead); otherwise the N-th best is parked. Never a
-            ;; refund: whoever leaves keeps funds and price, readmittable.
-            (let (
-              (outside (fold smallest-outside-y-fold depositors {
-                cycle: cycle,
-                price: price,
-                top: (map quote-who top),
-                seated: seated,
-                smallest: u999999999999999999,
-                found: none,
-              }))
-            )
-            (match (get found outside)
-              small (if (> (get-token-y-deposit cycle (get who last)) (get smallest outside))
-                (park-token-y cycle price small depositors)
+          (ok min-info)
+          (begin
+            (try! (match (get dead scan)
+              dead (park-token-y cycle price dead depositors)
+              (match (get out-who scan)
+                small (if (> (get amt last) (get out-amt scan))
+                  (park-token-y cycle price small depositors)
+                  (park-token-y cycle price (get who last) depositors)
+                )
                 (park-token-y cycle price (get who last) depositors)
               )
-              (park-token-y cycle price (get who last) depositors)
-            )
-          )
+            ))
+            (ok none)
           )
         )
-      )
-    )
-  )
-)
-(define-private (smallest-outside-x-fold
-    (who principal)
-    (acc {
-      cycle: uint,
-      price: uint,
-      top: (list 50 principal),
-      seated: (list 50 principal),
-      smallest: uint,
-      found: (optional principal),
-    })
-  )
-  ;; the smallest OUT-OF-RANGE resident that is not in the price region
-  (if (or
-      (is-some (index-of? (get seated acc) who))
-      (is-some (index-of? (get top acc) who))
-      (<= (token-x-limit-at who (get price acc)) (get price acc))
-    )
-    acc
-    (let ((amt (get-token-x-deposit (get cycle acc) who)))
-      (if (< amt (get smallest acc))
-        (merge acc {
-          smallest: amt,
-          found: (some who),
-        })
-        acc
       )
     )
   )
@@ -811,50 +869,44 @@
     (depositors (list 50 principal))
   )
   (let (
-      (seated (var-get seated-x))
-      (top (get out (fold top-x-fold depositors {
+      (scan (fold scan-x-fold depositors {
+        cycle: cycle,
         price: price,
         slots: (var-get distance-slots),
-        seated: seated,
-        out: (list),
-      })))
+        seated: (var-get seated-x),
+        i: u0,
+        top: (list),
+        dead: none,
+        out-amt: u999999999999999999,
+        out-i: u0,
+        out-who: none,
+        min-amt: u999999999999999999,
+        min-who: tx-sender,
+      }))
+      (top (get top scan))
       (n (len top))
-      (off (get found (fold first-off-x-fold depositors {
-        price: price,
-        seated: seated,
-        found: none,
-      })))
+      (min-info (some {
+        who: (get min-who scan),
+        amt: (get min-amt scan),
+      }))
     )
     (if (is-eq n u0)
-      (ok false)
+      (ok min-info)
       (let ((last (unwrap-panic (element-at? top (- n u1)))))
         (if (not (> (get l last) ask))
-          (ok false)
-          (match off
-            ;; a switched-off resident leaves before anyone alive
-            dead (park-token-x cycle price dead depositors)
-            ;; the N-th best is demoted to the size region: it stays if it is
-            ;; bigger than the smallest resident outside the region (that one
-            ;; is parked instead); otherwise the N-th best is parked. Never a
-            ;; refund: whoever leaves keeps funds and price, readmittable.
-            (let (
-              (outside (fold smallest-outside-x-fold depositors {
-                cycle: cycle,
-                price: price,
-                top: (map quote-who top),
-                seated: seated,
-                smallest: u999999999999999999,
-                found: none,
-              }))
-            )
-            (match (get found outside)
-              small (if (> (get-token-x-deposit cycle (get who last)) (get smallest outside))
-                (park-token-x cycle price small depositors)
+          (ok min-info)
+          (begin
+            (try! (match (get dead scan)
+              dead (park-token-x cycle price dead depositors)
+              (match (get out-who scan)
+                small (if (> (get amt last) (get out-amt scan))
+                  (park-token-x cycle price small depositors)
+                  (park-token-x cycle price (get who last) depositors)
+                )
                 (park-token-x cycle price (get who last) depositors)
               )
-              (park-token-x cycle price (get who last) depositors)
-            )
-          )
+            ))
+            (ok none)
           )
         )
       )
@@ -1125,6 +1177,10 @@
     (spread-bps (optional uint))
     (carry uint)
     (price uint)
+    (bump (optional {
+      who: principal,
+      amt: uint,
+    }))
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1145,14 +1201,23 @@
 
     (if (and (is-eq existing u0) (side-full-y depositors tx-sender))
       (let (
-          (smallest-info (fold find-smallest-token-y-fold depositors {
-            cycle: cycle,
-            seated: (var-get seated-y),
-            smallest: u999999999999999999,
-            smallest-principal: tx-sender,
-          }))
-          (smallest-amount (get smallest smallest-info))
-          (smallest-who (get smallest-principal smallest-info))
+          ;; the park scan already found the smallest; fold only without it
+          (smallest-info (match bump
+            b b
+            (let ((f (fold find-smallest-token-y-fold depositors {
+                cycle: cycle,
+                seated: (var-get seated-y),
+                amt: u999999999999999999,
+                who: tx-sender,
+              })))
+              {
+                who: (get who f),
+                amt: (get amt f),
+              }
+            )
+          ))
+          (smallest-amount (get amt smallest-info))
+          (smallest-who (get who smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
         ;; the smallest resident is PARKED, not refunded: funds and price
@@ -1255,12 +1320,13 @@
     ;; nobody out of range at all, park-tenth does nothing and the core's
     ;; size rule decides.
     (asserts! (not (and new-maker full (is-eq bid u0))) ERR_QUEUE_FULL)
-    (and
-      new-maker
-      full
-      (try! (park-tenth-token-y cycle price bid depositors))
-    )
-    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price t asset-name))))
+    (let (
+        (bump (if (and new-maker full)
+          (try! (park-tenth-token-y cycle price bid depositors))
+          none
+        ))
+        (deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price bump t asset-name)))
+      )
       (try! (log-peg-y-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -1278,6 +1344,10 @@
     (spread-bps (optional uint))
     (carry uint)
     (price uint)
+    (bump (optional {
+      who: principal,
+      amt: uint,
+    }))
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1297,14 +1367,23 @@
     (and (> carry u0) (map-delete token-x-parked tx-sender))
     (if (and (is-eq existing u0) (side-full-x depositors tx-sender))
       (let (
-          (smallest-info (fold find-smallest-token-x-fold depositors {
-            cycle: cycle,
-            seated: (var-get seated-x),
-            smallest: u999999999999999999,
-            smallest-principal: tx-sender,
-          }))
-          (smallest-amount (get smallest smallest-info))
-          (smallest-who (get smallest-principal smallest-info))
+          ;; the park scan already found the smallest; fold only without it
+          (smallest-info (match bump
+            b b
+            (let ((f (fold find-smallest-token-x-fold depositors {
+                cycle: cycle,
+                seated: (var-get seated-x),
+                amt: u999999999999999999,
+                who: tx-sender,
+              })))
+              {
+                who: (get who f),
+                amt: (get amt f),
+              }
+            )
+          ))
+          (smallest-amount (get amt smallest-info))
+          (smallest-who (get who smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
         ;; the smallest resident is PARKED, not refunded (mirror of the y side)
@@ -1402,12 +1481,13 @@
     ;; than the N-th best out-of-range ask -> a switched-off resident leaves
     ;; first, else the N-th best is demoted; otherwise the core's size rule.
     (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
-    (and
-      new-maker
-      full
-      (try! (park-tenth-token-x cycle price ask depositors))
-    )
-    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price t asset-name))))
+    (let (
+        (bump (if (and new-maker full)
+          (try! (park-tenth-token-x cycle price ask depositors))
+          none
+        ))
+        (deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price bump t asset-name)))
+      )
       (try! (log-peg-x-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -2167,12 +2247,12 @@
           ))
         )
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none u0 u0 tx-trait tx-name))
+        (try! (deposit-token-x-core net limit-price none u0 u0 none tx-trait tx-name))
       )
       (begin
         (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none u0 u0 ty-trait ty-name))
+        (try! (deposit-token-y-core net limit-price none u0 u0 none ty-trait ty-name))
       )
     )
     (var-set crossing true)

@@ -583,50 +583,87 @@ later) lands the sats in the rung held (step 31), the keeper's push with
 the same stale update is refused (step 34), the push with a fresh update
 puts them on the market (step 35).
 
-## Cost profile and what is not worth optimizing (2026-09-13)
+## Cost profile (2026-09-13): the market, the router, the vaults, and Bitflow
 
-Measured on the stxer fork `b0bd067c5adff10ec5bb4025885bb393` (forty
-fillers, one rung, then the park path) and the bounty-fixes / stress forks.
-Block limits: 15,000 reads, 5,000,000,000 runtime.
+Execution costs read from the stxer fork results (`execution_cost` per
+transaction, `node simulations/_costs.mjs <sim id>` prints them) and, for Bitflow, from the last fifty mainnet transactions of
+each contract via the Hiro API. Block limits: 15,000 reads, 15,000 writes,
+100 MB read length, 15 MB write length, 5,000,000,000 runtime. A
+transaction is bounded by the dimension it uses most; for everything below
+that is the read count.
 
-| transaction | reads | runtime | share of a block |
+Market v6 (fork `b0bd067c5adff10ec5bb4025885bb393`: forty fillers, one
+rung, then the park path; bounty-fixes and stress forks for swap and
+settle):
+
+| transaction | reads | runtime | block share (reads / runtime) |
 |---|---|---|---|
-| deposit, side has room (1st to 40th filler) | 62 | 1.1M to 1.35M | 0.4% reads, 0.03% runtime |
+| deposit, side has room (1st to 40th filler) | 62 | 1.1M to 1.35M | 0.4% / 0.03% |
 | deposit refused on a full side (u1010, every region empty) | 166 | 9.9M | 1.1% / 0.2% |
 | deposit that parks on a full side (in-range newcomer) | 270 | 11.1M | 1.8% / 0.22% |
 | band rung deposit + push onto a full side (seated, no park) | 294 | 2.2M | 2.0% / 0.04% |
 | sync-seat | 29 | 0.19M | |
-| settle-with-refresh (stress fork) | 180 | 1.1M | |
-| swap walking many makers (bounty-fixes fork) | up to 424 | 1.8M | 2.8% / 0.04% |
+| settle-with-refresh | 180 | 1.1M | 1.2% / 0.02% |
+| swap walking many makers | up to 424 | 1.8M | 2.8% / 0.04% |
 
-The park path is the heaviest thing a maker can do: ten times the runtime
-of a plain deposit, because four passes over the residents each recompute
-every ordinary maker's live limit from storage (the price region, the dead
-region, the size region, then the core size rule). It is still under 2% of
-a block on either dimension, and it runs only when the side is full for the
-newcomer. On a side with room the seats cost one data-var read.
+Through the wrappers (router fork `ecb91152db7534fda4dcda733f04bb3f`,
+vault fork `7468b9d40a901057fb8ef9a51c8848f4`, ccd016 fork
+`5df232a3282ec928cfb1b6536fe7b3d0`):
 
-Considered and not done:
+| transaction | reads | runtime | block share |
+|---|---|---|---|
+| router v5 swap, book leg + DLMM leg | 378 to 387 | 5.5M to 5.6M | 2.6% / 0.11% |
+| router v5 swap, book leg only | 137 | 4.3M | 0.9% / 0.09% |
+| vault v6 execute-jing-deposit | 52 | 0.34M | |
+| vault v6 execute-jing-set-limit | 42 | 0.51M | |
+| ccd016 (CityCoins) jing-place | 93 | 1.1M | 0.6% / 0.02% |
+| ccd016 router-swap (pools leg, refused u3002 that day) | 208 | 1.8M | 1.4% / 0.04% |
+| ccd016 jing-reclaim | 37 | 0.21M | |
 
-- One pass building an in-memory list of (who, limit, amount) then folding
-  the regions over it would cut the park path to roughly half its reads.
-  Gain: from 0.22% of a block to about 0.12%, on the rare full-side deposit.
-  Cost: a rewrite of the park path, an audit reset, and more source bytes
-  when the contract sits 800 bytes under the 100,000-byte deploy cap.
-  Deferred to a later version if full sides turn out to be common.
-- A separate list for the seated rungs, kept out of the depositor list.
-  The seat check is already an in-memory lookup over at most ten names; the
-  cost is the makers' limit reads, which a second list does not remove.
-  Settlement needs the rungs anyway, so every reader of the depositor list
-  (settle, walk, batch, distribute, roll, refund, prune, cancel, withdraw,
-  readmit, router, vault, ccd016) would merge two lists for no gain.
-- Binding repeated `var-get`s of the token principals, treasury and the
-  minimums once per function. Each is one small read; a settlement would
-  save under ten reads out of about two hundred. Not worth the churn.
+Bitflow DLMM on mainnet, same day, for scale:
 
-Source size: 99,191 bytes of a 100,000 cap. Indentation is about 19 KB
-and comments about 4 KB; a deploy-time minify (strip both) is the lever if
-v6 ever needs room, with the deployed bytes still derivable from the repo.
+| transaction | reads (avg / max) | runtime (avg / max) |
+|---|---|---|
+| dlmm-swap-router-v-1-2 swap-x-for-y / y-for-x simple-range-multi (50 txs) | 208 to 221 / 558 | 5.0M to 5.2M / 7.9M |
+| dlmm-swap-router-v-1-1 swap-simple-multi (47 txs) | 68 / 149 | 0.9M / 2.0M |
+
+So a Jing settlement or a book-only swap costs what a plain Bitflow swap
+costs, the router's two-leg swap costs a Bitflow multi-range swap, and every
+wrapper call sits under 3% of a block on its binding dimension. The park
+path is the outlier in runtime only: twice Bitflow's heaviest swap, still
+0.22% of a block, and it runs only when the side is full for the newcomer.
+On a side with room the seats cost one data-var read.
+
+The one-pass park scan, tried and measured (`markets-sbtc-stx-jing-v7.clar`,
+uncommitted): one fold builds the N-best set, the first switched-off
+resident, the smallest of the size region and the smallest of all, so the
+three park folds and the core's size fold collapse into one, with the
+same tie-breaks (list order) and the same outcomes. All 22 harnesses
+green on it (seats fork `224fa03922faec9abd87a457ea17e4f6`, 172/172).
+
+| full-side deposit | v6 reads | v7 reads | v6 runtime | v7 runtime |
+|---|---|---|---|---|
+| refused (u1010) | 166 | 123 | 9.9M | 15.9M |
+| parks a filler | 270 | 208 | 11.1M | 16.1M |
+
+Reads fall by a quarter, runtime rises by half: each resident now merges a
+wider accumulator (the top rows carry amount and index, the pass carries
+the seat list), and Clarity charges runtime by the bytes it copies. On the
+binding dimension the gain is 1.8% to 1.4% of a block, on a transaction
+that is rare. Not adopted: v6 stays as pushed, the v7 file records the
+experiment.
+
+Also considered and not done: a separate list for the seated rungs (the
+seat check is already an in-memory lookup; settlement needs the rungs, so
+every reader of the depositor list would merge two lists for no gain),
+and binding repeated `var-get`s of the token principals and minimums once
+per function (under ten small reads on a settlement of two hundred).
+
+Source size: 99,191 bytes of the node's 100,000-byte cap
+(`MAX_CONTRACT_SRC_SIZE`). Indentation is about 19 KB and comments about
+4 KB; a deploy-time strip of both is the lever if v6 ever needs room, the
+deployed bytes still derivable from the repo. The v7 experiment had to be
+deployed that way (100,082 bytes raw, 76 KB stripped).
 
 ## Bounty mtxs6nxg7a6d97081b11: decision (2026-09-13)
 
