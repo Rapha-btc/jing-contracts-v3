@@ -26,6 +26,7 @@
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u6009))
 (define-constant ERR_NOT_REGISTERED (err u6010))
 (define-constant ERR_BAND_FULL (err u6011))
+(define-constant ERR_ALREADY_SEATED (err u6012))
 
 ;; owner handover: propose, then accept once this many burn blocks passed
 (define-constant TIMELOCK_BURN_BLOCKS u144)
@@ -45,7 +46,8 @@
 ;; side (the market reserves the same number of slots), one rung per spread,
 ;; and a new canonical rung at an existing spread REPLACES the old one (the
 ;; upgrade path: bless the new code, deploy it at the same spread; the old
-;; rung keeps its funds and its resting order, only its band status goes)
+;; rung keeps its funds, its resting order and its `registered` row so its
+;; members can still withdraw and claim, only its band status goes)
 (define-data-var max-band-per-side uint u10)
 (define-map band-count (string-ascii 8) uint)
 (define-read-only (get-max-band-per-side) (var-get max-band-per-side))
@@ -134,6 +136,45 @@
 )
 (define-read-only (is-band-x (who principal)) (is-band-current who SIDE_BUY_BAND))
 (define-read-only (is-band-y (who principal)) (is-band-current who SIDE_SELL_BAND))
+;; still the holder of its (side, price) key: false for a replaced, retired
+;; or never-seated band rung, which keeps printing here for its members
+(define-private (is-current
+    (who principal)
+    (rung {
+      side: (string-ascii 8),
+      price: uint,
+    })
+  )
+  (is-eq (map-get? rungs rung) (some who))
+)
+(define-read-only (is-current-rung (who principal))
+  (match (map-get? registered who)
+    rung (is-current who rung)
+    false
+  )
+)
+;; The band seat at (side, spread) is about to change hands: taken -> the
+;; holder is replaced (its `registered` row stays, its seat goes once the
+;; caller writes the key); free -> one more seat, up to max-band-per-side.
+;; Only the count; the caller writes the key. Returns the replaced holder.
+(define-private (claim-seat
+    (side (string-ascii 8))
+    (price uint)
+  )
+  (let ((holder (map-get? rungs {
+      side: side,
+      price: price,
+    })))
+    (match holder
+      old true
+      (begin
+        (asserts! (< (get-band-count side) (var-get max-band-per-side)) ERR_BAND_FULL)
+        (map-set band-count side (+ (get-band-count side) u1))
+      )
+    )
+    (ok holder)
+  )
+)
 
 (define-private (valid-side (side (string-ascii 8)))
   (or
@@ -186,15 +227,8 @@
     )
     (asserts! (is-none (map-get? registered caller)) ERR_ALREADY_REGISTERED)
     (if (is-band-side side)
-      ;; a band spread: taken -> the newer canonical replaces the holder;
-      ;; free -> one more spread, up to max-band-per-side
-      (match holder
-        old (map-delete registered old)
-        (begin
-          (asserts! (< (get-band-count side) (var-get max-band-per-side)) ERR_BAND_FULL)
-          (map-set band-count side (+ (get-band-count side) u1))
-        )
-      )
+      ;; a band spread: the seat (taken -> replace, free -> count)
+      (is-some (try! (claim-seat side price)))
       ;; a fixed or guarded rung: one per (side, price), no replacement
       (asserts! (is-none holder) ERR_PRICE_TAKEN)
     )
@@ -215,9 +249,76 @@
       market-price: market-price,
       contract: caller,
       hash: caller-hash,
+      seated: (is-band-side side),
       replaced: (if (is-band-side side) holder none),
     })
     (ok true)
+  )
+)
+
+;; A band rung that takes NO seat: same hash gate, band sides only, the
+;; rung is registered (it prints, it takes deposits) as an ordinary maker
+;; on the book: parkable, counted against the open region, no key, no
+;; count. The owner can seat it later with `seat-band`. Any number of
+;; unseated rungs may share a spread.
+(define-public (register-unseated
+    (side (string-ascii 8))
+    (price uint)
+    (market-price uint)
+  )
+  (let (
+      (caller contract-caller)
+      (caller-hash (unwrap! (contract-hash? caller) ERR_INVALID_CONTRACT_HASH))
+      (canon (unwrap! (map-get? canonical side) ERR_NOT_VERIFIED))
+    )
+    (asserts! (is-band-side side) ERR_BAD_SIDE)
+    (asserts!
+      (is-eq caller-hash (unwrap! (contract-hash? canon) ERR_INVALID_CONTRACT_HASH))
+      ERR_HASH_MISMATCH
+    )
+    (asserts! (is-none (map-get? registered caller)) ERR_ALREADY_REGISTERED)
+    (map-set registered caller {
+      side: side,
+      price: price,
+    })
+    (print {
+      event: "rung-registered",
+      side: side,
+      price: price,
+      market-price: market-price,
+      contract: caller,
+      hash: caller-hash,
+      seated: false,
+      replaced: none,
+    })
+    (ok true)
+  )
+)
+
+;; Owner: seat a registered band rung that holds no seat (never seated,
+;; replaced or retired). Its spread taken -> the holder is replaced; free
+;; -> one more seat, up to max-band-per-side. The market copy follows on
+;; the next `sync-seat who` (anyone).
+(define-public (seat-band (who principal))
+  (let (
+      (reg (unwrap! (map-get? registered who) ERR_NOT_REGISTERED))
+      (side (get side reg))
+      (spread (get price reg))
+    )
+    (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    (asserts! (is-band-side side) ERR_BAD_SIDE)
+    (asserts! (not (is-current who reg)) ERR_ALREADY_SEATED)
+    (let ((replaced (try! (claim-seat side spread))))
+      (map-set rungs reg who)
+      (print {
+        event: "band-seated",
+        side: side,
+        spread: spread,
+        contract: who,
+        replaced: replaced,
+      })
+      (ok true)
+    )
   )
 )
 
@@ -243,9 +344,10 @@
   )
 )
 
-;; Owner: retire a band spread. The rung at it loses its seat and its ladder
-;; entry and is an ordinary maker from then on (funds and resting order
-;; untouched); the spread is free again and the count goes down.
+;; Owner: retire a band spread. The rung at it loses its seat and is an
+;; ordinary maker from then on (funds, resting order and `registered` row
+;; untouched, so its members can still withdraw and claim, and `seat-band`
+;; can seat it again); the spread is free again and the count goes down.
 (define-public (retire-band
     (side (string-ascii 8))
     (spread uint)
@@ -260,7 +362,7 @@
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
     (asserts! (is-band-side side) ERR_BAD_SIDE)
     (map-delete rungs key)
-    (map-delete registered holder)
+    ;; `registered` stays: the rung keeps printing (and paying) its members
     (map-set band-count side (- (get-band-count side) u1))
     (print {
       event: "band-retired",
@@ -292,6 +394,7 @@
     (print {
       event: "rung-deposit",
       rung: contract-caller,
+      current: (is-current contract-caller rung),
       side: (get side rung),
       price: (get price rung),
       member: member,
@@ -315,6 +418,7 @@
     (print {
       event: "rung-push",
       rung: contract-caller,
+      current: (is-current contract-caller rung),
       side: (get side rung),
       price: (get price rung),
       keeper: keeper,
@@ -337,6 +441,7 @@
     (print {
       event: "rung-withdraw",
       rung: contract-caller,
+      current: (is-current contract-caller rung),
       side: (get side rung),
       price: (get price rung),
       member: member,
@@ -358,6 +463,7 @@
     (print {
       event: "rung-claim",
       rung: contract-caller,
+      current: (is-current contract-caller rung),
       side: (get side rung),
       price: (get price rung),
       member: member,
@@ -376,6 +482,7 @@
     (print {
       event: "rung-epoch-closed",
       rung: contract-caller,
+      current: (is-current contract-caller rung),
       side: (get side rung),
       price: (get price rung),
       epoch: epoch,

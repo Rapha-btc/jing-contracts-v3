@@ -196,7 +196,10 @@
 
 ;; ---------- lifecycle ----------
 
-(define-public (initialize (bps uint))
+(define-public (initialize
+    (bps uint)
+    (seat bool)
+  )
   (begin
     ;; only the ladder owner may seat a band rung: registering at a taken
     ;; spread replaces the holder, so this must not be open to anyone who
@@ -209,10 +212,23 @@
     (var-set initialized true)
     ;; no cap stored yet: the first push derives it from the miner band.
     ;; The ladder keys one rung per (side, spread); the market-price slot
-    ;; logs u0 for the same reason. Registering IS the seat; the market keeps
-    ;; a local copy of who holds one, so tell it about ourselves.
-    (try! (contract-call? LADDER register SIDE bps u0))
-    (try! (contract-call? MARKET sync-seat current-contract))
+    ;; logs u0 for the same reason.
+    ;; `seat` true: registering IS the seat (taken spread -> replace), and
+    ;; the market keeps a local copy of who holds one, so tell it about
+    ;; ourselves. `seat` false: registered only, an ordinary maker on the
+    ;; book that prints through the ladder; the owner can seat it later
+    ;; with the ladder's seat-band.
+    (if seat
+      (begin
+        (try! (contract-call? LADDER register SIDE bps u0))
+        (try! (contract-call? MARKET sync-seat current-contract))
+        true
+      )
+      (begin
+        (try! (contract-call? LADDER register-unseated SIDE bps u0))
+        true
+      )
+    )
     (ok true)
   )
 )
@@ -256,7 +272,7 @@
           (< new-index SOLD_OUT_INDEX)
           (begin
             (map-set epoch-final-proceeds current-epoch new-proceeds)
-            (try! (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
+            (is-ok (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
             (var-set epoch (+ current-epoch u1))
             (var-set total-shares u0)
             (var-set unfilled-index SCALE)
@@ -306,9 +322,11 @@
         paid-index: (var-get proceeds-index),
       })
       (var-set total-shares (+ (var-get total-shares) shares))
-      (contract-call? LADDER log-deposit member amount shares epo
+      ;; the log is best effort: a member's funds never hang on a print
+      (is-ok (contract-call? LADDER log-deposit member amount shares epo
         (is-eq (var-get held-ustx) u0) (var-get held-ustx)
-      )
+      ))
+      (ok true)
     )
   )
 )
@@ -335,7 +353,7 @@
         (var-set held-ustx u0)
         true
       )
-      (try! (contract-call? LADDER log-push tx-sender to-push pushed (var-get held-ustx)))
+      (is-ok (contract-call? LADDER log-push tx-sender to-push pushed (var-get held-ustx)))
       (ok pushed)
     )
   )
@@ -381,9 +399,10 @@
         })
       )
       (var-set total-shares (- (var-get total-shares) shares-out))
-      (contract-call? LADDER log-withdraw member take shares-out epo
+      (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
         (var-get held-ustx)
-      )
+      ))
+      (ok true)
     )
   )
 )
@@ -392,8 +411,9 @@
   (begin
     (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
     (try! (sync))
-    (contract-call? LADDER log-claim tx-sender (try! (settle-proceeds tx-sender))
-      (var-get epoch)
+    (let ((paid (try! (settle-proceeds tx-sender))))
+      (is-ok (contract-call? LADDER log-claim tx-sender paid (var-get epoch)))
+      (ok true)
     )
   )
 )

@@ -214,7 +214,7 @@
           (< new-index SOLD_OUT_INDEX)
           (begin
             (map-set epoch-final-proceeds current-epoch new-proceeds)
-            (try! (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
+            (is-ok (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
             (var-set epoch (+ current-epoch u1))
             (var-set total-shares u0)
             (var-set unfilled-index SCALE)
@@ -264,9 +264,11 @@
         paid-index: (var-get proceeds-index),
       })
       (var-set total-shares (+ (var-get total-shares) shares))
-      (contract-call? LADDER log-deposit member amount shares epo
+      ;; the log is best effort: a member's funds never hang on a print
+      (is-ok (contract-call? LADDER log-deposit member amount shares epo
         (is-eq (var-get held-ustx) u0) (var-get held-ustx)
-      )
+      ))
+      (ok true)
     )
   )
 )
@@ -293,7 +295,7 @@
         (var-set held-ustx u0)
         true
       )
-      (try! (contract-call? LADDER log-push tx-sender to-push pushed (var-get held-ustx)))
+      (is-ok (contract-call? LADDER log-push tx-sender to-push pushed (var-get held-ustx)))
       (ok pushed)
     )
   )
@@ -339,9 +341,10 @@
         })
       )
       (var-set total-shares (- (var-get total-shares) shares-out))
-      (contract-call? LADDER log-withdraw member take shares-out epo
+      (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
         (var-get held-ustx)
-      )
+      ))
+      (ok true)
     )
   )
 )
@@ -350,8 +353,9 @@
   (begin
     (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
     (try! (sync))
-    (contract-call? LADDER log-claim tx-sender (try! (settle-proceeds tx-sender))
-      (var-get epoch)
+    (let ((paid (try! (settle-proceeds tx-sender))))
+      (is-ok (contract-call? LADDER log-claim tx-sender paid (var-get epoch)))
+      (ok true)
     )
   )
 )
