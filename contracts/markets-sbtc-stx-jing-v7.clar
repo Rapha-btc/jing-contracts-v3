@@ -56,6 +56,7 @@
 (define-constant ERR_FEED_TIMESTAMP_MISSING (err u1025))
 (define-constant ERR_BAD_SPREAD (err u1026))
 (define-constant ERR_CYCLE_OPEN (err u1027))
+(define-constant ERR_NOT_A_SEAT (err u1028))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -70,6 +71,69 @@
 ;; price, so no ladder of small orders can drain them. 0 = size only.
 (define-data-var distance-slots uint u10)
 (define-read-only (get-distance-slots) (var-get distance-slots))
+;; ---------- protected seats ----------
+;; max-band-per-side slots per side (the ladder's number) are reserved for
+;; the band rungs (jing-buy/sell-stx-core-spread: pooled pegs, floor / cap
+;; from the RFQ native oracle). A seat holder is never displaced; everyone
+;; else competes for the other slots, full for them even while seats stand
+;; empty. The ladder decides who holds a seat (one code hash per band side,
+;; one rung per spread, replace at a spread, retire); the market keeps a
+;; local copy so a deposit never calls the ladder. See the README.
+;; seat holders, one short list per side: folds read it once, test in memory
+(define-data-var seats-per-side uint u10)
+(define-data-var seated-x (list 50 principal) (list))
+(define-data-var seated-y (list 50 principal) (list))
+(define-read-only (protected-seats) (var-get seats-per-side))
+(define-read-only (get-seated-x) (var-get seated-x))
+(define-read-only (get-seated-y) (var-get seated-y))
+(define-read-only (is-protected-x (who principal)) (is-some (index-of? (var-get seated-x) who)))
+(define-read-only (is-protected-y (who principal)) (is-some (index-of? (var-get seated-y) who)))
+
+(define-private (still-seated-x (p principal)) (contract-call? .jing-ladder is-band-x p))
+(define-private (still-seated-y (p principal)) (contract-call? .jing-ladder is-band-y p))
+(define-private (with-seat
+    (lst (list 50 principal))
+    (who principal)
+  )
+  (if (is-some (index-of? lst who))
+    lst
+    (unwrap-panic (as-max-len? (append lst who) u50))
+  )
+)
+
+;; seat count from the ladder, clamped to the slot count
+(define-private (refresh-seat-count)
+  (let ((n (contract-call? .jing-ladder get-max-band-per-side)))
+    (var-set seats-per-side (if (> n MAX_DEPOSITORS)
+      MAX_DEPOSITORS
+      n
+    ))
+    (var-get seats-per-side)
+  )
+)
+(define-public (sync-seat-count)
+  (ok (refresh-seat-count))
+)
+
+;; Seat `who` (anyone; a rung calls it on itself from initialize). The
+;; ladder must seat it (u1028): add-only. A sync also prunes that side's list
+;; against the ladder, so a replaced or retired rung drops out.
+(define-public (sync-seat (who principal))
+  (let (
+      (x (contract-call? .jing-ladder is-band-x who))
+      (y (contract-call? .jing-ladder is-band-y who))
+    )
+    (asserts! (or x y) ERR_NOT_A_SEAT)
+    ;; only the side the ladder seats it on is touched and pruned
+    (and x (var-set seated-x (filter still-seated-x (with-seat (var-get seated-x) who))))
+    (and y (var-set seated-y (filter still-seated-y (with-seat (var-get seated-y) who))))
+    (ok {
+      x: x,
+      y: y,
+      seats: (refresh-seat-count),
+    })
+  )
+)
 (define-data-var current-cycle uint u0)
 
 (define-data-var settle-token-y-cleared uint u0)
@@ -361,16 +425,64 @@
   )
 )
 
+(define-private (count-seated-fold
+    (who principal)
+    (acc {
+      seated: (list 50 principal),
+      n: uint,
+    })
+  )
+  (if (is-some (index-of? (get seated acc) who))
+    (merge acc { n: (+ (get n acc) u1) })
+    acc
+  )
+)
+(define-private (seated-on
+    (depositors (list 50 principal))
+    (seated (list 50 principal))
+  )
+  (get n (fold count-seated-fold depositors {
+    seated: seated,
+    n: u0,
+  }))
+)
+;; Full FOR `who`: a seat holder sees the hard cap; anyone else sees the
+;; open slots, MAX_DEPOSITORS minus the seats, taken or not.
+(define-read-only (side-full-y
+    (depositors (list 50 principal))
+    (who principal)
+  )
+  (let ((seated (var-get seated-y)))
+    (if (is-some (index-of? seated who))
+      (>= (len depositors) MAX_DEPOSITORS)
+      (>= (- (len depositors) (seated-on depositors seated))
+        (- MAX_DEPOSITORS (protected-seats)))
+    )
+  )
+)
+(define-read-only (side-full-x
+    (depositors (list 50 principal))
+    (who principal)
+  )
+  (let ((seated (var-get seated-x)))
+    (if (is-some (index-of? seated who))
+      (>= (len depositors) MAX_DEPOSITORS)
+      (>= (- (len depositors) (seated-on depositors seated))
+        (- MAX_DEPOSITORS (protected-seats)))
+    )
+  )
+)
 (define-private (find-smallest-token-y-fold
     (depositor principal)
     (acc {
       cycle: uint,
+      seated: (list 50 principal),
       smallest: uint,
       smallest-principal: principal,
     })
   )
   (let ((amount (get-token-y-deposit (get cycle acc) depositor)))
-    (if (< amount (get smallest acc))
+    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get smallest acc)))
       (merge acc {
         smallest: amount,
         smallest-principal: depositor,
@@ -384,12 +496,13 @@
     (depositor principal)
     (acc {
       cycle: uint,
+      seated: (list 50 principal),
       smallest: uint,
       smallest-principal: principal,
     })
   )
   (let ((amount (get-token-x-deposit (get cycle acc) depositor)))
-    (if (< amount (get smallest acc))
+    (if (and (is-none (index-of? (get seated acc) depositor)) (< amount (get smallest acc)))
       (merge acc {
         smallest: amount,
         smallest-principal: depositor,
@@ -469,6 +582,7 @@
     (acc {
       price: uint,
       slots: uint,
+      seated: (list 50 principal),
       out: (list 50 {
         who: principal,
         l: uint,
@@ -476,7 +590,7 @@
     })
   )
   (let ((l (token-y-limit-at maker (get price acc))))
-    (if (>= l (get price acc))
+    (if (or (is-some (index-of? (get seated acc) maker)) (>= l (get price acc)))
       acc
       (let (
           (r (fold top-y-insert (get out acc) {
@@ -508,6 +622,7 @@
     (acc {
       price: uint,
       slots: uint,
+      seated: (list 50 principal),
       out: (list 50 {
         who: principal,
         l: uint,
@@ -515,7 +630,7 @@
     })
   )
   (let ((l (token-x-limit-at maker (get price acc))))
-    (if (<= l (get price acc))
+    (if (or (is-some (index-of? (get seated acc) maker)) (<= l (get price acc)))
       acc
       (let (
           (r (fold top-x-insert (get out acc) {
@@ -552,12 +667,14 @@
       cycle: uint,
       price: uint,
       top: (list 50 principal),
+      seated: (list 50 principal),
       smallest: uint,
       found: (optional principal),
     })
   )
   ;; the smallest OUT-OF-RANGE resident that is not in the price region
   (if (or
+      (is-some (index-of? (get seated acc) who))
       (is-some (index-of? (get top acc) who))
       (>= (token-y-limit-at who (get price acc)) (get price acc))
     )
@@ -577,11 +694,12 @@
     (who principal)
     (acc {
       price: uint,
+      seated: (list 50 principal),
       found: (optional principal),
     })
   )
   ;; a switched-off resident (bid sentinel u0) leaves before anyone alive
-  (if (and (is-none (get found acc)) (is-eq (token-y-limit-at who (get price acc)) u0))
+  (if (and (is-none (get found acc)) (is-none (index-of? (get seated acc) who)) (is-eq (token-y-limit-at who (get price acc)) u0))
     (merge acc { found: (some who) })
     acc
   )
@@ -590,11 +708,12 @@
     (who principal)
     (acc {
       price: uint,
+      seated: (list 50 principal),
       found: (optional principal),
     })
   )
   ;; a switched-off resident (ask sentinel MAX_UINT) leaves before anyone alive
-  (if (and (is-none (get found acc)) (is-eq (token-x-limit-at who (get price acc)) MAX_UINT))
+  (if (and (is-none (get found acc)) (is-none (index-of? (get seated acc) who)) (is-eq (token-x-limit-at who (get price acc)) MAX_UINT))
     (merge acc { found: (some who) })
     acc
   )
@@ -606,14 +725,17 @@
     (depositors (list 50 principal))
   )
   (let (
+      (seated (var-get seated-y))
       (top (get out (fold top-y-fold depositors {
         price: price,
         slots: (var-get distance-slots),
+        seated: seated,
         out: (list),
       })))
       (n (len top))
       (off (get found (fold first-off-y-fold depositors {
         price: price,
+        seated: seated,
         found: none,
       })))
     )
@@ -634,6 +756,7 @@
                 cycle: cycle,
                 price: price,
                 top: (map quote-who top),
+                seated: seated,
                 smallest: u999999999999999999,
                 found: none,
               }))
@@ -658,12 +781,14 @@
       cycle: uint,
       price: uint,
       top: (list 50 principal),
+      seated: (list 50 principal),
       smallest: uint,
       found: (optional principal),
     })
   )
   ;; the smallest OUT-OF-RANGE resident that is not in the price region
   (if (or
+      (is-some (index-of? (get seated acc) who))
       (is-some (index-of? (get top acc) who))
       (<= (token-x-limit-at who (get price acc)) (get price acc))
     )
@@ -686,14 +811,17 @@
     (depositors (list 50 principal))
   )
   (let (
+      (seated (var-get seated-x))
       (top (get out (fold top-x-fold depositors {
         price: price,
         slots: (var-get distance-slots),
+        seated: seated,
         out: (list),
       })))
       (n (len top))
       (off (get found (fold first-off-x-fold depositors {
         price: price,
+        seated: seated,
         found: none,
       })))
     )
@@ -714,6 +842,7 @@
                 cycle: cycle,
                 price: price,
                 top: (map quote-who top),
+                seated: seated,
                 smallest: u999999999999999999,
                 found: none,
               }))
@@ -1014,10 +1143,11 @@
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-y-parked tx-sender))
 
-    (if (and (is-eq existing u0) (>= (len depositors) MAX_DEPOSITORS))
+    (if (and (is-eq existing u0) (side-full-y depositors tx-sender))
       (let (
           (smallest-info (fold find-smallest-token-y-fold depositors {
             cycle: cycle,
+            seated: (var-get seated-y),
             smallest: u999999999999999999,
             smallest-principal: tx-sender,
           }))
@@ -1105,7 +1235,7 @@
       (parked (get-token-y-parked tx-sender))
       (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
       (depositors (get-token-y-depositors cycle))
-      (full (>= (len depositors) MAX_DEPOSITORS))
+      (full (side-full-y depositors tx-sender))
       (price (if (or
           (> (len (get-token-x-depositors cycle)) u0)
           (and new-maker full)
@@ -1165,10 +1295,11 @@
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-x-parked tx-sender))
-    (if (and (is-eq existing u0) (>= (len depositors) MAX_DEPOSITORS))
+    (if (and (is-eq existing u0) (side-full-x depositors tx-sender))
       (let (
           (smallest-info (fold find-smallest-token-x-fold depositors {
             cycle: cycle,
+            seated: (var-get seated-x),
             smallest: u999999999999999999,
             smallest-principal: tx-sender,
           }))
@@ -1255,7 +1386,7 @@
       (parked (get-token-x-parked tx-sender))
       (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
       (depositors (get-token-x-depositors cycle))
-      (full (>= (len depositors) MAX_DEPOSITORS))
+      (full (side-full-x depositors tx-sender))
       (price (if (or
           (> (len (get-token-y-depositors cycle)) u0)
           (and new-maker full)
@@ -1506,7 +1637,7 @@
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
-    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (side-full-y depositors who)) ERR_QUEUE_FULL)
     (asserts! (not (would-take-as-y price limit)) ERR_MUST_USE_SWAP)
     (map-set token-y-deposits {
       cycle: cycle,
@@ -1542,7 +1673,7 @@
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
-    (asserts! (< (len depositors) MAX_DEPOSITORS) ERR_QUEUE_FULL)
+    (asserts! (not (side-full-x depositors who)) ERR_QUEUE_FULL)
     (asserts! (not (would-take-as-x price limit)) ERR_MUST_USE_SWAP)
     (map-set token-x-deposits {
       cycle: cycle,
@@ -3152,6 +3283,7 @@
     (ok (var-set distance-slots slots))
   )
 )
+
 
 (define-private (cap-scale)
   (* PRICE_PRECISION DECIMAL_FACTOR)

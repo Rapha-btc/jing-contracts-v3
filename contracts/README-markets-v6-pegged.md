@@ -583,6 +583,51 @@ later) lands the sats in the rung held (step 31), the keeper's push with
 the same stale update is refused (step 34), the push with a fresh update
 puts them on the market (step 35).
 
+## Cost profile and what is not worth optimizing (2026-09-13)
+
+Measured on the stxer fork `b0bd067c5adff10ec5bb4025885bb393` (forty
+fillers, one rung, then the park path) and the bounty-fixes / stress forks.
+Block limits: 15,000 reads, 5,000,000,000 runtime.
+
+| transaction | reads | runtime | share of a block |
+|---|---|---|---|
+| deposit, side has room (1st to 40th filler) | 62 | 1.1M to 1.35M | 0.4% reads, 0.03% runtime |
+| deposit refused on a full side (u1010, every region empty) | 166 | 9.9M | 1.1% / 0.2% |
+| deposit that parks on a full side (in-range newcomer) | 270 | 11.1M | 1.8% / 0.22% |
+| band rung deposit + push onto a full side (seated, no park) | 294 | 2.2M | 2.0% / 0.04% |
+| sync-seat | 29 | 0.19M | |
+| settle-with-refresh (stress fork) | 180 | 1.1M | |
+| swap walking many makers (bounty-fixes fork) | up to 424 | 1.8M | 2.8% / 0.04% |
+
+The park path is the heaviest thing a maker can do: ten times the runtime
+of a plain deposit, because four passes over the residents each recompute
+every ordinary maker's live limit from storage (the price region, the dead
+region, the size region, then the core size rule). It is still under 2% of
+a block on either dimension, and it runs only when the side is full for the
+newcomer. On a side with room the seats cost one data-var read.
+
+Considered and not done:
+
+- One pass building an in-memory list of (who, limit, amount) then folding
+  the regions over it would cut the park path to roughly half its reads.
+  Gain: from 0.22% of a block to about 0.12%, on the rare full-side deposit.
+  Cost: a rewrite of the park path, an audit reset, and more source bytes
+  when the contract sits 800 bytes under the 100,000-byte deploy cap.
+  Deferred to a later version if full sides turn out to be common.
+- A separate list for the seated rungs, kept out of the depositor list.
+  The seat check is already an in-memory lookup over at most ten names; the
+  cost is the makers' limit reads, which a second list does not remove.
+  Settlement needs the rungs anyway, so every reader of the depositor list
+  (settle, walk, batch, distribute, roll, refund, prune, cancel, withdraw,
+  readmit, router, vault, ccd016) would merge two lists for no gain.
+- Binding repeated `var-get`s of the token principals, treasury and the
+  minimums once per function. Each is one small read; a settlement would
+  save under ten reads out of about two hundred. Not worth the churn.
+
+Source size: 99,191 bytes of a 100,000 cap. Indentation is about 19 KB
+and comments about 4 KB; a deploy-time minify (strip both) is the lever if
+v6 ever needs room, with the deployed bytes still derivable from the repo.
+
 ## Bounty mtxs6nxg7a6d97081b11: decision (2026-09-13)
 
 Five submissions, three real findings, all low severity, all fixed on
