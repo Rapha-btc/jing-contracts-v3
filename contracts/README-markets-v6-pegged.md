@@ -588,9 +588,15 @@ puts them on the market (step 35).
 Execution costs read from the stxer fork results (`execution_cost` per
 transaction, `node simulations/_costs.mjs <sim id>` prints them) and, for Bitflow, from the last fifty mainnet transactions of
 each contract via the Hiro API. Block limits: 15,000 reads, 15,000 writes,
-100 MB read length, 15 MB write length, 5,000,000,000 runtime. A
-transaction is bounded by the dimension it uses most; for everything below
-that is the read count.
+100 MB read length, 15 MB write length, 5,000,000,000 runtime. Runtime is
+not wall-clock: it is the Clarity VM's abstract unit, a fixed amount per
+operation scaled by the bytes the operation copies, deterministic on every
+node. Of the five budgets, the one a transaction uses the biggest share of
+is its binding dimension: it decides how many such transactions fit in a
+block and what the fee estimator prices it on. For everything below that
+is the read count; runtime sits an order of magnitude lower, so a change
+that trades runtime for reads moves the fee and one the other way does
+not.
 
 Market v6 (fork `b0bd067c5adff10ec5bb4025885bb393`: forty fillers, one
 rung, then the park path; bounty-fixes and stress forks for swap and
@@ -648,10 +654,16 @@ green on it (seats fork `224fa03922faec9abd87a457ea17e4f6`, 172/172).
 
 Reads fall by a quarter, runtime rises by half: each resident now merges a
 wider accumulator (the top rows carry amount and index, the pass carries
-the seat list), and Clarity charges runtime by the bytes it copies. On the
-binding dimension the gain is 1.8% to 1.4% of a block, on a transaction
-that is rare. Not adopted: v6 stays as pushed, the v7 file records the
-experiment.
+the seat list), and Clarity charges runtime by the bytes it copies. Mixed,
+not worse: reads bind, so the fee moves a hair down; runtime could double
+and still not bind. On the binding dimension the gain is 1.8% to 1.4% of a
+block, on a transaction that is rare, against a rewrite of the park path.
+Not adopted: v6 stays as pushed, the v7 file records the experiment.
+
+The router's number is the whole smart swap: router v5 quotes the book and
+the Bitflow DLMM on chain in one call, splits the amount across the two
+legs for the best total out, executes both and enforces min-out on the
+sum. That lands at the cost of one Bitflow multi-range swap.
 
 Also considered and not done: a separate list for the seated rungs (the
 seat check is already an in-memory lookup; settlement needs the rungs, so
