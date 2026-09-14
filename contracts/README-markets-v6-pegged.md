@@ -386,10 +386,15 @@ a band rung calls it on itself from its initialize) only ever ADDS: the
 ladder must seat `who` (u1028 otherwise), and a sync rebuilds and prunes
 the list of the side the ladder seats `who` on (only that side), so a
 replaced rung drops out the moment its successor syncs and a retired one
-the next time anyone syncs a seated rung on that side. Every sync also
-refreshes the seat count from the ladder (clamped to MAX_DEPOSITORS);
-`sync-seat-count` refreshes the count alone; the ladder's register and
-retire events say when to call either.
+the next time anyone syncs a seated rung on that side, or on
+`prune-seats` (anyone, both sides, drops nothing current, adds nothing):
+the only way out when a retire leaves no current rung on that side, else
+the retired rung stayed un-parkable and hidden from `side-full` until the
+list hit 50 and the next deposit panicked in `as-max-len?` (bounty
+finding, Celestial Mast). Every sync also refreshes the seat count from
+the ladder (clamped to MAX_DEPOSITORS); `sync-seat-count` refreshes the
+count alone; the ladder's register, seat and retire events say when to
+call which.
 Only the ladder owner may initialize a band rung (its `initialize` checks
 tx-sender against the ladder's `get-owner`), since registering at a taken
 spread replaces the holder and must not be open to anyone who can redeploy
@@ -780,11 +785,13 @@ Fix, 824f08b:
   -> one more seat under the max). Retire and replace are reversible
   without a redeploy. `register` and `seat-band` share `claim-seat`
   (replace-or-count bookkeeping); the caller writes the key.
-- Celestial Mast (MEDIUM, confirmed, open): `retire-band` leaves the
-  market's `seated-x/y` copy stale when no current rung is left on that
-  side, so the retired rung stays un-parkable and the 51st ordinary
-  deposit panics in `as-max-len?` instead of parking. Owner-recoverable
-  (seat any rung on that side). Fix planned: a permissionless prune.
+- Celestial Mast (MEDIUM, confirmed): `retire-band` left the market's
+  `seated-x/y` copy stale when no current rung was left on that side
+  (`sync-seat` needs a seated `who`), so the retired rung stayed
+  un-parkable and the 51st ordinary deposit panicked in `as-max-len?`
+  instead of parking. Fix: market `prune-seats` (anyone, both sides,
+  idempotent). The ladder cannot call the market (the market depends on
+  the ladder), so the prune lives on the market.
 
 Harness `verify-v6-rungs-replace-keyless.js` (no Pyth key: band rungs
 read the RFQ native oracle and every deposit lands on an empty opposite
@@ -798,14 +805,16 @@ dial, retire then seat again.
 
 | harness | result | sim |
 |---|---|---|
-| v6 rungs-replace-keyless (replace, retire, unseated, seat-band) | 131/131 | `1fcaaa862d16d769028cbb72e6be1a99` |
-| v6 rungs-keyless RUNG=buy | 37 passed | `2863a1c63b3c718e054bf1eea47090fb` |
-| v6 rungs-keyless RUNG=sell | 37 passed | `fd0b25288cc011a82ec412d03019ca1e` |
-| v6 rungs-keyless RUNG=buy-peg | 40 passed | `bf76616581bcbf0c2e1937d10a215e7d` |
-| v6 rungs-keyless RUNG=sell-peg | 40 passed | `9332a302e20d1c7560f3fe1df6fb55ee` |
+| v6 rungs-replace-keyless (replace, retire, unseated, seat-band, prune-seats) | 149/149 | `1e45965140897caa236c91dc41b8fc07` |
+| v6 rungs-keyless RUNG=buy | 37 passed | `2ee228909c498e6e5a218514af01453d` |
+| v6 rungs-keyless RUNG=sell | 37 passed | `f6284fc04a3c80acfc9795771bc4ecd6` |
+| v6 rungs-keyless RUNG=buy-peg | 40 passed | `80a2227b340dc0b8c82f4d365458a8f6` |
+| v6 rungs-keyless RUNG=sell-peg | 40 passed | `1f7360371a09dd370b8c736e72d49c30` |
 | v6 rungs-miner-band | needs a PYTH_API_KEY rerun: `initialize` now takes `(bps, seat)`, S8/S9 expect registered = true | |
 
-The market source is untouched (99,191 bytes); its harnesses stand.
+The market gained one additive public, `prune-seats` (99,608 bytes, no
+deposit path touched); the Lazer market harnesses are due a rerun with a
+key.
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

@@ -22,6 +22,10 @@
 //      seat (prints, takes deposits, no key, no count); seat-band (owner)
 //      seats it later, or re-seats a replaced rung (replace path); a full
 //      side refuses a seat but not an unseated rung; the max dial
+//   R6 prune-seats: retire every sel-band spread so no current rung is
+//      left on y; sync-seat has nothing to sync (u1028 all round), the
+//      market copy is stale; prune-seats clears it, keeps every current
+//      seat on x, adds nothing
 //
 // Run: npx tsx simulations/verify-v6-rungs-replace-keyless.js
 import fs from "node:fs";
@@ -197,6 +201,26 @@ async function main() {
   tx("R5 seat-band the retired rung again -> ok (retire is reversible)", call(DEP, "seat-band", [cp(BUY50)], LADDER), okTrue);
   ev("R5 band count buy-band 4 again", '(get-band-count "buy-band")', "u4", LADDER);
   tx("R5 sync-seat-count: market seats follow the max (4)", call(KEEPER, "sync-seat-count", []), "(ok u4)");
+
+  // =============== R6: prune-seats when a side has no current rung left ===============
+  tx("R6 retire sel-band 20", call(DEP, "retire-band", [stringAsciiCV("sel-band"), uintCV(20)], LADDER), okTrue);
+  tx("R6 retire sel-band 30", call(DEP, "retire-band", [stringAsciiCV("sel-band"), uintCV(30)], LADDER), okTrue);
+  ev("R6 band count sel-band 0", '(get-band-count "sel-band")', "u0", LADDER);
+  ev("R6 market copy still seats both retired sell rungs", "(len (get-seated-y))", "u2");
+  ev("R6 the retired spread-20 sell rung is still protected in the copy", `(is-protected-y '${SELL20})`, "true");
+  tx("R6 sync-seat on a retired rung -> u1028 (nothing current on y to sync)", call(KEEPER, "sync-seat", [cp(SELL30B)]), "(err u1028)");
+  tx("R6 sync-seat-count refreshes the count only", call(KEEPER, "sync-seat-count", []), "(ok u4)");
+  ev("R6 ... the stale seats are still there", "(len (get-seated-y))", "u2");
+  ev("R6 x side before the prune: 3 in the copy", "(len (get-seated-x))", "u3");
+  tx("R6 anyone prunes", call(KEEPER, "prune-seats", []), "(ok u4)");
+  ev("R6 y copy empty", "(len (get-seated-y))", "u0");
+  ev("R6 retired sell rung no longer protected", `(is-protected-y '${SELL20})`, "false");
+  ev("R6 x copy untouched (3 current seats)", "(len (get-seated-x))", "u3");
+  ev("R6 prune adds nothing: spread 50 (ladder-seated, never synced) still absent", `(is-protected-x '${BUY50})`, "false");
+  tx("R6 prune again: idempotent", call(KEEPER, "prune-seats", []), "(ok u4)");
+  ev("R6 x copy still 3", "(len (get-seated-x))", "u3");
+  tx("R6 sync-seat spread 50 -> now 4 on x", call(KEEPER, "sync-seat", [cp(BUY50)]), (v) => String(v).startsWith("(ok"));
+  ev("R6 x copy 4", "(len (get-seated-x))", "u4");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

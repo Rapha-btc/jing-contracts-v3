@@ -114,6 +114,16 @@
 (define-public (sync-seat-count)
   (ok (refresh-seat-count))
 )
+;; Drop every seat the ladder no longer holds, both sides (anyone): the
+;; only way out for a retired rung when no current rung is left on its
+;; side to sync. Removes nothing current, adds nothing: idempotent.
+(define-public (prune-seats)
+  (begin
+    (var-set seated-x (filter still-seated-x (var-get seated-x)))
+    (var-set seated-y (filter still-seated-y (var-get seated-y)))
+    (ok (refresh-seat-count))
+  )
+)
 
 ;; Seat `who` (anyone; a rung calls it on itself from initialize). The
 ;; ladder must seat it (u1028): add-only. A sync also prunes that side's list
