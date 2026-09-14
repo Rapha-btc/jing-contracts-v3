@@ -359,13 +359,26 @@ code hash per band side (`buy-band` / `sel-band`); `register` from a
 byte-identical rung takes the (side, spread) key, at most
 `max-band-per-side` spreads per side (u6011 past that; the same number the
 market reserves); and a register at a spread that already has a rung
-REPLACES it, the old rung loses its band status and its ladder entry, keeps
-its funds and its resting order. That is the upgrade: bless the new code,
-deploy it at the same spreads, members of the old rungs withdraw and join,
-withdraw needs no oracle. The owner can also retire a spread
-(`retire-band`): its rung loses the seat and the ladder entry, keeps its
-funds and its resting order as an ordinary maker, the spread is free and
-the count goes down. The market keeps a LOCAL COPY: one short list of
+REPLACES it, the old rung loses its band status, keeps its funds, its
+resting order and its ladder `registered` row (every member action prints
+through the ladder's `log-*`, gated on that row: dropping it locked the old
+rung's members out, bounty finding, fixed; `is-current-rung` tells the two
+apart and every rung event carries `current`). That is the upgrade: bless
+the new code, deploy it at the same spreads, members of the old rungs
+withdraw and join, withdraw needs no oracle. The owner can also retire a
+spread (`retire-band`): its rung loses the seat, keeps its funds, its
+resting order and its row as an ordinary maker, the spread is free and the
+count goes down. The rungs themselves treat every ladder log as best
+effort (`is-ok`, never `try!`): a member's withdraw or claim can never hang
+on a print. A band rung can also start WITHOUT a seat: `initialize(bps,
+false)` registers it through `register-unseated` (same hash gate, owner
+only, band sides only, any number per spread), so it prints and takes
+deposits as an ordinary parkable maker, no key, no count; the owner seats
+it later with `seat-band who` (its spread taken -> replace, free -> one
+more seat under the max), then anyone syncs it on the market. `seat-band`
+also re-seats a replaced or retired rung, so retire and replace are
+reversible without a redeploy. The FE badge is the ladder's
+`is-current-rung` / the market's `is-protected-x/y`. The market keeps a LOCAL COPY: one short list of
 seat holders per side (`seated-x/y`, at most the seat count) and the seat
 count, so a deposit never calls the ladder and every fold tests membership
 in a list it reads once, no storage per resident. `sync-seat who` (anyone;
@@ -740,6 +753,59 @@ in-range residents count for neither region).
 | v6 rungs-push | 39/39 | `06b5e9e0bb4e1ee1da4578760d25650e` |
 | v6 rungs-miner-band (band rungs, seats, upgrade, retire) | 172/172 | `b0bd067c5adff10ec5bb4025885bb393` |
 | vault v6 parked | 137/137 | `7468b9d40a901057fb8ef9a51c8848f4` |
+
+## Bounty round 2, 2026-09-14: a replaced or retired rung locked its members out
+
+Finding (Patient Reed, HIGH, confirmed): the ladder deleted the old rung's
+`registered` row on a band replace and on `retire-band`, and every rung
+action ends in a ladder `log-*` gated on that row (`rung-of`, u6010). In
+the rungs the log call was the return value of `withdraw` / `claim` /
+`deposit` and `try!`'d in `push` and in `sync` (epoch close), so after the
+documented upgrade (replace) or a retire, 100% of the old rung's member
+funds were stuck. The miner-band harness never deposited into a rung
+before replacing it, which is why 172/172 stayed green.
+
+Fix, 824f08b:
+- ladder: `registered` is never deleted. Seat status was already decided
+  by the `rungs` key alone (`is-band-current`), so replace and retire
+  still drop the seat. `is-current-rung who` tells a seated rung from a
+  demoted one and every rung event carries `current`.
+- all six rungs: every ladder log is best effort, `(is-ok ...)`, never
+  `try!` or the return value. A member's funds never hang on a print.
+- band rungs can start WITHOUT a seat: `initialize(bps, seat)`; `seat`
+  false goes through `register-unseated` (registered only: prints, takes
+  deposits, ordinary parkable maker, no key, no count, any number per
+  spread). The owner seats one later with `seat-band who`, which also
+  re-seats a replaced or retired rung (its spread taken -> replace, free
+  -> one more seat under the max). Retire and replace are reversible
+  without a redeploy. `register` and `seat-band` share `claim-seat`
+  (replace-or-count bookkeeping); the caller writes the key.
+- Celestial Mast (MEDIUM, confirmed, open): `retire-band` leaves the
+  market's `seated-x/y` copy stale when no current rung is left on that
+  side, so the retired rung stays un-parkable and the 51st ordinary
+  deposit panics in `as-max-len?` instead of parking. Owner-recoverable
+  (seat any rung on that side). Fix planned: a permissionless prune.
+
+Harness `verify-v6-rungs-replace-keyless.js` (no Pyth key: band rungs
+read the RFQ native oracle and every deposit lands on an empty opposite
+side). On the old source it reproduced the lock, 58/83 (every withdraw,
+claim, push and deposit on a replaced or retired rung -> u6010). On the
+fix: sell replace, buy replace, retire, the old rung living on as an
+ordinary maker, unseated init, seat-band on a stranger / unknown / seated
+rung, re-seating the replaced spread-30 rung over its successor, a full
+side refusing a seated init (u6011) but not an unseated one, the max
+dial, retire then seat again.
+
+| harness | result | sim |
+|---|---|---|
+| v6 rungs-replace-keyless (replace, retire, unseated, seat-band) | 131/131 | `1fcaaa862d16d769028cbb72e6be1a99` |
+| v6 rungs-keyless RUNG=buy | 37 passed | `2863a1c63b3c718e054bf1eea47090fb` |
+| v6 rungs-keyless RUNG=sell | 37 passed | `fd0b25288cc011a82ec412d03019ca1e` |
+| v6 rungs-keyless RUNG=buy-peg | 40 passed | `bf76616581bcbf0c2e1937d10a215e7d` |
+| v6 rungs-keyless RUNG=sell-peg | 40 passed | `9332a302e20d1c7560f3fe1df6fb55ee` |
+| v6 rungs-miner-band | needs a PYTH_API_KEY rerun: `initialize` now takes `(bps, seat)`, S8/S9 expect registered = true | |
+
+The market source is untouched (99,191 bytes); its harnesses stand.
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

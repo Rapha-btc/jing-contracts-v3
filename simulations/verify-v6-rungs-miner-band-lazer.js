@@ -14,7 +14,7 @@
 //   M4/M5 the sell rung mirror (cap = 2x, bid at mid - 20 bps, refresh-guard)
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-miner-band-lazer.js
 import fs from "node:fs";
-import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV, deserializeCV, cvToString, getAddressFromPrivateKey } from "@stacks/transactions";
+import { ClarityVersion, uintCV, trueCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV, deserializeCV, cvToString, getAddressFromPrivateKey } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
 
@@ -65,11 +65,11 @@ async function main() {
   const mmS = ev("M1 miner-mid (sell rung) same reading", "(miner-mid)", (v) => uintOf(v) > 0n, rid(SELL));
   const fl = ev("M1 current-floor (buy) = miner-mid / 2", "(current-floor)", (v) => uintOf(v) > 0n, rid(BUY));
   const cp = ev("M1 current-cap (sell) = miner-mid * 2", "(current-cap)", (v) => uintOf(v) > 0n, rid(SELL));
-  tx(`init ${BUY} (u20)`, call(DEP, "initialize", [uintCV(BPS)], rid(BUY)), "(ok true)");
-  tx(`init ${SELL} (u20)`, call(DEP, "initialize", [uintCV(BPS)], rid(SELL)), "(ok true)");
+  tx(`init ${BUY} (u20)`, call(DEP, "initialize", [uintCV(BPS), trueCV()], rid(BUY)), "(ok true)");
+  tx(`init ${SELL} (u20)`, call(DEP, "initialize", [uintCV(BPS), trueCV()], rid(SELL)), "(ok true)");
   ev("M1 stored floor after init is u0 (band mode: the first push sets it)", "(get-floor)", "u0", rid(BUY));
   ev("M1 stored cap after init is u0", "(get-cap)", "u0", rid(SELL));
-  tx("M1 init again -> u7002", call(DEP, "initialize", [uintCV(BPS)], rid(BUY)), "(err u7002)");
+  tx("M1 init again -> u7002", call(DEP, "initialize", [uintCV(BPS), trueCV()], rid(BUY)), "(err u7002)");
 
   // =============== M2: a push rests with the band as its floor ===============
   tx("M2 S rests a bid at -5% (the y side is not empty: x deposits need a price)", call(S, "deposit-token-y", [uintCV(5_000_000), uintCV((MID * 95n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u5000000)");
@@ -131,22 +131,23 @@ async function main() {
   // a second band rung claims the second seat: same code, another spread
   const BUY2 = `jing-buy-stx-spread-30`;
   deploy(BUY2, src("jing-buy-stx-core-spread"));
-  tx(`S6 init ${BUY2} (u30): registers spread 30 = seat 2`, call(DEP, "initialize", [uintCV(30)], rid(BUY2)), "(ok true)");
+  tx(`S6 init ${BUY2} (u30): registers spread 30 = seat 2`, call(DEP, "initialize", [uintCV(30), trueCV()], rid(BUY2)), "(ok true)");
   ev("S6 band count buy-band 2", '(get-band-count "buy-band")', "u2", LADDER);
   ev("S6 the second rung holds a seat", `(is-protected-x '${rid(BUY2)})`, "true");
   // the upgrade path: the same canonical code deployed by someone else at an
   // existing spread REPLACES the holder; the seat moves, the count does not
   const BUY30B = `${KEEPER}.jing-buy-stx-spread-30`;
   tx("S8 keeper deploys jing-buy-stx-spread-30 (same code)", (bb) => bb.withSender(KEEPER).addContractDeploy({ contract_name: "jing-buy-stx-spread-30", source_code: src("jing-buy-stx-core-spread"), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
-  tx("S8 keeper initializes it -> u7001: only the ladder owner seats a band rung", call(KEEPER, "initialize", [uintCV(30)], BUY30B), "(err u7001)");
+  tx("S8 keeper initializes it -> u7001: only the ladder owner seats a band rung", call(KEEPER, "initialize", [uintCV(30), trueCV()], BUY30B), "(err u7001)");
   ev("S8 the deployer's spread-30 rung still holds the seat", `(is-protected-x '${rid(BUY2)})`, "true");
-  tx("S8 the ladder owner initializes the keeper's deploy: replaces the deployer's spread-30 rung", call(DEP, "initialize", [uintCV(30)], BUY30B), "(ok true)");
+  tx("S8 the ladder owner initializes the keeper's deploy: replaces the deployer's spread-30 rung", call(DEP, "initialize", [uintCV(30), trueCV()], BUY30B), "(ok true)");
   ev("S8 band count buy-band still 2", '(get-band-count "buy-band")', "u2", LADDER);
   ev("S8 the new rung holds the seat (it synced itself)", `(is-protected-x '${BUY30B})`, "true");
   ev("S8 the old rung lost it in the same sync (prune)", `(is-protected-x '${rid(BUY2)})`, "false");
   tx("S8 sync-seat on the replaced rung -> u1028 (the ladder no longer seats it)", call(KEEPER, "sync-seat", [contractPrincipalCV(DEP, BUY2)]), "(err u1028)");
   ev("S8 the seated list on x is the two current rungs", "(len (get-seated-x))", "u2");
-  ev("S8 the old rung is no longer registered", `(is-registered '${rid(BUY2)})`, "false", LADDER);
+  ev("S8 the old rung stays registered (its members still withdraw through the ladder log)", `(is-registered '${rid(BUY2)})`, "true", LADDER);
+  ev("S8 ... but is not current", `(is-current-rung '${rid(BUY2)})`, "false", LADDER);
   // retire: the owner frees a spread; its rung is an ordinary maker from then on
   tx("S9 stranger cannot retire", call(KEEPER, "retire-band", [stringAsciiCV("buy-band"), uintCV(30)], LADDER), "(err u6001)");
   tx("S9 retire an empty spread -> u6010", call(DEP, "retire-band", [stringAsciiCV("buy-band"), uintCV(70)], LADDER), "(err u6010)");
@@ -156,7 +157,8 @@ async function main() {
   tx("S9 anyone syncs any seated rung (the spread-20 one): the prune drops the retired one", call(KEEPER, "sync-seat", [contractPrincipalCV(DEP, BUY)]), (v) => String(v).startsWith("(ok"));
   ev("S9 the retired rung no longer holds a seat", `(is-protected-x '${BUY30B})`, "false");
   ev("S9 the seated list on x is back to one", "(len (get-seated-x))", "u1");
-  ev("S9 the retired rung is no longer registered", `(is-registered '${BUY30B})`, "false", LADDER);
+  ev("S9 the retired rung stays registered", `(is-registered '${BUY30B})`, "true", LADDER);
+  ev("S9 ... but is not current", `(is-current-rung '${BUY30B})`, "false", LADDER);
   ev("S9 spread 30 is free", '(get-rung "buy-band" u30)', "none", LADDER);
   ev("S9 the spread-20 rung still holds its seat", `(is-protected-x '${rid(BUY)})`, "true");
 
