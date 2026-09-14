@@ -25,6 +25,7 @@
 (define-constant ERR_NO_PENDING_OWNER (err u6008))
 (define-constant ERR_TIMELOCK_NOT_ELAPSED (err u6009))
 (define-constant ERR_NOT_REGISTERED (err u6010))
+(define-constant ERR_BAND_FULL (err u6011))
 
 ;; owner handover: propose, then accept once this many burn blocks passed
 (define-constant TIMELOCK_BURN_BLOCKS u144)
@@ -35,6 +36,18 @@
 ;; keyed by cents * 10000 + spread-bps
 (define-constant SIDE_BUY_PEG "buy-peg")
 (define-constant SIDE_SELL_PEG "sell-peg")
+;; miner-band rungs (jing-buy/sell-stx-core-spread): no guard in the name,
+;; the floor / cap is read from the RFQ native oracle on every push; own
+;; canonical per side, keyed by spread-bps alone
+(define-constant SIDE_BUY_BAND "buy-band")
+(define-constant SIDE_SELL_BAND "sel-band")
+;; band rungs are the market's protected seats: at most this many spreads per
+;; side (the market reserves the same number of slots), one rung per spread,
+;; and a new canonical rung at an existing spread REPLACES the old one (the
+;; upgrade path: bless the new code, deploy it at the same spread; the old
+;; rung keeps its funds and its resting order, only its band status goes)
+(define-constant MAX_BAND_PER_SIDE u10)
+(define-map band-count (string-ascii 8) uint)
 
 (define-data-var contract-owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -94,10 +107,38 @@
   (is-some (map-get? registered who))
 )
 
+(define-read-only (get-band-count (side (string-ascii 8)))
+  (default-to u0 (map-get? band-count side))
+)
+(define-private (is-band-side (side (string-ascii 8)))
+  (or (is-eq side SIDE_BUY_BAND) (is-eq side SIDE_SELL_BAND))
+)
+;; The CURRENT band rung for its spread on the given side: registered under
+;; that side and still the holder of its (side, spread) key. A replaced rung
+;; answers false.
+(define-private (is-band-current
+    (who principal)
+    (side (string-ascii 8))
+  )
+  (match (map-get? registered who)
+    reg (and
+      (is-eq (get side reg) side)
+      (is-eq (map-get? rungs {
+        side: side,
+        price: (get price reg),
+      }) (some who))
+    )
+    false
+  )
+)
+(define-read-only (is-band-x (who principal)) (is-band-current who SIDE_BUY_BAND))
+(define-read-only (is-band-y (who principal)) (is-band-current who SIDE_SELL_BAND))
+
 (define-private (valid-side (side (string-ascii 8)))
   (or
     (is-eq side SIDE_BUY_STX) (is-eq side SIDE_SELL_STX)
     (is-eq side SIDE_BUY_PEG) (is-eq side SIDE_SELL_PEG)
+    (is-eq side SIDE_BUY_BAND) (is-eq side SIDE_SELL_BAND)
   )
 )
 
@@ -133,18 +174,28 @@
       (caller contract-caller)
       (caller-hash (unwrap! (contract-hash? caller) ERR_INVALID_CONTRACT_HASH))
       (canon (unwrap! (map-get? canonical side) ERR_NOT_VERIFIED))
+      (holder (map-get? rungs {
+        side: side,
+        price: price,
+      }))
     )
     (asserts!
       (is-eq caller-hash (unwrap! (contract-hash? canon) ERR_INVALID_CONTRACT_HASH))
       ERR_HASH_MISMATCH
     )
     (asserts! (is-none (map-get? registered caller)) ERR_ALREADY_REGISTERED)
-    (asserts!
-      (is-none (map-get? rungs {
-        side: side,
-        price: price,
-      }))
-      ERR_PRICE_TAKEN
+    (if (is-band-side side)
+      ;; a band spread: taken -> the newer canonical replaces the holder;
+      ;; free -> one more spread, up to MAX_BAND_PER_SIDE
+      (match holder
+        old (map-delete registered old)
+        (begin
+          (asserts! (< (get-band-count side) MAX_BAND_PER_SIDE) ERR_BAND_FULL)
+          (map-set band-count side (+ (get-band-count side) u1))
+        )
+      )
+      ;; a fixed or guarded rung: one per (side, price), no replacement
+      (asserts! (is-none holder) ERR_PRICE_TAKEN)
     )
     (map-set rungs {
       side: side,
@@ -163,6 +214,7 @@
       market-price: market-price,
       contract: caller,
       hash: caller-hash,
+      replaced: (if (is-band-side side) holder none),
     })
     (ok true)
   )

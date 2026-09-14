@@ -64,11 +64,10 @@
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant SIDE "buy-peg")
+(define-constant SIDE "buy-band")
 ;; the deploy name must be NAME_PREFIX + spread + "-floor-" + the floor as named:
 ;; jing-buy-stx-spread-20-floor-331-50
 (define-constant NAME_PREFIX "jing-buy-stx-spread-")
-(define-constant GUARD_INFIX "-floor-")
 ;; v6 rejects a spread of 10000 bps or more (u1026)
 (define-constant BPS_PRECISION u10000)
 ;; market price unit is micro-STX per sat times 1e10; from hundredths of a
@@ -84,6 +83,33 @@
 ;; withdraw branch call the market with a remainder it rejects (u1004)
 ;; literal principal on purpose: the node's read-only analysis rejects a
 ;; contract-call? through a constant here (clarinet accepts it, mainnet does not)
+;; ---------- miner band (guard from a second, on-chain source) ----------
+;;
+;; This rung has no fixed floor in its name. Its floor is
+;; derived on every push from the STX price Stacks miners are paying, read
+;; from the deployed RFQ's native oracle (rfq-sbtc-stx-jing-v2-3
+;; `get-native-price`: miner-spend-total per tenure against the coinbase,
+;; averaged over a day of tenures, in the market's own price unit). Nobody
+;; can move that number without burning real bitcoin, and it does not come
+;; from Pyth, so a fat-finger Pyth print cannot fill this rung:
+;; buying STX above twice the miners' price is refused (floor = native / 2).
+;; One oracle, one place: the RFQ computes it, the rungs read it.
+;; The miners' implied STX price in the market unit; u0 when the oracle
+;; cannot read it (a fresh chain, a simulation without tenure data). The
+;; principal is a literal, not a constant: a read-only may only call a
+;; contract it names literally (a constant is a dynamic call, refused).
+(define-read-only (miner-mid)
+  (match (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3 get-native-price)
+    p p
+    e u0
+  )
+)
+
+;; The floor this rung rests with right now: half the miners' price.
+(define-read-only (current-floor)
+  (/ (miner-mid) u2)
+)
+
 (define-read-only (min-market)
   (get min-token-x
     (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
@@ -96,11 +122,8 @@
 (define-constant MIN_DEPOSIT u100)
 
 (define-data-var initialized bool false)
-(define-constant DEPLOYER tx-sender)
 ;; distance from mid in basis points, as named (20 -> u20); zero sits at mid
 (define-data-var spread-bps uint u0)
-;; the floor as named, in hundredths of a sat per STX (331.50 -> u33150)
-(define-data-var floor-cents uint u0)
 ;; the same floor in the market unit (1e18 / cents): what the order rests with
 (define-data-var floor uint u0)
 (define-data-var total-shares uint u0)
@@ -137,15 +160,10 @@
   (var-get floor)
 )
 
-(define-read-only (get-floor-cents)
-  (var-get floor-cents)
-)
-
 (define-read-only (get-state)
   {
     spread-bps: (var-get spread-bps),
     floor: (var-get floor),
-    floor-cents: (var-get floor-cents),
     epoch: (var-get epoch),
     total-shares: (var-get total-shares),
     unfilled-index: (var-get unfilled-index),
@@ -208,27 +226,22 @@
 ;; ---------- lifecycle ----------
 
 ;; Once, by the deployer: the spread as named, then register.
-(define-public (initialize
-    (bps uint)
-    (cents uint)
-  )
+(define-public (initialize (bps uint))
   (begin
-    (asserts! (is-eq tx-sender DEPLOYER) ERR_NOT_AUTHORIZED)
+    ;; only the ladder owner may seat a band rung: registering at a taken
+    ;; spread replaces the holder, so this must not be open to anyone who
+    ;; can redeploy the blessed code
+    (asserts! (is-eq tx-sender (contract-call? LADDER get-owner)) ERR_NOT_AUTHORIZED)
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (asserts! (< bps BPS_PRECISION) ERR_BAD_SPREAD)
-    (asserts! (> cents u0) ERR_ZERO_PRICE)
-    (asserts! (is-eq (own-name) (expected-name bps cents)) ERR_BAD_NAME)
-    (let ((p (/ PRICE_NUMERATOR cents)))
-      (var-set spread-bps bps)
-      (var-set floor-cents cents)
-      (var-set floor p)
-      (var-set initialized true)
-      ;; the ladder keys one rung per (side, value): the (spread, floor) pair
-      ;; packed into one uint so two rungs can share a spread at different
-      ;; floors; the market-price slot logs the floor in the market unit, as the
-      ;; fixed rung logs its price
-      (contract-call? LADDER register SIDE (+ (* cents BPS_PRECISION) bps) p)
-    )
+    (asserts! (is-eq (own-name) (expected-name bps)) ERR_BAD_NAME)
+    (var-set spread-bps bps)
+    (var-set initialized true)
+    ;; no floor stored yet: the first push derives it from the miner band.
+    ;; The ladder keys one rung per (side, spread); the market-price slot
+    ;; logs u0 for the same reason. Registering IS the seat: the market asks
+    ;; the ladder whether a maker is the current band rung for its spread.
+    (contract-call? LADDER register SIDE bps u0)
   )
 )
 
@@ -434,23 +447,10 @@
 
 ;; "jing-buy-stx-spread-20-floor-331-50" for (u20, u33150): the spread in
 ;; basis points, then the floor as whole sats, dash, two-digit hundredths
-(define-private (expected-name
-    (bps uint)
-    (cents uint)
-  )
-  (let (
-      (whole (int-to-ascii (/ cents u100)))
-      (frac (mod cents u100))
-      (frac-str (if (< frac u10)
-        (concat "0" (int-to-ascii frac))
-        (int-to-ascii frac)
-      ))
-    )
-    (concat
-      (concat (concat (concat NAME_PREFIX (int-to-ascii bps)) GUARD_INFIX) whole)
-      (concat "-" frac-str)
-    )
-  )
+;; "jing-buy-stx-spread-20" for u20: the spread in basis points, nothing
+;; else; the guard is not a number in the name, it is the miner band
+(define-private (expected-name (bps uint))
+  (concat NAME_PREFIX (int-to-ascii bps))
 )
 
 (define-private (position-of (who principal))
@@ -505,8 +505,28 @@
     (to-push uint)
     (update (buff 8192))
   )
-  (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-    (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) update SBTC SBTC_NAME))
+  ;; a miner-band rung re-derives its floor on every push; with no miner data
+  ;; (u0) it does not push at all, the funds stay held
+  (let ((g (current-floor)))
+    (asserts! (> g u0) ERR_ZERO_PRICE)
+    (var-set floor g)
+    (as-contract? ((with-ft SBTC SBTC_NAME to-push))
+      (try! (contract-call? MARKET deposit-token-x to-push g (some (var-get spread-bps)) update SBTC SBTC_NAME))
+    )
+  )
+)
+
+;; Any keeper: move the market's stored floor to the current miner band
+;; without depositing (a miner-band rung with a resting or parked position
+;; whose floor would otherwise stay where the last push left it).
+(define-public (refresh-guard (update (buff 8192)))
+  (let ((g (current-floor)))
+    (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
+    (asserts! (> g u0) ERR_ZERO_PRICE)
+    (var-set floor g)
+    (as-contract? ()
+      (try! (contract-call? MARKET set-token-x-limit g (some (var-get spread-bps)) update))
+    )
   )
 )
 
