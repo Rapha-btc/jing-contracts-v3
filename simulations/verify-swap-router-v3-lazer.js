@@ -50,7 +50,11 @@
 //      mark): 1.2 BTC sold on the DLMM alone pushes its active bin to ~5.5%
 //      under the mid while XYK + Velar stay at 2%; a smart sell at 4% under
 //      then has no DLMM bin inside the limit and the whole residual lands
-//      inside the two pools' room, split pro rata: both fill, nothing home. W19 a swap the book absorbs whole (no DLMM
+//      inside the two pools' room, split pro rata: both fill, nothing home;
+//      then the STX mirror: XYK + Velar pushed to ~8.5% under on their own,
+//      an STX seller at 7% under finds the DLMM outside its limit and the
+//      pools inside, 300 STX split pro rata (the constant-product capacity
+//      for an STX seller). W19 a swap the book absorbs whole (no DLMM
 //      stage) and an STX smart sell with no update (no book leg).
 //
 // Market v4 settles on Pyth Lazer (SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle):
@@ -573,6 +577,16 @@ async function main() {
   const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
   const r18a = tx("W18a smart sell 250000 sats at 4% under, vaa none: no DLMM bin inside the limit, the residual split pro rata over XYK + Velar, nothing home", smartSbtc(T, 250_000n, L_4, NO_VAA, 1n), okPrefix);
   const x1s18 = sbtcOf(T, "W18a after"); const x1x18 = stxOf(T, "W18a after");
+  // the STX side: the DLMM now sits ~5.5% under the mid and the pools at 4%; T pushes XYK + Velar
+  // alone to ~8.5% under (explicit legs), and an STX seller at 7% under the mid then finds the DLMM
+  // OUTSIDE its limit (it pays fewer sats per STX than the limit allows) and the two pools inside it:
+  // the whole 300 STX lands on XYK + Velar pro rata (the constant-product capacity for an STX seller,
+  // the pools' reserves read for that direction), nothing home
+  tx("W18c T sells 1.2M sats on XYK and 2.4M on Velar alone: both pools drop to ~8.5% under the mid, the DLMM stays at ~5.5%", sellSbtc(T, 0n, NONE, amts(0n, 1_200_000n, 2_400_000n), ONES, 1n, NO_VAA), okPrefix);
+  const L_7 = (MID * 93n) / 100n; // 7% under the mid: the STX seller's ceiling, between the DLMM (5.5%) and the pools (8.5%)
+  const y0x18 = stxOf(S, "W18d before"); const y0s18 = sbtcOf(S, "W18d before");
+  const r18d = tx("W18d S smart sells 300 STX at 7% under the mid, vaa none: the DLMM is outside the limit, the residual split pro rata over XYK + Velar, nothing home", smartStx(S, 300_000_000n, L_7, NO_VAA, 1n), okPrefix);
+  const y1x18 = stxOf(S, "W18d after"); const y1s18 = sbtcOf(S, "W18d after");
 
   // =============== W11: STX-seller walk boundary on the smart swap ===============
   // asks rest: T at the mid (limit 1), M8 at +0.5% (inside the seller's 2%
@@ -888,6 +902,13 @@ async function main() {
   check("W18a sBTC delta == 250000", x0s18.value - x1s18.value, (d) => d === 250_000n);
   check(`W18a STX grew by out (${field(r18a.raw, "out")})`, x1x18.value - x0x18.value, (d) => d === field(r18a.raw, "out") && d > 0n);
   legPriceOk("W18a", r18a, L_4, true);
+  const in18d = ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r18d.raw, k));
+  check("W18d legs + unsold == 300 STX", in18d.reduce((t, x) => t + x, 0n) + field(r18d.raw, "unsold"), (t) => t === 300_000_000n);
+  check("W18d no book leg, no DLMM leg (its active bin sits outside the 7% limit)", [in18d[0], in18d[1]], (a) => a[0] === 0n && a[1] === 0n);
+  check("W18d the STX residual was split pro rata: XYK and Velar both filled, nothing home", [in18d[2], in18d[3], field(r18d.raw, "unsold")], (a) => a[0] > 0n && a[1] > 0n && a[2] === 0n);
+  check("W18d STX delta == 300 STX", y0x18.value - y1x18.value, (d) => d === 300_000_000n);
+  check(`W18d sBTC grew by out (${field(r18d.raw, "out")})`, y1s18.value - y0s18.value, (d) => d === field(r18d.raw, "out") && d > 0n);
+  legPriceOk("W18d", r18d, L_7, false);
   // W19
   check("W19a sBTC delta == 2000, all on the book", z0s.value - z1s.value, (d) => d === 2000n);
   check(`W19a STX grew by out (${field(r19a.raw, "out")}) == jing-out`, z1x.value - z0x.value, (d) => d === field(r19a.raw, "out") && d === field(r19a.raw, "jing-out") && d > 0n);
