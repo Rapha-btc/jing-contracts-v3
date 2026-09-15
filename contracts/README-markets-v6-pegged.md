@@ -810,7 +810,7 @@ dial, retire then seat again.
 | v6 rungs-keyless RUNG=sell | 37 passed | `f6284fc04a3c80acfc9795771bc4ecd6` |
 | v6 rungs-keyless RUNG=buy-peg | 40 passed | `80a2227b340dc0b8c82f4d365458a8f6` |
 | v6 rungs-keyless RUNG=sell-peg | 40 passed | `1f7360371a09dd370b8c736e72d49c30` |
-| v6 rungs-miner-band | needs a PYTH_API_KEY rerun: `initialize` now takes `(bps, seat)`, S8/S9 expect registered = true | |
+| v6 rungs-miner-band (`initialize(bps, seat)`, S8/S9 registered = true, not current) | 174/174 | `635157fe62c07d3b5fef21b84c8e4913` |
 
 The market gained one additive public, `prune-seats` (99,608 bytes, no
 deposit path touched); the Lazer market harnesses are due a rerun with a

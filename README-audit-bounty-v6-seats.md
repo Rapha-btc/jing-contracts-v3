@@ -95,9 +95,9 @@ nothing, idempotent).
 | v6 rungs-keyless RUNG=buy / sell | 37 / 37 | `2ee228909c498e6e5a218514af01453d` / `f6284fc04a3c80acfc9795771bc4ecd6` |
 | v6 rungs-keyless RUNG=buy-peg / sell-peg | 40 / 40 | `80a2227b340dc0b8c82f4d365458a8f6` / `1f7360371a09dd370b8c736e72d49c30` |
 
-Due a rerun with a Pyth key: `verify-v6-rungs-miner-band-lazer.js`
-(`initialize` now takes `(bps, seat)`, S8/S9 expect registered = true) and
-the market Lazer harnesses (one additive public on the market).
+| v6 rungs-miner-band, Lazer (`initialize(bps, seat)`, S8/S9 registered = true, not current) | 174/174 | `635157fe62c07d3b5fef21b84c8e4913` |
+
+The market Lazer harnesses are due a rerun (one additive public on the market).
 
 ## Commits
 
