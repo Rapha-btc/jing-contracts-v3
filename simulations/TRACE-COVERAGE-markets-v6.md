@@ -1,115 +1,42 @@
 # Trace coverage: markets-sbtc-stx-jing-v6
 
-From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transactions (164 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transactions (184 without a trace), every evaluated expression read from the stxer debug traces.
 
 | metric | value |
 |---|---|
-| expressions executed / total | 2375 / 4268 (55.6%) |
-| code lines touched / total | 1266 / 2558 (49.5%) |
-| branch nodes (if / match / asserts!) | 231: 138 full, 87 partial, 6 never reached |
+| expressions executed / total | 2453 / 4268 (57.5%) |
+| code lines touched / total | 1306 / 2558 (51.1%) |
+| branch nodes (if / match / asserts!) | 231: 211 full, 18 partial, 2 never reached |
 
-## Branches with one arm never taken (87)
+## Branches with one arm never taken (18)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 98 | with-seat | if | one arm (else only) |
-| 107 | refresh-seat-count | if | arms not seen |
-| 344 | pegged-bid | if | arms not seen |
-| 357 | pegged-ask | if | arms not seen |
-| 369 | order-y-price | match | one arm (then only) |
-| 380 | order-x-price | match | one arm (then only) |
-| 403 | valid-spread | match | one arm (then only) |
-| 445 | count-seated-fold | if | one arm (then only) |
-| 603 | top-y-fold | if | one arm (else only) |
-| 643 | top-x-fold | if | one arm (else only) |
-| 686 | smallest-outside-y-fold | if | one arm (else only) |
-| 693 | smallest-outside-y-fold | if | one arm (then only) |
-| 712 | first-off-y-fold | if | one arm (then only) |
-| 726 | first-off-x-fold | if | one arm (then only) |
 | 765 | park-tenth-token-y | if | one arm (else only) |
 | 769 | park-tenth-token-y | match | one arm (then only) |
 | 770 | park-tenth-token-y | if | one arm (else only) |
 | 777 | park-tenth-token-y | match | one arm (then only) |
 | 778 | park-tenth-token-y | if | one arm (then only) |
-| 801 | smallest-outside-x-fold | if | one arm (else only) |
-| 808 | smallest-outside-x-fold | if | one arm (then only) |
-| 862 | park-tenth-token-x | if | one arm (else only) |
 | 867 | park-tenth-token-x | if | one arm (else only) |
 | 874 | park-tenth-token-x | match | one arm (then only) |
-| 875 | park-tenth-token-x | if | arms not seen |
-| 980 | pick-feed | if | one arm (then only) |
-| 1075 | live-bid-fold | if | one arm (else only) |
-| 1078 | live-bid-fold | if | one arm (then only) |
-| 1097 | live-offer-fold | if | one arm (else only) |
-| 1100 | live-offer-fold | if | one arm (then only) |
+| 875 | park-tenth-token-x | if | one arm (else only) |
 | 1168 | deposit-token-y-core | if | one arm (else only) |
-| 1231 | deposit-token-y-core | if | one arm (then only) |
-| 1261 | deposit-token-y | if | one arm (then only) |
-| 1316 | deposit-token-x-core | if | one arm (else only) |
-| 1378 | deposit-token-x-core | if | one arm (then only) |
-| 1408 | deposit-token-x | if | one arm (then only) |
-| 1551 | withdraw-token-y | if | arms not seen |
-| 1557 | withdraw-token-y | if | arms not seen |
-| 1602 | withdraw-token-x | if | arms not seen |
-| 1608 | withdraw-token-x | if | arms not seen |
-| 1729 | set-token-y-limit | if | one arm (then only) |
-| 1764 | set-token-x-limit | if | one arm (then only) |
-| 1961 | filter-small-token-x-depositor | if | one arm (else only) |
-| 2227 | execute-fill | if | arms not seen |
-| 2234 | execute-fill | if | one arm (then only) |
-| 2239 | execute-fill | if | arms not seen |
-| 2246 | execute-fill | if | one arm (else only) |
-| 2252 | execute-fill | if | arms not seen |
-| 2261 | execute-fill | if | arms not seen |
-| 2269 | execute-fill | if | arms not seen |
 | 2285 | execute-fill | if | one arm (then only) |
-| 2293 | execute-fill | if | one arm (then only) |
-| 2344 | execute-fill | if | one arm (then only) |
-| 2355 | execute-fill | if | one arm (then only) |
-| 2373 | execute-fill | if | arms not seen |
-| 2377 | execute-fill | if | arms not seen |
 | 2403 | walk-x-book-step | match | one arm (then only) |
 | 2411 | walk-x-book-step | if | one arm (else only) |
 | 2445 | walk-y-book-step | match | one arm (then only) |
-| 2562 | collect-ask-step | if | one arm (else only) |
-| 2606 | collect-bid-step | if | one arm (else only) |
-| 2911 | execute-settlement | if | arms not seen |
-| 2915 | execute-settlement | if | one arm (else only) |
-| 2925 | execute-settlement | if | one arm (then only) |
-| 2929 | execute-settlement | if | one arm (then only) |
-| 2952 | execute-settlement | if | one arm (then only) |
-| 2958 | execute-settlement | if | one arm (then only) |
 | 3003 | distribute-to-token-y-depositor | if | one arm (then only) |
 | 3007 | distribute-to-token-y-depositor | if | one arm (then only) |
-| 3014 | distribute-to-token-y-depositor | if | arms not seen |
-| 3032 | distribute-to-token-y-depositor | if | one arm (then only) |
-| 3040 | distribute-to-token-y-depositor | if | one arm (then only) |
-| 3064 | distribute-to-token-y-depositor | if | one arm (then only) |
 | 3099 | distribute-to-token-x-depositor | if | one arm (then only) |
 | 3103 | distribute-to-token-x-depositor | if | one arm (then only) |
-| 3110 | distribute-to-token-x-depositor | if | arms not seen |
-| 3128 | distribute-to-token-x-depositor | if | one arm (then only) |
-| 3136 | distribute-to-token-x-depositor | if | one arm (then only) |
-| 3157 | distribute-to-token-x-depositor | if | one arm (then only) |
-| 3207 | roll-and-sweep-dust | if | one arm (then only) |
-| 3213 | roll-and-sweep-dust | if | one arm (then only) |
-| 3324 | cap-bid-fold | if | one arm (then only) |
-| 3352 | cap-ask-fold | if | one arm (then only) |
-| 3369 | gross-up | if | arms not seen |
-| 3386 | get-taker-capacity | if | arms not seen |
-| 3396 | get-taker-capacity | if | arms not seen |
-| 3415 | get-taker-capacity | if | one arm (then only) |
+| 3369 | gross-up | if | one arm (else only) |
 
-## Branch nodes never reached (6)
+## Branch nodes never reached (2)
 
 | line | function | kind |
 |---|---|---|
 | 495 | find-smallest-token-y-fold | if |
-| 515 | find-smallest-token-x-fold | if |
 | 1179 | deposit-token-y-core | asserts! |
-| 1327 | deposit-token-x-core | asserts! |
-| 1692 | readmit-token-x | asserts! |
-| 1693 | readmit-token-x | asserts! |
 
 ## Uncovered code lines by function
 
@@ -117,21 +44,19 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 |---|---|
 | (top) | 1, 3, 4, 5, 7, 10, 11, 13, 15, 17, 18, 20, 22, 23, 24, 26, 27, 28, 29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 72, 73, 83, 84, 85, 87, 88, 89, 90, 94, 105, 114, 120, 131, 147, 149, 150, 151, 152, 153, 154, 155, 156, 158, 159, 160, 161, 162, 163, 165, 166, 167, 168, 170, 172, 174, 175, 176, 177, 179, 187, 195, 200, 205, 213, 225, 232, 240, 244, 249, 252, 256, 260, 269, 273, 285, 297, 301, 305, 312, 321, 330, 334, 338, 351, 364, 375, 386, 394, 402, 409, 421, 432, 438, 450, 461, 473, 485, 505, 525, 529, 534, 560, 590, 630, 674, 703, 717, 732, 789, 829, 886, 914, 943, 986, 1018, 1051, 1068, 1090, 1112, 1128, 1144, 1247, 1293, 1394, 1438, 1489, 1540, 1591, 1642, 1678, 1714, 1749, 1784, 1842, 1902, 1951, 2000, 2045, 2090, 2141, 2212, 2390, 2432, 2474, 2487, 2494, 2520, 2546, 2590, 2634, 2650, 2666, 2686, 2706, 2773, 2840, 2989, 3085, 3181, 3230, 3258, 3265, 3272, 3279, 3287, 3295, 3304, 3308, 3336, 3364, 3376, 3434, 3447, 3451 |
 | deposit-token-y-core | 1144, 1145, 1146, 1147, 1148, 1149, 1150, 1151, 1169, 1170, 1172, 1176, 1177, 1179, 1182, 1183, 1184, 1186, 1187, 1188, 1189, 1190, 1193, 1197, 1201, 1203, 1207, 1208, 1210, 1211, 1212, 1214 |
-| deposit-token-x-core | 1293, 1294, 1295, 1296, 1297, 1298, 1299, 1300, 1317, 1318, 1320, 1324, 1325, 1327, 1329, 1330, 1331, 1333, 1334, 1335, 1336, 1337, 1340, 1344, 1348, 1350, 1354, 1355, 1357, 1358, 1359, 1361 |
 | pick-feed | 943, 944, 949, 950, 951, 952, 953, 954, 955, 956, 957, 958, 960, 962, 967, 968, 969, 970, 971, 972, 973, 974, 975, 976 |
-| readmit-token-x | 1678, 1679, 1680, 1692, 1693, 1694, 1700, 1701, 1703, 1704, 1706, 1707, 1708, 1710 |
 | shape-feed | 986, 987, 992, 993, 994, 995, 996, 997, 998, 999, 1000, 1001, 1003 |
 | execute-fill | 2212, 2213, 2214, 2215, 2216, 2217, 2218, 2219, 2220, 2221, 2222 |
 | park-tenth-token-y | 732, 733, 734, 735, 736, 737, 766, 771, 774 |
-| park-tenth-token-x | 829, 830, 831, 832, 833, 834, 863, 868, 876 |
 | deposit-token-x | 1394, 1395, 1396, 1397, 1398, 1399, 1400, 1430, 1431 |
 | swap | 2141, 2142, 2143, 2144, 2145, 2146, 2147, 2148, 2149 |
+| park-tenth-token-x | 829, 830, 831, 832, 833, 834, 868, 876 |
+| deposit-token-x-core | 1293, 1294, 1295, 1296, 1297, 1298, 1299, 1300 |
 | execute-settlement | 2840, 2841, 2842, 2851, 2860, 2861, 2862, 2863 |
 | reprice-or-swap-token-y | 1784, 1785, 1786, 1787, 1788, 1789, 1790, 1791 |
 | reprice-or-swap-token-x | 1842, 1843, 1844, 1845, 1846, 1847, 1848, 1849 |
 | initialize | 3230, 3231, 3232, 3233, 3234, 3235, 3236, 3237 |
 | find-smallest-token-y-fold | 485, 486, 487, 489, 494, 495, 496 |
-| find-smallest-token-x-fold | 505, 506, 507, 509, 514, 515, 516 |
 | deposit-token-y | 1247, 1248, 1249, 1250, 1251, 1252, 1253 |
 | smallest-outside-y-fold | 674, 675, 676, 679, 680, 682 |
 | smallest-outside-x-fold | 789, 790, 791, 794, 795, 797 |
@@ -158,6 +83,7 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 | order-y-price | 364, 365, 366, 367 |
 | order-x-price | 375, 376, 377, 378 |
 | count-seated-fold | 438, 439, 440, 441 |
+| find-smallest-token-x-fold | 505, 506, 507, 509 |
 | cancel-token-y-deposit | 1438, 1439, 1440, 1444 |
 | cancel-token-x-deposit | 1489, 1490, 1491, 1495 |
 | set-token-y-limit | 1714, 1715, 1716, 1717 |
@@ -185,6 +111,7 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 | would-take-as-x | 1112, 1113, 1114 |
 | would-take-as-y | 1128, 1129, 1130 |
 | readmit-token-y | 1642, 1643, 1644 |
+| readmit-token-x | 1678, 1679, 1680 |
 | swap-result-y | 2686, 2687, 2693 |
 | swap-result-x | 2666, 2667, 2673 |
 | cap-bid-fold | 3308, 3309, 3310 |
@@ -195,7 +122,6 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 | get-settlement | 269, 270 |
 | get-token-y-limit | 330, 331 |
 | get-token-x-limit | 334, 335 |
-| filter-small-token-x-depositor | 1951, 1962 |
 | gross-up | 3364, 3370 |
 | get-taker-rebate-bps | 7 |
 | ERR_DEPOSIT_TOO_SMALL | 33 |
@@ -261,6 +187,7 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 | filter-limit-violating-token-y-depositor | 2000 |
 | filter-limit-violating-token-x-depositor | 2045 |
 | filter-small-token-y-depositor | 1902 |
+| filter-small-token-x-depositor | 1951 |
 | set-treasury | 3258 |
 | set-paused | 3265 |
 | set-operator | 3272 |
@@ -275,7 +202,7 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 
 | sim | txs | before | after |
 |---|---|---|---|
-| `8a8c2463` | 117 | 0 | 2532 |
+| `4ccb83ee` | 166 | 0 | 2532 |
 | `908a895c` | 44 | 2532 | 2777 |
 | `98965765` | 17 | 2777 | 2789 |
 | `ef2ed5c1` | 31 | 2789 | 2797 |
@@ -291,15 +218,18 @@ From `simulations/trace-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transa
 | `918d5678` | 121 | 3440 | 3720 |
 | `6256d0b4` | 143 | 3720 | 4091 |
 | `62783a57` | 17 | 4091 | 4091 |
-| `6326641b` | 52 | 4091 | 4091 |
+| `dcb34a07` | 60 | 4091 | 4091 |
 | `c663e202` | 22 | 4091 | 4091 |
 | `52b52f6f` | 23 | 4091 | 4091 |
 | `bc321d10` | 119 | 4091 | 4159 |
-| `57978ebf` | 118 | 4159 | 4168 |
-| `d7f6ab1f` | 13 | 4168 | 4225 |
-| `5ba21f23` | 32 | 4225 | 4228 |
-| `40829b83` | 32 | 4228 | 4231 |
-| `dc165127` | 34 | 4231 | 4231 |
-| `7184028e` | 34 | 4231 | 4231 |
-| `868ef1fe` | 128 | 4231 | 4280 |
-| `879657b5` | 94 | 4280 | 4491 |
+| `20727cf8` | 122 | 4159 | 4169 |
+| `e5d2399d` | 18 | 4169 | 4230 |
+| `5ba21f23` | 32 | 4230 | 4233 |
+| `40829b83` | 32 | 4233 | 4236 |
+| `dc165127` | 34 | 4236 | 4236 |
+| `7184028e` | 34 | 4236 | 4236 |
+| `868ef1fe` | 128 | 4236 | 4284 |
+| `879657b5` | 94 | 4284 | 4495 |
+| `dc770f07` | 45 | 4495 | 4495 |
+| `f3db741b` | 29 | 4495 | 4495 |
+| `d1213248` | 109 | 4495 | 4653 |

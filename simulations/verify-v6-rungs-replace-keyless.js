@@ -293,6 +293,13 @@ async function main() {
   tx("R8 the deployer accepts -> ok", call(DEP, "accept-owner", [], CORE_ID), okTrue);
   ev("R8 core owner = deployer", "(get-contract-owner)", DEP, CORE_ID);
 
+  // =============== R9: the seat count clamps at the slot count ===============
+  tx("R9 ladder max-band-per-side 60 (over the market's 50 slots)", call(DEP, "set-max-band-per-side", [uintCV(60)], LADDER), okTrue);
+  tx("R9 sync-seat-count -> clamped to 50", call(KEEPER, "sync-seat-count", []), "(ok u50)");
+  ev("R9 protected-seats 50", "(protected-seats)", "u50");
+  tx("R9 back to 10", call(DEP, "set-max-band-per-side", [uintCV(10)], LADDER), okTrue);
+  tx("R9 sync-seat-count -> 10", call(KEEPER, "sync-seat-count", []), "(ok u10)");
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;

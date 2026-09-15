@@ -607,6 +607,70 @@ async function main() {
   ev("D7 N2 still untouched", `(get-token-y-deposit u0 '${N2})`, "u2000000", PID);
   tx("D7 operator restores distance-slots u3", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
 
+  // ---- D8 (trace coverage): the core's size rule on the Y side, and the demotion that parks the N-th best itself ----
+  // In range with nobody out of range: park-tenth returns (ok false) and deposit-token-y-core's
+  // own fold runs (find-smallest-token-y-fold): smaller than the smallest -> u1010, bigger parks it.
+  const R3 = mkAddr(33), R4 = mkAddr(34), R5 = mkAddr(35), R6 = mkAddr(36), R7 = mkAddr(37);
+  for (const w of [R3, R4, R5, R6, R7]) tx(`D8 fund ${w.slice(0, 6)}`, stxSend(w, 6_000_000), okPrefix);
+  tx("D8 N2 (-4%) cancels", cancelY(N2, PID), "(ok u2000000)");
+  tx("D8 R1 (-10%) cancels", cancelY(R1, PID), "(ok u3500000)");
+  ev("D8 y book: P3 alone, in range", "(len (get-token-y-depositors u0))", "u1", PID);
+  tx("D8 R3 bid 2 STX in range", depositY(R3, 2_000_000n, HUGE, PID), "(ok u2000000)");
+  tx("D8 R4 bid 2 STX in range", depositY(R4, 2_000_000n, HUGE, PID), "(ok u2000000)");
+  ev("D8 y book full (3), all in range", "(len (get-token-y-depositors u0))", "u3", PID);
+  tx("D8 R5 1.5 STX in range: nobody out of range -> the core's size rule, smaller than the smallest -> u1010", depositY(R5, 1_500_000n, HUGE, PID), "(err u1010)");
+  tx("D8 R5 3 STX in range -> the core parks the smallest (P3, first in the list), R5 in", depositY(R5, 3_000_000n, HUGE, PID), "(ok u3000000)");
+  ev("D8 P3 parked 2 STX by the core", `(get-token-y-parked '${P3})`, "u2000000", PID);
+  ev("D8 R5 live 3 STX", `(get-token-y-deposit u0 '${R5})`, "u3000000", PID);
+  ev("D8 R3 live", `(get-token-y-deposit u0 '${R3})`, "u2000000", PID);
+  ev("D8 R4 live", `(get-token-y-deposit u0 '${R4})`, "u2000000", PID);
+  // demotion where the N-th best is NOT bigger than the region's smallest: the N-th best itself is parked
+  tx("D8 R3 cancels", cancelY(R3, PID), "(ok u2000000)");
+  tx("D8 R4 cancels", cancelY(R4, PID), "(ok u2000000)");
+  tx("D8 R4 bid 4 STX at -10% (out of range, big)", depositY(R4, 4_000_000n, LP1, PID), "(ok u4000000)");
+  tx("D8 R6 bid 2 STX at -5% (out of range, the best out-of-range price, small)", depositY(R6, 2_000_000n, LP3, PID), "(ok u2000000)");
+  ev("D8 y book full: R5 in range, R4 -10%, R6 -5%", "(len (get-token-y-depositors u0))", "u3", PID);
+  tx("D8 operator sets distance-slots u1: price region {R6}, size region {R4}", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
+  tx("D8 R7 1.5 STX in range: R6 demoted, 2 STX not bigger than the region's smallest (R4, 4) -> R6 itself parked", depositY(R7, 1_500_000n, HUGE, PID), "(ok u1500000)");
+  ev("D8 R6 parked 2 STX", `(get-token-y-parked '${R6})`, "u2000000", PID);
+  ev("D8 R4 still live 4 STX", `(get-token-y-deposit u0 '${R4})`, "u4000000", PID);
+  ev("D8 R7 live 1.5", `(get-token-y-deposit u0 '${R7})`, "u1500000", PID);
+  tx("D8 operator restores distance-slots u3", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
+
+  // ---- D9 (trace coverage): the X side mirrors: no-edge size fight (park, empty region), demotion parking the smallest ----
+  const XD1 = mkAddr(38), XD2 = mkAddr(39), XD3 = mkAddr(40), XD4 = mkAddr(41), XD5 = mkAddr(42), XD6 = mkAddr(43), XD7 = mkAddr(44), XD8 = mkAddr(45);
+  for (const [w, sats] of [[XD1, 3500n], [XD2, 3500n], [XD3, 5500n], [XD4, 3500n], [XD5, 3500n], [XD6, 9500n], [XD7, 2500n], [XD8, 3500n]]) { tx(`D9 fund ${w.slice(0, 6)} stx`, stxSend(w, 1_000_000), okPrefix); tx(`D9 fund ${w.slice(0, 6)} sats`, sbtcSend(w, sats), okPrefix); }
+  // in-range asks are refused while bids that would cross them rest (u1016): clear the y side first
+  tx("D9 R5 cancels its in-range bid", cancelY(R5, PID), "(ok u3000000)");
+  tx("D9 R7 cancels its in-range bid", cancelY(R7, PID), "(ok u1500000)");
+  tx("D9 R4 cancels its -10% bid", cancelY(R4, PID), "(ok u4000000)");
+  ev("D9 y side empty", "(len (get-token-y-depositors u0))", "u0", PID);
+  ev("D9 x book: Q3 alone at +5%", "(len (get-token-x-depositors u0))", "u1", PID);
+  tx("D9 XD1 ask 3000 in range", depositX(XD1, 3000n, 1n, PID), "(ok u3000)");
+  tx("D9 XD2 ask 3000 at +10%", depositX(XD2, 3000n, LQ1, PID), "(ok u3000)");
+  ev("D9 x book full: Q3 +5%, XD1 in range, XD2 +10%", "(len (get-token-x-depositors u0))", "u3", PID);
+  tx("D9 operator sets distance-slots u1: price region {Q3}, size region {XD2}", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
+  tx("D9 XD3 5000 at +10%: no price edge (worse than Q3's +5%), bigger than the region's smallest (XD2, 3000) -> XD2 parked, XD3 in", depositX(XD3, 5000n, LQ1, PID), "(ok u5000)");
+  ev("D9 XD2 parked 3000", `(get-token-x-parked '${XD2})`, "u3000", PID);
+  ev("D9 XD3 live 5000", `(get-token-x-deposit u0 '${XD3})`, "u5000", PID);
+  ev("D9 XD1 (in range) untouched", `(get-token-x-deposit u0 '${XD1})`, "u3000", PID);
+  tx("D9 XD4 3000 at +10%: not bigger than the region's smallest (XD3, 5000) -> u1010", depositX(XD4, 3000n, LQ1, PID), "(err u1010)");
+  tx("D9 XD3 cancels", cancelX(XD3, PID), "(ok u5000)");
+  tx("D9 XD5 ask 3000 in range", depositX(XD5, 3000n, 1n, PID), "(ok u3000)");
+  ev("D9 x book full: Q3 +5%, XD1 in, XD5 in: the size region is EMPTY", "(len (get-token-x-depositors u0))", "u3", PID);
+  tx("D9 XD6 9000 at +10%: no price edge, empty region -> u1010 (an in-range resident or the N-th best is never displaced by it)", depositX(XD6, 9000n, LQ1, PID), "(err u1010)");
+  ev("D9 XD1 still live", `(get-token-x-deposit u0 '${XD1})`, "u3000", PID);
+  ev("D9 Q3 still live", `(get-token-x-deposit u0 '${Q3})`, "u3000", PID);
+  // demotion where the N-th best is bigger than the region's smallest: that smallest is parked
+  tx("D9 XD5 cancels", cancelX(XD5, PID), "(ok u3000)");
+  tx("D9 XD7 ask 2000 at +10% (small, out of range)", depositX(XD7, 2000n, LQ1, PID), "(ok u2000)");
+  ev("D9 x book full: Q3 +5% (3000), XD1 in, XD7 +10% (2000)", "(len (get-token-x-depositors u0))", "u3", PID);
+  tx("D9 XD8 ask 3000 in range: Q3 demoted, 3000 bigger than the region's smallest (XD7, 2000) -> XD7 parked, Q3 stays", depositX(XD8, 3000n, 1n, PID), "(ok u3000)");
+  ev("D9 XD7 parked 2000", `(get-token-x-parked '${XD7})`, "u2000", PID);
+  ev("D9 Q3 still live", `(get-token-x-deposit u0 '${Q3})`, "u3000", PID);
+  ev("D9 XD8 live", `(get-token-x-deposit u0 '${XD8})`, "u3000", PID);
+  tx("D9 operator restores distance-slots u3", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

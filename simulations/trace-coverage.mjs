@@ -76,7 +76,7 @@ function decodeNode(b, o, out, contract) {
   const resultErr = resOk ? null : td.decode(b.subarray(o, o + rlen)); o += rlen;
   const m = code.match(/^(S[PMTN][0-9A-Z]+\.[0-9a-zA-Z_-]+):/);
   if (m) contract = m[1].split(".")[1];
-  if (contract) { const set = out.get(contract) || out.set(contract, new Set()).get(contract); set.add(String(id)); if (resultErr) (out.errs ||= []).push({ contract, id: String(id), func, err: resultErr.slice(0, 80) }); }
+  if (contract) { const set = out.get(contract) || out.set(contract, new Set()).get(contract); set.add(String(id)); const cm = out.counts || (out.counts = new Map()); const key = `${contract}:${id}`; cm.set(key, (cm.get(key) || 0) + 1); if (resultErr) (out.errs ||= []).push({ contract, id: String(id), func, err: resultErr.slice(0, 80) }); }
   const n = u32(b, o); o += 4;
   for (let i = 0; i < n; i++) o = decodeNode(b, o, out, contract);
   return o;
@@ -137,8 +137,17 @@ for (const [id, n] of nodes) {
   const head = atomOf(l[0]); if (!["if", "match", "asserts!"].includes(head)) continue;
   const line = n.line;
   const arms = head === "if" ? [l[2], l[3]] : head === "match" ? [l[3], l[5] ?? l[4]] : [l[1]];
-  const armHit = arms.map((a) => a && a.id != null ? hit.has(String(a.id)) : null);
-  const nodeHit = hit.has(id);
+  // an arm can be a bare atom or literal: the tracer does not record those as
+  // nodes, so infer it from counts: the branch node ran more times than its
+  // traced arms together means an untraced arm ran
+  const cnt = (i) => (executed.counts?.get(`${NAME}:${i}`) || 0);
+  const nodeHit = hitAll.has(id);
+  const armHit = arms.map((a) => {
+    if (!a || a.id == null) return null;
+    if (listOf(a)) return hitAll.has(String(a.id));
+    const others = arms.filter((o) => o && o !== a && listOf(o)).reduce((acc, o) => acc + cnt(o.id), 0);
+    return nodeHit && cnt(id) > others;
+  });
   const state = !nodeHit ? "never reached" : head === "asserts!" ? "reached" : armHit.every((h) => h === true) ? "both arms" : armHit.some((h) => h === true) ? `one arm (${armHit[0] ? "then" : "else"} only)` : "arms not seen";
   branches.push({ id, line, fn: n.fn, head, state });
 }

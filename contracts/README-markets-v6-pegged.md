@@ -831,7 +831,7 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes (+ D7: the in-region size fight, strict tie, carry counts) | 220/220 | `8a8c2463356d84fc0bc35bf205b0f8bc` |
+| markets v6 bounty-fixes (+ D7: the y in-region size fight, strict tie, carry counts; + D8: the core's size rule on y (in range, nobody out of range: smaller u1010, bigger parks the smallest), the demotion that parks the N-th best itself; + D9: the x mirrors: no-edge fight parks the region's smallest, empty region u1010, demotion parks the smallest) | 292/292 | `4ccb83ee7698afad0f30a6ce16400d25` |
 | markets v6 gaps (+ G7: a second instance on the real 80 s window refuses an old update, the oracle's u1002 in front of the market's u1003; the harness waits 150 s before running) | 72/72 | `908a895c1aee9e5d3dfe0547c9782f9b` |
 | markets v6 lazer-paths | 35/35 | `989657650df21b6fc003e5fdeeadde1d` |
 | markets v6 multifill | 44/44 | `ef2ed5c1963e36033ed335d605957f1b` |
@@ -847,16 +847,19 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | v6 peg-park (+ K2b: an out-of-range newcomer with no price edge parks the switched-off peg first, every filler stays) | 50/50 | `918d567843534ca1ba8495dcabf60fe3` |
 | v6 peg-park-y | 77/77 | `6256d0b4f2f2cf1a7375312bf2cca474` |
 | v6 peg-track | 30/30 | `62783a5798b22194cc1c7f5f6ba91a2a` |
-| v6 peg-walk-order | 60/60 | `6326641b159092034822d28a464ba557` |
+| v6 peg-walk-order (+ O4: the x walk reaches a maker with nothing left and skips it) | 71/71 | `dcb34a07c2af85cc4e87951f9c4570e7` |
 | v6 rungs-fill | 40/40 | `c663e202dd9bc608ba246a9f982cb79f` |
 | v6 rungs-push | 39/39 | `52b52f6f88c53a4c6e69d7ade314fc11` |
 | v6 rungs-miner-band | 174/174 | `bc321d10fdf831eea71301b73ad75b77` |
-| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover; + R8: core-v5 admin: verify twice u5003, a standard principal u5002, register unverified u5005 / byte-different u5006, pause u5016, unpause timelock u5008 / u5017, owner handover u5018 / u5001, no timelock on the core's handover) | 199/199 | `57978ebf4a33450563a489bded059141` |
-| v6 small-share-x (mirror of peg-batch Z6: an ask under 0.2% of the side is rolled, small-share-roll-x logged) | 23/23 | `d7f6ab1f3678b9ef5193bd7fbdf832d5` |
+| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover; + R8: core-v5 admin: verify twice u5003, a standard principal u5002, register unverified u5005 / byte-different u5006, pause u5016, unpause timelock u5008 / u5017, owner handover u5018 / u5001, no timelock on the core's handover; + R9: the seat count clamps at 50 when the ladder max is 60) | 204/204 | `20727cf83f51f36455c5954503e4b754` |
+| v6 small-share-x (mirror of peg-batch Z6: an ask under 0.2% of the side is rolled, small-share-roll-x logged; + X12-X14: the x taker-too-small path, mirror of bounty-fixes B2: an in-range 600k ask on the taker's side, a bid 2% under, a 1100-sat x taker -> u1020) | 31/31 | `e5d2399ded0dbdb06ea40c79c1be017a` |
 | v6 rungs-keyless buy / sell | 37 / 37 | `5ba21f238b41ac6512c8ecca01e9cc70` / `40829b8367990bc3515b4882892a39b3` |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc16512744c46d4c86e1739a029eea9b` / `7184028e9d74d8fd705ca28d88fc478c` |
 | vault v6 parked (+ V1: initialize twice u6020, an intent before the pubkey u6021, a zero limit u6013) | 140/140 | `868ef1fe93f3e35ed4a22eb0eb40c48c` |
 | router v5 on the v6 stack (`V6=1 verify-swap-router-v3-lazer.js`; the harness now deploys the ladder before the market) | 248/248 | `879657b55cb9659874dc7c61629c5216` |
+| external: citycoins ccd016 v2 coverage on this market (`citycoins-protocol/simulations/stxer-ccd016-v2-coverage.js`) | 73/73 | `dc770f07957e63aead60cc8911e3b268` |
+| external: citycoins ccd016 v2 happy path | 49/49 | `f3db741b2f90addeb3de8dbdb4fa8c95` |
+| external: citycoins ccd016 v2 parked (39 in-range pegs + the vault, the core's size rule) | 129/129 | `d1213248cdbcdcdaf8660b6602d56bba` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

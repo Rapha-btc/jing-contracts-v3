@@ -152,6 +152,20 @@ async function main() {
   tx("O3 sell rung sync", call(S, "sync", [], rid(SELL_RUNG)), "(ok true)");
   ev("O3 sell rung: S has sats proceeds", `(get-position '${S})`, (v) => uintOf(field(v, "sbtc")) > 0n, rid(SELL_RUNG));
 
+  // ---- O4 (trace coverage): the x walk visits a maker with nothing left to fill and skips it ----
+  // Two fresh asks at +5 and +8 bps, a taker sized to EXACTLY the first with a limit that admits
+  // the second: the walk empties the first, reaches the second with rem 0 -> the skip arm.
+  const WA = mk(90), WB = mk(91), WT = mk(92);
+  const W_AMT = 2000n, W_NET = (W_AMT * PA(5n) + PPDF - 1n) / PPDF; // ceil: converts back to exactly 2000 sats at +5 bps
+  tx("O4 fund WA sats", satsSend(WA, 2100n), "(ok true)"); tx("O4 fund WA stx", stxSend(WA, 1_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("O4 fund WB sats", satsSend(WB, 2100n), "(ok true)"); tx("O4 fund WB stx", stxSend(WB, 1_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("O4 fund WT stx", stxSend(WT, grossFor(W_NET) + 2_000_000n), (v) => String(v).startsWith("(ok"));
+  tx("O4 WA fixed ask 2000 at +5 bps (the best ask on the book)", depX(WA, W_AMT, PA(5n), null), `(ok u${W_AMT})`);
+  tx("O4 WB fixed ask 2000 at +8 bps", depX(WB, W_AMT, PA(8n), null), `(ok u${W_AMT})`);
+  const o4 = tx("O4 WT sells STX worth exactly WA's 2000 sats, limit +10 bps: WA empties, WB is visited with rem 0 and skipped", swap(WT, grossFor(W_NET), PA(10n), false), (v) => String(v).startsWith("(ok"));
+  ev("O4 WA empty", depOfX(WA), "u0");
+  ev("O4 WB intact", depOfX(WB), `u${W_AMT}`);
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
@@ -161,6 +175,7 @@ async function main() {
   check(`O1 fills in price order: +10, +15, +20, +30`, matches(o1).join(","), [PA(10n), PA(15n), PA(20n), PA(30n)].join(","));
   check(`O3 exactly one fill at -10 bps`, matches(o3e).join(","), String(PB(10n)));
   check(`O3 fills in price order: -10, -15, -20, -30`, matches(o3).join(","), [PB(10n), PB(15n), PB(20n), PB(30n)].join(","));
+  check("O4 exactly one match log (WA), none for WB", prints(s[o4.idx]).filter((p) => p.includes('(event "match")')).length, (v) => v === 1);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

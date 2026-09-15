@@ -45,7 +45,7 @@ async function main() {
   const USTX_PER_SAT = MID / PPDF;
   console.log(`mid ${MID} (1 sat ~ ${USTX_PER_SAT} uSTX, 1 STX ~ ${(10n ** 16n) / MID} sats)`);
 
-  const XB = mk(81), XT = mk(82), TY = mk(83);
+  const XB = mk(81), XT = mk(82), TY = mk(83), TS = mk(84);
   const XB_AMT = 600_000n, XT_AMT = 1_000n, TY_NET = 3_000_000n; // 3 STX net
   if (XT_AMT * BPS >= (XB_AMT + XT_AMT) * 20n) throw new Error("sizing: XT must be under MIN_SHARE_BPS of the side");
   const XC = (TY_NET * PPDF) / MID; // sats cleared at mid (y binding)
@@ -69,7 +69,7 @@ async function main() {
   deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
   tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1), uintCV(45)]), "(ok true)");
-  for (const [who, ustx, sats] of [[XB, 1_000_000n, XB_AMT], [XT, 1_000_000n, XT_AMT], [TY, grossFor(TY_NET) + 1_000_000n, 0n]]) {
+  for (const [who, ustx, sats] of [[XB, 1_000_000n, XB_AMT], [XT, 1_000_000n, XT_AMT], [TY, grossFor(TY_NET) + 1_000_000n, 0n], [TS, 1_000_000n, 1300n]]) {
     tx(`fund ${who.slice(0, 6)} stx`, stxSend(who, ustx), (v) => String(v).startsWith("(ok"));
     if (sats > 0n) tx(`fund ${who.slice(0, 6)} sats`, satsSend(who, sats), "(ok true)");
   }
@@ -84,6 +84,20 @@ async function main() {
   ev("X9 XT order intact (some u0)", ordX(XT), (v) => field(v, "spread-bps") === "(some u0)");
   ev("X10 XT got no STX", `(stx-get-balance '${XT})`, "u1000000");
   ev("X11 x side of cycle 1 has both", "(len (get-token-x-depositors u1))", "u2");
+  // the taker-too-small path on the X side (mirror of u1020 on y): the taker deposits x against a
+  // resting bid, and its own x share is under MIN_SHARE_BPS of the side -> the filter flags it, u1020
+  const depY = (who, amt, limit, spread) => call(who, "deposit-token-y", [uintCV(amt), uintCV(limit), sp(spread), UPD, wstxT, wstxA]);
+  const setX = (who, limit, spread) => call(who, "set-token-x-limit", [uintCV(limit), sp(spread), UPD]);
+  // mirror of bounty-fixes B2 (in-range whale + small taker -> u1020): the big ask stays IN RANGE
+  // on the taker's side (fixed at the mid: a bid 2% under it does not cross it), the other side's
+  // bid at -2% is limit-violating at the clearing mid and is rolled out first, so the taker's x share
+  // is measured against XB and flagged before anything fills
+  tx("X12a XB reprices to a fixed ask AT the mid (in range, not crossed by a bid under the mid)", setX(XB, MID, null), "(ok true)");
+  tx("X12 the STX whale rests a 50 STX bid at -2%", depY(S, 50_000_000n, (MID * 98n) / 100n, null), "(ok u50000000)");
+  ev("X12c cycle 1 x total before the taker (XB left + XT)", "(get total-token-x (get-cycle-totals u1))", (v) => uintOf(v) > 590_000n);
+  ev("X12d cycle 1 x depositors", "(len (get-token-x-depositors u1))", "u2");
+  tx("X13 TS sells 1100 sats gross (deposit-x taker, limit -3%): 0.18% of an in-range x side of ~600k -> u1020 taker too small", swap(TS, 1100n, (MID * 97n) / 100n, true), "(err u1020)");
+  ev("X14 TS holds its sats (the refused swap moved nothing)", `(contract-call? '${SBTC} get-balance '${TS})`, "(ok u1300)");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
