@@ -40,6 +40,14 @@ declare -A SUTS=(
   ["rfq-sbtc-stx-jing-v2"]="contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
   ["rfq-sbtc-stx-jing-v3"]="contracts/rfq/rfq-sbtc-stx-jing-v3.clar"
   ["creator-bonus-jing"]="contracts/deploying/creator-bonus-jing.clar"
+  ["markets-sbtc-stx-jing-v6"]="contracts/markets-sbtc-stx-jing-v6.clar"
+  ["jing-ladder"]="contracts/jing-ladder.clar"
+  ["jing-buy-stx"]="contracts/jing-buy-stx.clar"
+  ["jing-sell-stx"]="contracts/jing-sell-stx.clar"
+  ["jing-buy-stx-market-spread"]="contracts/jing-buy-stx-market-spread.clar"
+  ["jing-sell-stx-market-spread"]="contracts/jing-sell-stx-market-spread.clar"
+  ["jing-buy-stx-core-spread"]="contracts/jing-buy-stx-core-spread.clar"
+  ["jing-sell-stx-core-spread"]="contracts/jing-sell-stx-core-spread.clar"
 )
 
 # Mainnet SIP-010 trait reference (must match the use-trait line in the
@@ -147,6 +155,71 @@ if "creator-bonus-jing" in src_path:
         "    (ok total)\n  )\n)",
         1
     )
+
+# 2d. markets-sbtc-stx-jing-v6 (added 2026-09-15). Settle runs LIVE under
+#     fuzz: the Lazer oracle and the decoder it passes along are one mock
+#     (tests/rv/mock-lazer-oracle.clar) whose mid the SUT's rv-set-mid moves;
+#     the ladder is a mock the SUT's rv-band-x/y seat accounts on; the core is
+#     the v5 mock (generated from jing-core-v5.clar). The queue is shrunk from
+#     50 to 6 with 2 seats (4 open slots) so ten RV accounts fill a side and
+#     reach park-tenth / size-rule / seat paths; the price region
+#     (distance-slots) is 2 for the same reason. Feed ids are the mainnet ones
+#     (BTC u1, STX u45) so pick-feed finds the mock's feeds. Minimums are
+#     u100 a side: big enough that the dust-refund branches at settle and the
+#     ERR_DEPOSIT_TOO_SMALL gate fire on RV's small naturals.
+if "markets-sbtc-stx-jing-v6" in src_path:
+    text = text.replace("(contract-call? .jing-core-v5", "(contract-call? .mock-jing-core")
+    text = text.replace(
+        "'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle", ".mock-lazer-oracle")
+    text = text.replace(
+        "'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1", ".mock-lazer-oracle")
+    text = text.replace(".jing-ladder", ".mock-jing-ladder")
+    text = text.replace("(define-constant MAX_DEPOSITORS u50)", "(define-constant MAX_DEPOSITORS u6)")
+    text = text.replace("(define-data-var seats-per-side uint u10)", "(define-data-var seats-per-side uint u2)")
+    text = text.replace("(define-data-var distance-slots uint u10)", "(define-data-var distance-slots uint u2)")
+    text = text.replace("(define-data-var feed-id-x uint u0)", "(define-data-var feed-id-x uint u1)")
+    text = text.replace("(define-data-var feed-id-y uint u0)", "(define-data-var feed-id-y uint u45)")
+    text = text.replace("(define-data-var min-token-y-deposit uint u0)", "(define-data-var min-token-y-deposit uint u100)")
+    text = text.replace("(define-data-var min-token-x-deposit uint u0)", "(define-data-var min-token-x-deposit uint u100)")
+
+# 2e. jing-ladder (added 2026-09-15). The only gate an RV account cannot
+#     pass is the code hash (contract-hash? of an account is none), so both
+#     hash reads become a fixed buffer: any account may then register as a
+#     rung, take a seat, be replaced, retired and re-seated. The SUT's rv-*
+#     wrappers fold the side string onto the six real sides and the price
+#     onto a handful of values so keys collide.
+if src_path.endswith("contracts/jing-ladder.clar"):
+    text = text.replace(
+        "(caller-hash (unwrap! (contract-hash? caller) ERR_INVALID_CONTRACT_HASH))",
+        "(caller-hash 0x00)")
+    text = text.replace(
+        "(unwrap! (contract-hash? canon) ERR_INVALID_CONTRACT_HASH)",
+        "0x00")
+
+# 2f. the six pooled rungs (added 2026-09-15). Absolute mainnet refs become
+#     the fuzz stack: `.v6-market` is the v6 fuzz build (a name no generic
+#     replace below touches), the ladder and the RFQ native oracle are mocks,
+#     sBTC and wstx are one mock-ft with the allowance name pinned. The rung
+#     is pre-initialized at 331.50 sats per STX (u33150 -> 1e18 / 33150 in
+#     the market unit), 20 bps for the spread rungs, so `initialize` (name
+#     check, ladder registration) is out of scope and every member action is
+#     reachable from the first call.
+if "/jing-buy-stx" in src_path or "/jing-sell-stx" in src_path:
+    text = text.replace("'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6", ".v6-market")
+    text = text.replace("'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder", ".mock-jing-ladder")
+    text = text.replace("'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3", ".mock-rfq-oracle")
+    text = text.replace("'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", ".mock-ft")
+    text = text.replace("'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2", ".mock-ft")
+    text = text.replace('(define-constant SBTC_NAME "sbtc-token")', '(define-constant SBTC_NAME "mock-ft")')
+    text = text.replace('(define-constant WSTX_NAME "wstx")', '(define-constant WSTX_NAME "mock-ft")')
+    text = text.replace("(define-data-var initialized bool false)", "(define-data-var initialized bool true)")
+    text = text.replace("(define-data-var price uint u0)", "(define-data-var price uint u30165912518853695)")
+    text = text.replace("(define-data-var sats-per-stx-cents uint u0)", "(define-data-var sats-per-stx-cents uint u33150)")
+    text = text.replace("(define-data-var spread-bps uint u0)", "(define-data-var spread-bps uint u20)")
+    text = text.replace("(define-data-var floor-cents uint u0)", "(define-data-var floor-cents uint u33150)")
+    text = text.replace("(define-data-var cap-cents uint u0)", "(define-data-var cap-cents uint u33150)")
+    text = text.replace("(define-data-var floor uint u0)", "(define-data-var floor uint u30165912518853695)")
+    text = text.replace("(define-data-var cap uint u0)", "(define-data-var cap uint u30165912518853695)")
 
 # 2. Local mock-jing-core. The v2-specific replace MUST run before the
 #    generic one, or `.jing-core-v2` would corrupt to `.mock-jing-core-v2`.

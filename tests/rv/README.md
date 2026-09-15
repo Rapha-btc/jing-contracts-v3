@@ -14,6 +14,127 @@ vault-sbtc-stx-v2           -- 500 runs,  3 invariants, 0 failures (2026-08-18)
 rfq-sbtc-stx-jing-v2        -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
 rfq-sbtc-stx-jing-v3        -- 500 runs,  4 invariants, 0 failures
 creator-bonus-jing          -- 500 runs,  4 invariants, 0 failures (2026-09-02)
+markets-sbtc-stx-jing-v6    -- 1000 runs, 25 invariants, 0 failures (2026-09-15, settle LIVE)
+jing-ladder                 -- 500 runs,  6 invariants, 0 failures (2026-09-15)
+jing-buy/sell-stx x3 pairs  -- 500 runs,  9 invariants each, 0 failures (2026-09-15)
+```
+
+### v6 stack, added 2026-09-15: market v6, jing-ladder, the six pooled rungs
+
+Nine new targets, one build script section each (`build.sh` 2d / 2e / 2f),
+one manifest each (`Clarinet-<name>.toml`). What is new against the v2
+target: **settle runs live under fuzz.** The Lazer oracle and the decoder
+principal the market passes it are one mock (`mock-lazer-oracle.clar`)
+that answers two fresh feeds, BTC/USD at a settable mid and STX/USD at
+exactly 1e8, so the market's cross is the mid itself. Every priced path
+now runs on random sequences: settle-with-refresh, swap, the crossing
+branch of reprice-or-swap, the book walk, limit rolls, small-share rolls,
+dust refunds, parks and readmits. The v2 target could only fuzz the deposit
+phase.
+
+Three things RV cannot produce on its own, and how the build gets there:
+
+- **Prices.** RV's uints are small naturals (fast-check `nat`, under
+  2^31), five orders of magnitude under a real BTC/STX cross, and its
+  strings are random, so every allowance name fails. The SUT gets `rv-*`
+  wrappers (in the invariants file, fuzzed like any public function) that
+  fold a price into `[2.4e13, 4.0e13)` in the market unit (250.00 to
+  416.67 sats per STX), fold a spread under 11000 (one in eleven still
+  refused, u1026), and pin the allowance name to `mock-ft`. The raw
+  functions stay in the mix; their calls mostly fail, which is fine.
+- **A full side.** MAX_DEPOSITORS is 6 with 2 seats (4 open slots) and
+  `distance-slots` 2, so ten accounts fill a side and reach park-tenth, the
+  size rule, seats and readmits. The ladder is a mock the SUT's
+  `rv-band-x/y` seat accounts on (capped at 2 a side like the real one).
+- **A crossing book.** The maker gate refuses an order that would cross
+  at placement, so a batch settlement only happens after the mid MOVES
+  into the book. `rv-mid-at who y` puts the mid on a resting order's
+  price; `rv-settle-at` does that with a keeper right behind it.
+
+Two fuzz aids that change nothing the invariants read: `rv-unpause` and
+`rv-reset-mins` (anyone). RV keeps ONE simnet across runs and the operator
+is one sender in ten, so one random `set-paused true` or one random
+`set-min-token-x-deposit` (a natural up to 2^31) starved the rest of the
+first sweeps (ERR_PAUSED x70, ERR_NOTHING_TO_SETTLE x159 on settle). Pause
+still blocks deposits, readmits and settlement in between; cancel and
+withdraw never had a pause gate.
+
+**Finding (cosmetic, fixed in source 2026-09-15, uncommitted at the time
+of writing):** `deposit-token-y` computes `bid` through `pegged-bid` inside
+its `let` before it asserts `valid-spread`, so a spread of 10000 or more
+hit `(- u10000 spread)` and aborted with ArithmeticUnderflow instead of
+returning u1026 (the x side adds, so it returned u1026). No funds, no
+state: the tx fails either way. The guard now sits inside `pegged-bid`
+(a spread at or over BPS_PRECISION is the switched-off sentinel u0), which
+also protects a front end reading it. Runtime panics only log in RV; the
+120 underflows in the 1000-run sweep were counted from the log, not
+flagged.
+
+The 25 market invariants: the 12 v1/v2 list-vs-totals, ghost and bound
+checks (current and next cycle), plus, new for v6: balance conservation
+WITH settle live (contract balance = open-cycle totals + next-cycle totals
++ every parked amount + pending escrow, x on mock-ft and y on native STX),
+scratch state clean at rest (pending rebates, `crossing`,
+`taker-too-small`), never live and parked on one side, every position has
+an order with a valid spread and no stale order row without a position,
+nothing stranded in the settled cycle, the open cycle unsettled, cleared
+at most deposited, no duplicate in the depositor lists, seats within the
+reservation.
+
+`jing-ladder` (`build.sh` 2e): the only gate an account cannot pass is
+the code hash, so both `contract-hash?` reads become a fixed buffer and
+any account registers as a rung; wrappers fold the side onto the six
+real ones (one in eight junk, u6007) and the key onto four values so
+register hits free, taken and replaced keys. Six invariants: the band
+count on each side equals the number of accounts holding a seat there
+and never exceeds the cap, a fixed or guarded rung always holds its own
+key, every row has a real side, a seat holder is registered on that side,
+the handover was proposed in the past.
+
+The six rungs (`build.sh` 2f, one mirrored invariants file each, edit all
+six together): the rung is the SUT, pre-initialized at 331.50 sats per
+STX (20 bps for the spread rungs; `initialize` and the ladder
+registration are out of scope, covered keyless on stxer), on the v6 fuzz
+market (`.v6-market`), the mock ladder, the mock RFQ native oracle
+(`mock-rfq-oracle.clar`, `rv-set-native`) and one mock-ft for sBTC and
+wstx. Wrappers play the market around it (mid, bids, asks, cancels, a
+taker on the other side, settlements; `rv-seat` for the band rungs) and
+each ends with `sync` so the rung's view is current. Nine invariants:
+held equals the local balance, the proceeds watermark equals the proceeds
+balance, total shares equal the sum of current-epoch shares, the pool the
+indices imply never exceeds resting plus held and the members' unsold
+claims never exceed the pool, the members' proceeds claims fit the
+balance, `unfilled-index` in `[SOLD_OUT_INDEX, SCALE]`, no paid mark ahead
+of the proceeds index, and the resting order is the one the rung was
+deployed for (price and `none`; floor / cap and `(some spread)`; `(some
+spread)` for the band rungs, whose guard moves with the oracle).
+
+Sweeps (2026-09-15, `--runs` as shown, zero falsified invariants):
+
+| target | runs | invariants (checks) | real movement (successful calls) |
+|---|---|---|---|
+| markets-sbtc-stx-jing-v6 | 1000 | 25 (1000) | rv-deposit-x x93 / -y x86 (+ raw x40 / x33), rv-reprice-x x55 / -y x57 (+ raw x16 / x18, the crossing branch settles), rv-swap x9, rv-settle x4, rv-settle-at x1, rv-mid-at x45, rv-cancel-x x67, cancel-y x55, rv-withdraw-x x28, withdraw-y x46, readmit-x x2 / -y x1, rv-band-x x88 / -y x84, sync-seat x41, prune-cycles x14; 0 underflows with the pegged-bid guard in source (120 before it) |
+| jing-ladder | 500 | 6 (500) | rv-register x5, rv-register-unseated x4, seat-band x6, rv-retire-band x4, rv-set-canonical x16, set-max-band-per-side x18, propose-owner x23, accept-owner x4, log-* x140-177 each; raw register / set-canonical x0 (random side strings, as expected) |
+| jing-buy-stx | 500 | 9 (500) | deposit x184, withdraw x193, claim x175, push x227, sync x220, rv-settle x19, rv-take x36 |
+| jing-sell-stx | 500 | 9 (500) | deposit x193, withdraw x84, claim x142, push x194, sync x206, rv-settle x28, rv-take x26 |
+| jing-buy-stx-market-spread | 500 | 9 (500) | deposit x184, withdraw x181, claim x156, push x196, sync x209, rv-settle x15, rv-take x48 |
+| jing-sell-stx-market-spread | 500 | 9 (500) | deposit x186, withdraw x174, claim x161, push x221, sync x212, rv-settle x18, rv-take x14 |
+| jing-buy-stx-core-spread | 500 | 9 (500) | deposit x159, withdraw x143, claim x139, push x175, sync x182, rv-seat x183, rv-set-native x183, rv-settle x8, rv-take x30 |
+| jing-sell-stx-core-spread | 500 | 9 (500) | deposit x149, withdraw x137, claim x127, push x200, sync x196, rv-seat x175, rv-set-native x195, rv-settle x16, rv-take x3 |
+
+Logs of the day's sweeps were read for the counts above; RV prints the
+same summary at the end of every run. `rv-take` on the sell rungs folds the
+taker under 0.002 BTC (a raw natural runs to 21 BTC against a few thousand
+STX resting and the market refuses a partial fill, u1017).
+
+Run:
+
+```bash
+npm run rv:build                     # market v6, ladder, six rungs
+npm run rv:v6                        # 1000 runs
+npm run rv:ladder                    # 500 runs
+npm run rv:rungs                     # six targets, 500 runs each
+npx rv . jing-buy-stx invariant --seed=<n>   # replay
 ```
 
 ### creator-bonus-jing, added 2026-09-02

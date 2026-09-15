@@ -1,0 +1,21 @@
+# RV-only manifest for fuzzing jing-ladder (rung registry, band seats,
+# owner handover). See tests/rv/build.sh section 2e and tests/rv/README.md.
+#
+# Run:
+#   bash tests/rv/build.sh jing-ladder
+#   npx rv . jing-ladder invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-ladder"
+description = "RV-only manifest for fuzzing jing-ladder"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.jing-ladder]
+path = "tests/rv/.build/jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"

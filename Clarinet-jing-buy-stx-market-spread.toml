@@ -1,0 +1,58 @@
+# RV-only manifest for fuzzing jing-buy-stx-market-spread (pooled rung on markets v6). The
+# rung is the SUT; the v6 fuzz build of the market, the mock Lazer oracle,
+# the mock ladder, the mock RFQ oracle and the v5 mock core are the stack
+# around it. See tests/rv/build.sh section 2f and tests/rv/README.md.
+#
+# Run:
+#   bash tests/rv/build.sh markets-sbtc-stx-jing-v6 && bash tests/rv/build.sh jing-buy-stx-market-spread
+#   npx rv . jing-buy-stx-market-spread invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-jing-buy-stx-market-spread"
+description = "RV-only manifest for fuzzing jing-buy-stx-market-spread"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "tests/rv/mock-lazer-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "tests/rv/mock-jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-rfq-oracle]
+path = "tests/rv/mock-rfq-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.v6-market]
+path = "tests/rv/.build/markets-sbtc-stx-jing-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-market-spread]
+path = "tests/rv/.build/jing-buy-stx-market-spread.clar"
+clarity_version = 5
+epoch = "3.4"

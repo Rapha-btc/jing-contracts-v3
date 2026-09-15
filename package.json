@@ -33,7 +33,11 @@
     "verify:v6-peg-edges": "tsx simulations/verify-v6-peg-edges-lazer.js",
     "verify:v6-peg-mirror": "tsx simulations/verify-v6-peg-mirror-lazer.js",
     "verify:v6-rungs-push": "tsx simulations/verify-v6-rungs-push-lazer.js",
-    "verify:markets-v6": "for f in regression multifill withdraw lazer-paths gaps bounty-fixes remainder-cross stress; do tsx simulations/verify-markets-v6-$f.js || exit 1; done"
+    "verify:markets-v6": "for f in regression multifill withdraw lazer-paths gaps bounty-fixes remainder-cross stress; do tsx simulations/verify-markets-v6-$f.js || exit 1; done",
+    "rv:build": "bash tests/rv/build.sh markets-sbtc-stx-jing-v6 && for r in jing-ladder jing-buy-stx jing-sell-stx jing-buy-stx-market-spread jing-sell-stx-market-spread jing-buy-stx-core-spread jing-sell-stx-core-spread; do bash tests/rv/build.sh $r; done",
+    "rv:v6": "rv . markets-sbtc-stx-jing-v6 invariant --runs=1000",
+    "rv:ladder": "rv . jing-ladder invariant --runs=500",
+    "rv:rungs": "for r in jing-buy-stx jing-sell-stx jing-buy-stx-market-spread jing-sell-stx-market-spread jing-buy-stx-core-spread jing-sell-stx-core-spread; do rv . $r invariant --runs=500 || exit 1; done"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",

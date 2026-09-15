@@ -3,7 +3,7 @@ log-*/register/get-contract-owner signatures but replacing bodies with
 (ok true) — for RV fuzzing only."""
 import re, sys
 
-src = open("contracts/jing-core.clar").read()
+src = open(sys.argv[1] if len(sys.argv) > 1 else "contracts/jing-core.clar").read()
 out = ['''(define-read-only (get-contract-owner) tx-sender)
 
 ''']
@@ -72,7 +72,7 @@ while i < len(lines):
         # Find function name
         name = m.group(1)
         # The body replacement
-        out.append(signature + '\n  (ok true))\n\n')
+        out.append(signature + '\n  (begin (asserts! true (err u0)) (ok true)))\n\n')
 
         i = j + 1
         continue

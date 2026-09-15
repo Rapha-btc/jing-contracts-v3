@@ -1,0 +1,49 @@
+# RV-only manifest for fuzzing markets-sbtc-stx-jing-v6 (pegged orders,
+# protected seats, parking; settle LIVE under fuzz through a mock Lazer
+# oracle). See tests/rv/build.sh section 2d and tests/rv/README.md.
+#
+# Run:
+#   bash tests/rv/build.sh markets-sbtc-stx-jing-v6
+#   npx rv . markets-sbtc-stx-jing-v6 invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-stx-v6"
+description = "RV-only manifest for fuzzing markets-sbtc-stx-jing-v6"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+# Order matters for the simnet deploy plan: traits, then mocks, then SUT.
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "tests/rv/mock-lazer-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "tests/rv/mock-jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v6]
+path = "tests/rv/.build/markets-sbtc-stx-jing-v6.clar"
+clarity_version = 5
+epoch = "3.4"
