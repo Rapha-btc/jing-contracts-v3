@@ -20,6 +20,7 @@ const sbtcA = stringAsciiCV("sbtc-token");
 const A = "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2"; // sBTC holder: rung member and filler funder
 const FILLERS = Array.from({ length: 49 }, (_, i) => getAddressFromPrivateKey((i + 100).toString(16).padStart(64, "0") + "01", "mainnet"));
 const PARKER = getAddressFromPrivateKey("7".repeat(64) + "01", "mainnet");
+const OUTN = getAddressFromPrivateKey("8".repeat(64) + "01", "mainnet"); // K2b: an out-of-range newcomer with no price edge
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n, BPS = 20n, FILL = 2000, MAX_UINT = 340282366920938463463374607431768211455n;
 const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
 
@@ -62,11 +63,24 @@ async function main() {
     tx(`K2 filler ${i + 1} rests ${FILL} at +5%`, call(f, "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), UPD, sbtcT, sbtcA]), `(ok u${FILL})`);
   });
   ev("K2 x queue full (50)", "(len (get-token-x-depositors u0))", "u50");
+  // K2b (2026-09-14, d1b32bd): an OUT-OF-RANGE newcomer with no price edge
+  // (same +5% as the fillers, ties do not beat) on the full queue: a
+  // switched-off resident leaves before anyone alive on EVERY path now, so
+  // the inactive peg is parked, not a filler, and the newcomer rests
+  tx("K2b fund the out-of-range newcomer", call(A, "transfer", [uintCV(3000), standardPrincipalCV(A), standardPrincipalCV(OUTN), noneCV()], SBTC), "(ok true)");
+  tx("K2b 3000 sats at +5% (no price edge, bigger than the fillers): the switched-off peg is parked first", call(OUTN, "deposit-token-x", [uintCV(3000), uintCV(ASK_NEAR), noneCV(), UPD, sbtcT, sbtcA]), "(ok u3000)");
+  ev("K2b the inactive peg is parked with its full 20000", `(get-token-x-parked '${RID})`, "u20000");
+  ev("K2b the peg is off the live queue", `(get-token-x-deposit u0 '${RID})`, "u0");
+  ev("K2b the newcomer rests 3000", `(get-token-x-deposit u0 '${OUTN})`, "u3000");
+  ev("K2b every filler still live (none parked for a dead peg's slot)", `(get-token-x-deposit u0 '${FILLERS[0]})`, `u${FILL}`);
+  ev("K2b queue still 50", "(len (get-token-x-depositors u0))", "u50");
   tx("K3 fund the parker", call(A, "transfer", [uintCV(FILL), standardPrincipalCV(A), standardPrincipalCV(PARKER), noneCV()], SBTC), "(ok true)");
-  tx("K3 parker rests an IN-RANGE ask on the full queue: parks the furthest = the inactive peg", call(PARKER, "deposit-token-x", [uintCV(FILL), uintCV(1), noneCV(), UPD, sbtcT, sbtcA]), `(ok u${FILL})`);
-  ev("K3 the rung is parked with its full 20000", `(get-token-x-parked '${RID})`, "u20000");
+  tx("K3 parker rests an IN-RANGE ask on the full queue: the peg is already parked, so the N-th best out-of-range maker is demoted and the region's smallest (a 2000 filler) is parked", call(PARKER, "deposit-token-x", [uintCV(FILL), uintCV(1), noneCV(), UPD, sbtcT, sbtcA]), `(ok u${FILL})`);
+  ev("K3 the rung still parked with its full 20000", `(get-token-x-parked '${RID})`, "u20000");
   ev("K3 the rung is off the live queue", `(get-token-x-deposit u0 '${RID})`, "u0");
   ev("K3 queue still 50", "(len (get-token-x-depositors u0))", "u50");
+  ev("K3 the parker rests", `(get-token-x-deposit u0 '${PARKER})`, `u${FILL}`);
+  ev("K3 x total: 48 fillers + 3000 newcomer + 2000 parker = 101000", "(get total-token-x (get-cycle-totals u0))", "u101000");
   // rung side
   tx("K4 sync while parked", call(A, "sync", [], RID), "(ok true)");
   ev("K4 market-size counts the parked balance: unfilled-index unchanged", "(get-state)", (v) => field(v, "unfilled-index") === `u${SCALE}` && field(v, "resting") === "u20000", RID);
@@ -92,8 +106,8 @@ async function main() {
   tx("K8 A deposits 1500 into the in-band rung: full queue, 0 residents closer < distance-slots -> parks the farthest filler (+5%), live with 1500", call(A, "deposit", [uintCV(1500), UPD], RID2), "(ok true)");
   ev("K8 live 1500, held 0", "(get-state)", (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u1500", RID2);
   ev("K8 rung 2 on the market with 1500", `(get-token-x-deposit u0 '${RID2})`, "u1500");
-  // before K8: 49 fillers + the parker, 2000 each = 100000 (the rung is parked, not in totals)
-  ev("K8 x total 99500: one 2000 filler parked, 1500 rung in", "(get total-token-x (get-cycle-totals u0))", "u99500");
+  // before K8: 48 fillers + the 3000 newcomer + the parker = 101000 (the rung is parked, not in totals)
+  ev("K8 x total 100500: one more 2000 filler parked, 1500 rung in", "(get total-token-x (get-cycle-totals u0))", "u100500");
   ev("K8 queue still 50", "(len (get-token-x-depositors u0))", "u50");
   tx("K9 A deposits 1000 more: plain top-up on the live position", call(A, "deposit", [uintCV(1000), UPD], RID2), "(ok true)");
   ev("K9 live with 2500", `(get-token-x-deposit u0 '${RID2})`, "u2500");

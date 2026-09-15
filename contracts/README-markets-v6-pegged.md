@@ -832,7 +832,7 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | harness | result | sim |
 |---|---|---|
 | markets v6 bounty-fixes (+ D7: the in-region size fight, strict tie, carry counts) | 220/220 | `8a8c2463356d84fc0bc35bf205b0f8bc` |
-| markets v6 gaps | 67/67 | `09bcb25ac2b861a5e0b2c3c6cb45ae9e` |
+| markets v6 gaps (+ G7: a second instance on the real 80 s window refuses an old update, the oracle's u1002 in front of the market's u1003; the harness waits 150 s before running) | 72/72 | `908a895c1aee9e5d3dfe0547c9782f9b` |
 | markets v6 lazer-paths | 35/35 | `989657650df21b6fc003e5fdeeadde1d` |
 | markets v6 multifill | 44/44 | `ef2ed5c1963e36033ed335d605957f1b` |
 | markets v6 regression | 23/23 | `9ce42eb1554a25e40740284a9b0a3c89` |
@@ -844,7 +844,7 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | v6 peg | 76/76 | `091acd48299b25a18b8757a08e5d6845` |
 | v6 peg-mirror | 44/44 | `cc8d690b85c571f3ae91d2c124809ca6` |
 | v6 peg-more | 51/51 | `802a310391cc533233773cefb09f788e` |
-| v6 peg-park | 41/41 | `e2a0b12c7bb989c1176e629123b9a873` |
+| v6 peg-park (+ K2b: an out-of-range newcomer with no price edge parks the switched-off peg first, every filler stays) | 50/50 | `918d567843534ca1ba8495dcabf60fe3` |
 | v6 peg-park-y | 77/77 | `6256d0b4f2f2cf1a7375312bf2cca474` |
 | v6 peg-track | 30/30 | `62783a5798b22194cc1c7f5f6ba91a2a` |
 | v6 peg-walk-order | 60/60 | `6326641b159092034822d28a464ba557` |

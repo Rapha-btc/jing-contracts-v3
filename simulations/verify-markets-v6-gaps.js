@@ -149,6 +149,7 @@ if (DEPLOYED) {
   // (this harness no longer advances the clock: cancel-cycle and its
   // CANCEL_THRESHOLD are gone). The 80 s window itself is proven in
   // verify-swap-router-v2-lazer.js (W10, stale fixture refused u1002).
+  const mktSrcStale = mktSrc; // the real 80 s window, for G7 below
   mktSrc = mktSrc.replace("(define-constant MAX_STALENESS u80)", "(define-constant MAX_STALENESS u999999999)");
   if (!mktSrc.includes("MAX_STALENESS u999999999")) throw new Error("staleness patch did not apply");
 
@@ -285,6 +286,24 @@ async function main() {
     contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
     uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
   ]), "(ok true)");
+  // G7: a second instance with the REAL staleness window; the harness waits
+  // until the single update is older than 80 s + a block before running, so
+  // this instance refuses it (u1003) while the patched one still takes it
+  const STALE = `${MARKET}-stale`, SID = `${DEPLOYER}.${STALE}`;
+  tx("G7 deploy market (real MAX_STALENESS u80)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: STALE, source_code: mktSrcStale }), (v) => !String(v).includes("ERR"));
+  tx("G7 verify it in core", call(DEPLOYER, "set-verified-contract", [contractPrincipalCV(DEPLOYER, STALE)], CORE_ID), "(ok true)");
+  tx("G7 initialize it", call(DEPLOYER, "initialize", [
+    contractPrincipalCV(DEPLOYER, STALE),
+    contractPrincipalCV(SBTC_ADDR, SBTC_NAME),
+    contractPrincipalCV(WSTX_ADDR, WSTX_NAME),
+    uintCV(MIN_SBTC), uintCV(MIN_STX), uintCV(1n), uintCV(45n),
+  ], SID), "(ok true)");
+  // the market hands MAX_STALENESS to the Lazer oracle as the max age, so the
+  // oracle refuses a stale update first (its u1002); the market's own u1003
+  // check behind it is defense in depth and cannot be reached with the live
+  // oracle. Both instances run the same code, only the window differs.
+  tx("G7 refresh-mid with an update older than 80 s on the real window -> refused by the oracle (u1002), the market's u1003 sits behind it", call(OUTSIDER, "refresh-mid", [DUMMY_VAA], SID), "(err u1002)");
+  tx("G7 the same update on the patched instance -> ok (window widened)", call(OUTSIDER, "refresh-mid", [DUMMY_VAA]), (v) => String(v).startsWith("(ok u"));
   tx("fund OP2 gas", stxSend(OP2, 3_000_000), okPrefix);
   tx("fund Y9 gas + 2 STX", stxSend(Y9, 5_000_000), okPrefix);
 
@@ -378,7 +397,10 @@ async function main() {
   tx("G6 settle-with-refresh on the empty book -> u1009 (raw totals under min)", settle(OUTSIDER), "(err u1009)");
   ev("G6 cycle u0", "(get-current-cycle)", "u0");
 
-  // ---- run ----
+  // ---- run: G7 needs the update to be stale on the real window ----
+  const ageWanted = 150; // 80 s window + a block of slack on the fork tip's time
+  const age = Date.now() / 1000 - lz.ts;
+  if (age < ageWanted) { console.log(`waiting ${Math.ceil(ageWanted - age)} s so the update is older than the 80 s window (G7)`); await new Promise((r) => setTimeout(r, (ageWanted - age) * 1000)); }
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid);
