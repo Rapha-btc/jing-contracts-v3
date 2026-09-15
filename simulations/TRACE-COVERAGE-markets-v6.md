@@ -1,22 +1,20 @@
 # Trace coverage: markets-sbtc-stx-jing-v6
 
-From `simulations/trace-coverage.mjs` on 2026-09-15, source at 296c73f: 30 simulations, 1761 transactions (192 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage.mjs` on 2026-09-15, source at 296c73f: 30 simulations, 1769 transactions (194 without a trace), every evaluated expression read from the stxer debug traces.
 
 | metric | value |
 |---|---|
-| expressions executed / total | 2464 / 4272 (57.7%) |
-| code lines touched / total | 1313 / 2562 (51.2%) |
-| function body lines touched / total (top-level definitions excluded) | 1310 / 2351 (55.7%) |
-| branch nodes (if / match / asserts!) | 233: 219 full, 12 partial, 2 never reached |
+| expressions executed / total | 2517 / 4272 (58.9%) |
+| code lines touched / total | 1341 / 2562 (52.3%) |
+| function body lines touched / total (top-level definitions excluded) | 1338 / 2351 (56.9%) |
+| branch nodes (if / match / asserts!) | 233: 223 full, 10 partial, 0 never reached |
 
-## Branches with one arm never taken (12)
+## Branches with one arm never taken (10)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 344 | pegged-bid | if | one arm (then only) |
 | 362 | pegged-ask | if | one arm (then only) |
-| 871 | park-tenth-token-x | if | one arm (else only) |
-| 1325 | deposit-token-x-core | if | one arm (else only) |
 | 2294 | execute-fill | if | one arm (then only) |
 | 2412 | walk-x-book-step | match | one arm (then only) |
 | 2454 | walk-y-book-step | match | one arm (then only) |
@@ -26,35 +24,32 @@ From `simulations/trace-coverage.mjs` on 2026-09-15, source at 296c73f: 30 simul
 | 3112 | distribute-to-token-x-depositor | if | one arm (then only) |
 | 3378 | gross-up | if | one arm (else only) |
 
-## Branch nodes never reached (2)
+## Branch nodes never reached (0)
 
 | line | function | kind |
 |---|---|---|
-| 524 | find-smallest-token-x-fold | if |
-| 1336 | deposit-token-x-core | asserts! |
 
 ## Uncovered code lines by function
 
 | function | lines |
 |---|---|
 | (top) | 1, 3, 4, 5, 7, 10, 11, 13, 15, 17, 18, 20, 22, 23, 24, 26, 27, 28, 29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 61, 62, 63, 64, 65, 72, 73, 83, 84, 85, 87, 88, 89, 90, 94, 105, 114, 120, 131, 147, 149, 150, 151, 152, 153, 154, 155, 156, 158, 159, 160, 161, 162, 163, 165, 166, 167, 168, 170, 172, 174, 175, 176, 177, 179, 187, 195, 200, 205, 213, 225, 232, 240, 244, 249, 252, 256, 260, 269, 273, 285, 297, 301, 305, 312, 321, 330, 334, 338, 355, 373, 384, 395, 403, 411, 418, 430, 441, 447, 459, 470, 482, 494, 514, 534, 538, 543, 569, 599, 639, 683, 712, 726, 741, 798, 838, 895, 923, 952, 995, 1027, 1060, 1077, 1099, 1121, 1137, 1153, 1256, 1302, 1403, 1447, 1498, 1549, 1600, 1651, 1687, 1723, 1758, 1793, 1851, 1911, 1960, 2009, 2054, 2099, 2150, 2221, 2399, 2441, 2483, 2496, 2503, 2529, 2555, 2599, 2643, 2659, 2675, 2695, 2715, 2782, 2849, 2998, 3094, 3190, 3239, 3267, 3274, 3281, 3288, 3296, 3304, 3313, 3317, 3345, 3373, 3385, 3443, 3456, 3460 |
-| deposit-token-x-core | 1302, 1303, 1304, 1305, 1306, 1307, 1308, 1309, 1326, 1327, 1329, 1333, 1334, 1336, 1338, 1339, 1340, 1342, 1343, 1344, 1345, 1346, 1349, 1353, 1357, 1359, 1363, 1364, 1366, 1367, 1368, 1370 |
 | pick-feed | 952, 953, 958, 959, 960, 961, 962, 963, 964, 965, 966, 967, 969, 971, 976, 977, 978, 979, 980, 981, 982, 983, 984, 985 |
 | shape-feed | 995, 996, 1001, 1002, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1010, 1012 |
 | execute-fill | 2221, 2222, 2223, 2224, 2225, 2226, 2227, 2228, 2229, 2230, 2231 |
 | deposit-token-x | 1403, 1404, 1405, 1406, 1407, 1408, 1409, 1439, 1440 |
 | swap | 2150, 2151, 2152, 2153, 2154, 2155, 2156, 2157, 2158 |
 | deposit-token-y-core | 1153, 1154, 1155, 1156, 1157, 1158, 1159, 1160 |
+| deposit-token-x-core | 1302, 1303, 1304, 1305, 1306, 1307, 1308, 1309 |
 | execute-settlement | 2849, 2850, 2851, 2860, 2869, 2870, 2871, 2872 |
 | reprice-or-swap-token-y | 1793, 1794, 1795, 1796, 1797, 1798, 1799, 1800 |
 | reprice-or-swap-token-x | 1851, 1852, 1853, 1854, 1855, 1856, 1857, 1858 |
 | initialize | 3239, 3240, 3241, 3242, 3243, 3244, 3245, 3246 |
-| find-smallest-token-x-fold | 514, 515, 516, 518, 523, 524, 525 |
-| park-tenth-token-x | 838, 839, 840, 841, 842, 843, 872 |
 | deposit-token-y | 1256, 1257, 1258, 1259, 1260, 1261, 1262 |
 | smallest-outside-y-fold | 683, 684, 685, 688, 689, 691 |
 | park-tenth-token-y | 741, 742, 743, 744, 745, 746 |
 | smallest-outside-x-fold | 798, 799, 800, 803, 804, 806 |
+| park-tenth-token-x | 838, 839, 840, 841, 842, 843 |
 | settle-with-refresh | 2099, 2100, 2101, 2102, 2103, 2104 |
 | cross-remainder-as-y | 2715, 2716, 2717, 2718, 2719, 2722 |
 | cross-remainder-as-x | 2782, 2783, 2784, 2785, 2786, 2789 |
@@ -79,6 +74,7 @@ From `simulations/trace-coverage.mjs` on 2026-09-15, source at 296c73f: 30 simul
 | order-x-price | 384, 385, 386, 387 |
 | count-seated-fold | 447, 448, 449, 450 |
 | find-smallest-token-y-fold | 494, 495, 496, 498 |
+| find-smallest-token-x-fold | 514, 515, 516, 518 |
 | cancel-token-y-deposit | 1447, 1448, 1449, 1453 |
 | cancel-token-x-deposit | 1498, 1499, 1500, 1504 |
 | set-token-y-limit | 1723, 1724, 1725, 1726 |
@@ -197,33 +193,45 @@ From `simulations/trace-coverage.mjs` on 2026-09-15, source at 296c73f: 30 simul
 
 | sim | txs | before | after |
 |---|---|---|---|
-| `65eca86d` | 166 | 0 | 3498 |
-| `b849e557` | 44 | 3498 | 3671 |
-| `7c6ff3f1` | 17 | 3671 | 3683 |
-| `20aa4a5c` | 31 | 3683 | 3691 |
-| `1e101767` | 18 | 3691 | 3824 |
-| `250da7f9` | 48 | 3824 | 4017 |
-| `08062c79` | 77 | 4017 | 4080 |
-| `d35a98ea` | 70 | 4080 | 4218 |
-| `021504ee` | 59 | 4218 | 4257 |
-| `d4405a31` | 35 | 4257 | 4261 |
-| `981c4c03` | 42 | 4261 | 4264 |
-| `c59430ec` | 38 | 4264 | 4309 |
-| `99f15bff` | 29 | 4309 | 4310 |
-| `dd814f5c` | 121 | 4310 | 4317 |
-| `f42edd92` | 143 | 4317 | 4351 |
-| `cc8fc837` | 17 | 4351 | 4351 |
-| `f14101fc` | 59 | 4351 | 4353 |
-| `5c063d70` | 18 | 4353 | 4413 |
-| `f4f22abe` | 32 | 4413 | 4470 |
-| `03519ee6` | 57 | 4470 | 4470 |
-| `e17cd8b0` | 22 | 4470 | 4470 |
-| `0b2a8e02` | 23 | 4470 | 4470 |
-| `677a6c55` | 119 | 4470 | 4472 |
-| `59b23d38` | 122 | 4472 | 4482 |
-| `93dc4f8c` | 32 | 4482 | 4485 |
-| `30745051` | 32 | 4485 | 4488 |
-| `910168c4` | 34 | 4488 | 4488 |
-| `2683081f` | 34 | 4488 | 4488 |
-| `aae15fd0` | 128 | 4488 | 4489 |
-| `6ed29637` | 94 | 4489 | 4700 |
+| `27ed7a6e` | 174 | 0 | 3612 |
+| `b849e557` | 44 | 3612 | 3785 |
+| `7c6ff3f1` | 17 | 3785 | 3797 |
+| `20aa4a5c` | 31 | 3797 | 3805 |
+| `1e101767` | 18 | 3805 | 3938 |
+| `250da7f9` | 48 | 3938 | 4131 |
+| `08062c79` | 77 | 4131 | 4194 |
+| `d35a98ea` | 70 | 4194 | 4332 |
+| `021504ee` | 59 | 4332 | 4371 |
+| `d4405a31` | 35 | 4371 | 4375 |
+| `981c4c03` | 42 | 4375 | 4378 |
+| `c59430ec` | 38 | 4378 | 4423 |
+| `99f15bff` | 29 | 4423 | 4424 |
+| `dd814f5c` | 121 | 4424 | 4431 |
+| `f42edd92` | 143 | 4431 | 4465 |
+| `cc8fc837` | 17 | 4465 | 4465 |
+| `f14101fc` | 59 | 4465 | 4467 |
+| `5c063d70` | 18 | 4467 | 4527 |
+| `f4f22abe` | 32 | 4527 | 4584 |
+| `03519ee6` | 57 | 4584 | 4584 |
+| `e17cd8b0` | 22 | 4584 | 4584 |
+| `0b2a8e02` | 23 | 4584 | 4584 |
+| `677a6c55` | 119 | 4584 | 4586 |
+| `59b23d38` | 122 | 4586 | 4596 |
+| `93dc4f8c` | 32 | 4596 | 4599 |
+| `30745051` | 32 | 4599 | 4602 |
+| `910168c4` | 34 | 4602 | 4602 |
+| `2683081f` | 34 | 4602 | 4602 |
+| `aae15fd0` | 128 | 4602 | 4603 |
+| `6ed29637` | 94 | 4603 | 4814 |
+
+## The remaining partial branches, and why they stay
+
+| line | function | why no harness reaches the other arm |
+|---|---|---|
+| 344, 362 | pegged-bid / pegged-ask | the spread >= BPS_PRECISION guard (06f57a3, found by RV): every transaction path checks `valid-spread` first (u1026), so only a direct read-only call reaches it, and read-only evals leave no trace |
+| 2294 | execute-fill | a y-side fee rounding to zero needs a fill under 10,000 uSTX, below the taker minimum |
+| 2412, 2454 | walk-x/y-book-step | the fold accumulator's `none` arm: an error state the walk never produces |
+| 3012, 3016, 3108, 3112 | distribute-to-token-y/x-depositor | a zero side total while distributing to a depositor of that side: contradictory |
+| 3378 | gross-up | the rounding correction when the estimate overshoots by one: a specific-size case, left to the fuzzer |
+
+Every other branch node of the market is exercised on both arms by the runs in the table.

@@ -835,7 +835,7 @@ exactly these runs against this source.
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 292/292 | `65eca86d6a2c27145232e6293cd2d409` |
+| markets v6 bounty-fixes (+ D10: the core's size rule on x, in range with nobody out of range: smaller u1010, bigger parks the smallest) | 304/304 | `27ed7a6e7dbd56f25f190dc9e42698d0` |
 | markets v6 gaps | 72/72 | `b849e5571176df29cf409661e7c5df27` |
 | markets v6 lazer-paths | 35/35 | `7c6ff3f146ece8f31ec1f11fc419d4ac` |
 | markets v6 multifill | 44/44 | `20aa4a5ce3153bf7008faa24e782c561` |
