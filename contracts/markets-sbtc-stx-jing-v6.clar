@@ -728,10 +728,12 @@
     acc
   )
 )
+;; mirror of park-tenth-token-x (bids: in range = bid >= price)
 (define-private (park-tenth-token-y
     (cycle uint)
     (price uint)
     (bid uint)
+    (size uint)
     (depositors (list 50 principal))
   )
   (let (
@@ -748,29 +750,22 @@
         seated: seated,
         found: none,
       })))
+      (outside (fold smallest-outside-y-fold depositors {
+        cycle: cycle,
+        price: price,
+        top: (map quote-who top),
+        seated: seated,
+        smallest: u999999999999999999,
+        found: none,
+      }))
+      (edge (and (> n u0) (< (get l (unwrap-panic (element-at? top (- n u1)))) bid)))
     )
-    (if (is-eq n u0)
-      (ok false)
-      (let ((last (unwrap-panic (element-at? top (- n u1)))))
-        (if (not (< (get l last) bid))
-          (ok false)
-          (match off
-            ;; a switched-off resident leaves before anyone alive
-            dead (park-token-y cycle price dead depositors)
-            ;; the N-th best is demoted to the size region: it stays if it is
-            ;; bigger than the smallest resident outside the region (that one
-            ;; is parked instead); otherwise the N-th best is parked. Never a
-            ;; refund: whoever leaves keeps funds and price, readmittable.
-            (let (
-              (outside (fold smallest-outside-y-fold depositors {
-                cycle: cycle,
-                price: price,
-                top: (map quote-who top),
-                seated: seated,
-                smallest: u999999999999999999,
-                found: none,
-              }))
-            )
+    (match off
+      dead (park-token-y cycle price dead depositors)
+      (if (and (>= bid price) (is-eq n u0))
+        (ok false)
+        (if edge
+          (let ((last (unwrap-panic (element-at? top (- n u1)))))
             (match (get found outside)
               small (if (> (get-token-y-deposit cycle (get who last)) (get smallest outside))
                 (park-token-y cycle price small depositors)
@@ -779,6 +774,12 @@
               (park-token-y cycle price (get who last) depositors)
             )
           )
+          (match (get found outside)
+            small (if (> size (get smallest outside))
+              (park-token-y cycle price small depositors)
+              ERR_QUEUE_FULL
+            )
+            ERR_QUEUE_FULL
           )
         )
       )
@@ -814,10 +815,22 @@
     )
   )
 )
+;; A newcomer on a full side. A switched-off resident leaves before anyone
+;; alive. In range with nobody out of range: (ok false), the core's size
+;; rule among everyone. In range, or out of range and better than the N-th
+;; best out-of-range price: the N-th best is demoted to the size region
+;; (every out-of-range resident outside the N best); it stays if bigger
+;; than the region's smallest, which is parked instead, else it is parked.
+;; Out of range with no price edge: a size fight inside the region only,
+;; the newcomer parks the region's smallest if bigger, else u1010; an
+;; in-range resident or one of the N best is never displaced by an
+;; out-of-range newcomer (before 2026-09-14 the core's size rule ran here
+;; and could park an in-range order for a bigger order far from the mid).
 (define-private (park-tenth-token-x
     (cycle uint)
     (price uint)
     (ask uint)
+    (size uint)
     (depositors (list 50 principal))
   )
   (let (
@@ -834,29 +847,22 @@
         seated: seated,
         found: none,
       })))
+      (outside (fold smallest-outside-x-fold depositors {
+        cycle: cycle,
+        price: price,
+        top: (map quote-who top),
+        seated: seated,
+        smallest: u999999999999999999,
+        found: none,
+      }))
+      (edge (and (> n u0) (> (get l (unwrap-panic (element-at? top (- n u1)))) ask)))
     )
-    (if (is-eq n u0)
-      (ok false)
-      (let ((last (unwrap-panic (element-at? top (- n u1)))))
-        (if (not (> (get l last) ask))
-          (ok false)
-          (match off
-            ;; a switched-off resident leaves before anyone alive
-            dead (park-token-x cycle price dead depositors)
-            ;; the N-th best is demoted to the size region: it stays if it is
-            ;; bigger than the smallest resident outside the region (that one
-            ;; is parked instead); otherwise the N-th best is parked. Never a
-            ;; refund: whoever leaves keeps funds and price, readmittable.
-            (let (
-              (outside (fold smallest-outside-x-fold depositors {
-                cycle: cycle,
-                price: price,
-                top: (map quote-who top),
-                seated: seated,
-                smallest: u999999999999999999,
-                found: none,
-              }))
-            )
+    (match off
+      dead (park-token-x cycle price dead depositors)
+      (if (and (<= ask price) (is-eq n u0))
+        (ok false)
+        (if edge
+          (let ((last (unwrap-panic (element-at? top (- n u1)))))
             (match (get found outside)
               small (if (> (get-token-x-deposit cycle (get who last)) (get smallest outside))
                 (park-token-x cycle price small depositors)
@@ -865,6 +871,12 @@
               (park-token-x cycle price (get who last) depositors)
             )
           )
+          (match (get found outside)
+            small (if (> size (get smallest outside))
+              (park-token-x cycle price small depositors)
+              ERR_QUEUE_FULL
+            )
+            ERR_QUEUE_FULL
           )
         )
       )
@@ -1257,18 +1269,14 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-y price bid)) ERR_MUST_USE_SWAP)
-    ;; Priority on a full book: switched off (sentinel) gets no slot at all.
-    ;; In range, or out of range and better than the N-th best out-of-range
-    ;; price (N = distance-slots): a switched-off resident leaves first; else
-    ;; the N-th best is demoted (it stays if bigger than the smallest of the
-    ;; size region, which is parked; else it is parked). Otherwise, or with
-    ;; nobody out of range at all, park-tenth does nothing and the core's
-    ;; size rule decides.
+    ;; Priority on a full book: switched off gets no slot; else park-tenth
+    ;; (see it), and only an in-range newcomer with nobody out of range
+    ;; falls through to the core's size rule.
     (asserts! (not (and new-maker full (is-eq bid u0))) ERR_QUEUE_FULL)
     (and
       new-maker
       full
-      (try! (park-tenth-token-y cycle price bid depositors))
+      (try! (park-tenth-token-y cycle price bid (+ amount parked) depositors))
     )
     (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
@@ -1408,14 +1416,12 @@
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
-    ;; mirror of the y side: switched off gets no slot; in range or better
-    ;; than the N-th best out-of-range ask -> a switched-off resident leaves
-    ;; first, else the N-th best is demoted; otherwise the core's size rule.
+    ;; mirror of the y side
     (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
     (and
       new-maker
       full
-      (try! (park-tenth-token-x cycle price ask depositors))
+      (try! (park-tenth-token-x cycle price ask (+ amount parked) depositors))
     )
     (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
