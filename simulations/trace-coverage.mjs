@@ -45,7 +45,10 @@ sims = sims.filter((s) => ![...SKIP].some((k) => s.startsWith(k)));
 // the sims ran on COMMITTED source: read it at --rev (default HEAD), never the working tree,
 // or an uncommitted edit shifts every expression id and the traces no longer line up
 const REV = arg("--rev", "HEAD");
-const source = REV === "worktree" ? fs.readFileSync(`contracts/${NAME}.clar`, "utf8") : execFileSync("git", ["show", `${REV}:contracts/${NAME}.clar`], { encoding: "utf8", maxBuffer: 1 << 26 });
+// --source <file>: a contract that lives in another repo (the CityCoins ccd016 vault); read as is
+const SRC = arg("--source");
+const source = SRC ? fs.readFileSync(SRC, "utf8") : REV === "worktree" ? fs.readFileSync(`contracts/${NAME}.clar`, "utf8") : execFileSync("git", ["show", `${REV}:contracts/${NAME}.clar`], { encoding: "utf8", maxBuffer: 1 << 26 });
+const SRC_LABEL = SRC ? `${SRC} at ${execFileSync("git", ["-C", path.dirname(SRC), "log", "-1", "--format=%h", "--", path.basename(SRC)], { encoding: "utf8" }).trim() || "the working tree"}` : REV === "worktree" ? "the working tree" : execFileSync("git", ["rev-parse", "--short", REV], { encoding: "utf8" }).trim();
 const ast = await parseContract({ sourceCode: source, contractId: `SP000000000000000000002Q6VF78.${NAME}`, clarityVersion: "5" });
 const exprs = ast.expressions ?? ast.ast ?? ast;
 const nodes = new Map(); // id -> { line, list, fn }
@@ -179,7 +182,7 @@ for (const [id, n] of nodes) { if (!n.list) continue; const l = n.line; if (!hit
 
 const out = [];
 const L = (s) => out.push(s);
-L(md ? `# Trace coverage: ${NAME}\n\nFrom \`simulations/trace-coverage.mjs\` on ${new Date().toISOString().slice(0, 10)}, source at ${REV === "worktree" ? "the working tree" : execFileSync("git", ["rev-parse", "--short", REV], { encoding: "utf8" }).trim()}: ${sims.length} simulations, ${txs} transactions (${missing} without a trace), every evaluated expression read from the stxer debug traces.\n` : `${sims.length} sims, ${txs} txs (${missing} no trace)`);
+L(md ? `# Trace coverage: ${NAME}\n\nFrom \`simulations/trace-coverage.mjs\` on ${new Date().toISOString().slice(0, 10)}, source at ${SRC_LABEL}: ${sims.length} simulations, ${txs} transactions (${missing} without a trace), every evaluated expression read from the stxer debug traces.\n` : `${sims.length} sims, ${txs} txs (${missing} no trace)`);
 L(md ? `| metric | value |\n|---|---|\n| expressions executed / total | ${hit.size} / ${total} (${((100 * hit.size) / total).toFixed(1)}%) |\n| code lines touched / total | ${coveredLines.length} / ${codeLines.length} (${((100 * coveredLines.length) / codeLines.length).toFixed(1)}%) |\n| function body lines touched / total (top-level definitions excluded) | ${fnCovered.length} / ${fnLines.length} (${((100 * fnCovered.length) / fnLines.length).toFixed(1)}%) |\n| branch nodes (if / match / asserts!) | ${branches.length}: ${branches.length - partial.length - unreached.length} full, ${partial.length} partial, ${unreached.length} never reached |`
   : `expressions ${hit.size}/${total} (${((100 * hit.size) / total).toFixed(1)}%), lines ${coveredLines.length}/${codeLines.length} (${((100 * coveredLines.length) / codeLines.length).toFixed(1)}%), branches ${branches.length}: ${partial.length} partial, ${unreached.length} never reached`);
 L(md ? `\n## Branches with one arm never taken (${partial.length})\n\n| line | function | kind | state |\n|---|---|---|---|` : `\n== partial branches (${partial.length})`);
