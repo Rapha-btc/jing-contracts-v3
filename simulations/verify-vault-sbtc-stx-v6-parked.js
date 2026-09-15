@@ -185,6 +185,7 @@ async function main() {
   const depStx = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 20);
   const slStx = intent("jing-set-limit", WSTX_ASSET_NAME, STX_5, BID_OUT2, 21);
   const repriceCross = intent("jing-reprice", WSTX_ASSET_NAME, STX_5, BID_IN, 22);
+  const repriceStay = intent("jing-reprice", WSTX_ASSET_NAME, STX_5, Number((MID * 93n) / 100n), 35); // still out of range: a plain reprice, nothing crosses
   const depStx20 = intent("jing-deposit", WSTX_ASSET_NAME, STX_20, BID_IN, 23); // in range: cleared in the BATCH, which is where the core credits a maker
   const jingSwapSbtc = intent("jing-swap", SBTC_ASSET_NAME, 3000, L_SELL_SBTC, 24);
   const jingSwapStx = intent("jing-swap", WSTX_ASSET_NAME, STX_5, L_SELL_STX, 25);
@@ -220,6 +221,8 @@ async function main() {
   ev("V8 vault bid rests 5 STX", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, `u${STX_5}`);
   tx("V8 set-limit on the STX bid to -6% -> ok (amount = the resting 5 STX)", exec(KEEPER, "execute-jing-set-limit", slStx, [UPD]), okHash);
   ev("V8 bid limit at -6%", MARKET_ID, `(get-token-y-limit '${VAULT_ID})`, `u${BID_OUT2}`);
+  tx("V8 reprice the bid to -7%: still out of range, nothing crosses, a plain reprice (no swap logged)", exec(KEEPER, "execute-jing-reprice", repriceStay, [UPD]), okHash);
+  ev("V8 bid limit at -7%", MARKET_ID, `(get-token-y-limit '${VAULT_ID})`, `u${(MID * 93n) / 100n}`);
   vaultSbtc("V8 vault sBTC before the crossing", "(ok u60000)");
   tx("V8 reprice the bid to +1%: crosses the parker's in-range ask -> swaps on the spot (fill-or-kill), logged as a swap", exec(KEEPER, "execute-jing-reprice", repriceCross, [UPD]), okHash);
   ev("V8 vault bid gone (dust at most)", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, (v) => BigInt(String(v).replace(/^u/, "")) < 1_000_000n);
