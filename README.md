@@ -210,6 +210,15 @@ npx rv . markets-sbtc-stx-jing   invariant --runs=500 --bail              # fuzz
 
 13 invariants per market — list/totals consistency, no-ghosts, bounded lists, cleared-≤-deposited at settle, and `invariant-balance-eq-cycle-totals` (compares actual contract token balance to the sum of `cycle-totals` across cycles 0..199, the one that catches state-corruption bugs like the cancel-cycle × small-share-roll bug above). Both markets pass 500-run sweeps clean. See `tests/rv/README.md` for harness details, the build pipeline, and how the bug was empirically caught by reverting the fix in `.build/`.
 
+**v6 stack (2026-09-15):** `markets-sbtc-stx-jing-v6`, `jing-ladder` and the six pooled rungs each have an RV target, and on v6 **settlement runs live under fuzz**: the Lazer oracle is a mock with a settable mid, so settle, swap, the crossing reprice, the book walk, rolls, dust refunds, parks and readmits all run on random sequences (the v2 target could only fuzz the deposit phase). 25 invariants on the market (balance conservation with settle live, scratch state clean at rest, never live and parked, orders and positions in step, nothing stranded in the settled cycle, seats within the reservation), 6 on the ladder, 9 on each rung. Sweeps: v6 1000 runs, the rest 500, zero falsified invariants. One finding, cosmetic, fixed in `06f57a3`: a spread at or over BPS_PRECISION aborted `deposit-token-y` with an arithmetic underflow inside `pegged-bid` before the u1026 assert. Same harness shape in `citycoins-protocol/tests/rv` for the ccd015 STX book and the ccd016 vault on this stack.
+
+```sh
+npm run rv:build        # market v6, ladder, six rungs
+npm run rv:v6           # 1000 runs
+npm run rv:ladder       # 500 runs
+npm run rv:rungs        # six targets, 500 runs each
+```
+
 ### File map
 
 | File | Surface | Tests |
