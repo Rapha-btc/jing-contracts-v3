@@ -15,6 +15,34 @@ Two submissions so far, both real, both fixed on master. **No winner picked
 yet**: the bounty is open until it closes and later entries are reviewed the
 same way. Nothing in scope is deployed, so every fix rides the next deploy.
 
+## Source moved since posting (2026-09-15): read this before submitting
+
+Three changes landed on master while the bounty is open, all found by the
+new Rendezvous fuzz harness (`tests/rv/README.md`), none from a submission:
+
+- `06f57a3` **`pegged-bid` / `pegged-ask` guard.** A spread at or over
+  BPS_PRECISION returned the switched-off sentinel instead of aborting
+  (`deposit-token-y` underflowed before its u1026 assert). Cosmetic.
+- `b7dc673` **`get-taker-capacity` takes the taker** as a fourth argument
+  `(mid limit deposit-x taker)` and leaves that principal's out-of-range
+  opposite-side order out of `walk-cap`: the walk never fills a self-cross
+  (it would print a match at a self-chosen price), the batch still clears
+  both of a principal's sides at the oracle mid, so in range it still
+  counts. Before, a user resting a bid who took exactly the reported
+  capacity with sBTC got u1017. Router v5 passes `tx-sender`. Reported by
+  the fuzz sizing property, seed -2050959550; a submission on the same
+  point after this date is a duplicate.
+- Known and documented, not fixed: the read does not model the size rule
+  on a full side. A taker smaller than the smallest resident is refused
+  u1010 before any fill. Rare with 40 open slots.
+
+The commented source is over the 100,000-byte deploy limit since `b7dc673`
+(100,655; 95,894 with comment-only lines stripped). Every harness deploys
+the stripped form; so will the deploy. The RV harness also runs 31
+invariants and 8 properties on the market, 12 and 2 on each rung, 6 on the
+ladder and 3 on the core through the market, all green; it found no theft
+or stuck-funds path, which is the space this bounty pays for.
+
 ## Submissions and verdicts
 
 | # | Submitter | Finding | Holds | Rating filed | Decision |
