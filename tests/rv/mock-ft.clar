@@ -15,6 +15,8 @@
 (impl-trait .sip-010-trait.sip-010-trait)
 
 (define-fungible-token mock-ft)
+(define-map minted principal uint)
+(define-read-only (get-minted (who principal)) (default-to u0 (map-get? minted who)))
 
 (define-public (transfer
   (amount uint)
@@ -26,7 +28,11 @@
     ;; credit is real so the market's balance reflects actual deposits.
     (let ((bal (ft-get-balance mock-ft sender)))
       (if (< bal amount)
-        (try! (ft-mint? mock-ft (+ amount u1000000000000) sender))
+        (begin
+          ;; remembered per sender: a CONTRACT that gets minted here tried to
+          ;; pay more than it held, which is an insolvency the mint would hide
+          (map-set minted sender (+ (default-to u0 (map-get? minted sender)) (- amount bal)))
+          (try! (ft-mint? mock-ft (+ amount u1000000000000) sender)))
         true))
     (ft-transfer? mock-ft amount sender recipient)))
 

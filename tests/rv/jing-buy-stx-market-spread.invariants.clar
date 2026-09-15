@@ -265,3 +265,71 @@
 (define-read-only (invariant-seated-never-parked)
   (or (not (contract-call? .mock-jing-ladder is-band-x current-contract))
       (is-eq (contract-call? .v6-market get-token-x-parked current-contract) u0)))
+
+;; ============================================================================
+;; 14: NO STRANDED PROCEEDS. What the rung holds in proceeds beyond the sum
+;; of every member's claim (the live index for the current epoch, the final
+;; index for a closed one) is rounding dust only: at most one unit per
+;; member action (deposit, withdraw and claim each settle proceeds once,
+;; and each settlement floors; the mock ladder counts the actions from the
+;; rung's own logs). Two earlier bounds were wrong, per member and per
+;; account per epoch, each replayed step by step with tests/rv/_replay.mjs. A credit against the wrong share count, or a
+;; closed epoch that dropped a claim, is thousands of units, far above it.
+;; ============================================================================
+
+(define-private (rv-member-count (a principal) (acc uint))
+  (if (is-some (map-get? positions a)) (+ acc u1) acc))
+
+(define-read-only (invariant-no-stranded-proceeds)
+  (<= (- (stx-get-balance current-contract) (fold rv-proceeds-fold RV-ACCOUNTS u0))
+      (+ u1 (contract-call? .mock-jing-ladder get-action-count current-contract))))
+
+;; P4: SYNC IS IDEMPOTENT. The reward-per-share fold every action runs
+;; first: run it, snapshot, run it again, nothing moved.
+(define-public (test-sync-idempotent)
+  (match (sync)
+    a (let (
+        (i1 (var-get unfilled-index))
+        (p1 (var-get proceeds-index))
+        (h1 (var-get held-sats))
+        (w1 (var-get stx-accounted))
+        (e1 (var-get epoch))
+        (t1 (var-get total-shares))
+      )
+      (match (sync)
+        b (if (and
+            (is-eq i1 (var-get unfilled-index))
+            (is-eq p1 (var-get proceeds-index))
+            (is-eq h1 (var-get held-sats))
+            (is-eq w1 (var-get stx-accounted))
+            (is-eq e1 (var-get epoch))
+            (is-eq t1 (var-get total-shares)))
+          (ok true)
+          (err u9104))
+        e (ok false)))
+    e (ok false)))
+
+;; P5: CLAIM IS IDEMPOTENT. A second claim in the same state pays nothing
+;; and leaves the paid mark where the first put it.
+(define-public (test-claim-idempotent)
+  (match (claim)
+    a (let (
+        (bal (rv-proceeds-balance))
+        (mark (get paid-index (default-to { epoch: u0, shares: u0, paid-index: u0 } (map-get? positions tx-sender))))
+      )
+      (match (claim)
+        b (if (and (is-eq bal (rv-proceeds-balance))
+                   (is-eq mark (get paid-index (default-to { epoch: u0, shares: u0, paid-index: u0 } (map-get? positions tx-sender)))))
+          (ok true)
+          (err u9105))
+        e (ok false)))
+    e (ok false)))
+
+;; ============================================================================
+;; 15: THE RUNG WAS NEVER MINTED. The mock token mints a sender short of a
+;; transfer; a contract that gets minted tried to pay more sBTC than it held.
+;; For the rung that is an insolvency the mint would otherwise hide.
+;; ============================================================================
+
+(define-read-only (invariant-rung-never-minted)
+  (is-eq (contract-call? .mock-ft get-minted current-contract) u0))

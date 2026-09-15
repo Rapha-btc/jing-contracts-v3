@@ -18,7 +18,7 @@ markets-sbtc-stx-jing-v6    -- 1000 runs, 31 invariants, 0 failures (2026-09-15,
 jing-ladder                 -- 500 runs,  6 invariants, 0 failures (2026-09-15)
 jing-core-v5 (via market v6) -- 1000 runs, 31 + 3 invariants, 0 failures (2026-09-15, equity ledger)
 swap-router-sbtc-stx-jing-v5 -- 300 runs, 1 invariant + 5 properties (500 runs), 0 failures (2026-09-15)
-jing-buy/sell-stx x3 pairs  -- 500 runs, 12 invariants each, 0 failures (2026-09-15)
+jing-buy/sell-stx x3 pairs  -- 500 runs, 14 invariants each + 4 properties (5 on the band rungs), 0 failures (2026-09-15)
 ```
 
 ### v6 stack, added 2026-09-15: market v6, jing-ladder, the six pooled rungs
@@ -211,7 +211,31 @@ same balances (a runtime underflow once; such a user is now discarded).
 Rungs, third round: the seat invariant (a rung the ladder seats is never
 parked) on all six, and on the two band rungs a property that a deposit
 which reached the market rests at the guard read at that moment
-(`current-floor` / `current-cap`).
+(`current-floor` / `current-cap`). Fourth round: **no stranded proceeds**
+(the rung's proceeds balance beyond the sum of every member's claim, live
+index for the current epoch and final index for closed ones, is rounding
+dust only, at most one unit per member action, since deposit, withdraw and
+claim each settle proceeds once and each settlement floors; the mock
+ladder counts the actions from the rung's own logs. A credit against the
+wrong share count or a dropped claim on epoch close is thousands of units.
+Two earlier bounds were wrong and RV said so within 300 runs: per current
+member (8 sats with 6 members after a sold-out epoch: a member paid out
+and deleted leaves its unit behind) and per account per epoch (14 sats
+with 9 members at epoch 0: dust accrues per settlement, not per epoch);
+`tests/rv/_replay.mjs` replays an RV log line by line in a simnet and
+prints the state after each call, which is how both were read),
+and two idempotence properties, `sync` twice moves nothing (the
+reward-per-share fold every action runs first; a double-counted fill or
+refund fails here while both syncs stay internally consistent) and a
+second `claim` pays nothing and leaves the paid mark.
+
+### Replaying a failing sweep
+
+`node tests/rv/_replay.mjs Clarinet-<target>.toml <target> <rv log>` replays
+every call in an RV log (sender, function, parsed args) in a fresh simnet
+and prints the state after each one, up to the first `[FAIL]`. Written for
+the rung stranded-proceeds bound; the state columns are the rung's, adapt
+the block at the end for another target.
 
 ### Property tests (`rv ... test`), added 2026-09-15
 

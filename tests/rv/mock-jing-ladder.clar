@@ -78,6 +78,15 @@
 )
 
 ;; ---------- rung endpoints (stubs) ----------
+;; member actions per rung (deposit, withdraw, claim each settle proceeds
+;; once): the rung's stranded-proceeds bound reads it
+(define-map actions principal uint)
+(define-read-only (get-action-count (who principal))
+  (default-to u0 (map-get? actions who))
+)
+(define-private (count-action)
+  (map-set actions contract-caller (+ (get-action-count contract-caller) u1))
+)
 ;; the band rungs gate their seat call on the ladder owner; the deployer
 (define-read-only (get-owner)
   'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
@@ -104,7 +113,7 @@
     (pushed bool)
     (held uint)
   )
-  (begin (asserts! true (err u0)) (ok true))
+  (begin (count-action) (asserts! true (err u0)) (ok true))
 )
 (define-public (log-push
     (keeper principal)
@@ -121,14 +130,14 @@
     (epoch uint)
     (held uint)
   )
-  (begin (asserts! true (err u0)) (ok true))
+  (begin (count-action) (asserts! true (err u0)) (ok true))
 )
 (define-public (log-claim
     (member principal)
     (amount uint)
     (epoch uint)
   )
-  (begin (asserts! true (err u0)) (ok true))
+  (begin (count-action) (asserts! true (err u0)) (ok true))
 )
 (define-public (log-epoch-closed
     (epoch uint)

@@ -698,3 +698,12 @@
   (match (rv-band-y who on) r (ok true) e (ok false)))
 (define-public (test-drive-unpause-and-mins)
   (begin (unwrap-panic (rv-unpause)) (unwrap-panic (rv-reset-mins)) (ok true)))
+
+;; ============================================================================
+;; 33: THE MARKET WAS NEVER MINTED. The mock token mints a sender short of a
+;; transfer; the market being minted means it tried to pay out more sBTC than
+;; it held, an insolvency the balance-conservation check would then miss.
+;; ============================================================================
+
+(define-read-only (invariant-market-never-minted)
+  (is-eq (contract-call? .mock-ft get-minted current-contract) u0))
