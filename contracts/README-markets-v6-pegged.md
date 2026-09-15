@@ -822,6 +822,101 @@ The market gained one additive public, `prune-seats` (99,608 bytes, no
 deposit path touched); the Lazer market harnesses are due a rerun with a
 key.
 
+## The deployed set with ten band rungs per side (2026-09-15, on mainnet bytes)
+
+`simulations/verify-v6-ten-band-deployed-lazer.js` runs on the DEPLOYED
+contracts, none of them redeployed: `markets-sbtc-stx-jing-v6` (initialized,
+its live book of two asks at +2.5% / +7.6% and one bid at -7.5% left in
+place), `jing-ladder` (no canonical, no seat yet), `jing-core-v5`,
+`swap-router-sbtc-stx-jing-v5`. The fork is the tip at run time, so the
+exact live-book figures in the harness are a snapshot of that day. The ladder
+owner deploys the twenty miner-band rungs `jing-buy-stx-spread-<bps>` /
+`jing-sell-stx-spread-<bps>` at 0 10 20 ... 90 from the core-spread template
+(comment-stripped, the deploy form), blesses the spread-0 build as the
+canonical of each side, seats all twenty. One member per side then deposits
+into all ten rungs plus one direct order on the market; three takers cross,
+one more takes the dust epoch, members withdraw / claim / re-deposit, seats
+are retired and re-seated, an eleventh seat is refused, and strangers fill the
+open region next to the seats. **428/428**,
+`d0afd78f967306ab0279f2d4cc23e475` (an earlier run of the same script before
+the dust-epoch scenario: `bfbecd3154ae3804aaf5f92295562df4`). What it
+establishes, in the order it runs:
+
+- **D** twenty `initialize(bps, true)`: band counts 10/10, `seated-x/y` 10/10,
+  `protected-seats` 10, `get-rung` keyed by the spread (u0 is a valid key);
+  an eleventh seated buy rung (100 bps) -> `u6011`, the same contract
+  `initialize(100, false)` -> ok, registered, not current, not protected;
+  `set-max-band-per-side 9` under the 10 held -> `u6011`.
+- **X** A's ten deposits (20,000 sats each) all push: `floor` = miner-mid / 2
+  stored as the market limit, order `(some bps)`, effective ask at the mid =
+  mid + bps for every rung; A's direct fixed ask (30,000 at +25 bps) rests
+  next to them: 2 live + 10 rungs + A = 13 on the side.
+- **Y** S's ten deposits (20 STX each): 10..90 rest with `cap` = miner-mid *
+  2. **The 0-bps sell rung does not rest**: its bid sits at the mid, the 0-bps
+  buy rung's ask already sits at the mid, the market answers `u1016` (a
+  resting order cannot sit at the mid without paying the taker rebate) and
+  the rung HOLDS the 20 STX (`deposit` -> `(ok true)`, `held-ustx` 20 STX,
+  a keeper `push` -> `(ok false)`). Two zero-spread band rungs cannot rest at
+  the same time; whichever pushes first holds the mid until it is consumed.
+  Design, not a defect (README "A zero spread is not a fixed order"); the
+  ladder owner should not expect both spread-0 seats to be live together.
+- **T1** a taker sells STX with limit +55: the batch clears buy-0 at the mid,
+  the walk takes 10, 20, A's direct +25, 30, 40 whole and ~8,000 of 50, match
+  prints in that price order; the live +2.5% ask is untouched. After anyone's
+  `sync`, buy-0..40 are sold out (epoch 1, shares 0, proceeds > 0), buy-50
+  sits at unfilled-index ~0.6; A's `claim` on each pays the STX, a second
+  claim on a paid-out rung -> `u7006` (the position is deleted with the
+  epoch).
+- **K1** keeper `push` on sell-0 now rests it (the mid ask is gone); A's
+  re-deposit into buy-0 (a new epoch) is refused by that mid bid and held.
+  **W1** A withdraws 5,000 from the untouched buy-70 (`withdraw-token-x`).
+- **T2** the mirror: a taker sells sBTC with limit -55, batch sell-0, walk
+  -10 -20 S's direct -25 -30 -40 whole and ~8 STX of -50, in price order.
+  **Finding (accounting, not funds):** the walked STX rungs keep under one
+  sat's worth of STX (670 .. 2,968 uSTX here): the walk sizes the fill in
+  sats and the market refunds the sub-minimum remainder to the maker, i.e. to
+  the rung as `held-ustx`. That dust is 3e-5 .. 1.5e-4 of a 20 STX pool,
+  above `SOLD_OUT_INDEX` (1e-6), so the rung's epoch stays OPEN with 20 STX
+  of shares standing for the dust and `unfilled-index` ~1e8. Members'
+  claims are right throughout (S's sats arrive, her position keeps the dust
+  as `stx`); the cost is a tiny index: the next deposit's shares are scaled
+  by 1 / index (**T2b**: 20 STX -> 5.97e11 shares) and the second fill drops
+  the index under the threshold, closing the epoch (T2b: a taker at -15
+  takes sell-10 whole, sync -> epoch 1, shares 0, ~1,340 uSTX of dust held,
+  S's old-epoch claim pays the sats). Self-healing in one more cycle; the
+  sBTC side does not show it (the walk consumes sats exactly). Raising
+  `SOLD_OUT_INDEX` to a sat's worth of the pool would close on the first
+  fill; not changed here.
+- **K2** keeper `push` on buy-0 rests it again once sell-0 is consumed.
+  **W2** on sell-70: withdraw 5 STX (partial `withdraw-token-y`), then 14.5
+  (the 0.5 remainder would sit under the market minimum: `cancel`, 0.5
+  held), S got exactly 19.5 STX; a 1 STX deposit pushes 1.5 back; a withdraw
+  above the position on sell-60 takes it all.
+- **T3** a taker sells STX with limit +95: batch buy-0 again, walk 50-rest,
+  60, 70 (15k after W1), 80 whole and 18,000 of 90, in price order; buy-0
+  closes its second epoch (epoch 2); A claims on every rung with a position.
+- **S** `refresh-guard` on a resting rung ok, on a sold-out rung
+  `u1005` (no position to set a limit on); `retire-band buy-band 90` ->
+  count 9, still registered, not current; `prune-seats` -> `seated-x` 9,
+  the rung keeps resting; a stranger's `seat-band` -> `u6001`, the owner's
+  -> ok, again -> `u6012`; `sync-seat` -> 10 seats back; seating the
+  unseated 100 rung on a full band -> `u6011`.
+- **F** A deposits into the unseated 100 rung: an ordinary maker. 37
+  strangers (1,000 at +5%) fill the open region next to the 3 non-seated
+  residents (2 live + the 100 rung); the 38th, same size -> `u1010`
+  although only 41 rest (the 9 empty seats are not theirs); A's deposit
+  into the sold-out buy-80 (a seat) still rests at 41; a bigger in-range
+  stranger (3,000 at 1) parks exactly one filler (its whole 1,000) and
+  neither seated rung nor the 100 rung.
+
+Two tooling notes from this run, both in `simulations/README-stxer.md`: the
+461-step submit needs `_chunked-submit.js` (the SDK posts every step in one
+request; stxer's origin answered 504 past ~250 steps and again under load,
+the helper posts 50 at a time and resumes from the count the session
+already holds), and `_lazer.js#fetchLazerUpdateAny` runs the harness with no
+`PYTH_API_KEY` on disk (the update comes from the faktory-dao backend route
+the front end uses).
+
 ## Full rerun on b8b6f3e (2026-09-15, get-taker-capacity takes the taker, a taker on a full side goes through the maker door)
 
 Every harness on the market as committed at b8b6f3e (b7dc673: `get-taker-capacity`

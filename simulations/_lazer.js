@@ -35,3 +35,18 @@ export async function fetchLazerUpdateOpts({ ids = [1, 45], properties = ["price
   const j = await r.json();
   return { hex: j.evm.data, parsed: j.parsed };
 }
+
+// No PYTH_API_KEY on this machine: the faktory-dao backend fetches the same
+// signed update with its own key (GET /api/auction/pyth-lazer-update, the
+// route the jingswap front end uses). The x-api-key it wants is the public
+// one shipped in the jingswap.com bundle (FAKTORY_API_KEY to override).
+export async function fetchLazerUpdateAny(ids = [1, 45]) {
+  if (process.env.PYTH_API_KEY) return fetchLazerUpdate(ids);
+  const key = process.env.FAKTORY_API_KEY || "jc_e4d2e10396eef95215a7afd492f42d743a3325739d29200c2a28b256f778be01";
+  const base = process.env.FAKTORY_API_URL || "https://faktory-dao-backend.vercel.app";
+  const r = await fetch(`${base}/api/auction/pyth-lazer-update?pair=sbtc-stx`, { headers: { "x-api-key": key } });
+  if (!r.ok) throw new Error(`backend lazer ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  const d = (await r.json()).data;
+  const ts = Number(d.timestampUs) / 1e6;
+  return { hex: d.hex, px: BigInt(d.priceX), py: BigInt(d.priceY), ts, expo: d.exponent, futX: Number(d.timestampUs), futY: Number(d.timestampUs) };
+}

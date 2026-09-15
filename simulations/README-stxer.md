@@ -545,6 +545,33 @@ Method, when a harness must advance blocks and still push a band rung:
 
 Worked example: R12 of `verify-v6-rungs-replace-keyless.js`.
 
+## Big simulations: chunked submit, and Lazer without a key (2026-09-15)
+
+`SimulationBuilder.run()` creates the session, then posts EVERY step in one
+request that the origin executes before answering. Past ~250 steps (or a few
+100 KB deploys) Cloudflare drops the wait at 100 s with a 504, the SDK throws
+before it prints the session id, and the steps may well have run. Under load
+the origin itself 504s a 50-step post at ~15 s. `_chunked-submit.js` wraps
+global `fetch` for the submit URL only: posts of `chunk` steps in order on
+the same session (a session accepts steps in several posts), and on a 5xx it
+waits, reads the session back, counts the steps it already holds and resumes
+from the first one missing. No blind retry, so a chunk that did run is never
+run twice (seen: a 504 after 15 s where the session already held all 150).
+
+```js
+import { installChunkedSubmit } from "./_chunked-submit.js";
+installChunkedSubmit(50); // before the builder runs
+```
+
+`_lazer.js#fetchLazerUpdateAny` returns the same `{hex, px, py, ts, ...}` as
+`fetchLazerUpdate` but needs no `PYTH_API_KEY`: without one it asks the
+faktory-dao backend (`GET /api/auction/pyth-lazer-update?pair=sbtc-stx`, the
+route the jingswap front end calls, keyed server-side) with the public
+`x-api-key` shipped in the jingswap.com bundle (`FAKTORY_API_KEY` /
+`FAKTORY_API_URL` to override). First user:
+`verify-v6-ten-band-deployed-lazer.js` (461 steps, 428/428 on the DEPLOYED
+v6 set; see `contracts/README-markets-v6-pegged.md`).
+
 ## Result decoding cheat sheet
 
 When parsing the V2 API response (`/devtools/v2/simulations/{id}`):
