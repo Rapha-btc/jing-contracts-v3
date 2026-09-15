@@ -21,17 +21,24 @@
 //       parked -> ok and the limit moves, reprice on parked -> market
 //       u1005 (needs a live deposit)
 //   V6  keeper cancels: the parked 20k comes back to the vault
+//   V7+ the rest of the vault on this stack: STX funding, the STX-side
+//       deposit / set-limit, the CROSSING reprice (the bid repriced into
+//       range swaps against the parker's in-range ask), the vault as a
+//       maker that gets walked (jing-core-v5 credits a registered
+//       contract), execute-jing-swap both ways, execute-router-swap both
+//       ways + a stale update (pools only), withdraws, expiry, revoke, the
+//       wrong key, a replay, a stranger
 //
 // Run: PYTH_API_KEY=... npx tsx simulations/verify-vault-sbtc-stx-v6-parked.js
 import fs from "node:fs";
 import {
   ClarityVersion, uintCV, contractPrincipalCV, standardPrincipalCV, stringAsciiCV, bufferCV,
-  someCV, noneCV, cvToString, deserializeCV, getAddressFromPrivateKey,
+  someCV, noneCV, trueCV, cvToString, deserializeCV, getAddressFromPrivateKey,
 } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import {
   STX_DEPOSITOR_1, SBTC_DEPOSITOR_1, SBTC_ADDR, SBTC_NAME, SBTC_ASSET_NAME, SBTC_FQN,
-  WSTX_ADDR, WSTX_NAME, WSTX_ASSET_NAME, TEST_INTENT_PUBKEY_HEX, TEST_INTENT_PRIVKEY,
+  WSTX_ADDR, WSTX_NAME, WSTX_ASSET_NAME, TEST_INTENT_PUBKEY_HEX, TEST_INTENT_PRIVKEY, WRONG_INTENT_PRIVKEY,
   buildIntentHashHex, signIntent,
 } from "./_setup.js";
 import { fetchLazerUpdate } from "./_lazer.js";
@@ -52,6 +59,8 @@ const PARKER = getAddressFromPrivateKey("7".repeat(64) + "01", "mainnet");
 
 const PP = 100_000_000n;
 const SBTC_20K = 20_000;
+const STX_300 = 300_000_000;
+const SBTC_EXTRA = 40_000; // V7+: the vault trades both ways
 const FILL = 2_000;
 const sbtcTrait = contractPrincipalCV(SBTC_ADDR, SBTC_NAME);
 const wstxTrait = contractPrincipalCV(WSTX_ADDR, WSTX_NAME);
@@ -73,7 +82,7 @@ async function main() {
   const MID = (lz.px * PP) / lz.py;
   console.log(`Lazer ${lz.hex.length / 2} bytes, mid ${MID} (1 STX ~ ${(10n ** 16n) / MID} sats)\n`);
 
-  const intent = (action, side, amount, limitPrice, authId) => { const d = { vault: vaultCV, action, side, amount, limitPrice, authId, expiry: 0 }; return { d, sig: signIntent(buildIntentHashHex(d), TEST_INTENT_PRIVKEY) }; };
+  const intent = (action, side, amount, limitPrice, authId, key = TEST_INTENT_PRIVKEY, expiry = 0) => { const d = { vault: vaultCV, action, side, amount, limitPrice, authId, expiry }; return { d, sig: signIntent(buildIntentHashHex(d), key) }; };
   const ASK_FAR = Number((MID * 120n) / 100n);   // the vault: farthest above mid -> parked first
   const ASK_NEAR = Number((MID * 105n) / 100n);  // fillers: closer
   const ASK_IN = Number((MID * 90n) / 100n);     // the parker: in range (<= mid), triggers the park
@@ -93,6 +102,7 @@ async function main() {
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
   const tx = (label, fn, want) => { b = fn(b); steps.push({ label, kind: "tx", want }); };
   const ev = (label, cid, code, want) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); };
+  const cap = (label, cid, code) => { b = b.addEvalCode(cid, code); const slot = { label, kind: "eval", capture: true, value: null }; steps.push(slot); return slot; };
 
   // ---- P0 the next stack, deployed on the fork under chavita ----
   tx("P0 deploy jing-core-v5", (b) => b.withSender(CHAVITA).addContractDeploy({ contract_name: CORE_NAME, source_code: srcOf(CORE_NAME), clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
@@ -106,8 +116,8 @@ async function main() {
   ev("P0 x book empty", MARKET_ID, "(len (get-token-x-depositors (get-current-cycle)))", "u0");
 
   // ---- V1 setup ----
-  tx("V1 fund owner with STX", (b) => b.addSTXTransfer({ sender: STX_DEPOSITOR_1, recipient: OWNER, amount: 5_000_000 }), () => true);
-  tx("V1 fund owner with sBTC", call(SBTC_DEPOSITOR_1, SBTC_FQN, "transfer", [uintCV(SBTC_20K), standardPrincipalCV(SBTC_DEPOSITOR_1), standardPrincipalCV(OWNER), noneCV()]), "(ok true)");
+  tx("V1 fund owner with STX", (b) => b.addSTXTransfer({ sender: STX_DEPOSITOR_1, recipient: OWNER, amount: 5_000_000 + STX_300 }), () => true);
+  tx("V1 fund owner with sBTC", call(SBTC_DEPOSITOR_1, SBTC_FQN, "transfer", [uintCV(SBTC_20K + SBTC_EXTRA), standardPrincipalCV(SBTC_DEPOSITOR_1), standardPrincipalCV(OWNER), noneCV()]), "(ok true)");
   tx("V1 deploy vault v6 (source as is, next-stack refs)", (b) => b.withSender(OWNER).addContractDeploy({ contract_name: VAULT_NAME, source_code: vaultSrc, clarity_version: ClarityVersion.Clarity5 }), "(ok true)");
   tx("V1 chavita verifies the vault hash in jing-core-v5", call(CHAVITA, CORE_ID, "set-verified-contract", [vaultCV]), "(ok true)");
   tx("V1 owner initializes", call(OWNER, VAULT_ID, "initialize", [vaultCV]), "(ok true)");
@@ -161,11 +171,116 @@ async function main() {
   ev("V6 vault sBTC after cancel", SBTC_FQN, `(get-balance '${VAULT_ID})`, "(ok u20000)");
   ev("V6 parked 0", MARKET_ID, `(get-token-x-parked '${VAULT_ID})`, "u0");
 
+  // ======== V7+: the rest of the vault on the v6 stack: STX side, crossing reprice, the vault as a
+  // filled maker (jing-core-v5 credits a registered contract), taker paths both ways, the router
+  // both ways, withdraws, expiry, revoke, the wrong key, a stranger ========
+  const BID_OUT = Number((MID * 95n) / 100n);   // a bid under the mid rests out of range
+  const BID_OUT2 = Number((MID * 94n) / 100n);
+  const BID_IN = Number((MID * 101n) / 100n);   // in range: crosses the parker's in-range ask
+  const L_SELL_SBTC = Number((MID * 90n) / 100n); // floor for an sBTC seller
+  const L_SELL_STX = Number((MID * 110n) / 100n); // ceiling for an STX seller
+  const STX_5 = 5_000_000, STX_20 = 20_000_000, STX_100 = 100_000_000;
+  const depStx = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 20);
+  const slStx = intent("jing-set-limit", WSTX_ASSET_NAME, STX_5, BID_OUT2, 21);
+  const repriceCross = intent("jing-reprice", WSTX_ASSET_NAME, STX_5, BID_IN, 22);
+  const depStx20 = intent("jing-deposit", WSTX_ASSET_NAME, STX_20, BID_OUT, 23);
+  const jingSwapSbtc = intent("jing-swap", SBTC_ASSET_NAME, 3000, L_SELL_SBTC, 24);
+  const jingSwapStx = intent("jing-swap", WSTX_ASSET_NAME, STX_5, L_SELL_STX, 25);
+  const routerSell = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 26);
+  const routerSellStale = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 27);
+  const routerBuy = intent("router-swap", WSTX_ASSET_NAME, STX_100, L_SELL_STX, 28);
+  const info = await (await fetch(`${STACKS_NODE_API}/v2/info`)).json();
+  const burnTip = Number(info.burn_block_height);
+  const expOk = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 29, TEST_INTENT_PRIVKEY, burnTip + 1000);
+  const expDead = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 30, TEST_INTENT_PRIVKEY, 1);
+  const revoked = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 31);
+  const revokedHash = buildIntentHashHex(revoked.d);
+  const revokedByKeeper = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 32);
+  const strangerIntent = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 33);
+  const wrongKey = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 34, WRONG_INTENT_PRIVKEY);
+  const STALE = bufferCV(Buffer.from(fs.readFileSync(new URL("./fixtures/lazer-update-stale-btc-stx.hex", import.meta.url), "utf8").trim(), "hex"));
+  const vaultSbtc = (label, want) => ev(label, SBTC_FQN, `(get-balance '${VAULT_ID})`, want);
+  const vaultStx = (label, want) => ev(label, VAULT_ID, "(stx-get-balance current-contract)", want);
+  const okHash = (v) => String(v).startsWith("(ok 0x");
+
+  // ---- V7 STX funding ----
+  tx("V7 deposit-stx u0 -> u6006", call(OWNER, VAULT_ID, "deposit-stx", [uintCV(0)]), "(err u6006)");
+  tx("V7 keeper deposit-stx -> u6001", call(KEEPER, VAULT_ID, "deposit-stx", [uintCV(1_000_000)]), "(err u6001)");
+  tx("V7 owner deposit-stx 300", call(OWNER, VAULT_ID, "deposit-stx", [uintCV(STX_300)]), "(ok true)");
+  tx("V7 owner deposit-sbtc 40k more", call(OWNER, VAULT_ID, "deposit-sbtc", [uintCV(SBTC_EXTRA)]), "(ok true)");
+  vaultStx("V7 vault STX 300", `u${STX_300}`);
+  vaultSbtc("V7 vault sBTC 60k", "(ok u60000)");
+
+  // ---- V8 STX-side deposit, set-limit, then the CROSSING reprice against the parker's in-range ask ----
+  tx("V8 wrong key -> u6002", exec(KEEPER, "execute-jing-deposit", wrongKey, [UPD]), "(err u6002)");
+  tx("V8 replay of the V2 intent -> u6003", exec(KEEPER, "execute-jing-deposit", dep, [UPD]), "(err u6003)");
+  tx("V8 keeper executes jing-deposit STX side: 5 STX bid at -5% (out of range)", exec(KEEPER, "execute-jing-deposit", depStx, [UPD]), okHash);
+  ev("V8 vault bid rests 5 STX", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, `u${STX_5}`);
+  tx("V8 set-limit on the STX bid to -6% -> ok (amount = the resting 5 STX)", exec(KEEPER, "execute-jing-set-limit", slStx, [UPD]), okHash);
+  ev("V8 bid limit at -6%", MARKET_ID, `(get-token-y-limit '${VAULT_ID})`, `u${BID_OUT2}`);
+  vaultSbtc("V8 vault sBTC before the crossing", "(ok u60000)");
+  tx("V8 reprice the bid to +1%: crosses the parker's in-range ask -> swaps on the spot (fill-or-kill), logged as a swap", exec(KEEPER, "execute-jing-reprice", repriceCross, [UPD]), okHash);
+  ev("V8 vault bid gone (dust at most)", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, (v) => BigInt(String(v).replace(/^u/, "")) < 1_000_000n);
+  vaultSbtc("V8 vault sBTC grew by the crossing fill", (v) => BigInt((String(v).match(/u(\d+)/) || [, "0"])[1]) > 60_000n);
+  ev("V8 the parker's in-range ask was consumed (dust refunded)", MARKET_ID, `(get-token-x-deposit (get-current-cycle) '${PARKER})`, (v) => BigInt(String(v).replace(/^u/, "")) < 1000n);
+
+  // ---- V9 the vault as a MAKER that gets filled: a 20 STX bid walked by an sBTC seller; jing-core-v5
+  // credits a registered contract's proceeds (credit-if-registered), then the keeper cancels ----
+  tx("V9 keeper executes jing-deposit STX side: 20 STX bid at -5%", exec(KEEPER, "execute-jing-deposit", depStx20, [UPD]), okHash);
+  ev("V9 vault bid rests 20 STX", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, `u${STX_20}`);
+  const eq0 = cap("V9 vault sBTC equity in jing-core-v5 before the fill", CORE_ID, `(get-token-equity '${SBTC_FQN} '${VAULT_ID})`);
+  tx("V9 an sBTC seller swaps 1000 sats at a -10% limit: the walk takes the vault's bid", call(SBTC_DEPOSITOR_1, MARKET_ID, "swap", [uintCV(1000), uintCV(L_SELL_SBTC), UPD, sbtcTrait, sbtcAsset, wstxTrait, wstxAsset, trueCV()]), (v) => String(v).startsWith("(ok"));
+  ev("V9 the vault's bid shrank", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, (v) => { const n = BigInt(String(v).replace(/^u/, "")); return n > 0n && n < BigInt(STX_20); });
+  const eq1 = cap("V9 vault sBTC equity in jing-core-v5 after the fill", CORE_ID, `(get-token-equity '${SBTC_FQN} '${VAULT_ID})`);
+  tx("V9 keeper cancels the STX bid: the rest comes home", call(KEEPER, VAULT_ID, "cancel-jing-stx", []), "(ok true)");
+  ev("V9 vault bid 0", MARKET_ID, `(get-token-y-deposit (get-current-cycle) '${VAULT_ID})`, "u0");
+
+  // ---- V10 taker paths straight into the market, both sides ----
+  tx("V10 a direct maker rests a 100 STX bid at -5%", call(STX_DEPOSITOR_1, MARKET_ID, "deposit-token-y", [uintCV(STX_100), uintCV(BID_OUT), noneCV(), UPD, wstxTrait, wstxAsset]), `(ok u${STX_100})`);
+  vaultStx("V10 vault STX before", `u${STX_300}`);
+  tx("V10 execute-jing-swap sBTC side: 3000 sats at -10%, fill-or-kill, walks the bid", exec(KEEPER, "execute-jing-swap", jingSwapSbtc, [UPD]), okHash);
+  vaultStx("V10 vault STX grew", (v) => BigInt(String(v).replace(/^u/, "")) > BigInt(STX_300));
+  tx("V10 execute-jing-swap STX side: 5 STX at +10%, walks the fillers' asks at +5%", exec(KEEPER, "execute-jing-swap", jingSwapStx, [UPD]), okHash);
+  vaultStx("V10 vault STX down by the 5 STX sold", (v) => BigInt(String(v).replace(/^u/, "")) < BigInt(STX_300) + 5_000_000n);
+
+  // ---- V11 the router both ways (book leg sized from the mid, DLMM next), a stale update falls back to the pools ----
+  vaultStx("V11 vault STX before the router sell", () => true);
+  tx("V11 execute-router-swap 5000 sats -> STX with a fresh update + mid", exec(KEEPER, "execute-router-swap", routerSell, [someCV(UPD), uintCV(Number(MID))]), okHash);
+  tx("V11 execute-router-swap 5000 sats with a STALE update: the book leg is caught, pools only, still ok", exec(KEEPER, "execute-router-swap", routerSellStale, [someCV(STALE), uintCV(Number(MID))]), okHash);
+  vaultSbtc("V11 vault sBTC before the router buy", () => true);
+  tx("V11 execute-router-swap 100 STX -> sBTC", exec(KEEPER, "execute-router-swap", routerBuy, [someCV(UPD), uintCV(Number(MID))]), okHash);
+  vaultSbtc("V11 vault sBTC after", () => true);
+
+  // ---- V12 withdraws ----
+  tx("V12 owner withdraws 1000 sats", call(OWNER, VAULT_ID, "withdraw-sbtc", [uintCV(1000)]), "(ok true)");
+  tx("V12 keeper withdraw-sbtc -> u6001", call(KEEPER, VAULT_ID, "withdraw-sbtc", [uintCV(1000)]), "(err u6001)");
+  tx("V12 withdraw-sbtc u0 -> u6006", call(OWNER, VAULT_ID, "withdraw-sbtc", [uintCV(0)]), "(err u6006)");
+  tx("V12 owner withdraws 1 STX", call(OWNER, VAULT_ID, "withdraw-stx", [uintCV(1_000_000)]), "(ok true)");
+  tx("V12 keeper withdraw-stx -> u6001", call(KEEPER, VAULT_ID, "withdraw-stx", [uintCV(1_000_000)]), "(err u6001)");
+  tx("V12 withdraw-stx u0 -> u6006", call(OWNER, VAULT_ID, "withdraw-stx", [uintCV(0)]), "(err u6006)");
+
+  // ---- V13 expiry ----
+  tx("V13 an intent expiring in 1000 burn blocks -> ok", exec(KEEPER, "execute-jing-deposit", expOk, [UPD]), okHash);
+  tx("V13 keeper cancels it again", call(KEEPER, VAULT_ID, "cancel-jing-stx", []), "(ok true)");
+  tx("V13 an intent with expiry u1 -> u6004", exec(KEEPER, "execute-jing-deposit", expDead, [UPD]), "(err u6004)");
+
+  // ---- V14 revoke ----
+  tx("V14 stranger revokes -> u6001", call(SBTC_DEPOSITOR_1, VAULT_ID, "revoke-intent", [bufferCV(Buffer.from(revokedHash, "hex"))]), "(err u6001)");
+  tx("V14 owner revokes an unused intent", call(OWNER, VAULT_ID, "revoke-intent", [bufferCV(Buffer.from(revokedHash, "hex"))]), "(ok true)");
+  tx("V14 executing the revoked intent -> u6003", exec(KEEPER, "execute-router-swap", revoked, [someCV(UPD), uintCV(Number(MID))]), "(err u6003)");
+  tx("V14 revoking twice -> u6003", call(OWNER, VAULT_ID, "revoke-intent", [bufferCV(Buffer.from(revokedHash, "hex"))]), "(err u6003)");
+  tx("V14 the keeper can revoke too", call(KEEPER, VAULT_ID, "revoke-intent", [bufferCV(Buffer.from(buildIntentHashHex(revokedByKeeper.d), "hex"))]), "(ok true)");
+
+  // ---- V15 a stranger with a valid intent ----
+  tx("V15 stranger executes a valid intent -> u6001", exec(SBTC_DEPOSITOR_1, "execute-router-swap", strangerIntent, [someCV(UPD), uintCV(Number(MID))]), "(err u6001)");
+  tx("V15 the direct maker cancels what is left of its bid", call(STX_DEPOSITOR_1, MARKET_ID, "cancel-token-y-deposit", [wstxTrait, wstxAsset]), (v) => String(v).startsWith("(ok u"));
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid);
   const s = res.steps;
-  steps.forEach((st, i) => assert(st.label, st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]), st.want));
+  steps.forEach((st, i) => { const raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); if (st.capture) { st.value = BigInt((String(raw).match(/u(\d+)/) || [, "0"])[1]); console.log(`  ..   ${st.label}: ${raw}`); } else assert(st.label, raw, st.want); });
+  assert("V9 the fill credited the vault's sBTC equity in the core (credit-if-registered: a registered maker)", eq1.value - eq0.value, (d) => d > 0n);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

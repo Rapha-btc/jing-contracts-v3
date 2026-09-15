@@ -46,6 +46,10 @@
 //      Velar against a resting bid, every leg's in == planned, out == sum
 //      of the four outs; W7c sell STX 5 Jing + 3 DLMM + 2 XYK + 2 Velar
 //      against a resting ask; W7e jing u0 + vaa none, three AMM legs.
+//   W18 the pro-rata XYK / Velar split through the 1-step copy (one DLMM
+//      bin, the residual inside the pools' room): both legs fill, nothing
+//      home, both directions. W19 a swap the book absorbs whole (no DLMM
+//      stage) and an STX smart sell with no update (no book leg).
 //
 // Market v4 settles on Pyth Lazer (SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle):
 // the harness fetches ONE signed Lazer update (BTC/USD feed 1 + STX/USD feed
@@ -442,7 +446,7 @@ async function main() {
   tx("W8 refresh-mid verifies the Lazer update and returns the mid", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
   ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes(`(gross-cap u${gross8})`) && String(v).includes(`(mid-cap u${midCap8})`) && String(v).includes(`(walk-cap u${walkCap8})`), CID);
-  ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true)`, (v) =>
+  ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes("(walk-cap u0)") && String(v).includes(`(mid-cap u${midCap8})`), CID);
   ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes("(mid-cap u0)"), CID);
@@ -468,10 +472,10 @@ async function main() {
   // allow ~3% to reach them.
   // v3: the smart swaps take the mid as a sizing hint (the same number the
   // market will settle at when the hint is honest); `mid` overrides it
-  const smartSbtc = (sender, amount, limit, vaa, minOut, mid = MID) =>
-    call(sender, "smart-swap-sbtc-for-stx", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)]);
-  const smartStx = (sender, amount, limit, vaa, minOut, mid = MID) =>
-    call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)]);
+  const smartSbtc = (sender, amount, limit, vaa, minOut, mid = MID, cid = RID) =>
+    call(sender, "smart-swap-sbtc-for-stx", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)], cid);
+  const smartStx = (sender, amount, limit, vaa, minOut, mid = MID, cid = RID) =>
+    call(sender, "smart-swap-stx-for-sbtc", [uintCV(amount), uintCV(limit), vaa, uintCV(mid), uintCV(minOut)], cid);
   const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
   const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
   // gross-cap for a taker facing a 100 STX bid at the mid with an empty own side
@@ -598,6 +602,20 @@ async function main() {
   tx("W14 smart sell 40000 sats with an impossible min-out -> u3002, nothing moved", smartSbtc(T, 40_000n, L_LOOSE, VAA, HUGE), "(err u3002)");
   const e1s14 = sbtcOf(T, "W14 after"); const e1x14 = stxOf(T, "W14 after");
 
+  // =============== W18: the pro-rata XYK / Velar split, both directions ===============
+  // The full router's DLMM walk (30 bins, ~2 BTC of room) always swallows what the book leaves, so
+  // the residual that reaches XYK + Velar only ever exceeded their room (W9f, W9e, W15: the excess
+  // stays home). Through the 1-step copy the DLMM leg stops after one bin (~0.03 BTC), the residual
+  // lands INSIDE the two pools' room at 10% under, and cp-split hands it out pro rata: both legs
+  // fill, nothing stays home. Same on the STX side (the constant-product capacity for an STX seller).
+  const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
+  const r18a = tx("W18a 1-step copy: smart sell 0.07 BTC at 10% under, vaa none: one DLMM bin, the rest split pro rata over XYK + Velar, nothing home", smartSbtc(T, 7_000_000n, L_LOOSE, NO_VAA, 1n, MID, `${DEPLOYER}.${ROUTER_1STEP}`), okPrefix);
+  const x1s18 = sbtcOf(T, "W18a after"); const x1x18 = stxOf(T, "W18a after");
+  const y0x18 = stxOf(S, "W18b before"); const y0s18 = sbtcOf(S, "W18b before");
+  const L_STX10 = (MID * 110n) / 100n;
+  const r18b = tx("W18b 1-step copy: smart sell 1500 STX at 10% over, vaa none: one DLMM bin, the rest pro rata over XYK + Velar", smartStx(S, 1_500_000_000n, L_STX10, NO_VAA, 1n, MID, `${DEPLOYER}.${ROUTER_1STEP}`), okPrefix);
+  const y1x18 = stxOf(S, "W18b after"); const y1s18 = sbtcOf(S, "W18b after");
+
   // =============== W15: the 30-bin cap on the DLMM walk ===============
   // 10% under the mid every bin near the active one qualifies, so the walk
   // stops at its 30-bin cap (4.5% of price); 3 BTC exceeds what those bins
@@ -643,6 +661,18 @@ async function main() {
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
   const hb1s = sbtcOf(T, "W17b after"); const hb1x = stxOf(T, "W17b after");
   tx("W17b S's bid is untouched: cancel returns all 100 STX", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), `(ok u${BID})`);
+
+  // =============== W19: the book absorbs everything (no DLMM stage), an STX smart sell with no update ===============
+  tx("W19 S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
+  const z0s = sbtcOf(T, "W19a before"); const z0x = stxOf(T, "W19a before");
+  const r19a = tx("W19a smart sell 1000 sats into a 100 STX bid: the book takes it all, DLMM and the pools never run", smartSbtc(T, 1000n, L_LOOSE, VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(jing-in u1000)") && String(v).includes("(dlmm-in u0)") && String(v).includes("(unsold u0)"));
+  const z1s = sbtcOf(T, "W19a after"); const z1x = stxOf(T, "W19a after");
+  tx("W19 S cancels the rest of the bid", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), (v) => okPrefix(v) && uintOf(v.slice(4, -1)) > 0n && uintOf(v.slice(4, -1)) < BID);
+  const z2x = stxOf(S, "W19b before"); const z2s = sbtcOf(S, "W19b before");
+  const r19b = tx("W19b smart sell 5 STX, vaa none: no book leg, the AMMs take it all", smartStx(S, 5_000_000n, L_STX10, NO_VAA, 1n), (v) =>
+    okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
+  const z3x = stxOf(S, "W19b after"); const z3s = sbtcOf(S, "W19b after");
 
   // =============== W10: freshness ===============
   // A genuinely old update: fixtures/lazer-update-stale-btc-stx.hex was
@@ -846,6 +876,27 @@ async function main() {
   check("W15 spill-over reached XYK and Velar", [field(r15.raw, "xyk-in"), field(r15.raw, "velar-in")], (a) => a.every((x) => x > 0n));
   check("W15 legs + unsold == 3 BTC", ["jing-in", "dlmm-in", "xyk-in", "velar-in", "unsold"].reduce((t, k) => t + field(r15.raw, k), 0n), (t) => t === 300_000_000n);
   legPriceOk("W15", r15, L_LOOSE, true);
+  // W18
+  const in18a = ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r18a.raw, k));
+  check("W18a legs + unsold == 0.07 BTC", in18a.reduce((t, x) => t + x, 0n) + field(r18a.raw, "unsold"), (t) => t === 7_000_000n);
+  check("W18a no book leg, one DLMM bin took part (0 < dlmm-in < 0.07 BTC)", in18a, (a) => a[0] === 0n && a[1] > 0n && a[1] < 7_000_000n);
+  check("W18a the residual was split pro rata: XYK and Velar both filled, nothing home", [in18a[2], in18a[3], field(r18a.raw, "unsold")], (a) => a[0] > 0n && a[1] > 0n && a[2] === 0n);
+  check("W18a sBTC delta == 0.07 BTC", x0s18.value - x1s18.value, (d) => d === 7_000_000n);
+  check(`W18a STX grew by out (${field(r18a.raw, "out")})`, x1x18.value - x0x18.value, (d) => d === field(r18a.raw, "out") && d > 0n);
+  legPriceOk("W18a", r18a, L_LOOSE, true);
+  const in18b = ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r18b.raw, k));
+  check("W18b legs + unsold == 1500 STX", in18b.reduce((t, x) => t + x, 0n) + field(r18b.raw, "unsold"), (t) => t === 1_500_000_000n);
+  check("W18b no book leg, nothing home", [in18b[0], field(r18b.raw, "unsold")], (a) => a[0] === 0n && a[1] === 0n);
+  check("W18b one DLMM bin, the rest pro rata over XYK + Velar (or the bin swallowed it all: then no split to make)", in18b, (a) => a[1] > 0n && ((a[2] > 0n && a[3] > 0n) || a[1] === 1_500_000_000n));
+  check("W18b STX delta == 1500 STX", y0x18.value - y1x18.value, (d) => d === 1_500_000_000n);
+  check(`W18b sBTC grew by out (${field(r18b.raw, "out")})`, y1s18.value - y0s18.value, (d) => d === field(r18b.raw, "out") && d > 0n);
+  legPriceOk("W18b", r18b, L_STX10, false);
+  // W19
+  check("W19a sBTC delta == 1000, all on the book", z0s.value - z1s.value, (d) => d === 1000n);
+  check(`W19a STX grew by out (${field(r19a.raw, "out")}) == jing-out`, z1x.value - z0x.value, (d) => d === field(r19a.raw, "out") && d === field(r19a.raw, "jing-out") && d > 0n);
+  check("W19b STX delta == 5 STX", z2x.value - z3x.value, (d) => d === 5_000_000n);
+  check(`W19b sBTC grew by out (${field(r19b.raw, "out")})`, z3s.value - z2s.value, (d) => d === field(r19b.raw, "out") && d > 0n);
+  legPriceOk("W19b", r19b, L_STX10, false);
   console.log("  cost " + costLine(r9f));
   console.log("  cost " + costLine(r15));
   // observed 2026-09-05: read_count ~13%, read_length ~12%, runtime 0.4%;
