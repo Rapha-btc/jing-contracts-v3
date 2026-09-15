@@ -242,6 +242,42 @@ async function main() {
   tx("R6 sync-seat spread 50 -> now 4 on x", call(KEEPER, "sync-seat", [cp(BUY50)]), (v) => String(v).startsWith("(ok"));
   ev("R6 x copy 4", "(len (get-seated-x))", "u4");
 
+  // =============== R10: a band rung holding under the market minimum, a keeper push, a withdraw from held ===============
+  // (the seated spread-50 rung, x side; the y side is empty so every push is keyless). R10 and R11 run
+  // BEFORE R7: a band rung's push reads the miner band off the RFQ native oracle, and stxer refuses a
+  // simulation that does so after an addAdvanceBlocks (BlockingError at submit), which R7 and R8 use.
+  tx("R10 A deposits 500 sats into the spread-50 band rung: under the 1000-sat minimum -> HELD, not pushed", call(A, "deposit", [uintCV(500), NO_UPDATE], BUY50), okTrue);
+  state("R10 held 500, resting 0", BUY50, (v) => field(v, "held-sats") === "u500" && field(v, "resting") === "u0");
+  tx("R10 A withdraws 100 sats: served from what is held, the market untouched", call(A, "withdraw", [uintCV(100)], BUY50), okTrue);
+  state("R10 held 400, resting 0", BUY50, (v) => field(v, "held-sats") === "u400" && field(v, "resting") === "u0");
+  tx("R10 keeper push: 400 < the minimum -> (ok false), stays held", call(KEEPER, "push", [NO_UPDATE], BUY50), "(ok false)");
+  tx("R10 operator lowers the x minimum to 100", call(DEP, "set-min-token-x-deposit", [uintCV(100)]), okTrue);
+  tx("R10 keeper push: 400 >= 100 -> pushed (ok true), the band floor read from the miner band", call(KEEPER, "push", [NO_UPDATE], BUY50), "(ok true)");
+  state("R10 held 0, resting 400", BUY50, (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u400");
+  ev("R10 the rung's order carries the band spread (some u50)", `(get-token-x-order '${BUY50})`, (v) => field(v, "spread-bps") === "(some u50)");
+  tx("R10 operator restores the x minimum (1000)", call(DEP, "set-min-token-x-deposit", [uintCV(1000)]), okTrue);
+  tx("R10 A withdraws everything: 400 on the market under the minimum -> whole cancel, paid", call(A, "withdraw", [uintCV(999_999)], BUY50), okTrue);
+  state("R10 empty", BUY50, (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u0" && field(v, "total-shares") === "u0");
+
+  // =============== R11: the sell band mirror, on an UNSEATED rung ===============
+  const SELL40 = `${DEP}.jing-sell-stx-spread-40`;
+  deploy(DEP, nm(SELL40), SELL_SRC);
+  tx("R11 owner initializes sell spread 40 UNSEATED -> ok (registered, no key, no count)", call(DEP, "initialize", [uintCV(40), falseCV()], SELL40), okTrue);
+  ev("R11 registered, not current", `(and (is-registered '${SELL40}) (not (is-current-rung '${SELL40})))`, "true", LADDER);
+  ev("R11 band count sel-band still 0", '(get-band-count "sel-band")', "u0", LADDER);
+  tx("R11 S deposits 0.5 STX: under the 1 STX minimum -> HELD", call(S, "deposit", [uintCV(500_000), NO_UPDATE], SELL40), okTrue);
+  state("R11 held 0.5 STX, resting 0", SELL40, (v) => field(v, "held-ustx") === "u500000" && field(v, "resting") === "u0");
+  tx("R11 S withdraws 0.1 STX from held", call(S, "withdraw", [uintCV(100_000)], SELL40), okTrue);
+  state("R11 held 0.4 STX", SELL40, (v) => field(v, "held-ustx") === "u400000" && field(v, "resting") === "u0");
+  tx("R11 keeper push: 0.4 < 1 STX -> (ok false)", call(KEEPER, "push", [NO_UPDATE], SELL40), "(ok false)");
+  tx("R11 operator lowers the y minimum to 0.1 STX", call(DEP, "set-min-token-y-deposit", [uintCV(100_000)]), okTrue);
+  tx("R11 keeper push -> pushed (ok true), an ordinary maker on the book (no seat)", call(KEEPER, "push", [NO_UPDATE], SELL40), "(ok true)");
+  state("R11 held 0, resting 0.4 STX", SELL40, (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u400000");
+  ev("R11 on the book without a seat", `(is-protected-y '${SELL40})`, "false");
+  tx("R11 operator restores the y minimum (1 STX)", call(DEP, "set-min-token-y-deposit", [uintCV(1_000_000)]), okTrue);
+  tx("R11 S withdraws everything -> whole cancel, paid", call(S, "withdraw", [uintCV(999_999_999)], SELL40), okTrue);
+  state("R11 empty", SELL40, (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u0" && field(v, "total-shares") === "u0");
+
   // =============== R7: uninitialized rung, non-canonical rung, owner handover ===============
   const BUY60 = `${DEP}.jing-buy-stx-spread-60`, BUY70 = `${DEP}.jing-buy-stx-spread-70`;
   deploy(DEP, nm(BUY60), BUY_SRC);
@@ -280,7 +316,8 @@ async function main() {
   tx("R8 initialize it naming the verified v6 market as canonical (same bytes) -> ok, registered", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), okTrue);
   ev("R8 markets-b registered in the core", `(is-registered '${MKT_B})`, "true", CORE_ID);
   // a byte-different copy WITHOUT growing the source past the 100,000-byte cap: widen one comment marker
-  deploy(DEP, "markets-c", src(MKT).replace(";; ", ";;  "));
+  // (src strips the comment lines, so the extra byte goes inside the first form: whitespace, same code, another hash)
+  deploy(DEP, "markets-c", src(MKT).replace("(define-constant ", "(define-constant  "));
   tx("R8 a byte-different copy naming the verified market -> u5006 hash mismatch", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_C), "(err u5006)");
   tx("R8 stranger pauses the core -> u5001", call(KEEPER, "pause", [], CORE_ID), "(err u5001)");
   tx("R8 unpause when not paused -> u5017", call(DEP, "unpause", [], CORE_ID), "(err u5017)");
@@ -309,40 +346,6 @@ async function main() {
   ev("R9 protected-seats 50", "(protected-seats)", "u50");
   tx("R9 back to 10", call(DEP, "set-max-band-per-side", [uintCV(10)], LADDER), okTrue);
   tx("R9 sync-seat-count -> 10", call(KEEPER, "sync-seat-count", []), "(ok u10)");
-
-  // =============== R10: a band rung holding under the market minimum, a keeper push, a withdraw from held ===============
-  // (the seated spread-50 rung, x side; the y side is empty so every push is keyless)
-  tx("R10 A deposits 500 sats into the spread-50 band rung: under the 1000-sat minimum -> HELD, not pushed", call(A, "deposit", [uintCV(500), NO_UPDATE], BUY50), okTrue);
-  state("R10 held 500, resting 0", BUY50, (v) => field(v, "held-sats") === "u500" && field(v, "resting") === "u0");
-  tx("R10 A withdraws 100 sats: served from what is held, the market untouched", call(A, "withdraw", [uintCV(100)], BUY50), okTrue);
-  state("R10 held 400, resting 0", BUY50, (v) => field(v, "held-sats") === "u400" && field(v, "resting") === "u0");
-  tx("R10 keeper push: 400 < the minimum -> (ok false), stays held", call(KEEPER, "push", [NO_UPDATE], BUY50), "(ok false)");
-  tx("R10 operator lowers the x minimum to 100", call(DEP, "set-min-token-x-deposit", [uintCV(100)]), okTrue);
-  tx("R10 keeper push: 400 >= 100 -> pushed (ok true), the band floor read from the miner band", call(KEEPER, "push", [NO_UPDATE], BUY50), "(ok true)");
-  state("R10 held 0, resting 400", BUY50, (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u400");
-  ev("R10 the rung's order carries the band spread (some u50)", `(get-token-x-order '${BUY50})`, (v) => field(v, "spread-bps") === "(some u50)");
-  tx("R10 operator restores the x minimum (1000)", call(DEP, "set-min-token-x-deposit", [uintCV(1000)]), okTrue);
-  tx("R10 A withdraws everything: 400 on the market under the minimum -> whole cancel, paid", call(A, "withdraw", [uintCV(999_999)], BUY50), okTrue);
-  state("R10 empty", BUY50, (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u0" && field(v, "total-shares") === "u0");
-
-  // =============== R11: the sell band mirror, on an UNSEATED rung ===============
-  const SELL40 = `${DEP}.jing-sell-stx-spread-40`;
-  deploy(DEP, nm(SELL40), SELL_SRC);
-  tx("R11 owner initializes sell spread 40 UNSEATED -> ok (registered, no key, no count)", call(DEP, "initialize", [uintCV(40), falseCV()], SELL40), okTrue);
-  ev("R11 registered, not current", `(and (is-registered '${SELL40}) (not (is-current-rung '${SELL40})))`, "true", LADDER);
-  ev("R11 band count sel-band still 0", '(get-band-count "sel-band")', "u0", LADDER);
-  tx("R11 S deposits 0.5 STX: under the 1 STX minimum -> HELD", call(S, "deposit", [uintCV(500_000), NO_UPDATE], SELL40), okTrue);
-  state("R11 held 0.5 STX, resting 0", SELL40, (v) => field(v, "held-ustx") === "u500000" && field(v, "resting") === "u0");
-  tx("R11 S withdraws 0.1 STX from held", call(S, "withdraw", [uintCV(100_000)], SELL40), okTrue);
-  state("R11 held 0.4 STX", SELL40, (v) => field(v, "held-ustx") === "u400000" && field(v, "resting") === "u0");
-  tx("R11 keeper push: 0.4 < 1 STX -> (ok false)", call(KEEPER, "push", [NO_UPDATE], SELL40), "(ok false)");
-  tx("R11 operator lowers the y minimum to 0.1 STX", call(DEP, "set-min-token-y-deposit", [uintCV(100_000)]), okTrue);
-  tx("R11 keeper push -> pushed (ok true), an ordinary maker on the book (no seat)", call(KEEPER, "push", [NO_UPDATE], SELL40), "(ok true)");
-  state("R11 held 0, resting 0.4 STX", SELL40, (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u400000");
-  ev("R11 on the book without a seat", `(is-protected-y '${SELL40})`, "false");
-  tx("R11 operator restores the y minimum (1 STX)", call(DEP, "set-min-token-y-deposit", [uintCV(1_000_000)]), okTrue);
-  tx("R11 S withdraws everything -> whole cancel, paid", call(S, "withdraw", [uintCV(999_999_999)], SELL40), okTrue);
-  state("R11 empty", SELL40, (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u0" && field(v, "total-shares") === "u0");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
