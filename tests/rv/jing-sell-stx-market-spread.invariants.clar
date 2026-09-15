@@ -204,3 +204,58 @@
 (define-read-only (invariant-rung-no-stale-order)
   (or (> (market-size) u0)
       (is-eq (contract-call? .v6-market get-token-y-limit current-contract) u0)))
+
+;; ============================================================================
+;; PROPERTY TESTS (`rv . <rung> test`): the two anti-drain promises of the
+;; pool. (ok true) passes, (ok false) discards, (err) or a panic fails.
+;; ============================================================================
+
+;; P1: DEPOSIT THEN WITHDRAW IT ALL never takes more out of the pool than
+;; went in: the pool's assets (held here + resting on the market) after
+;; are at least what they were before (the share-burn rounding class the
+;; ladder bounty found). Measured on the pool, not the member: the mock
+;; token mints a fresh wallet on its first transfer. A failure encodes the
+;; shortfall: 9100000000 + (before - after).
+(define-public (test-deposit-withdraw-no-drain (amount uint))
+  (let (
+      (amt (+ MIN_DEPOSIT (mod amount u1000000)))
+      (before (+ (stx-get-balance current-contract) (market-size)))
+    )
+    (match (deposit amt 0x)
+      d (match (withdraw amt)
+          w (let ((after (+ (stx-get-balance current-contract) (market-size))))
+              (if (>= after before) (ok true) (err (+ u9100000000 (- before after)))))
+          e (ok false))
+      e (ok false))))
+
+;; P2: A WITHDRAWAL NEVER PAYS MORE THAN THE POSITION SHOWED before the call
+;; (sync only ever shrinks the unsold side).
+(define-public (test-withdraw-le-position (amount uint))
+  (let (
+      (pos (get stx (get-position tx-sender)))
+      (before (stx-get-balance tx-sender))
+    )
+    (if (is-eq pos u0)
+      (ok false)
+      (match (withdraw (+ u1 (mod amount u1000000)))
+        w (if (<= (- (stx-get-balance tx-sender) before) pos) (ok true) (err u9102))
+        e (ok false)))))
+
+;; drivers for test mode: the market around the rung (RV only calls
+;; test-* functions there)
+(define-public (test-drive-deposit (amount uint))
+  (match (deposit (+ MIN_DEPOSIT (mod amount u1000000)) 0x) r (ok true) e (ok false)))
+(define-public (test-drive-bid (amount uint) (limit uint))
+  (match (rv-bid amount limit) r (ok true) e (ok false)))
+(define-public (test-drive-ask (amount uint) (limit uint))
+  (match (rv-ask amount limit) r (ok true) e (ok false)))
+(define-public (test-drive-settle)
+  (match (rv-settle) r (ok true) e (ok false)))
+(define-public (test-drive-take (amount uint) (limit uint))
+  (match (rv-take amount limit) r (ok true) e (ok false)))
+(define-public (test-drive-set-mid (raw uint))
+  (match (rv-set-mid raw) r (ok true) e (ok false)))
+(define-public (test-drive-push)
+  (match (push 0x) r (ok true) e (ok false)))
+(define-public (test-drive-claim)
+  (match (claim) r (ok true) e (ok false)))

@@ -80,3 +80,6 @@
   (or (not (contract-call? .jing-core-v5 is-paused))
       (and (> (contract-call? .jing-core-v5 get-paused-at) u0)
            (<= (contract-call? .jing-core-v5 get-paused-at) burn-block-height))))
+
+(define-public (test-drive-core-register)
+  (match (rv-core-register) r (ok true) e (ok false)))

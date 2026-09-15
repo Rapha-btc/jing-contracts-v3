@@ -216,6 +216,8 @@ npx rv . markets-sbtc-stx-jing   invariant --runs=500 --bail              # fuzz
 npm run rv:build        # market v6, ladder, six rungs
 npm run rv:v6           # 1000 runs
 npm run rv:core         # core-v5 through the market, 1000 runs
+npm run rv:v6:props     # property tests (sizing promise, fill-or-kill, binding side clears, readmit, withdraw, cancel)
+npm run rv:rungs:props  # rung property tests (no-drain on deposit+withdraw, withdraw within position)
 npm run rv:ladder       # 500 runs
 npm run rv:rungs        # six targets, 500 runs each
 ```

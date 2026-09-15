@@ -196,7 +196,11 @@ if "markets-sbtc-stx-jing-v6" in src_path:
     text = text.replace("(define-data-var distance-slots uint u10)", "(define-data-var distance-slots uint u2)")
     text = text.replace("(define-data-var feed-id-x uint u0)", "(define-data-var feed-id-x uint u1)")
     text = text.replace("(define-data-var feed-id-y uint u0)", "(define-data-var feed-id-y uint u45)")
-    text = text.replace("(define-data-var min-token-y-deposit uint u0)", "(define-data-var min-token-y-deposit uint u100)")
+    # y minimum above one sat's worth of STX in the price band (4,000 uSTX at
+    # 250 sats/STX): a y taker's remainder after the walk is quantised to
+    # one sat, and under one sat it is dust to refund, not a partial fill
+    # (the sizing property tripped u1017 on a 3,000-uSTX remainder with u100)
+    text = text.replace("(define-data-var min-token-y-deposit uint u0)", "(define-data-var min-token-y-deposit uint u10000)")
     text = text.replace("(define-data-var min-token-x-deposit uint u0)", "(define-data-var min-token-x-deposit uint u100)")
 
 # 2g. jing-core-v5 (added 2026-09-15): the registry fuzzed WITH the v6 market
@@ -212,7 +216,7 @@ if src_path.endswith("contracts/jing-core-v5.clar"):
     text = text.replace("(define-constant TIMELOCK_BURN_BLOCKS u144)", "(define-constant TIMELOCK_BURN_BLOCKS u10)")
     text = text.replace(
         "(define-map registered-contracts\n  principal\n  bool\n)",
-        "(define-map registered-contracts\n  principal\n  bool\n)\n;; RV: the on-core market registers itself through this (a literal here\n;; would be a dependency edge back to the market, a cycle for clarinet;\n;; the real register needs a code hash no account has)\n(define-public (rv-register (who principal))\n  (ok (map-set registered-contracts who true)))")
+        "(define-map registered-contracts\n  principal\n  bool\n)\n;; RV: the on-core market registers itself through this (a literal here\n;; would be a dependency edge back to the market, a cycle for clarinet;\n;; the real register needs a code hash no account has)\n(define-public (rv-register (who principal))\n  (begin (asserts! true (err u0)) (ok (map-set registered-contracts who true))))")
 
 # 2e. jing-ladder (added 2026-09-15). The only gate an RV account cannot
 #     pass is the code hash (contract-hash? of an account is none), so both

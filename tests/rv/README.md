@@ -168,6 +168,82 @@ same summary at the end of every run. `rv-take` on the sell rungs folds the
 taker under 0.002 BTC (a raw natural runs to 21 BTC against a few thousand
 STX resting and the market refuses a partial fill, u1017).
 
+### Property tests (`rv ... test`), added 2026-09-15
+
+Invariants read the state at rest. RV's second mode calls `test-*`
+functions: a random action, then the promise that call made. `(ok true)`
+passes, `(ok false)` discards (the action did not apply), `(err ...)` or a
+runtime error fails, and here a panic does count. RV only calls `test-*`
+functions in this mode, so each file also carries `test-drive-*`
+functions that build the state the properties act on (deposits, mid
+moves, seats, bids and asks around a rung); the simnet persists across
+runs.
+
+Market (also on the core target): **the sizing promise**, a swap of
+exactly `get-taker-capacity`'s gross-cap at the same mid and limit fills
+(never u1017; discarded under the taker minimum, with a resting position,
+or paused); **fill or kill**, after a swap the taker holds nothing on its
+side; **the binding side clears fully** at settlement (cleared equals the
+settle total on x or on y); **readmit restores** the parked amount
+exactly; **a partial withdrawal leaves the minimum**; **cancel returns the
+whole position**, both the amount reported and the tokens received.
+
+Rungs (all six): **deposit then withdraw it all never takes more out of
+the pool than went in**, measured on the pool (held plus resting) because
+the mock token mints a fresh wallet on its first transfer (the first cut
+measured the member and flagged that mint); **a withdrawal never pays
+more than the position showed** before the call.
+
+What the first property sweeps taught, none of it a contract defect:
+
+- The market properties all discarded until the drivers existed: in test
+  mode nothing else builds a book.
+- The rung no-drain test first flagged a "drain" that was the mock token
+  minting a fresh wallet on its first transfer; it now measures the pool.
+- The sizing promise tripped u1017 once (seed -294427561). Not the
+  small-share filter (a diagnostic count in the error came back zero):
+  a y-side taker's remainder after the walk is quantised to one sat's
+  worth of STX (3,000 to 4,000 uSTX in the band) and the fuzz build's y
+  minimum was u100, so a sub-sat remainder read as a partial fill instead
+  of dust. The fuzz minimum is now u10000, above one sat in the whole
+  band; the production minimums are 1,000 sats and 1 STX (1e6 uSTX), 250 times a sat. Same seed passes.
+- Then two limits of `get-taker-capacity` that ARE real, both refusals
+  (no funds at risk), both now discarded by the property and worth a line
+  in the router's sizing:
+  - **the read has no taker argument**, so it counts the taker's own
+    resting order on the opposite side, which the walk skips (a self-cross
+    is never filled). A user who rests a bid and takes exactly the reported
+    capacity with sBTC gets u1017 (seed -2050959550, flag 128 in the
+    diagnostic error). `swap` only forbids a resting position on the
+    DEPOSIT side, so the case is reachable in production; the router or
+    the front end should subtract the taker's own opposite-side order, or
+    the market could expose a `get-taker-capacity-for who`.
+  - **the read does not model the queue**: on a full side a taker smaller
+    than the smallest resident is refused by the size rule (u1010) before
+    any fill. Six slots in the fuzz build make it frequent; forty open
+    slots in production make it rare, but a taker sized by the read can
+    still be refused on a crowded side.
+- `readmit-restores` and `settle-binding-side-clears` rarely fire under
+  random test order (a park with a free slot after it; a crossing book
+  right before a settle); both are exercised by the invariant sweeps'
+  wrappers instead.
+
+| target | runs | properties (passes) |
+|---|---|---|
+| markets-sbtc-stx-jing-v6 | 500 | sizing promise x3, fill-or-kill x5, binding side clears x1, readmit restores x1, withdraw leaves min x5 / x6, cancel returns position x10 / x9; 0 failed |
+| markets-sbtc-stx-jing-v6-on-core | 200 | same set on the real registry, 0 failed |
+| six rungs | 200 each | deposit+withdraw no-drain x16-22, withdraw within position x4-14 each; 0 failed |
+
+Discards are the norm in this mode (an action that did not apply is not a
+counterexample): the sizing promise runs only when a book exists and the
+sender rests nothing on either side.
+
+```bash
+npm run rv:v6:props      # 500 runs
+npm run rv:core:props    # 300 runs
+npm run rv:rungs:props   # six targets, 300 runs each
+```
+
 Run:
 
 ```bash
