@@ -838,9 +838,10 @@ into all ten rungs plus one direct order on the market; three takers cross,
 one more takes the dust epoch, members withdraw / claim / re-deposit, seats
 are retired and re-seated, an eleventh seat is refused, and strangers fill the
 open region next to the seats. **428/428**,
-`d0afd78f967306ab0279f2d4cc23e475` (an earlier run of the same script before
-the dust-epoch scenario: `bfbecd3154ae3804aaf5f92295562df4`). What it
-establishes, in the order it runs:
+`a89a219b7f614d841aa8c7296d76361c` (update fetched from Pyth Lazer with the
+key; the same script through the backend route: `d0afd78f967306ab0279f2d4cc23e475`;
+an earlier run before the dust-epoch scenario: `bfbecd3154ae3804aaf5f92295562df4`).
+What it establishes, in the order it runs:
 
 - **D** twenty `initialize(bps, true)`: band counts 10/10, `seated-x/y` 10/10,
   `protected-seats` 10, `get-rung` keyed by the spread (u0 is a valid key);

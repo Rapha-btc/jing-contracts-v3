@@ -570,7 +570,8 @@ route the jingswap front end calls, keyed server-side) with the public
 `x-api-key` shipped in the jingswap.com bundle (`FAKTORY_API_KEY` /
 `FAKTORY_API_URL` to override). First user:
 `verify-v6-ten-band-deployed-lazer.js` (461 steps, 428/428 on the DEPLOYED
-v6 set; see `contracts/README-markets-v6-pegged.md`).
+v6 set both ways, keyed `a89a219b7f614d841aa8c7296d76361c` and through the
+route `d0afd78f967306ab0279f2d4cc23e475`; see `contracts/README-markets-v6-pegged.md`).
 
 ## Result decoding cheat sheet
 
