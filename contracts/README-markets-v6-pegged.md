@@ -847,7 +847,7 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | v6 peg-park (+ K2b: an out-of-range newcomer with no price edge parks the switched-off peg first, every filler stays) | 50/50 | `918d567843534ca1ba8495dcabf60fe3` |
 | v6 peg-park-y | 77/77 | `6256d0b4f2f2cf1a7375312bf2cca474` |
 | v6 peg-track | 30/30 | `62783a5798b22194cc1c7f5f6ba91a2a` |
-| v6 peg-walk-order (+ O4: the x walk reaches a maker with nothing left and skips it) | 71/71 | `dcb34a07c2af85cc4e87951f9c4570e7` |
+| v6 peg-walk-order (+ O4: the x walk skips a maker: the taker's own resting ask, since swap only refuses a resting position on the taker's deposit side) | 70/70 | `a19bb24c8c96e7c76af91c8afd44ecec` |
 | v6 rungs-fill | 40/40 | `c663e202dd9bc608ba246a9f982cb79f` |
 | v6 rungs-push | 39/39 | `52b52f6f88c53a4c6e69d7ade314fc11` |
 | v6 rungs-miner-band | 174/174 | `bc321d10fdf831eea71301b73ad75b77` |

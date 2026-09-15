@@ -3,8 +3,8 @@ import { execFileSync } from "node:child_process";
 import { getSimulationResult } from "stxer"; import { deserializeCV, cvToString } from "@stacks/transactions";
 const [sim, want, pat = "filter-small|filter-limit|execute-settlement|cross-remainder|walk-|settle-with-refresh|reprice|deposit-token|execute-fill|distribute|taker-too-small|crossing"] = process.argv.slice(2);
 const res = await getSimulationResult(sim);
-const target = res.steps.find((s) => { try { return s.TxId && cvToString(deserializeCV(s.Result.Transaction.Ok.result)).includes(want); } catch { return false; } });
-if (!target) { console.log("no tx with that result"); process.exit(1); }
+const cands = res.steps.filter((s) => { try { return s.TxId && cvToString(deserializeCV(s.Result.Transaction.Ok.result)).includes(want); } catch { return false; } });
+const target = process.env.LAST ? cands[cands.length - 1] : cands[0]; if (!target) { console.log("no tx with that result"); process.exit(1); }
 const r = await fetch(`https://api.stxer.xyz/devtools/v2/simulations/${sim}/inspect/${target.TxId}`);
 const raw = execFileSync("zstd", ["-d", "-c"], { input: Buffer.from(await r.arrayBuffer()), maxBuffer: 1 << 28 });
 const td = new TextDecoder(); const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;

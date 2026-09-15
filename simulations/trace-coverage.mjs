@@ -20,6 +20,9 @@ import { deserializeCV, cvToString } from "@stacks/transactions";
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const md = process.argv.includes("--md");
 const NAME = arg("--contract", "markets-sbtc-stx-jing-v6");
+// every instance of the SAME source deployed under another name (a MAX_DEPOSITORS u3 copy, a
+// real-staleness copy, "markets-b") counts for the contract: same expression ids
+const ALIAS = new RegExp(arg("--alias", "^markets-"));
 const TABLE = arg("--table", "Full rerun 2026-09-14");
 const API = "https://api.stxer.xyz";
 const CACHE = process.env.TRACE_CACHE || path.join(process.env.TMPDIR || "/tmp", "stxer-traces");
@@ -75,7 +78,7 @@ function decodeNode(b, o, out, contract) {
   const rlen = u32(b, o); o += 4;
   const resultErr = resOk ? null : td.decode(b.subarray(o, o + rlen)); o += rlen;
   const m = code.match(/^(S[PMTN][0-9A-Z]+\.[0-9a-zA-Z_-]+):/);
-  if (m) contract = m[1].split(".")[1];
+  if (m) { contract = m[1].split(".")[1]; if (contract !== NAME && ALIAS.test(contract)) contract = NAME; }
   if (contract) { const set = out.get(contract) || out.set(contract, new Set()).get(contract); set.add(String(id)); const cm = out.counts || (out.counts = new Map()); const key = `${contract}:${id}`; cm.set(key, (cm.get(key) || 0) + 1); if (resultErr) (out.errs ||= []).push({ contract, id: String(id), func, err: resultErr.slice(0, 80) }); }
   const n = u32(b, o); o += 4;
   for (let i = 0; i < n; i++) o = decodeNode(b, o, out, contract);
@@ -130,6 +133,11 @@ for (const [id, n] of nodes) {
 }
 const codeLines = lines.map((_, i) => i + 1).filter(codeLine);
 const coveredLines = codeLines.filter((l) => lineTouched.get(l) === true);
+// top-level definitions (constants, maps, vars, trait lines) only run at deploy, which has no trace:
+// report the executable body separately
+const topLines = new Set([...nodes.values()].filter((n) => n.fn === "(top)" && n.line != null).map((n) => n.line));
+const fnLines = codeLines.filter((l) => !topLines.has(l));
+const fnCovered = fnLines.filter((l) => lineTouched.get(l) === true);
 // ---- branches: if / match / asserts! whose arms never ran ----
 const branches = [];
 for (const [id, n] of nodes) {
@@ -161,7 +169,7 @@ for (const [id, n] of nodes) { if (!n.list) continue; const l = n.line; if (!hit
 const out = [];
 const L = (s) => out.push(s);
 L(md ? `# Trace coverage: ${NAME}\n\nFrom \`simulations/trace-coverage.mjs\` on ${new Date().toISOString().slice(0, 10)}: ${sims.length} simulations, ${txs} transactions (${missing} without a trace), every evaluated expression read from the stxer debug traces.\n` : `${sims.length} sims, ${txs} txs (${missing} no trace)`);
-L(md ? `| metric | value |\n|---|---|\n| expressions executed / total | ${hit.size} / ${total} (${((100 * hit.size) / total).toFixed(1)}%) |\n| code lines touched / total | ${coveredLines.length} / ${codeLines.length} (${((100 * coveredLines.length) / codeLines.length).toFixed(1)}%) |\n| branch nodes (if / match / asserts!) | ${branches.length}: ${branches.length - partial.length - unreached.length} full, ${partial.length} partial, ${unreached.length} never reached |`
+L(md ? `| metric | value |\n|---|---|\n| expressions executed / total | ${hit.size} / ${total} (${((100 * hit.size) / total).toFixed(1)}%) |\n| code lines touched / total | ${coveredLines.length} / ${codeLines.length} (${((100 * coveredLines.length) / codeLines.length).toFixed(1)}%) |\n| function body lines touched / total (top-level definitions excluded) | ${fnCovered.length} / ${fnLines.length} (${((100 * fnCovered.length) / fnLines.length).toFixed(1)}%) |\n| branch nodes (if / match / asserts!) | ${branches.length}: ${branches.length - partial.length - unreached.length} full, ${partial.length} partial, ${unreached.length} never reached |`
   : `expressions ${hit.size}/${total} (${((100 * hit.size) / total).toFixed(1)}%), lines ${coveredLines.length}/${codeLines.length} (${((100 * coveredLines.length) / codeLines.length).toFixed(1)}%), branches ${branches.length}: ${partial.length} partial, ${unreached.length} never reached`);
 L(md ? `\n## Branches with one arm never taken (${partial.length})\n\n| line | function | kind | state |\n|---|---|---|---|` : `\n== partial branches (${partial.length})`);
 for (const b of partial.sort((a, c) => a.line - c.line)) L(md ? `| ${b.line} | ${b.fn} | ${b.head} | ${b.state} |` : `L${b.line} ${b.fn} ${b.head}: ${b.state}`);
