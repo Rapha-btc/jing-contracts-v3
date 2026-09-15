@@ -822,6 +822,54 @@ The market gained one additive public, `prune-seats` (99,608 bytes, no
 deposit path touched); the Lazer market harnesses are due a rerun with a
 key.
 
+## Full rerun on b8b6f3e (2026-09-15, get-taker-capacity takes the taker, a taker on a full side goes through the maker door)
+
+Every harness on the market as committed at b8b6f3e (b7dc673: `get-taker-capacity`
+takes the taker and leaves its own opposite-side order out of the walk;
+b8b6f3e: a taker whose side is full enters through the same door as a maker,
+so the queue-full rule cannot be dodged by crossing, and `get-taker-capacity`
+models the queue and reports the minimum taker). The source is 104,288 bytes
+raw, 98,477 with the comment lines stripped; every harness strips the comment
+lines before it deploys, and the mainnet deploy must do the same (or the file
+must be trimmed) since the cap is 100,000 bytes. The harnesses themselves
+grew since the previous table (the other window's coverage pass on the rungs,
+the vault and the router; what each run added is listed row by row in
+`simulations/COVERAGE-RUNS-other.md`). Trace coverage
+(`simulations/TRACE-COVERAGE-markets-v6.md`) and the executed error-code /
+event matrix (`simulations/COVERAGE.md`) are computed on exactly these runs
+against this source.
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 304/304 | `2d134ecd3fbea22f1d59b5c50d9f13bc` |
+| markets v6 gaps | 72/72 | `0aea86878770aef850f677f7e8a5df96` |
+| markets v6 lazer-paths | 35/35 | `cfa2c166f5d4a520cc8aeadce652970f` |
+| markets v6 multifill | 44/44 | `75b553498060145bc9850296114450a7` |
+| markets v6 regression | 23/23 | `9f66c482f6aba6a5f0722986ac452850` |
+| markets v6 remainder-cross | 116/116 | `69d71b4f099043929088d759b1df5ef3` |
+| markets v6 stress | 126/126 | `e604363adf4890cbc42ff99ab09607e3` |
+| markets v6 withdraw | 102/102 | `764fdf7a96e014dd6e6ca4aa694776ce` |
+| v6 peg-batch | 93/93 | `a199df4c12a42bfed1ec04042bd4f8eb` |
+| v6 peg-edges | 60/60 | `3e2c86f80dccc7bb933806564e467fe0` |
+| v6 peg | 76/76 | `4efa9f394ae2973eeb65191b1fb6bf82` |
+| v6 peg-mirror | 44/44 | `bb8891d08d0e21681cea44939b7d1af0` |
+| v6 peg-more | 51/51 | `1f7701ce6fcfc19f868a08ef2e2b8949` |
+| v6 peg-park | 50/50 | `dfade3ba66a593c73b96113c1e86ae0d` |
+| v6 peg-park-y | 77/77 | `cf9830c6b487c16cbb39f57d26ef6222` |
+| v6 peg-track | 30/30 | `afc6b10211fb420318a925aad5f425fb` |
+| v6 peg-walk-order | 70/70 | `1a404bbfc679180da509421491b732aa` |
+| v6 small-share-x | 31/31 | `79b5a9805ad01bfea483330cbb8a84f8` |
+| v6 band-mixed-fill | 60/60 | `6cff092430a4046a5f0044c4522bb0e0` |
+| v6 rung-types-mixed | 85/85 | `7833fe4ef93bcc002a40bf744c863037` |
+| v6 rungs-fill (+ F5 the sell side sold out) | 81/81 | `96ec02af18b5f20239cb4ceb4b71fcc8` |
+| v6 rungs-push (+ P3/P5/P6 push on every rung kind) | 62/62 | `da6fd0cf7ed01f7cef1d444b0920ceee` |
+| v6 rungs-miner-band | 174/174 | `8d41a193d90d224c46dc6e95632b3340` |
+| v6 rungs-replace-keyless (+ R10/R11 band rungs held under the minimum) | 232/232 | `a8b13fcddf9671daf6e6e20207384beb` |
+| v6 rungs-keyless buy / sell (+ zero-padded hundredths) | 38 / 38 | `0124c42a93ccca1e3d783d218d2158a1` / `6343bc2a39a972a5b85a515a8a65a908` |
+| v6 rungs-keyless buy-peg / sell-peg | 41 / 41 | `672d3cdca06a352d28f00004c598f493` / `8ff938cbd99e211faa75aff338fe160f` |
+| vault v6 parked (+ V3/V7-V15 the rest of the vault on this stack) | 196/196 | `9b1125d0128cc8e2371dcd7e0a56438f` |
+| router v5 on the v6 stack (`V6=1`, + W18/W19 pro-rata XYK / Velar splits both ways) | 275/275 | `08121faed3949526413beda14c4306aa` |
+
 ## Full rerun 2026-09-15, on the spread guard (06f57a3) and the peg-track comment strip (296c73f), source at 296c73f
 
 Every harness on the market as committed at 296c73f (the pegged-bid / pegged-ask
