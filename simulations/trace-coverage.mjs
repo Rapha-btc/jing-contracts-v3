@@ -37,6 +37,9 @@ else {
   const end = readme.indexOf("\n## ", start + 4);
   sims = [...readme.slice(start, end < 0 ? undefined : end).matchAll(/`([0-9a-f]{32})`/g)].map((m) => m[1]);
 }
+// --skip id,id : sims that ran on another source version (their ids do not line up with --rev)
+const SKIP = new Set((arg("--skip", "") || "").split(",").filter(Boolean));
+sims = sims.filter((s) => ![...SKIP].some((k) => s.startsWith(k)));
 
 // ---- the AST of the canonical source: id -> span, plus the branch nodes ----
 // the sims ran on COMMITTED source: read it at --rev (default HEAD), never the working tree,

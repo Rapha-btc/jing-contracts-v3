@@ -28,7 +28,12 @@ const S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";  // STX whale: sell-rung m
 const B = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q";  // taker both ways
 const PP = 100_000_000n, PPDF = PP * 100n, BPS = 20n;
 const WAIT = Number(process.env.WAIT ?? 75);
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped: the v6 source sits at 99,996 bytes with them
+// and the MAX_STALENESS patch below tipped it over the 100,000-byte deploy
+// limit ("String length exceeds maximum bytes 100000", 2026-09-15); same
+// strip as verify-markets-v6-gaps.js, the deploy form is comment-free anyway
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
