@@ -97,7 +97,14 @@ nothing, idempotent).
 
 | v6 rungs-miner-band, Lazer (`initialize(bps, seat)`, S8/S9 registered = true, not current) | 174/174 | `635157fe62c07d3b5fef21b84c8e4913` |
 
-The market Lazer harnesses are due a rerun (one additive public on the market).
+Market Lazer harnesses rerun on `d9ee89e` (market with `prune-seats`), with a key:
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 201/201 | `0c2ad98df7f55b800e33223213cf9bda` |
+| markets v6 withdraw | 102/102 | `ee78cdb45afb3af5a17d2aa6bf62aa84` |
+| v6 peg-park | 41/41 | `db351920e687d0aec7122bbfb44adcd5` |
+| vault v6 parked | 137/137 | `24f1efd2b6d9abed3abe6d6ed1a6e450` |
 
 ## Commits
 
