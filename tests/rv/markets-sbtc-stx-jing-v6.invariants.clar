@@ -129,6 +129,9 @@
 ;; seat / unseat an account on the mock ladder, then let the market copy it
 (define-public (rv-band-x (who principal) (on bool))
   (begin
+    ;; a parked account is not seated: the protection rule (a seat holder
+    ;; is never parked) is checked below and must not be broken by the seat
+    (asserts! (or (not on) (is-eq (get-token-x-parked who) u0)) ERR_QUEUE_FULL)
     (try! (contract-call? .mock-jing-ladder set-band-x who on))
     (if on
       (begin (try! (sync-seat who)) (ok true))
@@ -136,6 +139,7 @@
 
 (define-public (rv-band-y (who principal) (on bool))
   (begin
+    (asserts! (or (not on) (is-eq (get-token-y-parked who) u0)) ERR_QUEUE_FULL)
     (try! (contract-call? .mock-jing-ladder set-band-y who on))
     (if on
       (begin (try! (sync-seat who)) (ok true))
@@ -430,3 +434,54 @@
       (or (would-take-as-x mid mid) (not (would-take-as-x mid mid)))
       (or (would-take-as-y mid mid) (not (would-take-as-y mid mid)))
       (<= n u20))))
+
+;; ============================================================================
+;; 29: a seat holder is never parked (the protection rule; the seat wrapper
+;; refuses a parked account so the market alone decides).
+;;
+;; NOT an invariant, tried and dropped 2026-09-15: "unseated makers on a
+;; side never exceed MAX_DEPOSITORS minus the seats". By design a retired
+;; seat holder keeps its resting order and counts in the open region until
+;; it leaves (jing-ladder retire-band / replace), so right after a prune
+;; the region can sit one over its cap. RV found that within 400 runs.
+;; ============================================================================
+
+(define-private (rv-seated-parked-x (a principal))
+  (and (is-protected-x a) (> (get-token-x-parked a) u0)))
+(define-private (rv-seated-parked-y (a principal))
+  (and (is-protected-y a) (> (get-token-y-parked a) u0)))
+
+(define-read-only (invariant-seat-holders-never-parked)
+  (and (is-eq (len (filter rv-seated-parked-x RV-ACCOUNTS)) u0)
+       (is-eq (len (filter rv-seated-parked-y RV-ACCOUNTS)) u0)))
+
+;; ============================================================================
+;; 31: the future is empty at rest. Rolls write to cycle+1 and advance in
+;; the same call; nothing ever writes further ahead.
+;; ============================================================================
+
+(define-read-only (invariant-future-cycles-empty)
+  (let ((next (+ (var-get current-cycle) u1)))
+    (and
+      (is-eq (get total-token-x (get-cycle-totals next)) u0)
+      (is-eq (get total-token-y (get-cycle-totals next)) u0)
+      (is-eq (len (get-token-x-depositors next)) u0)
+      (is-eq (len (get-token-y-depositors next)) u0)
+      (is-eq (get total-token-x (get-cycle-totals (+ next u1))) u0)
+      (is-eq (get total-token-y (get-cycle-totals (+ next u1))) u0)
+      (is-eq (len (get-token-x-depositors (+ next u1))) u0)
+      (is-eq (len (get-token-y-depositors (+ next u1))) u0))))
+
+;; ============================================================================
+;; 32: configuration frozen and sane. initialize runs once (the fuzz build
+;; starts initialized), the tokens never move, both minimums stay above
+;; zero, the price region fits the queue.
+;; ============================================================================
+
+(define-read-only (invariant-config-frozen)
+  (and (var-get initialized)
+       (is-eq (var-get token-x) .mock-ft)
+       (is-eq (var-get token-y) .mock-ft)
+       (> (var-get min-token-x-deposit) u0)
+       (> (var-get min-token-y-deposit) u0)
+       (<= (var-get distance-slots) MAX_DEPOSITORS)))

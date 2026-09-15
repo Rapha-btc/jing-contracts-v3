@@ -190,3 +190,17 @@
     (> (contract-call? .v6-market get-token-y-deposit
          (contract-call? .v6-market get-current-cycle) current-contract) u0)
     (> (contract-call? .v6-market get-token-y-parked current-contract) u0))))
+
+;; ============================================================================
+;; 11-12: a closed epoch's final index never runs ahead of the live one
+;; (old members are paid against it); the rung holds no order row on the
+;; market without a position (mirror of the market's stale-order check).
+;; ============================================================================
+
+(define-read-only (invariant-closed-epoch-index-le-live)
+  (or (is-eq (var-get epoch) u0)
+      (<= (final-index (- (var-get epoch) u1)) (var-get proceeds-index))))
+
+(define-read-only (invariant-rung-no-stale-order)
+  (or (> (market-size) u0)
+      (is-eq (contract-call? .v6-market get-token-y-limit current-contract) u0)))

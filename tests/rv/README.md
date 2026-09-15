@@ -14,9 +14,9 @@ vault-sbtc-stx-v2           -- 500 runs,  3 invariants, 0 failures (2026-08-18)
 rfq-sbtc-stx-jing-v2        -- 500 runs,  4 invariants, 0 failures (banded + kill-switch)
 rfq-sbtc-stx-jing-v3        -- 500 runs,  4 invariants, 0 failures
 creator-bonus-jing          -- 500 runs,  4 invariants, 0 failures (2026-09-02)
-markets-sbtc-stx-jing-v6    -- 1000 runs, 28 invariants, 0 failures (2026-09-15, settle LIVE)
+markets-sbtc-stx-jing-v6    -- 1000 runs, 31 invariants, 0 failures (2026-09-15, settle LIVE)
 jing-ladder                 -- 500 runs,  6 invariants, 0 failures (2026-09-15)
-jing-buy/sell-stx x3 pairs  -- 500 runs, 10 invariants each, 0 failures (2026-09-15)
+jing-buy/sell-stx x3 pairs  -- 500 runs, 12 invariants each, 0 failures (2026-09-15)
 ```
 
 ### v6 stack, added 2026-09-15: market v6, jing-ladder, the six pooled rungs
@@ -70,7 +70,7 @@ also protects a front end reading it. Runtime panics only log in RV; the
 120 underflows in the 1000-run sweep were counted from the log, not
 flagged.
 
-The 28 market invariants: the 12 v1/v2 list-vs-totals, ghost and bound
+The 31 market invariants: the 12 v1/v2 list-vs-totals, ghost and bound
 checks (current and next cycle), plus, new for v6: balance conservation
 WITH settle live (contract balance = open-cycle totals + next-cycle totals
 + every parked amount + pending escrow, x on mock-ft and y on native STX),
@@ -84,7 +84,16 @@ exactly FEE_BPS of what cleared, x cleared at the settlement price never
 exceeds y cleared, and the read-only surface is total at the live mid
 (`get-taker-capacity`, `would-take-as-x/y`, every account's
 `token-x/y-limit-at` evaluate without a runtime error: the class of the
-MAX_UINT sentinel overflow found on the v6 bounty).
+MAX_UINT sentinel overflow found on the v6 bounty); and, third round: a
+seat holder is never parked (the seat wrapper refuses a parked account so
+the market alone decides), the next two cycles are empty at rest (rolls
+write to cycle+1 and advance in the same call), and the configuration is
+frozen and sane (initialized, tokens unchanged, minimums above zero, the
+price region within the queue). One candidate was tried and dropped:
+"unseated makers on a side never exceed MAX_DEPOSITORS minus the seats"
+is false by design, a retired seat holder keeps its resting order and
+counts in the open region until it leaves; RV found that inside 400 runs
+right after a prune.
 
 `jing-ladder` (`build.sh` 2e): the only gate an account cannot pass is
 the code hash, so both `contract-hash?` reads become a fixed buffer and
@@ -104,7 +113,7 @@ market (`.v6-market`), the mock ladder, the mock RFQ native oracle
 (`mock-rfq-oracle.clar`, `rv-set-native`) and one mock-ft for sBTC and
 wstx. Wrappers play the market around it (mid, bids, asks, cancels, a
 taker on the other side, settlements; `rv-seat` for the band rungs) and
-each ends with `sync` so the rung's view is current. Ten invariants:
+each ends with `sync` so the rung's view is current. Twelve invariants:
 held equals the local balance, the proceeds watermark equals the proceeds
 balance, total shares equal the sum of current-epoch shares, the pool the
 indices imply never exceeds resting plus held and the members' unsold
@@ -113,20 +122,22 @@ balance, `unfilled-index` in `[SOLD_OUT_INDEX, SCALE]`, no paid mark ahead
 of the proceeds index, and the resting order is the one the rung was
 deployed for (price and `none`; floor / cap and `(some spread)`; `(some
 spread)` for the band rungs, whose guard moves with the oracle), and the
-rung is never live and parked at once on the market.
+rung is never live and parked at once on the market, a closed epoch's
+final index never runs ahead of the live one, and the rung holds no order
+row on the market without a position.
 
 Sweeps (2026-09-15, `--runs` as shown, zero falsified invariants):
 
 | target | runs | invariants (checks) | real movement (successful calls) |
 |---|---|---|---|
-| markets-sbtc-stx-jing-v6 | 1000 | 28 (1000; the three added after review: 400 more runs, 43 checks) | rv-deposit-x x93 / -y x86 (+ raw x40 / x33), rv-reprice-x x55 / -y x57 (+ raw x16 / x18, the crossing branch settles), rv-swap x9, rv-settle x4, rv-settle-at x1, rv-mid-at x45, rv-cancel-x x67, cancel-y x55, rv-withdraw-x x28, withdraw-y x46, readmit-x x2 / -y x1, rv-band-x x88 / -y x84, sync-seat x41, prune-cycles x14; 0 underflows with the pegged-bid guard in source (120 before it) |
+| markets-sbtc-stx-jing-v6 | 1000 | 31 (1000; two later rounds of 400 runs each for the six added after review) | rv-deposit-x x93 / -y x86 (+ raw x40 / x33), rv-reprice-x x55 / -y x57 (+ raw x16 / x18, the crossing branch settles), rv-swap x9, rv-settle x4, rv-settle-at x1, rv-mid-at x45, rv-cancel-x x67, cancel-y x55, rv-withdraw-x x28, withdraw-y x46, readmit-x x2 / -y x1, rv-band-x x88 / -y x84, sync-seat x41, prune-cycles x14; 0 underflows with the pegged-bid guard in source (120 before it) |
 | jing-ladder | 500 | 6 (500) | rv-register x5, rv-register-unseated x4, seat-band x6, rv-retire-band x4, rv-set-canonical x16, set-max-band-per-side x18, propose-owner x23, accept-owner x4, log-* x140-177 each; raw register / set-canonical x0 (random side strings, as expected) |
-| jing-buy-stx | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x184, withdraw x193, claim x175, push x227, sync x220, rv-settle x19, rv-take x36 |
-| jing-sell-stx | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x193, withdraw x84, claim x142, push x194, sync x206, rv-settle x28, rv-take x26 |
-| jing-buy-stx-market-spread | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x184, withdraw x181, claim x156, push x196, sync x209, rv-settle x15, rv-take x48 |
-| jing-sell-stx-market-spread | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x186, withdraw x174, claim x161, push x221, sync x212, rv-settle x18, rv-take x14 |
-| jing-buy-stx-core-spread | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x159, withdraw x143, claim x139, push x175, sync x182, rv-seat x183, rv-set-native x183, rv-settle x8, rv-take x30 |
-| jing-sell-stx-core-spread | 500 | 10 (500; the tenth: 200 more runs on buy-stx and sell-stx-core-spread) | deposit x149, withdraw x137, claim x127, push x200, sync x196, rv-seat x175, rv-set-native x195, rv-settle x16, rv-take x3 |
+| jing-buy-stx | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x184, withdraw x193, claim x175, push x227, sync x220, rv-settle x19, rv-take x36 |
+| jing-sell-stx | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x193, withdraw x84, claim x142, push x194, sync x206, rv-settle x28, rv-take x26 |
+| jing-buy-stx-market-spread | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x184, withdraw x181, claim x156, push x196, sync x209, rv-settle x15, rv-take x48 |
+| jing-sell-stx-market-spread | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x186, withdraw x174, claim x161, push x221, sync x212, rv-settle x18, rv-take x14 |
+| jing-buy-stx-core-spread | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x159, withdraw x143, claim x139, push x175, sync x182, rv-seat x183, rv-set-native x183, rv-settle x8, rv-take x30 |
+| jing-sell-stx-core-spread | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x149, withdraw x137, claim x127, push x200, sync x196, rv-seat x175, rv-set-native x195, rv-settle x16, rv-take x3 |
 
 Logs of the day's sweeps were read for the counts above; RV prints the
 same summary at the end of every run. `rv-take` on the sell rungs folds the
