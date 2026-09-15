@@ -328,6 +328,10 @@ async function main() {
   tx("sim-only: seats 0 on the ladder (the 3-slot park instance cannot reserve 10)", call(DEPLOYER, "set-max-band-per-side", [uintCV(0)], `${DEPLOYER}.jing-ladder`), "(ok true)");
   tx("deploy market (patched)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy park market (MAX u3)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: PARK, source_code: parkSrc }), (v) => !String(v).includes("ERR"));
+  // sim-only probe: a read-only called from a transaction leaves a stxer debug trace, an eval does not
+  // (the trace coverage of get-taker-capacity's queue model comes from these calls)
+  tx("deploy cap-probe (sim-only)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: "cap-probe", source_code:
+    `(define-public (probe (mid uint) (limit uint) (dx bool) (taker principal))\n  (ok (contract-call? '${PID} get-taker-capacity mid limit dx taker)))\n` }), (v) => !String(v).includes("ERR"));
   tx("sim-only: main market syncs the count", call(DEPLOYER, "sync-seat-count", []), (v) => String(v).startsWith("(ok"));
   tx("sim-only: park market syncs the count", call(DEPLOYER, "sync-seat-count", [], PID), (v) => String(v).startsWith("(ok"));
   for (const [name, cid] of [[MARKET, CID], [PARK, PID]]) {
@@ -685,6 +689,94 @@ async function main() {
   ev("D10 XE2 live 5000", `(get-token-x-deposit u0 '${XE2})`, "u5000", PID);
   ev("D10 XD8 still live", `(get-token-x-deposit u0 '${XD8})`, "u3000", PID);
 
+  // ---- T (trace coverage, b8b6f3e): a taker on a FULL side goes through the maker door ----
+  // swap reads the mid and runs park-tenth when the taker's side is full (before, the
+  // taker met the core's size rule alone). get-taker-capacity models the same queue:
+  // door-parks (a switched-off or an out-of-range resident leaves first) -> min-taker 0;
+  // nobody to park that way -> min-taker = smallest unseated resident + 1, and a cap
+  // under it reads zero. x side: XD8 3000, XE1 3000, XE2 5000, all in range (full).
+  const TKX = mkAddr(48), YB = mkAddr(49), YB2 = mkAddr(50), TXC = mkAddr(51), TXP = mkAddr(52);
+  const TKY = mkAddr(53), XS = mkAddr(54), XS2 = mkAddr(55), YR1 = mkAddr(56), YR2 = mkAddr(57), YR3 = mkAddr(58), YC = mkAddr(59), YP = mkAddr(60);
+  for (const [w, ustx, sats] of [[TKX, 1_000_000, 20_000n], [YB, 3_000_000, 0n], [YB2, 110_000_000, 0n], [TXC, 1_000_000, 3500n], [TXP, 1_000_000, 3500n],
+    [TKY, 20_000_000, 0n], [XS, 1_000_000, 1500n], [XS2, 1_000_000, 5500n], [YR1, 5_000_000, 0n], [YR2, 5_000_000, 0n], [YR3, 5_000_000, 0n], [YC, 3_000_000, 0n], [YP, 3_000_000, 0n]]) {
+    tx(`T fund ${w.slice(0, 6)} stx`, stxSend(w, ustx), okPrefix);
+    if (sats > 0n) tx(`T fund ${w.slice(0, 6)} sats`, sbtcSend(w, sats), okPrefix);
+  }
+  const capX = (limit) => `(get-taker-capacity u${MID} u${limit} true '${TKX})`;
+  const capY = (limit) => `(get-taker-capacity u${MID} u${limit} false '${TKY})`;
+  const probeX = (label, limit, want) => tx(label, call(TKX, "probe", [uintCV(MID), uintCV(limit), trueCV(), standardPrincipalCV(TKX)], `${DEPLOYER}.cap-probe`), (v) => String(v).includes(want));
+  const probeY = (label, limit, want) => tx(label, call(TKY, "probe", [uintCV(MID), uintCV(limit), falseCV(), standardPrincipalCV(TKY)], `${DEPLOYER}.cap-probe`), (v) => String(v).includes(want));
+  // T1-T6: nobody to park through the door -> the core's size rule applies to the taker
+  tx("T1 YB bids 2 STX at -1% (out of range, does not cross the in-range asks)", depositY(YB, 2_000_000n, LD, PID), "(ok u2000000)");
+  ev("T2 capacity for an x-taker at -1%: side full, nobody to park -> min-taker = smallest (3000) + 1", `(get min-taker ${capX(LD)})`, "u3001", PID);
+  ev("T2 the 2 STX walk (~1.7k sats) is under min-taker -> net-cap reads 0", `(get net-cap ${capX(LD)})`, "u0", PID);
+  probeX("T2 probe (traced): min-taker u3001, net-cap u0", LD, "(min-taker u3001)");
+  ev("T2 gross-cap reads 0 too", `(get gross-cap ${capX(LD)})`, "u0", PID);
+  tx("T3 TKX swaps 2000 net at -1% on the full side: the door parks nobody, 2000 not over the smallest (3000) -> u1010", swap(TKX, grossFor(2000n), LD, true, PID), "(err u1010)");
+  ev("T3 x book untouched (3)", "(len (get-token-x-depositors (get-current-cycle)))", "u3", PID);
+  tx("T4 YB2 bids 100 STX at -1%", depositY(YB2, 100_000_000n, LD, PID), "(ok u100000000)");
+  ev("T5 min-taker still 3001", `(get min-taker ${capX(LD)})`, "u3001", PID);
+  ev("T5 net-cap now over the bar (the 102 STX walk)", `(get net-cap ${capX(LD)})`, (v) => uintOf(v) > 3001n, PID);
+  probeX("T5 probe (traced): admitted over the bar", LD, "(min-taker u3001)");
+  const tkxBefore = cap("T6 TKX STX before", `(stx-get-balance '${TKX})`, PID);
+  tx("T6 TKX swaps 4000 net at -1%: over the smallest -> the core parks the smallest in-range ask, the taker enters and walks the -1% bids", swap(TKX, grossFor(4000n), LD, true, PID), okPrefix);
+  ev("T6 the smallest (XD8 or XE1, 3000) is parked", `(+ (get-token-x-parked '${XD8}) (get-token-x-parked '${XE1}))`, "u3000", PID);
+  ev("T6 XE2 (5000) still live", `(get-token-x-deposit (get-current-cycle) '${XE2})`, "u5000", PID);
+  ev("T6 cycle advanced (the walk settled)", "(get-current-cycle)", "u1", PID);
+  ev("T6 x book: two live asks rolled", "(len (get-token-x-depositors (get-current-cycle)))", "u2", PID);
+  const tkxAfter = cap("T6 TKX STX after", `(stx-get-balance '${TKX})`, PID);
+  // T7-T9: an out-of-range resident makes the side full -> the door parks it for an in-range taker
+  tx("T7 TXC asks 3000 at +10% (side full again)", depositX(TXC, 3000n, LQ1, PID), "(ok u3000)");
+  ev("T8 capacity: door parks (an out-of-range resident) -> min-taker 0", `(get min-taker ${capX(LD)})`, "u0", PID);
+  ev("T8 admitted: net-cap over 0", `(get net-cap ${capX(LD)})`, (v) => uintOf(v) > 0n, PID);
+  probeX("T8 probe (traced): door parks -> min-taker u0", LD, "(min-taker u0)");
+  tx("T9 TKX swaps 2000 net (under everyone) on the full side: the door parks TXC, the taker enters", swap(TKX, grossFor(2000n), LD, true, PID), okPrefix);
+  ev("T9 TXC parked 3000", `(get-token-x-parked '${TXC})`, "u3000", PID);
+  ev("T9 cycle u2", "(get-current-cycle)", "u2", PID);
+  // T10-T12: a switched-off pegged resident leaves first
+  tx("T10 TXP pegged ask 3000, floor +10% over the mid -> switched off, rests (side full again)", depositXPeg(TXP, 3000n, LQ1, 0n, PID), "(ok u3000)");
+  ev("T11 capacity: door parks (a switched-off resident) -> min-taker 0", `(get min-taker ${capX(LD)})`, "u0", PID);
+  probeX("T11 probe (traced): switched-off resident -> min-taker u0", LD, "(min-taker u0)");
+  tx("T12 TKX swaps 2000 net: the switched-off TXP is parked first", swap(TKX, grossFor(2000n), LD, true, PID), okPrefix);
+  ev("T12 TXP parked 3000", `(get-token-x-parked '${TXP})`, "u3000", PID);
+  ev("T12 x book: the two rolled asks", "(len (get-token-x-depositors (get-current-cycle)))", "u2", PID);
+  // T13-T25: the y mirror. Clear both sides (in-range bids cannot rest next to in-range asks, u1016)
+  const cyc = () => "(get-current-cycle)";
+  tx("T13 XE1 cancels", cancelX(XE1, PID), (v) => okPrefix(v) || v === "(err u1005)");
+  tx("T13 XD8 cancels", cancelX(XD8, PID), (v) => okPrefix(v) || v === "(err u1005)");
+  tx("T13 XE2 cancels", cancelX(XE2, PID), okPrefix);
+  tx("T13 YB cancels the rest of its bid", cancelY(YB, PID), (v) => okPrefix(v) || v === "(err u1005)");
+  tx("T13 YB2 cancels the rest of its bid", cancelY(YB2, PID), okPrefix);
+  ev("T13 x side: the parked ones are off the list", `(len (get-token-x-depositors ${cyc()}))`, "u0", PID);
+  ev("T13 y side empty", `(len (get-token-y-depositors ${cyc()}))`, "u0", PID);
+  tx("T14 XS asks 1000 sats at +1% (out of range, ~3 STX of walk)", depositX(XS, 1000n, LB, PID), "(ok u1000)");
+  tx("T14 YR1 bids 4 STX in range", depositY(YR1, 4_000_000n, HUGE, PID), "(ok u4000000)");
+  tx("T14 YR2 bids 4 STX in range", depositY(YR2, 4_000_000n, HUGE, PID), "(ok u4000000)");
+  tx("T14 YR3 bids 4 STX in range", depositY(YR3, 4_000_000n, HUGE, PID), "(ok u4000000)");
+  ev("T14 y side full, all in range", `(len (get-token-y-depositors ${cyc()}))`, "u3", PID);
+  ev("T15 capacity for a y-taker at +1%: nobody to park -> min-taker = 4 STX + 1", `(get min-taker ${capY(LB)})`, "u4000001", PID);
+  ev("T15 the 1000-sat walk (~3 STX) is under min-taker -> net-cap 0", `(get net-cap ${capY(LB)})`, "u0", PID);
+  probeY("T15 probe (traced): min-taker u4000001, net-cap u0", LB, "(min-taker u4000001)");
+  tx("T16 TKY swaps 1.5 STX net at +1% on the full side: not over the smallest bid (4 STX) -> u1010", swap(TKY, grossFor(1_500_000n), LB, false, PID), "(err u1010)");
+  tx("T17 XS2 asks 5000 at +1%", depositX(XS2, 5000n, LB, PID), "(ok u5000)");
+  ev("T18 min-taker still 4 STX + 1", `(get min-taker ${capY(LB)})`, "u4000001", PID);
+  ev("T18 net-cap now over the bar", `(get net-cap ${capY(LB)})`, (v) => uintOf(v) > 4_000_001n, PID);
+  probeY("T18 probe (traced): admitted over the bar", LB, "(min-taker u4000001)");
+  tx("T19 TKY swaps 4.5 STX net at +1%: over the smallest -> the core parks the smallest in-range bid, the taker walks the +1% asks", swap(TKY, grossFor(4_500_000n), LB, false, PID), okPrefix);
+  ev("T19 one 4 STX bid parked (the first smallest)", `(+ (get-token-y-parked '${YR1}) (get-token-y-parked '${YR2}) (get-token-y-parked '${YR3}))`, "u4000000", PID);
+  ev("T19 y book: two live bids rolled", `(len (get-token-y-depositors ${cyc()}))`, "u2", PID);
+  tx("T20 YC bids 2 STX at -10% (side full again)", depositY(YC, 2_000_000n, LP1, PID), "(ok u2000000)");
+  ev("T21 capacity: door parks (an out-of-range bid) -> min-taker 0", `(get min-taker ${capY(LB)})`, "u0", PID);
+  probeY("T21 probe (traced): door parks -> min-taker u0", LB, "(min-taker u0)");
+  tx("T22 TKY swaps 1.5 STX net: the door parks YC, the taker enters", swap(TKY, grossFor(1_500_000n), LB, false, PID), okPrefix);
+  ev("T22 YC parked 2 STX", `(get-token-y-parked '${YC})`, "u2000000", PID);
+  tx("T23 YP pegged bid 2 STX, cap -10% under the mid -> switched off, rests (side full again)", depositYPeg(YP, 2_000_000n, LP1, 0n, PID), "(ok u2000000)");
+  ev("T24 capacity: door parks (a switched-off bid) -> min-taker 0", `(get min-taker ${capY(LB)})`, "u0", PID);
+  probeY("T24 probe (traced): switched-off bid -> min-taker u0", LB, "(min-taker u0)");
+  tx("T25 TKY swaps 1.5 STX net: the switched-off YP is parked first", swap(TKY, grossFor(1_500_000n), LB, false, PID), okPrefix);
+  ev("T25 YP parked 2 STX", `(get-token-y-parked '${YP})`, "u2000000", PID);
+  ev("T25 y book: the two rolled bids", `(len (get-token-y-depositors ${cyc()}))`, "u2", PID);
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
@@ -713,6 +805,7 @@ async function main() {
   check("B2 escrow unchanged (atomic)", escAfter.value - escBefore.value, (d) => d === 0n);
   check(`B4 taker sBTC gain == ${XB - (XB * FEE) / BPS}`, t3After.value - t3Before.value, (d) => d === XB - (XB * FEE) / BPS);
   check("PX Q1 refund landed (3000 sats)", q1After.value - q1Before.value, (d) => d === 3000n);
+  check("T6 TKX received STX from the walked bids", tkxAfter.value - tkxBefore.value, (d) => d > 0n);
 
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);

@@ -841,7 +841,7 @@ against this source.
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 304/304 | `2d134ecd3fbea22f1d59b5c50d9f13bc` |
+| markets v6 bounty-fixes (+ T1-T25: a taker on a full side goes through the maker door, both sides; get-taker-capacity min-taker / net-cap 0 / door parks) | 387/387 | `39900fcaa0d76a23d4ddc2fe4ed4d2b8` |
 | markets v6 gaps | 72/72 | `0aea86878770aef850f677f7e8a5df96` |
 | markets v6 lazer-paths | 35/35 | `cfa2c166f5d4a520cc8aeadce652970f` |
 | markets v6 multifill | 44/44 | `75b553498060145bc9850296114450a7` |
