@@ -893,6 +893,19 @@
 ;; or computed. `let` evaluates every binding, which is why the guard has to
 ;; be an `if` around the whole stage rather than around the leg alone.
 
+;; What is left is dust: worth at most one unit of the other token at the
+;; limit. A venue cannot pay for it (its output rounds to zero while the
+;; limit-derived minimum rounds to one, so the venue refuses the leg and
+;; the whole swap with it: seen on the DLMM with the uSTX rounding dust a
+;; book fill leaves an STX seller), so the stages leave it home instead.
+(define-private (dust-left
+    (left uint)
+    (limit uint)
+    (sell-sbtc bool)
+  )
+  (or (is-eq left u0) (<= (limit-min left limit sell-sbtc) u1))
+)
+
 (define-private (amm-leg
     (amount uint)
     (limit uint)
@@ -911,7 +924,7 @@
     (limit uint)
     (sell-sbtc bool)
   )
-  (if (is-eq left u0)
+  (if (dust-left left limit sell-sbtc)
     (ok {
       cap: u0,
       in: u0,
@@ -940,7 +953,7 @@
     (limit uint)
     (sell-sbtc bool)
   )
-  (if (is-eq left u0)
+  (if (dust-left left limit sell-sbtc)
     (ok {
       xyk-cap: u0,
       velar-cap: u0,
@@ -948,7 +961,7 @@
       xyk-out: u0,
       velar-in: u0,
       velar-out: u0,
-      unsold: u0,
+      unsold: left,
     })
     (let (
         (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit
