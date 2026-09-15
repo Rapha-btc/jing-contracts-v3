@@ -376,3 +376,57 @@
   (and (<= (len (var-get seated-x)) (protected-seats))
        (<= (len (var-get seated-y)) (protected-seats))
        (<= (protected-seats) MAX_DEPOSITORS)))
+
+;; ============================================================================
+;; 26-27: the last settlement's arithmetic. Fees are exactly FEE_BPS of what
+;; cleared; x cleared at the settlement price never exceeds y cleared (the
+;; binding side sets both, the other is derived with a floor).
+;; ============================================================================
+
+(define-private (rv-last-settlement)
+  (let ((cycle (var-get current-cycle)))
+    (if (> cycle u0) (get-settlement (- cycle u1)) none)))
+
+(define-read-only (invariant-settlement-fees-exact)
+  (match (rv-last-settlement)
+    s (and
+        (is-eq (get token-y-fee s) (/ (* (get token-y-cleared s) FEE_BPS) BPS_PRECISION))
+        (is-eq (get token-x-fee s) (/ (* (get token-x-cleared s) FEE_BPS) BPS_PRECISION)))
+    true))
+
+(define-read-only (invariant-settlement-volumes-agree)
+  (match (rv-last-settlement)
+    s (and
+        (> (get price s) u0)
+        (<= (/ (* (get token-x-cleared s) (get price s)) (* PRICE_PRECISION DECIMAL_FACTOR))
+            (get token-y-cleared s)))
+    true))
+
+;; ============================================================================
+;; 28: the read-only surface is total at the live mid. get-taker-capacity,
+;; would-take-as-x/y and every account's effective limit evaluate without a
+;; runtime error (a panic inside an invariant fails the run). This is the
+;; class of the MAX_UINT sentinel overflow found on bounty mtxs6nxg7a6d97081b11.
+;; ============================================================================
+
+(define-private (rv-limits-at (a principal) (acc uint))
+  (let ((mid (contract-call? .mock-lazer-oracle get-mid)))
+    (+ acc
+       (if (is-eq (token-y-limit-at a mid) u0) u0 u1)
+       (if (is-eq (token-x-limit-at a mid) MAX_UINT) u0 u1))))
+
+(define-read-only (invariant-readers-total-at-mid)
+  (let (
+      (mid (contract-call? .mock-lazer-oracle get-mid))
+      (cap-x (get-taker-capacity mid mid true))
+      (cap-y (get-taker-capacity mid mid false))
+      (n (fold rv-limits-at RV-ACCOUNTS u0))
+    )
+    (and
+      (>= (get gross-cap cap-x) (get net-cap cap-x))
+      (>= (get gross-cap cap-y) (get net-cap cap-y))
+      (is-eq (get net-cap cap-x) (+ (get mid-cap cap-x) (get walk-cap cap-x)))
+      (is-eq (get net-cap cap-y) (+ (get mid-cap cap-y) (get walk-cap cap-y)))
+      (or (would-take-as-x mid mid) (not (would-take-as-x mid mid)))
+      (or (would-take-as-y mid mid) (not (would-take-as-y mid mid)))
+      (<= n u20))))

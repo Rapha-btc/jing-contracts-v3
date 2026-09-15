@@ -191,3 +191,14 @@
   (or (is-eq (market-size) u0)
       (let ((o (contract-call? .v6-market get-token-y-order current-contract)))
         (and (> (get limit o) u0) (is-eq (get spread-bps o) (some (var-get spread-bps)))))))
+
+;; ============================================================================
+;; 10: the rung is live or parked on the market, never both (the market's
+;; own invariants check this for accounts; they are not evaluated here).
+;; ============================================================================
+
+(define-read-only (invariant-rung-never-live-and-parked)
+  (not (and
+    (> (contract-call? .v6-market get-token-y-deposit
+         (contract-call? .v6-market get-current-cycle) current-contract) u0)
+    (> (contract-call? .v6-market get-token-y-parked current-contract) u0))))
