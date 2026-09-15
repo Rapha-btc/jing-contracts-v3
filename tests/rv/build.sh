@@ -42,6 +42,8 @@ declare -A SUTS=(
   ["creator-bonus-jing"]="contracts/deploying/creator-bonus-jing.clar"
   ["markets-sbtc-stx-jing-v6"]="contracts/markets-sbtc-stx-jing-v6.clar"
   ["jing-ladder"]="contracts/jing-ladder.clar"
+  ["jing-core-v5"]="contracts/jing-core-v5.clar"
+  ["markets-sbtc-stx-jing-v6-on-core"]="contracts/markets-sbtc-stx-jing-v6.clar"
   ["jing-buy-stx"]="contracts/jing-buy-stx.clar"
   ["jing-sell-stx"]="contracts/jing-sell-stx.clar"
   ["jing-buy-stx-market-spread"]="contracts/jing-buy-stx-market-spread.clar"
@@ -60,12 +62,24 @@ build_market() {
   local src="${SUTS[$name]:-}"
   local invariants="tests/rv/$name.invariants.clar"
   local out="$OUT/$name.clar"
+  # the on-core market variant is the v6 build with the real core-v5 as its
+  # registry: the v6 wrappers and invariants plus the core ledger add-on
+  # (tests/rv/jing-core-v5.invariants.clar). The core cannot be the RV
+  # target itself: it would have to call the market, and the market calls
+  # the core, which clarinet refuses as a cycle.
+  if [ "$name" = "markets-sbtc-stx-jing-v6-on-core" ]; then
+    invariants="tests/rv/markets-sbtc-stx-jing-v6.invariants.clar"
+  fi
+  # jing-core-v5 has no manifest of its own; it is built for the on-core target
+  if [ "$name" = "jing-core-v5" ]; then
+    invariants="/dev/null"
+  fi
 
   if [ -z "$src" ]; then
     echo "Unknown contract: $name (known: ${!SUTS[*]})" >&2
     exit 1
   fi
-  if [ ! -f "$invariants" ]; then
+  if [ "$invariants" != "/dev/null" ] && [ ! -f "$invariants" ]; then
     echo "Skipping $name: no invariants file at $invariants"
     return
   fi
@@ -167,8 +181,11 @@ if "creator-bonus-jing" in src_path:
 #     (BTC u1, STX u45) so pick-feed finds the mock's feeds. Minimums are
 #     u100 a side: big enough that the dust-refund branches at settle and the
 #     ERR_DEPOSIT_TOO_SMALL gate fire on RV's small naturals.
+on_core = out_path.endswith("-on-core.clar")
 if "markets-sbtc-stx-jing-v6" in src_path:
-    text = text.replace("(contract-call? .jing-core-v5", "(contract-call? .mock-jing-core")
+    # the on-core variant keeps the real registry: park the name so the
+    # generic .jing-core* replaces below cannot touch it, restore at the end
+    text = text.replace(".jing-core-v5", ".JINGCOREV5" if on_core else ".mock-jing-core")
     text = text.replace(
         "'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle", ".mock-lazer-oracle")
     text = text.replace(
@@ -181,6 +198,21 @@ if "markets-sbtc-stx-jing-v6" in src_path:
     text = text.replace("(define-data-var feed-id-y uint u0)", "(define-data-var feed-id-y uint u45)")
     text = text.replace("(define-data-var min-token-y-deposit uint u0)", "(define-data-var min-token-y-deposit uint u100)")
     text = text.replace("(define-data-var min-token-x-deposit uint u0)", "(define-data-var min-token-x-deposit uint u100)")
+
+# 2g. jing-core-v5 (added 2026-09-15): the registry fuzzed WITH the v6 market
+#     driving its log-* calls (the on-core market variant is registered at
+#     deploy; RV accounts still cannot register, contract-hash? of an account
+#     is none). set-verified-contract's hash read becomes a fixed buffer so
+#     the owner path runs; the pause timelock is 10 burn blocks so unpause
+#     is reachable; sBTC is the mock token.
+if src_path.endswith("contracts/jing-core-v5.clar"):
+    text = text.replace(
+        "(computed-hash (unwrap! (contract-hash? contract) ERR_INVALID_CONTRACT_HASH))",
+        "(computed-hash 0x00)")
+    text = text.replace("(define-constant TIMELOCK_BURN_BLOCKS u144)", "(define-constant TIMELOCK_BURN_BLOCKS u10)")
+    text = text.replace(
+        "(define-map registered-contracts\n  principal\n  bool\n)",
+        "(define-map registered-contracts\n  principal\n  bool\n)\n;; RV: the on-core market registers itself through this (a literal here\n;; would be a dependency edge back to the market, a cycle for clarinet;\n;; the real register needs a code hash no account has)\n(define-public (rv-register (who principal))\n  (ok (map-set registered-contracts who true)))")
 
 # 2e. jing-ladder (added 2026-09-15). The only gate an RV account cannot
 #     pass is the code hash (contract-hash? of an account is none), so both
@@ -464,6 +496,9 @@ text = text.replace(
 
 # Append invariants
 text += "\n\n" + open(inv_path).read()
+if on_core:
+    text = text.replace(".JINGCOREV5", ".jing-core-v5")
+    text += "\n\n" + open("tests/rv/jing-core-v5.invariants.clar").read()
 
 open(out_path, "w").write(text)
 PYEOF

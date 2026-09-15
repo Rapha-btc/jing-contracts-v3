@@ -16,6 +16,7 @@ rfq-sbtc-stx-jing-v3        -- 500 runs,  4 invariants, 0 failures
 creator-bonus-jing          -- 500 runs,  4 invariants, 0 failures (2026-09-02)
 markets-sbtc-stx-jing-v6    -- 1000 runs, 31 invariants, 0 failures (2026-09-15, settle LIVE)
 jing-ladder                 -- 500 runs,  6 invariants, 0 failures (2026-09-15)
+jing-core-v5 (via market v6) -- 1000 runs, 31 + 3 invariants, 0 failures (2026-09-15, equity ledger)
 jing-buy/sell-stx x3 pairs  -- 500 runs, 12 invariants each, 0 failures (2026-09-15)
 ```
 
@@ -68,7 +69,8 @@ state: the tx fails either way. The guard now sits inside `pegged-bid`
 (a spread at or over BPS_PRECISION is the switched-off sentinel u0), which
 also protects a front end reading it. Runtime panics only log in RV; the
 120 underflows in the 1000-run sweep were counted from the log, not
-flagged.
+flagged. The 20 stxer harnesses of the v6 set were rerun on the guarded
+source the same day (real Lazer update): all green, 1,700+ checks.
 
 The 31 market invariants: the 12 v1/v2 list-vs-totals, ghost and bound
 checks (current and next cycle), plus, new for v6: balance conservation
@@ -94,6 +96,27 @@ price region within the queue). One candidate was tried and dropped:
 is false by design, a retired seat holder keeps its resting order and
 counts in the open region until it leaves; RV found that inside 400 runs
 right after a prune.
+
+`jing-core-v5` (`build.sh` 2g, target `markets-sbtc-stx-jing-v6-on-core`):
+the registry and equity ledger fuzzed THROUGH the market. The core cannot
+be the RV target itself (its wrappers would call the market, which calls
+the core: clarinet refuses the cycle, and even a qualified principal
+literal counts as an edge), so the target is a second build of the v6
+market bound to the real `.jing-core-v5`, carrying the 31 market
+invariants plus a core add-on (`jing-core-v5.invariants.clar`): total
+equity equals the sum of the accounts' buckets, every account's bucket
+equals its position on the market (live + parked, both sides: deposits
+credit, refunds / withdrawals / cleared / matched debit, parks and rolls
+move nothing), paused implies a consistent paused-at. Tried and dropped:
+"the pending owner is never the current owner", propose-owner accepts the
+owner proposing itself (accepting is a no-op), RV found it inside 1000
+runs. Core admin paths (pause, unpause, handover,
+set-verified with a fixed hash) run through wrappers with the RV account
+as tx-sender; the market registers itself through a fuzz-only
+`rv-register` on the core (the real register wants a code hash no account
+has). Pause timelock 10 burn blocks in the build. The core's pause gate
+then blocks the market's deposits, matches and settlements for real, and
+never its cancels.
 
 `jing-ladder` (`build.sh` 2e): the only gate an account cannot pass is
 the code hash, so both `contract-hash?` reads become a fixed buffer and
@@ -131,6 +154,7 @@ Sweeps (2026-09-15, `--runs` as shown, zero falsified invariants):
 | target | runs | invariants (checks) | real movement (successful calls) |
 |---|---|---|---|
 | markets-sbtc-stx-jing-v6 | 1000 | 31 (1000; two later rounds of 400 runs each for the six added after review) | rv-deposit-x x93 / -y x86 (+ raw x40 / x33), rv-reprice-x x55 / -y x57 (+ raw x16 / x18, the crossing branch settles), rv-swap x9, rv-settle x4, rv-settle-at x1, rv-mid-at x45, rv-cancel-x x67, cancel-y x55, rv-withdraw-x x28, withdraw-y x46, readmit-x x2 / -y x1, rv-band-x x88 / -y x84, sync-seat x41, prune-cycles x14; 0 underflows with the pegged-bid guard in source (120 before it) |
+| markets-sbtc-stx-jing-v6-on-core (jing-core-v5) | 1000 | 31 + 3 (1000, then 300 on the final set) | rv-core-register x69, rv-core-pause x5 / unpause x3, propose x4 / accept x2, set-verified x6; rv-deposit-x x24 / -y x23, rv-cancel-x x18, withdraw-y x10, crossing reprices x7, rv-swap x1; equity tracked every position through all of it |
 | jing-ladder | 500 | 6 (500) | rv-register x5, rv-register-unseated x4, seat-band x6, rv-retire-band x4, rv-set-canonical x16, set-max-band-per-side x18, propose-owner x23, accept-owner x4, log-* x140-177 each; raw register / set-canonical x0 (random side strings, as expected) |
 | jing-buy-stx | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x184, withdraw x193, claim x175, push x227, sync x220, rv-settle x19, rv-take x36 |
 | jing-sell-stx | 500 | 12 (500; 200 more runs per added round on a buy and a sell rung) | deposit x193, withdraw x84, claim x142, push x194, sync x206, rv-settle x28, rv-take x26 |
@@ -149,6 +173,7 @@ Run:
 ```bash
 npm run rv:build                     # market v6, ladder, six rungs
 npm run rv:v6                        # 1000 runs
+npm run rv:core                      # core-v5 through the market, 1000 runs
 npm run rv:ladder                    # 500 runs
 npm run rv:rungs                     # six targets, 500 runs each
 npx rv . jing-buy-stx invariant --seed=<n>   # replay

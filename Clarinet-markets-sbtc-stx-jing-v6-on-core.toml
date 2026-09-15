@@ -1,0 +1,50 @@
+# RV-only manifest: the v6 fuzz market bound to the REAL jing-core-v5 (the
+# registry + equity ledger), so the core's log-* endpoints and ledger are
+# fuzzed through every market action. The market is the target (the core
+# would have to call the market for wrappers, a cycle); the core add-on
+# invariants live in tests/rv/jing-core-v5.invariants.clar. See
+# tests/rv/build.sh section 2g and tests/rv/README.md.
+#
+# Run:
+#   bash tests/rv/build.sh jing-core-v5 && bash tests/rv/build.sh markets-sbtc-stx-jing-v6-on-core
+#   npx rv . markets-sbtc-stx-jing-v6-on-core invariant --runs=500
+[project]
+name = "jing-contracts-v3-rv-v6-on-core"
+description = "RV-only manifest for fuzzing jing-core-v5 through the v6 market"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "tests/rv/mock-lazer-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "tests/rv/mock-jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v5]
+path = "tests/rv/.build/jing-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v6-on-core]
+path = "tests/rv/.build/markets-sbtc-stx-jing-v6-on-core.clar"
+clarity_version = 5
+epoch = "3.4"
