@@ -340,7 +340,11 @@
     (spread-bps uint)
     (cap uint)
   )
-  (let ((pegged (/ (* mid (- BPS_PRECISION spread-bps)) BPS_PRECISION)))
+  ;; a spread at or over BPS_PRECISION is switched off (u0), not an underflow
+  (let ((pegged (if (< spread-bps BPS_PRECISION)
+      (/ (* mid (- BPS_PRECISION spread-bps)) BPS_PRECISION)
+      u0
+    )))
     (if (<= pegged cap)
       pegged
       u0
@@ -353,7 +357,12 @@
     (spread-bps uint)
     (floor uint)
   )
-  (let ((pegged (/ (* mid (+ BPS_PRECISION spread-bps)) BPS_PRECISION)))
+  ;; a spread at or over BPS_PRECISION is switched off (MAX_UINT), not an
+  ;; overflow of mid * (BPS_PRECISION + spread) on an absurd spread
+  (let ((pegged (if (< spread-bps BPS_PRECISION)
+      (/ (* mid (+ BPS_PRECISION spread-bps)) BPS_PRECISION)
+      MAX_UINT
+    )))
     (if (>= pegged floor)
       pegged
       MAX_UINT
