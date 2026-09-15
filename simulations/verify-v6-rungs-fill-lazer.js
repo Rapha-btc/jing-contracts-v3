@@ -6,12 +6,14 @@
 // the member claims and the balance moves by the claimed amount. Also the
 // settlement roll of the other rung (a fixed order outside mid rolls with
 // its own limit in the event).
-// F5: the sell side SOLD OUT: fixed + peg + band sell rungs (5 STX each)
-// next to a deep direct bid, one sBTC seller walks the three whole; each
+// F5: the sell side SOLD OUT: three IN-RANGE sell rungs (fixed 1% over the
+// mid, zero-spread peg, zero-spread band; 5 STX each) next to a deep direct
+// bid, one sBTC seller clears the three whole in the batch at the mid (a
+// walked y maker keeps rounding dust, a batch-cleared one does not); each
 // rung's sync closes its epoch, the member claims from the closed epoch.
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-fill-lazer.js
 import fs from "node:fs";
-import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, trueCV, falseCV, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
+import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, trueCV, falseCV, noneCV, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 import { fetchLazerUpdate } from "./_lazer.js";
 
@@ -93,31 +95,35 @@ async function main() {
   ev("F4 buy rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(BUY));
   ev("F4 sell rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(SELL));
 
-  // F5 the sell side SOLD OUT: the fixed, peg and band sell rungs (5 STX each) rest next to a deep
-  // direct bid; one sBTC seller walks all three whole and part of the deep bid, every rung's
-  // market position is u0, its next sync closes the epoch, the member claims from the closed
-  // epoch (paid in full, position gone) and can no longer withdraw
+  // F5 the sell side SOLD OUT: a walked y maker keeps rounding dust (its STX is derived from the
+  // taker's sats), so a rung is only sold out when the BATCH clears it: three IN-RANGE sell rungs
+  // (a fixed bid 1% over the mid, a zero-spread peg, a zero-spread band rung; 5 STX each) next to a
+  // deep direct bid; one sBTC seller clears the three whole at the mid and walks the deep bid for
+  // the rest. Each rung's market position is u0 with nothing refunded, its next sync closes the
+  // epoch, the member claims from the closed epoch (paid in full, position gone), a withdraw is u7006.
+  const SELLF_C = (10n ** 18n) / ((MID * 101n) / 100n); // fixed sell rung bidding 1% OVER the mid: in range
   const SELLP_C = (10n ** 18n) / ((MID * 110n) / 100n); // cap over the pegged bid: in band
-  const SELLP = `jing-sell-stx-spread-20-cap-${centsName(SELLP_C)}`, SELLB = "jing-sell-stx-spread-20";
-  deploy(SELLP, src("jing-sell-stx-market-spread")); deploy(SELLB, src("jing-sell-stx-core-spread"));
+  const SELLF = `jing-sell-stx-${centsName(SELLF_C)}`, SELLP = `jing-sell-stx-spread-0-cap-${centsName(SELLP_C)}`, SELLB = "jing-sell-stx-spread-0";
+  deploy(SELLF, src("jing-sell-stx")); deploy(SELLP, src("jing-sell-stx-market-spread")); deploy(SELLB, src("jing-sell-stx-core-spread"));
   tx("canonical sell-peg", call(DEP, "set-canonical", [stringAsciiCV("sell-peg"), contractPrincipalCV(DEP, SELLP)], LADDER), "(ok true)");
   tx("canonical sel-band", call(DEP, "set-canonical", [stringAsciiCV("sel-band"), contractPrincipalCV(DEP, SELLB)], LADDER), "(ok true)");
-  tx(`init ${SELLP}`, call(DEP, "initialize", [uintCV(20), uintCV(SELLP_C)], rid(SELLP)), "(ok true)");
-  tx(`init ${SELLB} (seated)`, call(DEP, "initialize", [uintCV(20), trueCV()], rid(SELLB)), "(ok true)");
+  tx(`init ${SELLF} (a second fixed sell rung, same canonical hash)`, call(DEP, "initialize", [uintCV(SELLF_C)], rid(SELLF)), "(ok true)");
+  tx(`init ${SELLP} (spread 0: pegged at the mid)`, call(DEP, "initialize", [uintCV(0), uintCV(SELLP_C)], rid(SELLP)), "(ok true)");
+  tx(`init ${SELLB} (spread 0, seated)`, call(DEP, "initialize", [uintCV(0), trueCV()], rid(SELLB)), "(ok true)");
   const STX5 = 5_000_000;
-  tx("F5 S deposits 5 STX into the fixed sell rung (x side empty: pushed)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELL)), "(ok true)");
-  tx("F5 S deposits 5 STX into the sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), "(ok true)");
-  tx("F5 S deposits 5 STX into the sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), "(ok true)");
-  for (const r of [SELL, SELLP, SELLB]) ev(`F5 ${r} resting 5 STX`, "(get-state)", (v) => field(v, "resting") === `u${STX5}` && field(v, "held-ustx") === "u0", rid(r));
+  tx("F5 S deposits 5 STX into the in-range fixed sell rung (x side empty: no crossing)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLF)), "(ok true)");
+  tx("F5 S deposits 5 STX into the zero-spread sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), "(ok true)");
+  tx("F5 S deposits 5 STX into the zero-spread sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), "(ok true)");
+  for (const r of [SELLF, SELLP, SELLB]) ev(`F5 ${r} resting 5 STX`, "(get-state)", (v) => field(v, "resting") === `u${STX5}` && field(v, "held-ustx") === "u0", rid(r));
   tx("F5 S rests a deep direct bid: 100 STX at -2%", call(S, "deposit-token-y", [uintCV(100_000_000), uintCV((MID * 98n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u100000000)");
-  const SATS_35_STX = (35n * 10n ** 16n) / MID; // ~35 STX worth of sats: the three rungs (15 STX) whole, the rest off the deep bid
-  const fill5 = tx(`F5 B sells ${SATS_35_STX} sats (~35 STX) at -3%: the walk takes the three rungs whole, then part of the deep bid`, swap(B, Number(SATS_35_STX), (MID * 97n) / 100n, true), (v) => String(v).startsWith("(ok"));
-  for (const r of [SELL, SELLP, SELLB]) ev(`F5 ${r} market position u0`, `(get-token-y-deposit (get-current-cycle) '${rid(r)})`, "u0");
+  const SATS_25_STX = (25n * 10n ** 16n) / MID; // ~25 STX worth of sats: the three rungs (15 STX) cleared whole at the mid, the rest walks the deep bid
+  const fill5 = tx(`F5 B sells ${SATS_25_STX} sats (~25 STX) at -3%: the batch clears the three rungs at the mid, the walk takes part of the deep bid`, swap(B, Number(SATS_25_STX), (MID * 97n) / 100n, true), (v) => String(v).startsWith("(ok"));
+  for (const r of [SELLF, SELLP, SELLB]) ev(`F5 ${r} market position u0`, `(get-token-y-deposit (get-current-cycle) '${rid(r)})`, "u0");
   ev("F5 the deep bid was walked (under 100 STX, above 0)", `(get-token-y-deposit (get-current-cycle) '${S})`, (v) => uintOf(v) > 0n && uintOf(v) < 100_000_000n);
-  for (const r of [SELL, SELLP, SELLB]) {
+  for (const r of [SELLF, SELLP, SELLB]) {
     tx(`F5 sync ${r}: sold out -> the epoch closes`, call(B, "sync", [], rid(r)), "(ok true)");
-    ev(`F5 ${r} epoch 1, shares reset, nothing resting`, "(get-state)", (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0", rid(r));
-    ev(`F5 ${r} S's position: from the closed epoch, only sats owed`, `(get-position '${S})`, (v) => field(v, "ustx") === "u0" && uintOf(field(v, "sbtc")) > 0n, rid(r));
+    ev(`F5 ${r} epoch 1, shares reset, nothing resting or held`, "(get-state)", (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0" && field(v, "held-ustx") === "u0", rid(r));
+    ev(`F5 ${r} S's position: from the closed epoch, only sats owed`, `(get-position '${S})`, (v) => field(v, "stx") === "u0" && uintOf(field(v, "sbtc")) > 0n, rid(r));
     tx(`F5 S claims on ${r} (old epoch: paid in full, position gone)`, call(S, "claim", [], rid(r)), "(ok true)");
     ev(`F5 ${r} S's position gone`, `(get-position '${S})`, (v) => field(v, "shares") === "u0" && field(v, "sbtc") === "u0", rid(r));
     tx(`F5 S withdraws on ${r} -> u7006 (no position)`, call(S, "withdraw", [uintCV(1)], rid(r)), "(err u7006)");
@@ -138,8 +144,9 @@ async function main() {
   check(`F2 A's STX grew by the position's proceeds (${pA}, minus fees)`, dA, (d) => d > 0n && d <= pA && d >= pA - 1_000_000n);
   const dS = uintOf(s1.raw) - uintOf(s0.raw), pS = uintOf(field(posS.raw, "sbtc"));
   check(`F3 S's sats grew by exactly the position's proceeds (${pS})`, dS, (d) => d === pS);
-  const m5 = logsOf(s[fill5.idx]).filter((r) => r.includes('(event "match")')).length;
-  check("F5 the sBTC seller matched four makers (three rungs + the deep bid)", m5, (n) => n === 4);
+  const l5 = logsOf(s[fill5.idx]);
+  check("F5 the walk matched one maker (the deep bid); the rungs were cleared in the batch, not walked", l5.filter((r) => r.includes('(event "match")')).length, (n) => n === 1);
+  check("F5 three y makers cleared 5 STX whole in the batch (distribute-y-depositor, y-cleared u5000000)", l5.filter((r) => r.includes('(event "distribute-y-depositor")') && r.includes("(y-cleared u5000000)")).length, (n) => n === 3);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }
