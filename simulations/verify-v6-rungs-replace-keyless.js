@@ -270,7 +270,8 @@ async function main() {
   tx("R8 initialize a second market naming itself as canonical, unverified -> u5005", call(DEP, "initialize", [contractPrincipalCV(DEP, "markets-b"), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), "(err u5005)");
   tx("R8 initialize it naming the verified v6 market as canonical (same bytes) -> ok, registered", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), okTrue);
   ev("R8 markets-b registered in the core", `(is-registered '${MKT_B})`, "true", CORE_ID);
-  deploy(DEP, "markets-c", src(MKT) + "\n;; one byte off\n");
+  // a byte-different copy WITHOUT growing the source past the 100,000-byte cap: widen one comment marker
+  deploy(DEP, "markets-c", src(MKT).replace(";; ", ";;  "));
   tx("R8 a byte-different copy naming the verified market -> u5006 hash mismatch", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_C), "(err u5006)");
   tx("R8 stranger pauses the core -> u5001", call(KEEPER, "pause", [], CORE_ID), "(err u5001)");
   tx("R8 unpause when not paused -> u5017", call(DEP, "unpause", [], CORE_ID), "(err u5017)");
