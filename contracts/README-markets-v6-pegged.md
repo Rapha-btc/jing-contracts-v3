@@ -879,15 +879,34 @@ What it establishes, in the order it runs:
   the rung as `held-ustx`. That dust is 3e-5 .. 1.5e-4 of a 20 STX pool,
   above `SOLD_OUT_INDEX` (1e-6), so the rung's epoch stays OPEN with 20 STX
   of shares standing for the dust and `unfilled-index` ~1e8. Members'
-  claims are right throughout (S's sats arrive, her position keeps the dust
-  as `stx`); the cost is a tiny index: the next deposit's shares are scaled
-  by 1 / index (**T2b**: 20 STX -> 5.97e11 shares) and the second fill drops
-  the index under the threshold, closing the epoch (T2b: a taker at -15
-  takes sell-10 whole, sync -> epoch 1, shares 0, ~1,340 uSTX of dust held,
-  S's old-epoch claim pays the sats). Self-healing in one more cycle; the
-  sBTC side does not show it (the walk consumes sats exactly). Raising
-  `SOLD_OUT_INDEX` to a sat's worth of the pool would close on the first
-  fill; not changed here.
+  claims were right throughout, the cost was a tiny index: the next
+  deposit's shares were scaled by 1 / index (20 STX -> 5.97e11 shares) and
+  only the second fill closed the epoch (runs `a89a219b`, `d0afd78f`).
+  **Changed in the six rungs (source, not deployed):** the epoch now closes
+  on an absolute floor, `(< actual SOLD_OUT_DUST)` with `u10000` uSTX on the
+  sell rungs and `u10` sats on the buy rungs (what is left, on the market
+  plus held, is under a sat's worth), instead of the relative
+  `SOLD_OUT_INDEX` (1e-6 of the pool, which closed a small pool late and a
+  big one early since the remainder is a fixed size). The walked sell rungs
+  close on the first fill, their sub-sat dust rides into the next epoch as
+  before; **T2b** now shows the re-deposit starting epoch 1 at index 1.0
+  with exactly 20 STX of shares, and the taker closing epoch 2. RV
+  `invariant-unfilled-index-bounds` says it the new way: an open epoch with
+  shares holds at least `SOLD_OUT_DUST`. Ten-band harness on the changed
+  rungs: **428/428**, `f90d7d6204d961b0be034dc3bb3653b6` (walked sell rungs
+  epoch 1 on the first fill with 877 .. 2,910 uSTX of dust held, T2b's
+  re-deposit at index 1.0 with exactly 20 STX of shares, epoch 2 after the
+  taker); RV invariants on all six rungs green after the rewrite.
+
+**The older v6 harnesses no longer run on a fork as written** (seen
+2026-09-15 evening, `bae0f52304...`): they deploy `jing-core-v5`,
+`jing-ladder` and `markets-sbtc-stx-jing-v6` under the deployer, the engine
+answers `Duplicate contract` now that the set is on mainnet, the deployer's
+nonce never advances and every later step of that sender fails `Bad nonce`.
+Verifying a rung change against the fork means the deployed-set harness
+above, or a prelude that skips the three deploys and drives the live market
+(its book is not empty, so the exact-count expectations of the old
+harnesses would need a rewrite). The clarinet suites and RV are unaffected.
 - **K2** keeper `push` on buy-0 rests it again once sell-0 is consumed.
   **W2** on sell-70: withdraw 5 STX (partial `withdraw-token-y`), then 14.5
   (the 0.5 remainder would sit under the market minimum: `cancel`, 0.5

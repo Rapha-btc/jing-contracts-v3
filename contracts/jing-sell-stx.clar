@@ -20,10 +20,15 @@
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_NAME (err u7009))
 
-;; an epoch closes when the unsold fraction falls under this, i.e. unsold *
-;; 1,000,000 < total shares: what is left is rounding dust nobody could
-;; withdraw. The pool is sold out, the next deposit starts a fresh epoch.
-(define-constant SOLD_OUT_INDEX u1000000)
+;; an epoch closes when what is left unsold, on the market plus held here, is
+;; under this many micro-STX: a walk fill is sized in whole sats so a fully
+;; taken pool keeps up to one sat's worth of STX (about 3,000 uSTX at 330
+;; sats per STX; 10,000 covers STX up to 100 sats), and the market refunds a
+;; remainder under its minimum back here. An absolute floor, not a fraction of
+;; the pool: the remainder is a fixed size whatever the pool was (a fraction
+;; closed a small pool late and a big one early). The pool is sold out, the
+;; next deposit starts a fresh epoch; what is left rides into it.
+(define-constant SOLD_OUT_DUST u10000)
 
 (define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
@@ -208,10 +213,10 @@
         (var-set unfilled-index new-index)
         (var-set proceeds-index new-proceeds)
         (var-set sats-accounted sbtc-now)
-        ;; sold out (down to rounding dust): close the epoch, restart the pool.
+        ;; sold out (down to sub-sat dust): close the epoch, restart the pool.
         ;; Dust still resting rides into the next epoch as a gift.
         (and
-          (< new-index SOLD_OUT_INDEX)
+          (< actual SOLD_OUT_DUST)
           (begin
             (map-set epoch-final-proceeds current-epoch new-proceeds)
             (is-ok (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))

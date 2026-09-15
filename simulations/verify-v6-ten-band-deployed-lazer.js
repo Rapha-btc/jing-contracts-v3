@@ -29,9 +29,10 @@
 //      -40 whole and ~8 STX of -50
 //   K2 keeper pushes buy-0 (the mid bid is gone) -> rests again
 //   T2b the walked sell rungs keep under one sat's worth of STX (the market refunds the
-//      sub-minimum remainder to the rung as held dust), so their epoch stays open at a
-//      tiny unfilled-index; S re-deposits 20 STX into sell-10, a taker takes it whole,
-//      the second fill drops the index under SOLD_OUT_INDEX and the epoch closes
+//      sub-minimum remainder to the rung as held dust); under SOLD_OUT_DUST that counts
+//      as sold out, the epoch closes on the first fill and the dust rides into the next:
+//      S re-deposits 20 STX into sell-10 (epoch 1, pushed with the dust on top), a taker
+//      takes it whole, epoch 2
 //   W2 S withdraws 5 STX from sell-70 (partial), then 14.5 (cancel path, 0.5 held),
 //      then deposits 1 STX (1.5 pushed back)
 //   T3 taker sells STX, limit +95 (after T2b): batch buy-0 again, walk 50-rest, 60, 70 (15k), 80
@@ -227,12 +228,12 @@ async function main() {
   ev("T2 T2 holds STX now", `(stx-get-balance '${T2})`, (v) => uintOf(v) > 130_000_000n);
   for (const s of SPREADS) tx(`T2 keeper syncs sell-${s}`, call(KEEPER, "sync", [], SID(s)), okTrue);
   state("T2 sell-0 (batch fill, exact): sold out, epoch 1, shares 0", SID(0), (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0");
-  for (const s of [10, 20, 30, 40]) state(`T2 sell-${s} (walk fill): resting 0 but under one sat's worth of STX refunded to the rung as held dust -> epoch stays 0, shares 20 STX, unfilled-index tiny`, SID(s), (v) => field(v, "epoch") === "u0" && field(v, "total-shares") === `u${RY}` && field(v, "resting") === "u0" && between(1n, 3000n)(field(v, "held-ustx")) && uintOf(field(v, "unfilled-index")) < 150_000_000n);
+  for (const s of [10, 20, 30, 40]) state(`T2 sell-${s} (walk fill): resting 0, under one sat's worth of STX refunded to the rung as held dust, under SOLD_OUT_DUST -> sold out, epoch 1, shares 0`, SID(s), (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0" && between(1n, 3000n)(field(v, "held-ustx")));
   const s0 = ev("T2 S sats before claims", `(contract-call? '${SBTC} get-balance '${S})`, () => true);
   for (const s of SPREADS) tx(`T2 S claims on sell-${s}`, call(S, "claim", [], SID(s)), okTrue);
   const s1 = ev("T2 S sats after claims", `(contract-call? '${SBTC} get-balance '${S})`, () => true);
   ev("T2 S's position on sell-50: nothing more owed, ~12 STX unsold", `(get-position '${S})`, (v) => field(v, "sbtc") === "u0" && between(11_900_000n, 12_100_000n)(field(v, "stx")), SID(50));
-  ev("T2 S's position on sell-10: nothing more owed, the dust is still hers", `(get-position '${S})`, (v) => field(v, "sbtc") === "u0" && between(1n, 3000n)(field(v, "stx")), SID(10));
+  ev("T2 S's position on sell-10 gone (old epoch paid out at the claim)", `(get-position '${S})`, (v) => field(v, "shares") === "u0" && field(v, "sbtc") === "u0" && field(v, "stx") === "u0", SID(10));
 
   // =============== K2: buy-0 gets its turn back ===============
   tx("K2 keeper pushes buy-0: the mid bid is gone -> (ok true)", call(KEEPER, "push", [UPD], BID(0)), okTrue);
@@ -253,14 +254,14 @@ async function main() {
   state("W2 sell-60 emptied: resting 0, held 0, shares 0", SID(60), (v) => field(v, "resting") === "u0" && field(v, "held-ustx") === "u0" && field(v, "total-shares") === "u0");
 
   // =============== T2b: the dust epoch closes on the second fill ===============
-  tx("T2b S deposits 20 STX into sell-10 (dust epoch): pushed with the dust on top", call(S, "deposit", [uintCV(RY), UPD], SID(10)), okTrue);
-  state("T2b sell-10 resting 20 STX + dust, held 0, epoch 0, shares grew by 20 STX / index", SID(10), (v) => field(v, "held-ustx") === "u0" && between(RY + 1n, RY + 3000n)(field(v, "resting")) && field(v, "epoch") === "u0" && uintOf(field(v, "total-shares")) > RY * 1000n);
+  tx("T2b S deposits 20 STX into sell-10 (epoch 1): pushed with the leftover dust on top", call(S, "deposit", [uintCV(RY), UPD], SID(10)), okTrue);
+  state("T2b sell-10 resting 20 STX + dust, held 0, epoch 1, shares exactly 20 STX (fresh index)", SID(10), (v) => field(v, "held-ustx") === "u0" && between(RY + 1n, RY + 3000n)(field(v, "resting")) && field(v, "epoch") === "u1" && field(v, "total-shares") === `u${RY}` && field(v, "unfilled-index") === "u1000000000000");
   const t2b = tx("T2b taker sells sBTC limit -15: the walk takes sell-10 whole", swap(T2, grossFor(T2B_NET), PB(15), true), okish);
   ev("T2b cycle u3", "(get-current-cycle)", "u3");
   ev("T2b sell-10 emptied on the market", depOfY(3, SID(10)), "u0");
   tx("T2b keeper syncs sell-10", call(KEEPER, "sync", [], SID(10)), okTrue);
-  state("T2b sell-10 sold out now: epoch 1, shares 0, only dust held", SID(10), (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0" && uintOf(field(v, "held-ustx")) < 6000n);
-  ev("T2b S's position on sell-10 (old epoch): stx 0, sats owed", `(get-position '${S})`, (v) => field(v, "stx") === "u0" && uintOf(field(v, "sbtc")) > 5000n, SID(10));
+  state("T2b sell-10 sold out again: epoch 2, shares 0, only dust held", SID(10), (v) => field(v, "epoch") === "u2" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0" && uintOf(field(v, "held-ustx")) < 6000n);
+  ev("T2b S's position on sell-10 (epoch 1, closed): stx 0, sats owed", `(get-position '${S})`, (v) => field(v, "stx") === "u0" && uintOf(field(v, "sbtc")) > 5000n && field(v, "shares") === `u${RY}`, SID(10));
   tx("T2b S claims on sell-10", call(S, "claim", [], SID(10)), okTrue);
   ev("T2b S's position on sell-10 gone", `(get-position '${S})`, (v) => field(v, "shares") === "u0" && field(v, "sbtc") === "u0", SID(10));
 

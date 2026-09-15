@@ -155,14 +155,16 @@
   (<= (fold rv-proceeds-fold RV-ACCOUNTS u0) (rv-proceeds-balance)))
 
 ;; ============================================================================
-;; 7-8: the indices. unfilled-index only ever comes down from SCALE and a
-;; pool under the sold-out threshold has closed its epoch and restarted;
+;; 7-8: the indices. unfilled-index only ever comes down from SCALE and an
+;; open epoch with shares holds at least SOLD_OUT_DUST (under it, sync has
+;; closed the epoch and restarted);
 ;; no member's paid mark is ahead of the proceeds index.
 ;; ============================================================================
 
 (define-read-only (invariant-unfilled-index-bounds)
   (and (<= (var-get unfilled-index) SCALE)
-       (>= (var-get unfilled-index) SOLD_OUT_INDEX)))
+       (or (is-eq (var-get total-shares) u0)
+           (>= (+ (market-size) (rv-local)) SOLD_OUT_DUST))))
 
 (define-read-only (invariant-paid-index-le-proceeds)
   (is-eq (len (filter rv-paid-ahead RV-ACCOUNTS)) u0))

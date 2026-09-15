@@ -142,7 +142,8 @@ held equals the local balance, the proceeds watermark equals the proceeds
 balance, total shares equal the sum of current-epoch shares, the pool the
 indices imply never exceeds resting plus held and the members' unsold
 claims never exceed the pool, the members' proceeds claims fit the
-balance, `unfilled-index` in `[SOLD_OUT_INDEX, SCALE]`, no paid mark ahead
+balance, `unfilled-index` at most `SCALE` and an open epoch with shares holding
+at least `SOLD_OUT_DUST`, no paid mark ahead
 of the proceeds index, and the resting order is the one the rung was
 deployed for (price and `none`; floor / cap and `(some spread)`; `(some
 spread)` for the band rungs, whose guard moves with the oracle), and the
