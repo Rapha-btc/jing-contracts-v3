@@ -95,6 +95,7 @@ async function main() {
   const slZeroParked = intent("jing-set-limit", SBTC_ASSET_NAME, 0, ASK_FAR3, 5);
   const slParked = intent("jing-set-limit", SBTC_ASSET_NAME, SBTC_20K, ASK_FAR3, 6);
   const repriceParked = intent("jing-reprice", SBTC_ASSET_NAME, SBTC_20K, ASK_FAR, 7);
+  const repriceLive = intent("jing-reprice", SBTC_ASSET_NAME, SBTC_20K, ASK_FAR, 36); // sBTC side, live, no cross: back from +25% to +20%
 
   const call = (sender, cid, fn, args) => (b) => b.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
   const exec = (sender, fn, it, extra) => call(sender, VAULT_ID, fn, [bufferCV(Buffer.from(it.sig, "hex")), stringAsciiCV(it.d.side), uintCV(it.d.amount), uintCV(it.d.limitPrice), uintCV(it.d.authId), uintCV(it.d.expiry), ...extra]);
@@ -139,6 +140,9 @@ async function main() {
   tx("V3 set-limit wrong amount -> u6022", exec(KEEPER, "execute-jing-set-limit", slWrong, [UPD]), "(err u6022)");
   tx("V3 set-limit amount 20k -> ok", exec(KEEPER, "execute-jing-set-limit", slLive, [UPD]), (v) => v.startsWith("(ok 0x"));
   ev("V3 limit retargeted to +25%", MARKET_ID, `(get-token-x-limit '${VAULT_ID})`, `u${ASK_FAR2}`);
+  tx("V3 execute-jing-reprice on the live ask back to +20%: nothing crosses, a plain reprice on the sBTC side", exec(KEEPER, "execute-jing-reprice", repriceLive, [UPD]), (v) => v.startsWith("(ok 0x"));
+  ev("V3 limit back at +20%", MARKET_ID, `(get-token-x-limit '${VAULT_ID})`, `u${ASK_FAR}`);
+  tx("V3 set-limit to +25% again (the park below wants the worst ask)", exec(KEEPER, "execute-jing-set-limit", intent("jing-set-limit", SBTC_ASSET_NAME, SBTC_20K, ASK_FAR2, 37), [UPD]), (v) => v.startsWith("(ok 0x"));
 
   // ---- V4 park the vault: fill the book, then an in-range newcomer ----
   FILLERS.forEach((f, i) => {
