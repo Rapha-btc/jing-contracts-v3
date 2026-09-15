@@ -31,6 +31,12 @@
 //      (u6004 at register), and the ladder's owner handover (propose,
 //      accept before the timelock u6009, after 145 burn blocks ok, no
 //      pending u6008, stranger u6001), handed back at the end
+//   R8 jing-core-v5 admin: verify twice u5003, register from an unverified
+//      canonical u5005 and from a byte-different copy u5006 (a second and a
+//      third market instance), pause (a market deposit then fails u5016),
+//      unpause before the timelock u5008 / by a stranger u5001 / after 145
+//      blocks ok / when not paused u5017, owner handover u5018 / u5001 /
+//      ok at once (no timelock on the core's handover), handed back
 //
 // Run: npx tsx simulations/verify-v6-rungs-replace-keyless.js
 import fs from "node:fs";
@@ -254,6 +260,37 @@ async function main() {
   b = b.addAdvanceBlocks({ bitcoin_blocks: 145, stacks_blocks_per_bitcoin: 1 });
   tx("R7 the deployer accepts -> ok", call(DEP, "accept-owner", [], LADDER), okTrue);
   ev("R7 owner = deployer again", "(get-owner)", DEP, LADDER);
+
+  // =============== R8: jing-core-v5 admin paths ===============
+  const MKT_B = `${DEP}.markets-b`, MKT_C = `${DEP}.markets-c`;
+  tx("R8 verify the v6 market a second time -> u5003", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(err u5003)");
+  tx("R8 stranger verifies -> u5001", call(KEEPER, "set-verified-contract", [contractPrincipalCV(DEP, "jing-ladder")], CORE_ID), "(err u5001)");
+  deploy(DEP, "markets-b", src(MKT));
+  tx("R8 initialize a second market naming itself as canonical, unverified -> u5005", call(DEP, "initialize", [contractPrincipalCV(DEP, "markets-b"), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), "(err u5005)");
+  tx("R8 initialize it naming the verified v6 market as canonical (same bytes) -> ok, registered", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), okTrue);
+  ev("R8 markets-b registered in the core", `(is-registered '${MKT_B})`, "true", CORE_ID);
+  deploy(DEP, "markets-c", src(MKT) + "\n;; one byte off\n");
+  tx("R8 a byte-different copy naming the verified market -> u5006 hash mismatch", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_C), "(err u5006)");
+  tx("R8 stranger pauses the core -> u5001", call(KEEPER, "pause", [], CORE_ID), "(err u5001)");
+  tx("R8 unpause when not paused -> u5017", call(DEP, "unpause", [], CORE_ID), "(err u5017)");
+  tx("R8 owner pauses the core -> ok", call(DEP, "pause", [], CORE_ID), okTrue);
+  tx("R8 a market deposit while the core is paused -> u5016 (the core refuses the log)", call(A, "deposit-token-x", [uintCV(2000), uintCV(1), noneCV(), NO_UPDATE, sbtcT, stringAsciiCV("sbtc-token")]), "(err u5016)");
+  tx("R8 unpause before the timelock -> u5008", call(DEP, "unpause", [], CORE_ID), "(err u5008)");
+  tx("R8 stranger unpauses -> u5001", call(KEEPER, "unpause", [], CORE_ID), "(err u5001)");
+  b = b.addAdvanceBlocks({ bitcoin_blocks: 145, stacks_blocks_per_bitcoin: 1 });
+  tx("R8 145 burn blocks later the owner unpauses -> ok", call(DEP, "unpause", [], CORE_ID), okTrue);
+  tx("R8 the market deposit goes through again", call(A, "deposit-token-x", [uintCV(2000), uintCV(1), noneCV(), NO_UPDATE, sbtcT, stringAsciiCV("sbtc-token")]), "(ok u2000)");
+  tx("R8 A cancels it", call(A, "cancel-token-x-deposit", [sbtcT, stringAsciiCV("sbtc-token")]), "(ok u2000)");
+  tx("R8 core accept-owner with nothing pending -> u5018", call(KEEPER, "accept-owner", [], CORE_ID), "(err u5018)");
+  tx("R8 stranger propose-owner -> u5001", call(KEEPER, "propose-owner", [someCV(standardPrincipalCV(KEEPER))], CORE_ID), "(err u5001)");
+  tx("R8 owner proposes the keeper", call(DEP, "propose-owner", [someCV(standardPrincipalCV(KEEPER))], CORE_ID), okTrue);
+  tx("R8 a stranger accepts -> u5001", call(A, "accept-owner", [], CORE_ID), "(err u5001)");
+  // the core's owner handover has NO timelock (the ladder's has one; the core's 144 blocks guard unpause)
+  tx("R8 the keeper accepts at once -> ok (no timelock on the core's handover)", call(KEEPER, "accept-owner", [], CORE_ID), okTrue);
+  ev("R8 core owner = keeper", "(get-contract-owner)", KEEPER, CORE_ID);
+  tx("R8 hand back: keeper proposes the deployer", call(KEEPER, "propose-owner", [someCV(standardPrincipalCV(DEP))], CORE_ID), okTrue);
+  tx("R8 the deployer accepts -> ok", call(DEP, "accept-owner", [], CORE_ID), okTrue);
+  ev("R8 core owner = deployer", "(get-contract-owner)", DEP, CORE_ID);
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

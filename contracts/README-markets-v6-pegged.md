@@ -851,11 +851,12 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | v6 rungs-fill | 40/40 | `c663e202dd9bc608ba246a9f982cb79f` |
 | v6 rungs-push | 39/39 | `52b52f6f88c53a4c6e69d7ade314fc11` |
 | v6 rungs-miner-band | 174/174 | `bc321d10fdf831eea71301b73ad75b77` |
-| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover u6009/u6008/u6001, 145-block accept) | 172/172 | `533a7485d8310fb5162a20208ea86292` |
+| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover; + R8: core-v5 admin: verify twice u5003, register unverified u5005 / byte-different u5006, pause u5016, unpause timelock u5008 / u5017, owner handover u5018 / u5001, no timelock on the core's handover) | 198/198 | `2ce70d556322f32db8e3c6a1ae3e16f1` |
 | v6 small-share-x (mirror of peg-batch Z6: an ask under 0.2% of the side is rolled, small-share-roll-x logged) | 23/23 | `d7f6ab1f3678b9ef5193bd7fbdf832d5` |
 | v6 rungs-keyless buy / sell | 37 / 37 | `5ba21f238b41ac6512c8ecca01e9cc70` / `40829b8367990bc3515b4882892a39b3` |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc16512744c46d4c86e1739a029eea9b` / `7184028e9d74d8fd705ca28d88fc478c` |
 | vault v6 parked | 137/137 | `dbbfd7d9d7eac338e4d1efbeb6b1cc5e` |
+| router v5 on the v6 stack (`V6=1 verify-swap-router-v3-lazer.js`; the harness now deploys the ladder before the market) | 248/248 | `879657b55cb9659874dc7c61629c5216` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

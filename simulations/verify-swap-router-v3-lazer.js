@@ -304,6 +304,7 @@ async function main() {
   // mainnet deployments of both and only verifies + initializes the market
   // on the fork (as chavita), which mainnet still has to do for real.
   if (V6) tx("deploy jing-core-v5", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: CORE, source_code: fs.readFileSync(new URL(`../contracts/${CORE}.clar`, import.meta.url), "utf8") }), (v) => !String(v).includes("ERR"));
+  if (V6) tx("deploy jing-ladder (v6 reads it for the protected seats)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: "jing-ladder", source_code: fs.readFileSync(new URL("../contracts/jing-ladder.clar", import.meta.url), "utf8") }), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED && !DEPLOY_COPY && !LIVE_V5) tx(V6 ? "deploy market v6 (unpatched, Lazer)" : "deploy market v4 (unpatched, Lazer)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: MARKET, source_code: mktSrc }), (v) => !String(v).includes("ERR"));
   if (!DEPLOYED && !LIVE_V5) tx(DEPLOY_COPY ? "deploy router deploy-copy swap-router-sbtc-stx-jingswap-v1 (v3 bytes)" : "deploy router v3", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER, source_code: routerSrc }), (v) => !String(v).includes("ERR"));
   tx("deploy wrapper-1step (DLMM_MAX_STEPS u1)", (b) => b.withSender(DEPLOYER).addContractDeploy({ contract_name: ROUTER_1STEP, source_code: router1StepSrc }), (v) => !String(v).includes("ERR"));
