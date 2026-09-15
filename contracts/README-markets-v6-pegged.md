@@ -855,6 +855,7 @@ used to park N1 on size. Added D7: an out-of-range newcomer with no price edge p
 | v6 small-share-x (mirror of peg-batch Z6: an ask under 0.2% of the side is rolled, small-share-roll-x logged; + X12-X14: the x taker-too-small path, mirror of bounty-fixes B2: an in-range 600k ask on the taker's side, a bid 2% under, a 1100-sat x taker -> u1020) | 31/31 | `e5d2399ded0dbdb06ea40c79c1be017a` |
 | v6 rungs-keyless buy / sell | 37 / 37 | `5ba21f238b41ac6512c8ecca01e9cc70` / `40829b8367990bc3515b4882892a39b3` |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc16512744c46d4c86e1739a029eea9b` / `7184028e9d74d8fd705ca28d88fc478c` |
+| v6 band-mixed-fill (a seated band rung + a fixed ask + a zero-spread peg on the same side, one STX seller: the peg clears in the batch at the mid, the walk takes the fixed ask (+10) then part of the rung (+20), sync, the member claims; the sell-band mirror with two direct bids and one sBTC seller) | 60/60 | `df9254fb406e24c0833a24a9e3baf9f2` |
 | vault v6 parked (+ V1: initialize twice u6020, an intent before the pubkey u6021, a zero limit u6013) | 140/140 | `868ef1fe93f3e35ed4a22eb0eb40c48c` |
 | router v5 on the v6 stack (`V6=1 verify-swap-router-v3-lazer.js`; the harness now deploys the ladder before the market) | 248/248 | `879657b55cb9659874dc7c61629c5216` |
 | external: citycoins ccd016 v2 coverage on this market (`citycoins-protocol/simulations/stxer-ccd016-v2-coverage.js`) | 73/73 | `dc770f07957e63aead60cc8911e3b268` |

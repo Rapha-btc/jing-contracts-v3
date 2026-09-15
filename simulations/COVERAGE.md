@@ -1,6 +1,6 @@
 # Executed coverage from the stxer results (Full rerun 2026-09-14)
 
-From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transactions, 272 error returns. "Produced" means a step returned that code or a print carried that event, in at least one of the listed sims.
+From `simulations/sim-coverage.mjs` on 2026-09-15: 32 simulations, 1887 transactions, 272 error returns. "Produced" means a step returned that code or a print carried that event, in at least one of the listed sims.
 
 
 ## markets-sbtc-stx-jing-v6
@@ -23,7 +23,7 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transact
 | `u1014` | ERR_EXPO_MISMATCH | **none** |
 | `u1015` | ERR_NOTHING_FILLED | **none** |
 | `u1016` | ERR_MUST_USE_SWAP | 9ce42eb1, 5aa3e49f, 091acd48, cc8d690b, 6256d0b4 |
-| `u1017` | ERR_PARTIAL_FILL | 908a895c, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, dcb34a07 |
+| `u1017` | ERR_PARTIAL_FILL | 908a895c, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, a19bb24c |
 | `u1018` | ERR_HAS_RESTING_POSITION | 4ccb83ee, 908a895c |
 | `u1019` | ERR_ZERO_MIN_DEPOSIT | a7ccab31 |
 | `u1020` | ERR_TAKER_TOO_SMALL | 4ccb83ee, 179b8bc7, e5d2399d, 879657b5 |
@@ -51,29 +51,29 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transact
 
 | event | produced in |
 |---|---|
-| `deposit-x` | 4ccb83ee, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 6256d0b4, 62783a57, dcb34a07, c663e202, 52b52f6f, bc321d10, 20727cf8, e5d2399d, 5ba21f23, dc165127, 868ef1fe, 879657b5, dc770f07, f3db741b, d1213248 |
-| `deposit-y` | 4ccb83ee, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 62783a57, dcb34a07, c663e202, 52b52f6f, bc321d10, 20727cf8, e5d2399d, 40829b83, 7184028e, 879657b5, dc770f07, f3db741b |
+| `deposit-x` | 4ccb83ee, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 6256d0b4, 62783a57, a19bb24c, c663e202, 52b52f6f, bc321d10, 20727cf8, e5d2399d, 5ba21f23, dc165127, df9254fb, 868ef1fe, 879657b5, dc770f07, f3db741b, d1213248 |
+| `deposit-y` | 4ccb83ee, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 62783a57, a19bb24c, c663e202, 52b52f6f, bc321d10, 20727cf8, e5d2399d, 40829b83, 7184028e, df9254fb, 879657b5, dc770f07, f3db741b |
 | `refund-x` | 4ccb83ee, 908a895c, a7ccab31, 8084a860, dda78b56, 091acd48, cc8d690b, 802a3103, 6256d0b4, c663e202, 20727cf8, 5ba21f23, dc165127, 868ef1fe, 879657b5, dc770f07, f3db741b, d1213248 |
-| `refund-y` | 4ccb83ee, 908a895c, 98965765, a7ccab31, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, dcb34a07, c663e202, 20727cf8, 40829b83, 7184028e, 879657b5, dc770f07 |
+| `refund-y` | 4ccb83ee, 908a895c, 98965765, a7ccab31, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, a19bb24c, c663e202, 20727cf8, 40829b83, 7184028e, df9254fb, 879657b5, dc770f07 |
 | `withdraw-x` | 908a895c, 8084a860, dda78b56, 802a3103, 918d5678, 20727cf8, 5ba21f23, dc165127 |
 | `withdraw-y` | 8084a860, 6256d0b4, 20727cf8, 40829b83, 7184028e |
 | `set-limit-x` | 908a895c, 9ce42eb1, a7ccab31, 5aa3e49f, 091acd48, cc8d690b, 802a3103, bc321d10, e5d2399d, 868ef1fe, dc770f07 |
 | `set-limit-y` | 4ccb83ee, a7ccab31, dda78b56, cc8d690b, 6256d0b4, bc321d10 |
-| `peg-x` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 62783a57, dcb34a07, bc321d10, 20727cf8, e5d2399d, dc165127, dc770f07, f3db741b, d1213248 |
-| `peg-y` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 6256d0b4, 62783a57, dcb34a07, 52b52f6f, bc321d10, 20727cf8, 7184028e |
+| `peg-x` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 62783a57, a19bb24c, bc321d10, 20727cf8, e5d2399d, dc165127, df9254fb, dc770f07, f3db741b, d1213248 |
+| `peg-y` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 6256d0b4, 62783a57, a19bb24c, 52b52f6f, bc321d10, 20727cf8, 7184028e, df9254fb |
 | `park-x` | 4ccb83ee, 8084a860, cc8d690b, 918d5678, bc321d10, 868ef1fe, d1213248 |
 | `readmit-x` | 8084a860, cc8d690b, d1213248 |
 | `park-y` | 4ccb83ee, 8084a860, 6256d0b4 |
 | `readmit-y` | 4ccb83ee, 8084a860, 6256d0b4 |
 | `small-share-roll-x` | e5d2399d |
 | `small-share-roll-y` | dda78b56 |
-| `limit-roll-x` | 4ccb83ee, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, 802a3103, 62783a57, dcb34a07, c663e202, 879657b5, f3db741b |
-| `limit-roll-y` | 4ccb83ee, a7ccab31, dda78b56, 091acd48, 62783a57, dcb34a07, c663e202, 879657b5 |
-| `match` | 4ccb83ee, ef2ed5c1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, 802a3103, 62783a57, dcb34a07, c663e202, 879657b5, f3db741b |
-| `settlement` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, dcb34a07, c663e202, e5d2399d, 879657b5, dc770f07, f3db741b |
-| `distribute-x-depositor` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 091acd48, cc8d690b, 802a3103, 62783a57, dcb34a07, c663e202, e5d2399d, 879657b5, dc770f07, f3db741b |
-| `distribute-y-depositor` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, dcb34a07, c663e202, e5d2399d, 879657b5, dc770f07, f3db741b |
-| `sweep-dust` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, dcb34a07, c663e202, e5d2399d, 879657b5, dc770f07, f3db741b |
+| `limit-roll-x` | 4ccb83ee, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, 802a3103, 62783a57, a19bb24c, c663e202, df9254fb, 879657b5, f3db741b |
+| `limit-roll-y` | 4ccb83ee, a7ccab31, dda78b56, 091acd48, 62783a57, a19bb24c, c663e202, df9254fb, 879657b5 |
+| `match` | 4ccb83ee, ef2ed5c1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, 802a3103, 62783a57, a19bb24c, c663e202, df9254fb, 879657b5, f3db741b |
+| `settlement` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, a19bb24c, c663e202, e5d2399d, df9254fb, 879657b5, dc770f07, f3db741b |
+| `distribute-x-depositor` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 091acd48, cc8d690b, 802a3103, 62783a57, a19bb24c, c663e202, e5d2399d, df9254fb, 879657b5, dc770f07, f3db741b |
+| `distribute-y-depositor` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, a19bb24c, c663e202, e5d2399d, df9254fb, 879657b5, dc770f07, f3db741b |
+| `sweep-dust` | 4ccb83ee, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 62783a57, a19bb24c, c663e202, e5d2399d, df9254fb, 879657b5, dc770f07, f3db741b |
 
 ## jing-ladder
 
@@ -94,15 +94,15 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transact
 
 | event | produced in |
 |---|---|
-| `canonical-set` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, dcb34a07, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `rung-registered` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, dcb34a07, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `canonical-set` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, a19bb24c, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e, df9254fb |
+| `rung-registered` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, a19bb24c, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e, df9254fb |
 | `band-seated` | 20727cf8 |
 | `max-band-per-side-set` | 4ccb83ee, 8084a860, cc8d690b, 918d5678, 6256d0b4, bc321d10, 20727cf8, 868ef1fe |
 | `band-retired` | bc321d10, 20727cf8 |
-| `rung-deposit` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, dcb34a07, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `rung-deposit` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, a19bb24c, c663e202, 52b52f6f, bc321d10, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e, df9254fb |
 | `rung-push` | 52b52f6f, 20727cf8 |
 | `rung-withdraw` | 802a3103, 918d5678, 6256d0b4, c663e202, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `rung-claim` | 179b8bc7, 091acd48, c663e202, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `rung-claim` | 179b8bc7, 091acd48, c663e202, 20727cf8, 5ba21f23, 40829b83, dc165127, 7184028e, df9254fb |
 | `rung-epoch-closed` | 179b8bc7 |
 | `owner-proposed` | 20727cf8 |
 | `owner-accepted` | 20727cf8 |
@@ -230,7 +230,7 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transact
 | v6 peg-park (+ K2b: an out-of-range newcomer with no price edge parks the switched-off peg first, every filler stays) | 50/50 | `918d5678` | 148 | 0 | 11 |
 | v6 peg-park-y | 77/77 | `6256d0b4` | 180 | 3 | 16 |
 | v6 peg-track | 30/30 | `62783a57` | 25 | 0 | 16 |
-| v6 peg-walk-order (+ O4: the x walk reaches a maker with nothing left and skips it) | 71/71 | `dcb34a07` | 87 | 1 | 17 |
+| v6 peg-walk-order (+ O4: the x walk skips a maker: the taker's own resting ask, since swap only refuses a resting position on the taker's deposit side) | 70/70 | `a19bb24c` | 86 | 1 | 17 |
 | v6 rungs-fill | 40/40 | `c663e202` | 35 | 0 | 18 |
 | v6 rungs-push | 39/39 | `52b52f6f` | 37 | 0 | 9 |
 | v6 rungs-miner-band | 174/174 | `bc321d10` | 167 | 7 | 14 |
@@ -240,6 +240,7 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 31 simulations, 1856 transact
 | v6 rungs-keyless buy / sell | 37 / 37 | `40829b83` | 54 | 9 | 10 |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc165127` | 56 | 11 | 11 |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `7184028e` | 56 | 11 | 11 |
+| v6 band-mixed-fill (a seated band rung + a fixed ask + a zero-spread peg on the same side, one STX seller: the peg clears in the batch at the mid, the walk takes the fixed ask (+10) then part of the rung (+20), sync, the member claims; the sell-band mirror with two direct bids and one sBTC seller) | 60/60 | `df9254fb` | 60 | 0 | 18 |
 | vault v6 parked (+ V1: initialize twice u6020, an intent before the pubkey u6021, a zero limit u6013) | 140/140 | `868ef1fe` | 140 | 6 | 10 |
 | router v5 on the v6 stack (`V6=1 verify-swap-router-v3-lazer.js`; the harness now deploys the ladder before the market) | 248/248 | `879657b5` | 247 | 12 | 13 |
 | external: citycoins ccd016 v2 coverage on this market (`citycoins-protocol/simulations/stxer-ccd016-v2-coverage.js`) | 73/73 | `dc770f07` | 78 | 7 | 14 |
