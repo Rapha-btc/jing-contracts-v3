@@ -196,6 +196,9 @@ async function main() {
   const routerSell = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 26);
   const routerSellStale = intent("router-swap", SBTC_ASSET_NAME, 5000, L_SELL_SBTC, 27);
   const routerBuy = intent("router-swap", WSTX_ASSET_NAME, STX_100, L_ROUTER_STX, 28);
+  const ASK_OUT20 = Number((MID * 120n) / 100n), ASK_CROSS = Number((MID * 99n) / 100n); // in range: crosses an in-range bid (both would clear in the batch)
+  const depSbtc3k = intent("jing-deposit", SBTC_ASSET_NAME, 3000, ASK_OUT20, 38);          // an ask far out of range on the full side (bigger than a filler: it stays, a filler parks)
+  const repriceCrossX = intent("jing-reprice", SBTC_ASSET_NAME, 3000, ASK_CROSS, 39);     // repriced into range against an in-range bid: crosses, swaps on the spot (the sBTC-side crossing arm)
   const info = await (await fetch(`${STACKS_NODE_API}/v2/info`)).json();
   const burnTip = Number(info.burn_block_height);
   const expOk = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 29, TEST_INTENT_PRIVKEY, burnTip + 1000);
@@ -262,6 +265,16 @@ async function main() {
   tx("V11 execute-router-swap 100 STX -> sBTC at +4% (no ask inside the limit: pools only)", exec(KEEPER, "execute-router-swap", routerBuy, [someCV(UPD), uintCV(Number(MID))]), okHash);
   vaultSbtc("V11 vault sBTC after", () => true);
 
+  // ---- V11b the sBTC-side CROSSING reprice: a 3000-sat ask repriced into range against an in-range bid swaps into it
+  // (an ask under an out-of-range bid does not cross: only makers that would clear together at the mid do) ----
+  tx("V11b the direct maker adds 50 STX at +1%: its position merges and reprices IN RANGE (no ask inside: nothing crosses)", call(STX_DEPOSITOR_1, MARKET_ID, "deposit-token-y", [uintCV(50_000_000), uintCV(BID_IN), noneCV(), UPD, wstxTrait, wstxAsset]), (v) => String(v).startsWith("(ok u"));
+  tx("V11b keeper executes jing-deposit sBTC side: 3000 sats at +20% on the full side (bigger than a 2000-sat filler: it stays, the smallest parks)", exec(KEEPER, "execute-jing-deposit", depSbtc3k, [UPD]), okHash);
+  ev("V11b vault ask rests 3000 live", MARKET_ID, `(get-token-x-deposit (get-current-cycle) '${VAULT_ID})`, "u3000");
+  const vy0 = cap("V11b vault STX before the crossing", VAULT_ID, "(stx-get-balance current-contract)");
+  tx("V11b reprice the ask to -1% (in range): crosses the in-range bid -> swaps on the spot, logged as a vault swap", exec(KEEPER, "execute-jing-reprice", repriceCrossX, [UPD]), okHash);
+  ev("V11b vault ask gone (dust at most)", MARKET_ID, `(get-token-x-deposit (get-current-cycle) '${VAULT_ID})`, (v) => BigInt(String(v).replace(/^u/, "")) < 1000n);
+  const vy1 = cap("V11b vault STX after the crossing", VAULT_ID, "(stx-get-balance current-contract)");
+
   // ---- V12 withdraws ----
   tx("V12 owner withdraws 1000 sats", call(OWNER, VAULT_ID, "withdraw-sbtc", [uintCV(1000)]), "(ok true)");
   tx("V12 keeper withdraw-sbtc -> u6001", call(KEEPER, VAULT_ID, "withdraw-sbtc", [uintCV(1000)]), "(err u6001)");
@@ -293,6 +306,7 @@ async function main() {
   steps.forEach((st, i) => { const raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); if (st.capture) { st.value = BigInt((String(raw).match(/u(\d+)/) || [, "0"])[1]); console.log(`  ..   ${st.label}: ${raw}`); } else assert(st.label, raw, st.want); });
   assert("V9 the fill credited the vault's sBTC equity in the core (credit-if-registered: a registered maker)", eq1.value - eq0.value, (d) => d > 0n);
   assert("V10 the STX-side taker swap took the 5 STX from the vault, less the sub-minimum dust the walk refunds", vx0.value - vx1.value, (d) => d > 4_000_000n && d <= 5_000_000n);
+  assert("V11b the sBTC-side crossing paid the vault STX", vy1.value - vy0.value, (d) => d > 0n);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }
