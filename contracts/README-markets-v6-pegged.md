@@ -822,6 +822,48 @@ The market gained one additive public, `prune-seats` (99,608 bytes, no
 deposit path touched); the Lazer market harnesses are due a rerun with a
 key.
 
+## Full rerun 2026-09-15, on the spread guard (06f57a3) and the peg-track comment strip (296c73f), source at 296c73f
+
+Every harness on the market as committed at 296c73f (the pegged-bid / pegged-ask
+guard for a spread at or over BPS_PRECISION, found by the RV fuzz; market
+99,996 bytes, the harnesses that patch the source strip comment lines first).
+Two new harnesses since the previous table: band-mixed-fill and
+rung-types-mixed (a seated band rung, then all three rung types, resting
+next to direct makers on the same side, crossed by one taker per side).
+Trace coverage (`simulations/TRACE-COVERAGE-markets-v6.md`) is computed on
+exactly these runs against this source.
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 292/292 | `65eca86d6a2c27145232e6293cd2d409` |
+| markets v6 gaps | 72/72 | `b849e5571176df29cf409661e7c5df27` |
+| markets v6 lazer-paths | 35/35 | `7c6ff3f146ece8f31ec1f11fc419d4ac` |
+| markets v6 multifill | 44/44 | `20aa4a5ce3153bf7008faa24e782c561` |
+| markets v6 regression | 23/23 | `1e101767e70198831945906445286df5` |
+| markets v6 remainder-cross | 116/116 | `250da7f962c7bf779aa3b18b01725ff5` |
+| markets v6 stress | 126/126 | `08062c793dde95b6f8534164ec3c37db` |
+| markets v6 withdraw | 102/102 | `d35a98eaba67b24e8a283c7f1192754b` |
+| v6 peg-batch | 93/93 | `021504ee9bf1269c25a3e6383c37e39d` |
+| v6 peg-edges | 60/60 | `d4405a318735a0b0ab3332bd5881e006` |
+| v6 peg | 76/76 | `981c4c03d9cbfdb8146b41da98fcd008` |
+| v6 peg-mirror | 44/44 | `c59430ec3a25f66c830f5189b5addd2c` |
+| v6 peg-more | 51/51 | `99f15bff58f88d14fe58598fc4b5f778` |
+| v6 peg-park | 50/50 | `dd814f5c7213376356e028ccd3fdfb81` |
+| v6 peg-park-y | 77/77 | `f42edd927d19e5f088a88d742df58bb2` |
+| v6 peg-track | 30/30 | `cc8fc83720108a4e724b9568ddd445dc` |
+| v6 peg-walk-order | 70/70 | `f14101fce7ffe2468222943193b008f6` |
+| v6 small-share-x | 31/31 | `5c063d7013af2e8a2a23d8bc4884ecff` |
+| v6 band-mixed-fill | 60/60 | `f4f22abe79799c260fe5c0cbd1c5e4de` |
+| v6 rung-types-mixed | 85/85 | `03519ee6f38591eacddd84cf0a265aed` |
+| v6 rungs-fill | 40/40 | `e17cd8b0c70f0352510bcafdcfaebbd8` |
+| v6 rungs-push | 39/39 | `0b2a8e026976af1989d9fc538ef944ea` |
+| v6 rungs-miner-band | 174/174 | `677a6c551cf39c77e11295585ec71de2` |
+| v6 rungs-replace-keyless | 204/204 | `59b23d38b40d5f47c061a0ab010bd5f9` |
+| v6 rungs-keyless buy / sell | 37 / 37 | `93dc4f8cba90d7b9e90e9d54306b4004` / `30745051fb6ebead37fbacefb5630844` |
+| v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `910168c40043f729e2576f2bfc23501f` / `2683081fd7e8e3e8a263a25bf67f7783` |
+| vault v6 parked | 140/140 | `aae15fd0b7d6cc7f66eaf6d44e604376` |
+| router v5 on the v6 stack (`V6=1`) | 248/248 | `6ed29637cc3b25690e94f481914f92b9` |
+
 ## Full rerun 2026-09-14, after the park rule change (d1b32bd) and prune-seats (d9ee89e)
 
 Every v6 harness on the market at d1b32bd. One expectation moved:
