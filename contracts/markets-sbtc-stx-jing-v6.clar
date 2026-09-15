@@ -3320,6 +3320,7 @@
       cycle: uint,
       mid: uint,
       limit: uint,
+      taker: principal,
       in-range: uint,
       walk: uint,
     })
@@ -3330,7 +3331,11 @@
     )
     (if (>= l (get mid acc))
       (merge acc { in-range: (+ (get in-range acc) amt) })
+      ;; the walk never fills the taker's own order (walk-y-book-step
+      ;; skips it), so it does not count here either; in range it does,
+      ;; the batch clears in aggregate
       (if (and
+          (not (is-eq who (get taker acc)))
           (not (is-eq l u0))
           (>= l (get limit acc))
           (>= amt (var-get min-token-y-deposit))
@@ -3348,6 +3353,7 @@
       cycle: uint,
       mid: uint,
       limit: uint,
+      taker: principal,
       in-range: uint,
       walk: uint,
     })
@@ -3359,6 +3365,7 @@
     (if (<= l (get mid acc))
       (merge acc { in-range: (+ (get in-range acc) amt) })
       (if (and
+          (not (is-eq who (get taker acc)))
           (not (is-eq l MAX_UINT))
           (<= l (get limit acc))
           (>= amt (var-get min-token-x-deposit))
@@ -3382,10 +3389,15 @@
   )
 )
 
+;; `taker` is the principal that will call `swap`: its own resting order on
+;; the opposite side is left out of the walk (the walk skips a self-cross;
+;; found by the RV sizing property, 2026-09-15). In range it still counts:
+;; the batch clears both of its sides at the mid.
 (define-read-only (get-taker-capacity
     (mid uint)
     (limit uint)
     (deposit-x bool)
+    (taker principal)
   )
   (let (
       (cycle (var-get current-cycle))
@@ -3396,6 +3408,7 @@
           limit
           mid
         ),
+        taker: taker,
         in-range: u0,
         walk: u0,
       }))
@@ -3406,6 +3419,7 @@
           mid
           limit
         ),
+        taker: taker,
         in-range: u0,
         walk: u0,
       }))

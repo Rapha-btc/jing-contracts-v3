@@ -210,14 +210,22 @@ What the first property sweeps taught, none of it a contract defect:
 - Then two limits of `get-taker-capacity` that ARE real, both refusals
   (no funds at risk), both now discarded by the property and worth a line
   in the router's sizing:
-  - **the read has no taker argument**, so it counts the taker's own
+  - **the read had no taker argument**, so it counted the taker's own
     resting order on the opposite side, which the walk skips (a self-cross
-    is never filled). A user who rests a bid and takes exactly the reported
-    capacity with sBTC gets u1017 (seed -2050959550, flag 128 in the
-    diagnostic error). `swap` only forbids a resting position on the
-    DEPOSIT side, so the case is reachable in production; the router or
-    the front end should subtract the taker's own opposite-side order, or
-    the market could expose a `get-taker-capacity-for who`.
+    is never filled: in the batch both of a principal's sides clear at the
+    oracle mid, a print nobody chose; on the walk a self-fill would print a
+    match at a self-chosen price). A user who rested a bid and took exactly
+    the reported capacity with sBTC got u1017 (seed -2050959550, flag 128
+    in the diagnostic error); `swap` only forbids a resting position on the
+    DEPOSIT side, so it was reachable. FIXED the same day: `get-taker-capacity`
+    takes `(taker principal)` as its fourth argument and leaves that
+    principal's out-of-range opposite order out of `walk-cap` (in range it
+    still counts, the batch clears it); router v5 passes `tx-sender`, the
+    harnesses a neutral principal. The property no longer discards a taker
+    resting on the other side, and the seed passes. The commented source
+    crossed 100,000 bytes with the change (100,655; 95,894 stripped), so
+    every v6 harness now strips comment lines before deploying, as the
+    deploy form is.
   - **the read does not model the queue**: on a full side a taker smaller
     than the smallest resident is refused by the size rule (u1010) before
     any fill. Six slots in the fuzz build make it frequent; forty open

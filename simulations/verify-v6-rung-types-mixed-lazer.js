@@ -32,7 +32,11 @@ const S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";  // STX whale (2953 STX): 
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 const PP = 100_000_000n, PPDF = PP * 100n, BPS = 10_000n, FEE = 10n, REB = 20n;
 const MIN_STX = 1_000_000n, MIN_SBTC = 1000n, HUGE = 999_999_999_999_999n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
 const decodeTx = (s) => { const r = s?.Result?.Transaction; if (!r) return "<no tx>"; if ("Err" in r) return `ENGINE-ERR ${JSON.stringify(r.Err).slice(0, 120)}`; if (r.Ok?.vm_error) return `VM-ERR ${r.Ok.vm_error}`; try { return cvToString(deserializeCV(r.Ok.result)); } catch (e) { return `decode-failed ${e.message}`; } };

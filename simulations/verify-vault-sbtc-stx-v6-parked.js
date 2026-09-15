@@ -59,7 +59,7 @@ const sbtcAsset = stringAsciiCV(SBTC_ASSET_NAME);
 const wstxAsset = stringAsciiCV(WSTX_ASSET_NAME);
 const vaultCV = contractPrincipalCV(OWNER, VAULT_NAME);
 const vaultSrc = fs.readFileSync(new URL(`../contracts/${VAULT_NAME}.clar`, import.meta.url), "utf8");
-const srcOf = (n) => fs.readFileSync(new URL(`../contracts/${n}.clar`, import.meta.url), "utf8");
+const srcOf = (n) => fs.readFileSync(new URL(`../contracts/${n}.clar`, import.meta.url), "utf8").split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n"); // comment lines dropped as deployed
 
 function decodeTx(s) { const r = s?.Result?.Transaction; if (!r) return "<no tx>"; if ("Err" in r) return `ENGINE-ERR: ${JSON.stringify(r.Err)}`; if (r.Ok?.vm_error) return `VM-ERR: ${r.Ok.vm_error}`; try { return cvToString(deserializeCV(r.Ok.result)); } catch (e) { return `decode-failed: ${e.message}`; } }
 function decodeEval(s) { const r = s?.Result?.Eval; if (!r) return "<no eval>"; if (!("Ok" in r)) return `ERR: ${JSON.stringify(r.Err)}`; try { return cvToString(deserializeCV(r.Ok)); } catch { return r.Ok; } }

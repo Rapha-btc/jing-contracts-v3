@@ -728,7 +728,7 @@
   (match update
     v (let (
         (cap (get gross-cap
-          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc)
+          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc tx-sender)
         ))
         (size (if (> cap amount)
           amount

@@ -36,7 +36,11 @@ const F51 = getAddressFromPrivateKey((250).toString(16).padStart(64, "0") + "01"
 const Q = getAddressFromPrivateKey("b".repeat(64) + "01", "mainnet");
 const PARKER3 = getAddressFromPrivateKey("c".repeat(64) + "01", "mainnet");
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n, BPS = 20n, FILL = 1_500_000n, HUGE = 999_999_999_999_999n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;

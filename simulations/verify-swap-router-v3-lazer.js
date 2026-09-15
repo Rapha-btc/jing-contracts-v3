@@ -186,7 +186,7 @@ let router1StepSrc = (() => {
   if (s === routerSrc) throw new Error("DLMM_MAX_STEPS patch did not apply");
   return s;
 })();
-const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8"); // UNPATCHED
+const mktSrc = fs.readFileSync(new URL(`../contracts/${MARKET_FILE}.clar`, import.meta.url), "utf8").split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n"); // UNPATCHED, comment lines dropped as deployed (v6 is over 100,000 bytes with them)
 
 // ---- decode + assert ----
 function decodeTx(s) {
@@ -440,11 +440,11 @@ async function main() {
   tx("W8 fund the low bidder with 60 STX", (b) => b.withSender(S).addSTXTransfer({ recipient: M8, amount: 60_000_000 }), () => true);
   tx("W8 50 STX bid at -0.5% (fresh maker)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_LOW), ...SPREAD, DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
   tx("W8 refresh-mid verifies the Lazer update and returns the mid", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
-  ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true)`, (v) =>
+  ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes(`(gross-cap u${gross8})`) && String(v).includes(`(mid-cap u${midCap8})`) && String(v).includes(`(walk-cap u${walkCap8})`), CID);
   ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true)`, (v) =>
     String(v).includes("(walk-cap u0)") && String(v).includes(`(mid-cap u${midCap8})`), CID);
-  ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true)`, (v) =>
+  ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes("(mid-cap u0)"), CID);
   const k0s = sbtcOf(T, "W8 before"); const k0x = stxOf(T, "W8 before");
   // one min deposit over still fills (the sub-min residual is refunded as
@@ -537,7 +537,7 @@ async function main() {
   const ASK_OWN = 10_000n;
   tx("W9g M8 asks 10000 sats at +1% (own side, out of range)", call(M8, "deposit-token-x", [uintCV(ASK_OWN), uintCV((MID * 101n) / 100n), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
   tx("W9g S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
-  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) =>
+  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes(`(gross-cap u${midGross9a})`) && String(v).includes("(walk-cap u0)"), CID);
   const w0s = sbtcOf(T, "W9g before"); const w0x = stxOf(T, "W9g before"); const g8s0 = sbtcOf(M8, "W9g M8 before"); const g8x0 = stxOf(M8, "W9g M8 before");
   const r9g = tx("W9g smart sell 40000 sats, loose limit: bid to capacity, ask untouched, rest on DLMM", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
@@ -575,7 +575,7 @@ async function main() {
   // deposit: capacity says so, jing-size returns u0, the AMMs take it all
   // and the bid stays where it is
   tx("W12 S bids 1 STX at the mid", depositY(S, MIN_STX, HUGE), `(ok u${MIN_STX})`);
-  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true)`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
+  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78)`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
   const t0s12 = sbtcOf(T, "W12 before");
   const r12 = tx("W12 smart sell 5000 sats: book skipped for size, all on the AMMs", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
@@ -615,7 +615,7 @@ async function main() {
   tx("W16 smart sell sBTC, mid u0 -> u3007", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n, 0n), "(err u3007)");
   tx("W16 smart sell STX, mid u0 -> u3007", smartStx(S, 5_000_000n, HUGE, VAA, 1n, 0n), "(err u3007)");
   tx("W16 smart sell sBTC, vaa none, mid u0 -> still u3007 (guard is unconditional)", smartSbtc(T, 5000n, L_LOOSE, NO_VAA, 1n, 0n), "(err u3007)");
-  ev("W16 market get-taker-capacity happy -> (ok {...})", `(get-taker-capacity u${MID} u1 true)`, (v) => String(v).startsWith("(tuple") && String(v).includes("gross-cap"), CID);
+  ev("W16 market get-taker-capacity happy -> (ok {...})", `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78)`, (v) => String(v).startsWith("(tuple") && String(v).includes("gross-cap"), CID);
 
   // =============== W17: the mid is a hint, not a trust ===============
   // The router no longer verifies the update itself; the caller passes the

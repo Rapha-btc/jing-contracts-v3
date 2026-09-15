@@ -6,6 +6,9 @@
 // the member claims and the balance moves by the claimed amount. Also the
 // settlement roll of the other rung (a fixed order outside mid rolls with
 // its own limit in the event).
+// F5: the sell side SOLD OUT: fixed + peg + band sell rungs (5 STX each)
+// next to a deep direct bid, one sBTC seller walks the three whole; each
+// rung's sync closes its epoch, the member claims from the closed epoch.
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-fill-lazer.js
 import fs from "node:fs";
 import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, trueCV, falseCV, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
@@ -20,7 +23,11 @@ const sbtcA = stringAsciiCV("sbtc-token"), wstxA = stringAsciiCV("wstx");
 const SBTC = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token";
 const A = "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2", S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51", B = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q";
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
@@ -86,6 +93,37 @@ async function main() {
   ev("F4 buy rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(BUY));
   ev("F4 sell rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(SELL));
 
+  // F5 the sell side SOLD OUT: the fixed, peg and band sell rungs (5 STX each) rest next to a deep
+  // direct bid; one sBTC seller walks all three whole and part of the deep bid, every rung's
+  // market position is u0, its next sync closes the epoch, the member claims from the closed
+  // epoch (paid in full, position gone) and can no longer withdraw
+  const SELLP_C = (10n ** 18n) / ((MID * 110n) / 100n); // cap over the pegged bid: in band
+  const SELLP = `jing-sell-stx-spread-20-cap-${centsName(SELLP_C)}`, SELLB = "jing-sell-stx-spread-20";
+  deploy(SELLP, src("jing-sell-stx-market-spread")); deploy(SELLB, src("jing-sell-stx-core-spread"));
+  tx("canonical sell-peg", call(DEP, "set-canonical", [stringAsciiCV("sell-peg"), contractPrincipalCV(DEP, SELLP)], LADDER), "(ok true)");
+  tx("canonical sel-band", call(DEP, "set-canonical", [stringAsciiCV("sel-band"), contractPrincipalCV(DEP, SELLB)], LADDER), "(ok true)");
+  tx(`init ${SELLP}`, call(DEP, "initialize", [uintCV(20), uintCV(SELLP_C)], rid(SELLP)), "(ok true)");
+  tx(`init ${SELLB} (seated)`, call(DEP, "initialize", [uintCV(20), trueCV()], rid(SELLB)), "(ok true)");
+  const STX5 = 5_000_000;
+  tx("F5 S deposits 5 STX into the fixed sell rung (x side empty: pushed)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELL)), "(ok true)");
+  tx("F5 S deposits 5 STX into the sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), "(ok true)");
+  tx("F5 S deposits 5 STX into the sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), "(ok true)");
+  for (const r of [SELL, SELLP, SELLB]) ev(`F5 ${r} resting 5 STX`, "(get-state)", (v) => field(v, "resting") === `u${STX5}` && field(v, "held-ustx") === "u0", rid(r));
+  tx("F5 S rests a deep direct bid: 100 STX at -2%", call(S, "deposit-token-y", [uintCV(100_000_000), uintCV((MID * 98n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u100000000)");
+  const SATS_35_STX = (35n * 10n ** 16n) / MID; // ~35 STX worth of sats: the three rungs (15 STX) whole, the rest off the deep bid
+  const fill5 = tx(`F5 B sells ${SATS_35_STX} sats (~35 STX) at -3%: the walk takes the three rungs whole, then part of the deep bid`, swap(B, Number(SATS_35_STX), (MID * 97n) / 100n, true), (v) => String(v).startsWith("(ok"));
+  for (const r of [SELL, SELLP, SELLB]) ev(`F5 ${r} market position u0`, `(get-token-y-deposit (get-current-cycle) '${rid(r)})`, "u0");
+  ev("F5 the deep bid was walked (under 100 STX, above 0)", `(get-token-y-deposit (get-current-cycle) '${S})`, (v) => uintOf(v) > 0n && uintOf(v) < 100_000_000n);
+  for (const r of [SELL, SELLP, SELLB]) {
+    tx(`F5 sync ${r}: sold out -> the epoch closes`, call(B, "sync", [], rid(r)), "(ok true)");
+    ev(`F5 ${r} epoch 1, shares reset, nothing resting`, "(get-state)", (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0", rid(r));
+    ev(`F5 ${r} S's position: from the closed epoch, only sats owed`, `(get-position '${S})`, (v) => field(v, "ustx") === "u0" && uintOf(field(v, "sbtc")) > 0n, rid(r));
+    tx(`F5 S claims on ${r} (old epoch: paid in full, position gone)`, call(S, "claim", [], rid(r)), "(ok true)");
+    ev(`F5 ${r} S's position gone`, `(get-position '${S})`, (v) => field(v, "shares") === "u0" && field(v, "sbtc") === "u0", rid(r));
+    tx(`F5 S withdraws on ${r} -> u7006 (no position)`, call(S, "withdraw", [uintCV(1)], rid(r)), "(err u7006)");
+  }
+  tx("F5 S cancels the rest of the deep bid", call(S, "cancel-token-y-deposit", [wstxT, wstxA]), (v) => String(v).startsWith("(ok u"));
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
@@ -100,6 +138,8 @@ async function main() {
   check(`F2 A's STX grew by the position's proceeds (${pA}, minus fees)`, dA, (d) => d > 0n && d <= pA && d >= pA - 1_000_000n);
   const dS = uintOf(s1.raw) - uintOf(s0.raw), pS = uintOf(field(posS.raw, "sbtc"));
   check(`F3 S's sats grew by exactly the position's proceeds (${pS})`, dS, (d) => d === pS);
+  const m5 = logsOf(s[fill5.idx]).filter((r) => r.includes('(event "match")')).length;
+  check("F5 the sBTC seller matched four makers (three rungs + the deep bid)", m5, (n) => n === 4);
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

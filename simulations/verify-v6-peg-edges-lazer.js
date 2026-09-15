@@ -36,7 +36,11 @@ const STRANGER = "SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3";
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + "01", "mainnet");
 const PP = 100_000_000n, PPDF = PP * 100n, BPS = 10_000n, REB = 20n, SCALE = 1_000_000_000_000n;
 const HUGE = 999_999_999_999_999n, MAX_UINT = 340282366920938463463374607431768211455n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 const grossFor = (net) => { let a = (net * BPS) / (BPS - REB); while (a - (a * REB) / BPS < net) a += 1n; return a; };
 let checks = 0, failures = 0;
@@ -119,8 +123,8 @@ async function main() {
   // explicitly, mirroring the bid side's u0 checks.
   tx("G5 X8 rests a 30 bps peg ask with the floor one unit over mid+30bps -> out of band", depX(X8, 1000n, PA(30n) + 1n, 30n), "(ok u1000)");
   ev("G5 X8 limit-at = MAX_UINT (inactive)", `(token-x-limit-at '${X8} u${MID})`, `u${MAX_UINT}`);
-  const capHuge = ev("G5 capacity at limit HUGE (baseline)", `(get-taker-capacity u${MID} u${HUGE} false)`, (v) => String(v).startsWith("(tuple"));
-  const capMax = ev("G5 capacity at limit MAX_UINT returns instead of overflowing on the sentinel", `(get-taker-capacity u${MID} u${MAX_UINT} false)`, (v) => String(v).startsWith("(tuple"));
+  const capHuge = ev("G5 capacity at limit HUGE (baseline)", `(get-taker-capacity u${MID} u${HUGE} false 'SP000000000000000000002Q6VF78)`, (v) => String(v).startsWith("(tuple"));
+  const capMax = ev("G5 capacity at limit MAX_UINT returns instead of overflowing on the sentinel", `(get-taker-capacity u${MID} u${MAX_UINT} false 'SP000000000000000000002Q6VF78)`, (v) => String(v).startsWith("(tuple"));
 
   // =============== U: small taker vs a big zero-spread peg on its own side ===============
   tx("U1 S rests a 2000 STX zero-spread peg bid (asks rest above mid: no cross)", depY(S, BIG, HUGE, 0n), `(ok u${BIG})`);

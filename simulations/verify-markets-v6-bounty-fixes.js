@@ -671,6 +671,20 @@ async function main() {
   ev("D9 XD8 live", `(get-token-x-deposit u0 '${XD8})`, "u3000", PID);
   tx("D9 operator restores distance-slots u3", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
 
+  // ---- D10 (trace coverage): the core's size rule on the X side ----
+  // In range with nobody out of range: park-tenth returns (ok false) and deposit-token-x-core's
+  // own fold runs (find-smallest-token-x-fold): smaller than the smallest -> u1010, bigger parks it.
+  const XE1 = mkAddr(46), XE2 = mkAddr(47);
+  for (const [w, sats] of [[XE1, 3500n], [XE2, 5500n]]) { tx(`D10 fund ${w.slice(0, 6)} stx`, stxSend(w, 1_000_000), okPrefix); tx(`D10 fund ${w.slice(0, 6)} sats`, sbtcSend(w, sats), okPrefix); }
+  tx("D10 Q3 (+5%, the only out-of-range ask) cancels", cancelX(Q3, PID), "(ok u3000)");
+  tx("D10 XE1 ask 3000 in range: the side is full again, all in range", depositX(XE1, 3000n, 1n, PID), "(ok u3000)");
+  ev("D10 x book full (3): XD1, XD8, XE1, all in range", "(len (get-token-x-depositors u0))", "u3", PID);
+  tx("D10 XE2 2000 in range: nobody out of range -> the core's size rule, smaller than the smallest -> u1010", depositX(XE2, 2000n, 1n, PID), "(err u1010)");
+  tx("D10 XE2 5000 in range -> the core parks the smallest (XD1, first in the list), XE2 in", depositX(XE2, 5000n, 1n, PID), "(ok u5000)");
+  ev("D10 XD1 parked 3000 by the core", `(get-token-x-parked '${XD1})`, "u3000", PID);
+  ev("D10 XE2 live 5000", `(get-token-x-deposit u0 '${XE2})`, "u5000", PID);
+  ev("D10 XD8 still live", `(get-token-x-deposit u0 '${XD8})`, "u3000", PID);
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

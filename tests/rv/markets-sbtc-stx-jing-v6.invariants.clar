@@ -422,8 +422,8 @@
 (define-read-only (invariant-readers-total-at-mid)
   (let (
       (mid (contract-call? .mock-lazer-oracle get-mid))
-      (cap-x (get-taker-capacity mid mid true))
-      (cap-y (get-taker-capacity mid mid false))
+      (cap-x (get-taker-capacity mid mid true tx-sender))
+      (cap-y (get-taker-capacity mid mid false tx-sender))
       (n (fold rv-limits-at RV-ACCOUNTS u0))
     )
     (and
@@ -504,23 +504,17 @@
   (let (
       (mid (contract-call? .mock-lazer-oracle get-mid))
       (lim (rv-price (+ limit u1)))
-      (cap (get-taker-capacity mid lim deposit-x))
+      (cap (get-taker-capacity mid lim deposit-x tx-sender))
       (cycle (var-get current-cycle))
       (min (if deposit-x (var-get min-token-x-deposit) (var-get min-token-y-deposit)))
       (resting (if deposit-x
         (+ (get-token-x-deposit cycle tx-sender) (get-token-x-parked tx-sender))
         (+ (get-token-y-deposit cycle tx-sender) (get-token-y-parked tx-sender))))
-      ;; KNOWN GAP (found by this property, seed -2050959550, 2026-09-15):
-      ;; get-taker-capacity has no taker argument, so it counts the taker's
-      ;; own resting order on the opposite side, which the walk skips
-      ;; (self-cross). A taker resting on the other side is discarded here;
-      ;; the read over-reports for that taker until the market or the router
-      ;; excludes it.
-      (other (if deposit-x
-        (get-token-y-deposit cycle tx-sender)
-        (get-token-x-deposit cycle tx-sender)))
-    )
-    (if (or (< (get net-cap cap) min) (> resting u0) (> other u0) (var-get paused))
+          )
+    ;; a resting order on the OTHER side is no longer discarded: the read
+    ;; takes the taker since 2026-09-15 and leaves that order out of the
+    ;; walk (found by this property, seed -2050959550)
+    (if (or (< (get net-cap cap) min) (> resting u0) (var-get paused))
       (ok false)
       (match (swap (get gross-cap cap) lim 0x .mock-ft "mock-ft" .mock-ft "mock-ft" deposit-x)
         r (ok true)
@@ -558,14 +552,14 @@
   (let (
       (cycle (var-get current-cycle))
       (bids (fold cap-bid-fold (get-token-y-depositors cycle)
-        { cycle: cycle, mid: mid, limit: (if deposit-x lim mid), in-range: u0, walk: u0 }))
+        { cycle: cycle, mid: mid, limit: (if deposit-x lim mid), taker: tx-sender, in-range: u0, walk: u0 }))
       (asks (fold cap-ask-fold (get-token-x-depositors cycle)
-        { cycle: cycle, mid: mid, limit: (if deposit-x mid lim), in-range: u0, walk: u0 }))
+        { cycle: cycle, mid: mid, limit: (if deposit-x mid lim), taker: tx-sender, in-range: u0, walk: u0 }))
       (opposite (if deposit-x
         (/ (* (get in-range bids) (cap-scale)) mid)
         (/ (* (get in-range asks) mid) (cap-scale))))
       (own (if deposit-x (get in-range asks) (get in-range bids)))
-      (cap (get-taker-capacity mid lim deposit-x))
+      (cap (get-taker-capacity mid lim deposit-x tx-sender))
     )
     (+ (if (>= own opposite) u1 u0)
        (if (is-eq (get mid-cap cap) u0) u2 u0)

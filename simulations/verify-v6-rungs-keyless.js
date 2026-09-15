@@ -45,6 +45,7 @@ const CENTS = BUY ? 33150 : 36000;
 const BPS = 20;
 const HUMAN = BUY ? "331-50" : "360-00";
 const HUMAN_BAD = BUY ? "300-00" : "400-00";
+const CENTS_PAD = BUY ? 30005 : 40005; // "300-05" / "400-05": hundredths under 10, the zero-padding arm of expected-name
 const RUNG = PEG
   ? (BUY ? `jing-buy-stx-spread-${BPS}-floor-${HUMAN}` : `jing-sell-stx-spread-${BPS}-cap-${HUMAN}`)
   : (BUY ? `jing-buy-stx-${HUMAN}` : `jing-sell-stx-${HUMAN}`);
@@ -65,7 +66,11 @@ const balOf = (who) => BUY ? `(contract-call? '${SBTC} get-balance '${who})` : `
 const orderOf = `(contract-call? '${MARKET} ${BUY ? "get-token-x-order" : "get-token-y-order"} '${RID})`;
 const guardName = BUY ? "floor" : "cap";
 
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const rungFile = PEG ? (BUY ? "jing-buy-stx-market-spread" : "jing-sell-stx-market-spread") : (BUY ? "jing-buy-stx" : "jing-sell-stx");
 
 const plan = [];
@@ -102,6 +107,8 @@ if (PEG) {
   call(`peg: ${guardName} 0 -> ERR_ZERO_PRICE u7008`, DEP, BID, "initialize", initArgs(0), "(err u7008)");
 }
 call("initialize with numbers that do not match the name -> ERR_BAD_NAME u7009", DEP, BID, "initialize", initArgs(CENTS), "(err u7009)");
+// hundredths under 10 are zero-padded in the name ("300-05"): the padding arm of expected-name, still a mismatch
+call(`initialize with hundredths under 10 (${HUMAN_BAD.split("-")[0]}-05) -> the zero-padded name still mismatches, u7009`, DEP, BID, "initialize", initArgs(CENTS_PAD), "(err u7009)");
 call(`initialize ${RUNG} -> ok (registers under ${SIDE_STR})`, DEP, RID, "initialize", initArgs(CENTS), "(ok true)");
 call("initialize twice -> u7002", DEP, RID, "initialize", initArgs(CENTS), "(err u7002)");
 evalc("min-market reads the v6 minimum", "(min-market)");

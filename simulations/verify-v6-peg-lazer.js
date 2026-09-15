@@ -37,7 +37,11 @@ const S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";    // STX holder: sell-run
 const B = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q";   // taker both ways (278k sats + 7.4k STX)
 const PP = 100_000_000n, BPS = 20n, SCALE = 1_000_000_000_000n;
 const MAX_UINT = 340282366920938463463374607431768211455n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const centsName = (cents) => { const w = cents / 100n, f = cents % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 
 let checks = 0, failures = 0;

@@ -14,6 +14,10 @@
 //      update (fixtures/lazer-update-stale-btc-stx.hex); broadcast later it
 //      still lands the sats in the rung (held), and the keeper's push with a
 //      fresh update puts them on the market
+//   P5 the FIXED sell rung (jing-sell-stx) mirror: held on 0x00 while asks
+//      rest, push(0x00) refused, push(update) pushes, nothing left -> false
+//   P6 the buy PEG rung (jing-buy-stx-market-spread) mirror: held on 0x00
+//      while bids rest, pushed by a keeper, rests a pegged ask at +20 bps
 // Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-push-lazer.js
 import fs from "node:fs";
 import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, noneCV, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
@@ -30,7 +34,11 @@ const S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";  // STX holder: sell-rung 
 const KEEPER = "SPZSQNQF9SM88N00K4XYV05ZAZRACC748T78P5P3"; // anyone
 const PP = 100_000_000n, BPS = 20n, NO_UPDATE = bufferCV(Buffer.from("00", "hex"));
 const STALE = bufferCV(Buffer.from(fs.readFileSync(new URL("./fixtures/lazer-update-stale-btc-stx.hex", import.meta.url), "utf8").trim(), "hex"));
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;
 function check(label, actual, want) { checks += 1; const ok = typeof want === "function" ? want(actual) : String(actual) === want; if (!ok) failures += 1; console.log(`  ${ok ? "ok  " : "FAIL"} ${label}: ${String(actual).slice(0, 170)}${ok ? "" : ` (want ${typeof want === "function" ? want.toString().slice(0, 90) : want})`}`); }
@@ -47,6 +55,9 @@ async function main() {
   const BUY_C = (10n ** 18n) / ((MID * 110n) / 100n); // fixed buy rung 10% over mid: rests, never crosses
   const SELL_C = (10n ** 18n) / ((MID * 110n) / 100n); // sell peg rung cap over the bid: in band
   const BUY = `jing-buy-stx-${centsName(BUY_C)}`, SELL = `jing-sell-stx-spread-${BPS}-cap-${centsName(SELL_C)}`;
+  const SELLF_C = (10n ** 18n) / ((MID * 90n) / 100n); // P5: fixed sell rung bidding 10% under the mid: rests, never crosses
+  const BUYP_C = (10n ** 18n) / ((MID * 90n) / 100n);  // P6: buy peg rung, floor under the pegged ask: in band
+  const SELLF = `jing-sell-stx-${centsName(SELLF_C)}`, BUYP = `jing-buy-stx-spread-${BPS}-floor-${centsName(BUYP_C)}`;
   const rid = (n) => `${DEP}.${n}`;
   console.log(`mid ${MID}; ${BUY} / ${SELL}`);
 
@@ -89,6 +100,7 @@ async function main() {
   const p3 = tx("P3 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(SELL)), "(ok true)");
   state("P3 held 0, resting 5 STX", rid(SELL), (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u5000000");
   ev("P3 the rung rests a pegged bid (some u20) at mid - 20 bps", `(token-y-limit-at '${rid(SELL)} u${MID})`, `u${(MID * (10000n - BPS)) / 10000n}`);
+  tx("P3 push again with nothing held -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(SELL)), "(ok false)");
 
   // =============== P4: a pre-signed deposit with a STALE signed update ===============
   tx("P4 A deposits 3000 sats with a STALE (signed, old) update: the market refuses the read, the rung holds", call(A, "deposit", [uintCV(3000), STALE], rid(BUY)), "(ok true)");
@@ -99,6 +111,30 @@ async function main() {
   state("P4 held 0, resting 23500", rid(BUY), (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u23500");
   ev("P4 on the market: 23500", `(get-token-x-deposit (get-current-cycle) '${rid(BUY)})`, "u23500");
 
+  // =============== P5: the FIXED sell rung, held on 0x00 (asks rest), pushed by a keeper ===============
+  deploy(SELLF, src("jing-sell-stx"));
+  tx("canonical sell-stx", call(DEP, "set-canonical", [stringAsciiCV("sell-stx"), contractPrincipalCV(DEP, SELLF)], LADDER), "(ok true)");
+  tx(`init ${SELLF}`, call(DEP, "initialize", [uintCV(SELLF_C)], rid(SELLF)), "(ok true)");
+  tx("P5 S deposits 5 STX into the fixed sell rung with 0x00 (asks rest: price needed): held", call(S, "deposit", [uintCV(5_000_000), NO_UPDATE], rid(SELLF)), "(ok true)");
+  state("P5 held 5 STX, resting 0", rid(SELLF), (v) => field(v, "held-ustx") === "u5000000" && field(v, "resting") === "u0");
+  tx("P5 keeper push(0x00): refused -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(SELLF)), "(ok false)");
+  const p5 = tx("P5 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(SELLF)), "(ok true)");
+  state("P5 held 0, resting 5 STX", rid(SELLF), (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u5000000");
+  ev("P5 the rung's order on the market: fixed at its price (spread-bps none)", `(get-token-y-order '${rid(SELLF)})`, (v) => field(v, "spread-bps") === "none");
+  tx("P5 push again with nothing held -> (ok false)", call(KEEPER, "push", [UPD], rid(SELLF)), "(ok false)");
+
+  // =============== P6: the buy PEG rung, held on 0x00 (bids rest), pushed by a keeper ===============
+  deploy(BUYP, src("jing-buy-stx-market-spread"));
+  tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, BUYP)], LADDER), "(ok true)");
+  tx(`init ${BUYP}`, call(DEP, "initialize", [uintCV(BPS), uintCV(BUYP_C)], rid(BUYP)), "(ok true)");
+  tx("P6 A deposits 3000 sats into the buy peg rung with 0x00 (bids rest: price needed): held", call(A, "deposit", [uintCV(3000), NO_UPDATE], rid(BUYP)), "(ok true)");
+  state("P6 held 3000, resting 0", rid(BUYP), (v) => field(v, "held-sats") === "u3000" && field(v, "resting") === "u0");
+  tx("P6 keeper push(0x00): refused -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(BUYP)), "(ok false)");
+  const p6 = tx("P6 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(BUYP)), "(ok true)");
+  state("P6 held 0, resting 3000", rid(BUYP), (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u3000");
+  ev("P6 the rung rests a pegged ask (some u20) at mid + 20 bps", `(token-x-limit-at '${rid(BUYP)} u${MID})`, `u${(MID * (10000n + BPS)) / 10000n}`);
+  tx("P6 push again with nothing held -> (ok false)", call(KEEPER, "push", [UPD], rid(BUYP)), "(ok false)");
+
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
@@ -106,6 +142,8 @@ async function main() {
   const pushLog = (st) => prints(s[st.idx]).filter((p) => p.includes('(event "rung-push")')).join("|");
   check("P1 ladder logged rung-push (pushed true, amount 20000, keeper)", pushLog(p1), (v) => v.includes("(pushed true)") && v.includes("(amount u20000)") && v.includes(KEEPER));
   check("P3 ladder logged rung-push for the sell rung", pushLog(p3), (v) => v.includes("(pushed true)") && v.includes("(amount u5000000)"));
+  check("P5 ladder logged rung-push for the fixed sell rung", pushLog(p5), (v) => v.includes("(pushed true)") && v.includes("(amount u5000000)"));
+  check("P6 ladder logged rung-push for the buy peg rung", pushLog(p6), (v) => v.includes("(pushed true)") && v.includes("(amount u3000)"));
   console.log(`\n${checks - failures}/${checks} checks green`);
   if (failures > 0) process.exit(1);
 }

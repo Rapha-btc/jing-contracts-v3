@@ -22,7 +22,11 @@ const FILLERS = Array.from({ length: 49 }, (_, i) => getAddressFromPrivateKey((i
 const PARKER = getAddressFromPrivateKey("7".repeat(64) + "01", "mainnet");
 const OUTN = getAddressFromPrivateKey("8".repeat(64) + "01", "mainnet"); // K2b: an out-of-range newcomer with no price edge
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n, BPS = 20n, FILL = 2000, MAX_UINT = 340282366920938463463374607431768211455n;
-const src = (f) => fs.readFileSync(`./contracts/${f}.clar`, "utf8");
+// comment-only lines stripped before deploying: the v6 market crossed the
+// 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
+// is comment-free anyway, same strip as verify-markets-v6-gaps.js
+const stripComments = (t) => t.split("\n").filter((l) => !/^\s*;;/.test(l)).join("\n");
+const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"));
 
 const centsName = (c) => { const w = c / 100n, f = c % 100n; return `${w}-${f < 10n ? "0" : ""}${f}`; };
 let checks = 0, failures = 0;
