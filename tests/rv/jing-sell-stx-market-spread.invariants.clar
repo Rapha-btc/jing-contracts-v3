@@ -259,3 +259,12 @@
   (match (push 0x) r (ok true) e (ok false)))
 (define-public (test-drive-claim)
   (match (claim) r (ok true) e (ok false)))
+
+;; ============================================================================
+;; 13: a seated rung (a band seat on the ladder) is never parked. The market
+;; checks this for accounts; its invariants are not evaluated in a rung run.
+;; ============================================================================
+
+(define-read-only (invariant-seated-never-parked)
+  (or (not (contract-call? .mock-jing-ladder is-band-y current-contract))
+      (is-eq (contract-call? .v6-market get-token-y-parked current-contract) u0)))

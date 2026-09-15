@@ -17,6 +17,7 @@ creator-bonus-jing          -- 500 runs,  4 invariants, 0 failures (2026-09-02)
 markets-sbtc-stx-jing-v6    -- 1000 runs, 31 invariants, 0 failures (2026-09-15, settle LIVE)
 jing-ladder                 -- 500 runs,  6 invariants, 0 failures (2026-09-15)
 jing-core-v5 (via market v6) -- 1000 runs, 31 + 3 invariants, 0 failures (2026-09-15, equity ledger)
+swap-router-sbtc-stx-jing-v5 -- 300 runs, 1 invariant + 5 properties (500 runs), 0 failures (2026-09-15)
 jing-buy/sell-stx x3 pairs  -- 500 runs, 12 invariants each, 0 failures (2026-09-15)
 ```
 
@@ -167,6 +168,50 @@ Logs of the day's sweeps were read for the counts above; RV prints the
 same summary at the end of every run. `rv-take` on the sell rungs folds the
 taker under 0.002 BTC (a raw natural runs to 21 BTC against a few thousand
 STX resting and the market refuses a partial fill, u1017).
+
+### swap-router-sbtc-stx-jing-v5, added 2026-09-15
+
+The taker path users call, fuzzed on the v6 fuzz market with one mock per
+AMM (`build.sh` 2h): DLMM pool, core and router, XYK pool and core, Velar
+pool and fees, plus `mock-wstx`, a SIP-010 facade that moves real STX so
+the Velar mock reads the direction off `token-in`. Each AMM mock takes
+the input from the user and pays exactly the minimum the router derived
+from the mock pool state (reserves, bins, fees), so the pricing under
+test is the router's own sizing arithmetic; STX payouts come from what
+`rv-fund-amms` gave the mocks, sBTC payouts mint. The router is a
+pass-through by design and that is what is checked:
+
+- one invariant, **the router holds nothing**, in either token, ever;
+- five properties: after a smart or manual swap in either direction that
+  returned ok, the user's sold token went down by exactly `amount` minus
+  `unsold`, the bought token went up by exactly `out`, the four legs plus
+  `unsold` sum to `amount`, and `out` is the sum of the leg outs (the
+  "sells a different total" class from the router's own header); a swap
+  with a floor of one that returned ok paid something.
+
+Wrappers build the book (bids, asks, pegs, cancels, settlements, the mid)
+and call the entries with realistic sizes (under 0.5 BTC, under 5,000
+STX), the mock oracle's mid as the hint, random four-way splits and
+fallbacks for the manual entries. The manual entries' raw calls mostly
+land on u3004 (a random split never sums to the amount), the wrappers
+pass.
+
+| mode | runs | result |
+|---|---|---|
+| invariant | 300 | router-holds-nothing checked 300 times, 0 failed; smart and manual entries succeeded 59 times in the first 40 runs alone |
+| test (properties) | 500 | smart sell sBTC x7, smart sell STX x16, manual sell sBTC x8, manual sell STX x11, floor honoured x22; 0 failed |
+
+Two false alarms on the way, both from the fuzz build, not the router: the
+market's treasury defaulted to the deployer, one sender in ten, so a fee
+paid mid-swap moved the taker's own balance (u9201, 18 times in the first
+sweep; the fuzz market's treasury is now a contract that never trades),
+and a taker who also rested on the market got its own maker fill in the
+same balances (a runtime underflow once; such a user is now discarded).
+
+Rungs, third round: the seat invariant (a rung the ladder seats is never
+parked) on all six, and on the two band rungs a property that a deposit
+which reached the market rests at the guard read at that moment
+(`current-floor` / `current-cap`).
 
 ### Property tests (`rv ... test`), added 2026-09-15
 

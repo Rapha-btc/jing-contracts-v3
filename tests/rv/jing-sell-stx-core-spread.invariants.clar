@@ -271,3 +271,28 @@
   (match (push 0x) r (ok true) e (ok false)))
 (define-public (test-drive-claim)
   (match (claim) r (ok true) e (ok false)))
+
+;; ============================================================================
+;; 13: a seated rung (a band seat on the ladder) is never parked. The market
+;; checks this for accounts; its invariants are not evaluated in a rung run.
+;; ============================================================================
+
+(define-read-only (invariant-seated-never-parked)
+  (or (not (contract-call? .mock-jing-ladder is-band-y current-contract))
+      (is-eq (contract-call? .v6-market get-token-y-parked current-contract) u0)))
+
+;; P3: A DEPOSIT THAT REACHES THE MARKET RESTS THE ORDER AT THE current-cap READ
+;; NOW (current-cap, half or twice the miners' price from the RFQ native
+;; oracle): the point of a band rung is that its guard follows the oracle
+;; at every push. Discarded when the deposit was held (the market refused).
+(define-public (test-push-sets-guard (amount uint))
+  (match (deposit (+ MIN_DEPOSIT (mod amount u1000000)) 0x)
+    d (if (is-eq (var-get held-ustx) u0)
+      (if (is-eq (get limit (contract-call? .v6-market get-token-y-order current-contract))
+                 (current-cap))
+        (ok true)
+        (err u9103))
+      ;; held: the market refused the push (a full side, u1010, or a crossing
+      ;; peg, u1016); the funds wait here, nothing to check
+      (ok false))
+    e (ok false)))

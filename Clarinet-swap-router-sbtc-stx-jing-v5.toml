@@ -1,0 +1,93 @@
+# RV-only manifest for fuzzing swap-router-sbtc-stx-jing-v5 on the v6 fuzz
+# market with one mock per AMM. See tests/rv/build.sh section 2h and
+# tests/rv/README.md.
+#
+# Run:
+#   bash tests/rv/build.sh markets-sbtc-stx-jing-v6 && bash tests/rv/build.sh swap-router-sbtc-stx-jing-v5
+#   npx rv . swap-router-sbtc-stx-jing-v5 invariant --runs=500
+#   npx rv . swap-router-sbtc-stx-jing-v5 test --runs=500
+[project]
+name = "jing-contracts-v3-rv-router-v5"
+description = "RV-only manifest for fuzzing swap-router-sbtc-stx-jing-v5"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.sip-010-trait]
+path = "tests/rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "tests/rv/mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-wstx]
+path = "tests/rv/mock-wstx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "tests/rv/mock-jing-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "tests/rv/mock-lazer-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "tests/rv/mock-jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.v6-market]
+path = "tests/rv/.build/markets-sbtc-stx-jing-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-core]
+path = "tests/rv/mock-dlmm-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-pool-v5]
+path = "tests/rv/mock-dlmm-pool-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-router-v5]
+path = "tests/rv/mock-dlmm-router-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-pool-v5]
+path = "tests/rv/mock-xyk-pool-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-core-v5]
+path = "tests/rv/mock-xyk-core-v5.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-velar-fees]
+path = "tests/rv/mock-velar-fees.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-velar-pool]
+path = "tests/rv/mock-velar-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.swap-router-sbtc-stx-jing-v5]
+path = "tests/rv/.build/swap-router-sbtc-stx-jing-v5.clar"
+clarity_version = 5
+epoch = "3.4"

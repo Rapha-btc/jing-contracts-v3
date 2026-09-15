@@ -43,6 +43,7 @@ declare -A SUTS=(
   ["markets-sbtc-stx-jing-v6"]="contracts/markets-sbtc-stx-jing-v6.clar"
   ["jing-ladder"]="contracts/jing-ladder.clar"
   ["jing-core-v5"]="contracts/jing-core-v5.clar"
+  ["swap-router-sbtc-stx-jing-v5"]="contracts/swap-router-sbtc-stx-jing-v5.clar"
   ["markets-sbtc-stx-jing-v6-on-core"]="contracts/markets-sbtc-stx-jing-v6.clar"
   ["jing-buy-stx"]="contracts/jing-buy-stx.clar"
   ["jing-sell-stx"]="contracts/jing-sell-stx.clar"
@@ -194,6 +195,10 @@ if "markets-sbtc-stx-jing-v6" in src_path:
     text = text.replace("(define-constant MAX_DEPOSITORS u50)", "(define-constant MAX_DEPOSITORS u6)")
     text = text.replace("(define-data-var seats-per-side uint u10)", "(define-data-var seats-per-side uint u2)")
     text = text.replace("(define-data-var distance-slots uint u10)", "(define-data-var distance-slots uint u2)")
+    # the treasury is a contract that never trades: with the deployer (one
+    # sender in ten) as treasury, a fee paid mid-swap moved the taker's own
+    # balance and broke the router's delta properties (u9201)
+    text = text.replace("(define-data-var treasury principal tx-sender)", "(define-data-var treasury principal .mock-jing-ladder)")
     text = text.replace("(define-data-var feed-id-x uint u0)", "(define-data-var feed-id-x uint u1)")
     text = text.replace("(define-data-var feed-id-y uint u0)", "(define-data-var feed-id-y uint u45)")
     # y minimum above one sat's worth of STX in the price band (4,000 uSTX at
@@ -217,6 +222,32 @@ if src_path.endswith("contracts/jing-core-v5.clar"):
     text = text.replace(
         "(define-map registered-contracts\n  principal\n  bool\n)",
         "(define-map registered-contracts\n  principal\n  bool\n)\n;; RV: the on-core market registers itself through this (a literal here\n;; would be a dependency edge back to the market, a cycle for clarinet;\n;; the real register needs a code hash no account has)\n(define-public (rv-register (who principal))\n  (begin (asserts! true (err u0)) (ok (map-set registered-contracts who true))))")
+
+# 2h. swap-router-sbtc-stx-jing-v5 (added 2026-09-15): the taker path users
+#     call, fuzzed on the v6 fuzz market plus one mock per AMM (DLMM pool,
+#     core and router; XYK pool and core; Velar pool and fees) and a wstx
+#     facade that moves real STX. The AMM mocks take the input and pay
+#     exactly the minimum the router derived from the mock pool state, so
+#     the pricing under test is the router's own arithmetic; the router
+#     never holds funds and the user's deltas must match what it reports.
+if src_path.endswith("contracts/swap-router-sbtc-stx-jing-v5.clar"):
+    for a, b in [
+        ("'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6", ".v6-market"),
+        ("'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token", ".mock-ft"),
+        ("'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2", ".mock-ft"),
+        ("'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2", ".mock-dlmm-router-v5"),
+        ("'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15", ".mock-dlmm-pool-v5"),
+        ("'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1", ".mock-dlmm-core"),
+        ("'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2", ".mock-xyk-core-v5"),
+        ("'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1", ".mock-xyk-pool-v5"),
+        ("'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070", ".mock-velar-pool"),
+        ("'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-fees-v1_0_0-0070", ".mock-velar-fees"),
+        ("'SP1Y5YSTAHZ88XYK1VPDH24GY0HPX5J4JECTMY4A1.wstx", ".mock-wstx"),
+    ]:
+        assert a in text, a
+        text = text.replace(a, b)
+    text = text.replace('(define-constant ASSET_SBTC "sbtc-token")', '(define-constant ASSET_SBTC "mock-ft")')
+    text = text.replace('(define-constant ASSET_WSTX "wstx")', '(define-constant ASSET_WSTX "mock-ft")')
 
 # 2e. jing-ladder (added 2026-09-15). The only gate an RV account cannot
 #     pass is the code hash (contract-hash? of an account is none), so both
