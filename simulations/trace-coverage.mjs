@@ -52,14 +52,19 @@ const nodes = new Map(); // id -> { line, list, fn }
 const listOf = (e) => e?.expr?.List ?? e?.expr?.list ?? e?.list ?? null;
 const atomOf = (e) => e?.expr?.Atom ?? e?.expr?.atom ?? null;
 const lineOf = (span) => { if (typeof span === "string") return Number(span.split(":")[0]); return span?.start_line ?? span?.startLine ?? null; };
-function walk(e, fn) {
+// a function's signature `(name (arg type) ...)` never executes: its lines are not code to cover
+const sigLines = new Set();
+function markSig(e) { if (!e || typeof e !== "object") return; if (e.span) sigLines.add(lineOf(e.span)); const l = listOf(e); if (l) for (const c of l) markSig(c); }
+function walk(e, fn, inSig = false) {
   if (!e || typeof e !== "object") return;
-  if (e.id != null && e.span) nodes.set(String(e.id), { line: lineOf(e.span), list: listOf(e), fn });
+  if (e.id != null && e.span && !inSig) nodes.set(String(e.id), { line: lineOf(e.span), list: listOf(e), fn });
   const l = listOf(e);
   if (l) {
     const head = atomOf(l[0]);
+    const isDefFn = typeof head === "string" && /^define-(public|private|read-only)$/.test(head);
     const f = typeof head === "string" && /^define-/.test(head) ? atomOf(listOf(l[1])?.[0]) ?? atomOf(l[1]) ?? fn : fn;
-    for (const c of l) walk(c, f);
+    if (isDefFn) markSig(l[1]);
+    l.forEach((c, k) => walk(c, f, inSig || (isDefFn && k === 1)));
   }
 }
 for (const e of exprs) walk(e, "(top)");
@@ -128,7 +133,7 @@ const hit = new Set([...hitAll].filter((id) => callIds.has(id)));
 // ---- line coverage ----
 const lines = source.split("\n");
 const lineTouched = new Map(); // line -> executed?
-const codeLine = (i) => { const raw = lines[i - 1]; if (raw == null) return false; const t = raw.trim(); return t !== "" && !t.startsWith(";;") && t !== ")" && t !== "(" && !/^\)+$/.test(t); };
+const codeLine = (i) => { const raw = lines[i - 1]; if (raw == null || sigLines.has(i)) return false; const t = raw.trim(); return t !== "" && !t.startsWith(";;") && t !== ")" && t !== "(" && !/^\)+$/.test(t); };
 for (const [id, n] of nodes) {
   if (!n.list) continue;
   const l0 = n.line;
