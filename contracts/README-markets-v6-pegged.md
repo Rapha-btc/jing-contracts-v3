@@ -827,11 +827,11 @@ key.
 Every v6 harness on the market at d1b32bd. One expectation moved:
 bounty-fixes section P, "P3 deposits 1 STX while parked" (out of range on a
 side full of in-range makers) is now u1010 and P3 stays parked, where it
-used to park N1 on size.
+used to park N1 on size. Added D7: an out-of-range newcomer with no price edge parks the size region's smallest when bigger (R2 3 STX parks R1 2 STX at the same price), a strict tie is u1010 (a parked maker re-depositing to exactly the region's smallest, its carry counted in `size`), bigger takes the slot back, and the in-range and price-region residents are never touched.
 
 | harness | result | sim |
 |---|---|---|
-| markets v6 bounty-fixes | 200/200 | `35061e54c3777eed18447424c0319809` |
+| markets v6 bounty-fixes (+ D7: the in-region size fight, strict tie, carry counts) | 220/220 | `8a8c2463356d84fc0bc35bf205b0f8bc` |
 | markets v6 gaps | 67/67 | `09bcb25ac2b861a5e0b2c3c6cb45ae9e` |
 | markets v6 lazer-paths | 35/35 | `989657650df21b6fc003e5fdeeadde1d` |
 | markets v6 multifill | 44/44 | `ef2ed5c1963e36033ed335d605957f1b` |

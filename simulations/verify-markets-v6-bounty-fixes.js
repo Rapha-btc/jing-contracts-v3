@@ -581,6 +581,32 @@ async function main() {
   tx("D6 operator restores to MAX_DEPOSITORS of this instance (u3; u10 default exceeds the patched cap)", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
   ev("D6 distance-slots 3", "(get-distance-slots)", "u3", PID);
 
+  // ---- D7 (2026-09-14, d1b32bd): an out-of-range newcomer with NO price edge fights on size
+  // inside the out-of-range region only (seated, top N and in-range residents skipped).
+  // Book on y: P3 in range, N2 at -4%; N1 (in range) leaves, R1 rests at -10%: full (3).
+  // distance-slots 1: the price region is {N2}, the size region is {R1}, P3 is in neither.
+  const R1 = mkAddr(31), R2 = mkAddr(32);
+  tx("D7 fund R1", stxSend(R1, 4_500_000), okPrefix);
+  tx("D7 fund R2", stxSend(R2, 4_500_000), okPrefix);
+  tx("D7 N1 (in range) cancels", cancelY(N1, PID), "(ok u2000000)");
+  tx("D7 R1 bid 2 STX at -10%", depositY(R1, 2_000_000n, LP1, PID), "(ok u2000000)");
+  ev("D7 book full (3): P3 in range, N2 -4%, R1 -10%", "(len (get-token-y-depositors u0))", "u3", PID);
+  tx("D7 operator sets distance-slots u1: price region {N2}, size region {R1}", call(DEPLOYER, "set-distance-slots", [uintCV(1)], PID), "(ok true)");
+  tx("D7 R2 3 STX at -10%: no price edge (not better than N2's -4%), bigger than the region's smallest (R1, 2) -> R1 parked, R2 in", depositY(R2, 3_000_000n, LP1, PID), "(ok u3000000)");
+  ev("D7 R1 parked 2 STX", `(get-token-y-parked '${R1})`, "u2000000", PID);
+  ev("D7 R2 live 3 STX", `(get-token-y-deposit u0 '${R2})`, "u3000000", PID);
+  ev("D7 N2 (price region) untouched", `(get-token-y-deposit u0 '${N2})`, "u2000000", PID);
+  ev("D7 P3 (in range) untouched", `(get-token-y-deposit u0 '${P3})`, "u2000000", PID);
+  tx("D7 R1 (parked 2) deposits 1 at -10%: size 3 = the region's smallest (R2, 3), not bigger -> u1010 (strict)", depositY(R1, 1_000_000n, LP1, PID), "(err u1010)");
+  ev("D7 R1 still parked 2 STX", `(get-token-y-parked '${R1})`, "u2000000", PID);
+  tx("D7 R1 deposits 1.5 at -10%: size 3.5 > 3 -> R2 parked, R1 in with 3.5", depositY(R1, 1_500_000n, LP1, PID), "(ok u1500000)");
+  ev("D7 R2 parked 3 STX", `(get-token-y-parked '${R2})`, "u3000000", PID);
+  ev("D7 R1 live 3.5 STX", `(get-token-y-deposit u0 '${R1})`, "u3500000", PID);
+  ev("D7 R1 parked cleared", `(get-token-y-parked '${R1})`, "u0", PID);
+  ev("D7 P3 still untouched", `(get-token-y-deposit u0 '${P3})`, "u2000000", PID);
+  ev("D7 N2 still untouched", `(get-token-y-deposit u0 '${N2})`, "u2000000", PID);
+  tx("D7 operator restores distance-slots u3", call(DEPLOYER, "set-distance-slots", [uintCV(3)], PID), "(ok true)");
+
   // ---- run ----
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
