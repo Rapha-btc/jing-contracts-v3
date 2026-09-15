@@ -514,6 +514,37 @@ marketSource = marketSource.replace(
 addRegistryInit(builder, { marketName, initializeArgs, marketSourceOverride: marketSource });
 ```
 
+## Mocking the miner band after `addAdvanceBlocks` (2026-09-15)
+
+The band rungs (`jing-buy-stx-core-spread`, `jing-sell-stx-core-spread`) derive
+their guard on every push from `get-native-price` on the deployed RFQ
+(`rfq-sbtc-stx-jing-v2-3`), which folds over burn-block tenure data. On the
+synthetic burn blocks stxer mints for `addAdvanceBlocks` that read makes stxer
+refuse the WHOLE simulation at submit (`HTTP 400 ... BlockingError`), with no
+simulation id to inspect. A plain market deposit after the advance is fine; only
+the oracle read trips it (bisected in `verify-v6-rungs-replace-keyless.js`:
+through R8 green, plus one band-rung deposit refused, through R6 + advance +
+band deposit refused, through R6 + advance + direct market deposit green).
+
+Method, when a harness must advance blocks and still push a band rung:
+
+1. Deploy a one-line mock under the deployer:
+   `(define-read-only (get-native-price) (if true (ok u<price in the market unit>) (err u1)))`
+   (both arms, so the response type is complete for the rung's `match`).
+2. Deploy the rung from its real source with the oracle literal
+   `'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3`
+   replaced by the mock's principal (a literal, because a read-only may only
+   call a contract it names literally). Swapping a principal literal does not
+   shift expression ids, so `trace-coverage.mjs` keeps counting the run for
+   the real contract.
+3. Bless the mocked build with `set-canonical` (the ladder's upgrade path), then
+   `initialize` it; every hash check passes against the mocked canonical.
+4. Keep at least one advance-free sim on the real oracle so the miner-band
+   path itself stays covered (R1-R6, R10, R11 of the replace harness, F5 of the
+   fill harness, the rung-types-mixed harness).
+
+Worked example: R12 of `verify-v6-rungs-replace-keyless.js`.
+
 ## Result decoding cheat sheet
 
 When parsing the V2 API response (`/devtools/v2/simulations/{id}`):

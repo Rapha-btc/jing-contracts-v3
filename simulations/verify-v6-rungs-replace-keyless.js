@@ -42,6 +42,9 @@
 //      withdraw is served from held, push refuses under the minimum and
 //      pushes once the operator lowers it (the band floor from the miner band)
 //   R11 the sell mirror on an UNSEATED sell band rung (initialize seat=false)
+//   R12 band rungs after the block advances: the rung source with its oracle
+//      literal pointed at a one-line mock of get-native-price (stxer refuses
+//      a simulation that reads the real miner band on synthetic burn blocks)
 //
 // Run: npx tsx simulations/verify-v6-rungs-replace-keyless.js
 import fs from "node:fs";
@@ -346,6 +349,36 @@ async function main() {
   ev("R9 protected-seats 50", "(protected-seats)", "u50");
   tx("R9 back to 10", call(DEP, "set-max-band-per-side", [uintCV(10)], LADDER), okTrue);
   tx("R9 sync-seat-count -> 10", call(KEEPER, "sync-seat-count", []), "(ok u10)");
+
+  // =============== R12: band rungs AFTER the block advances, on a mocked miner band ===============
+  // A band rung derives its guard from the RFQ's native oracle, which samples burn-block tenure data; on
+  // the synthetic burn blocks stxer mints for addAdvanceBlocks that read makes stxer refuse the whole
+  // simulation at submit (BlockingError), so nothing above touches a band rung after R7. Here the same
+  // rung source is deployed with the oracle literal pointed at a one-line mock (a fixed price in the
+  // market unit) and blessed as the new canonical: same expression ids, same market path, the miner
+  // band replaced by a constant. Real-oracle pushes stay covered by R1-R6, R10, R11 and the fill harness.
+  const NATIVE = 30_000_000_000_000n; // ~the mid in the market unit; the buy floor is half of it, the sell cap twice
+  const RFQ_LIT = "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3";
+  const mocked = (code) => { const m = code.split(RFQ_LIT).join(`'${DEP}.rfq-native-mock`); if (m === code) throw new Error("oracle literal not found in the rung source"); return m; };
+  const BUY80 = `${DEP}.jing-buy-stx-spread-80`, SELL80 = `${DEP}.jing-sell-stx-spread-80`;
+  // the response must be fully typed for the rung's `match` (a bare (ok u..) leaves the err type open)
+  deploy(DEP, "rfq-native-mock", `(define-read-only (get-native-price) (if true (ok u${NATIVE}) (err u1)))`);
+  deploy(DEP, nm(BUY80), mocked(BUY_SRC)); deploy(DEP, nm(SELL80), mocked(SELL_SRC));
+  tx("R12 the mocked build becomes the canonical buy-band (the upgrade path)", call(DEP, "set-canonical", [stringAsciiCV("buy-band"), cp(BUY80)], LADDER), okTrue);
+  tx("R12 ... and the canonical sel-band", call(DEP, "set-canonical", [stringAsciiCV("sel-band"), cp(SELL80)], LADDER), okTrue);
+  tx("R12 initialize buy spread 80 seated", call(DEP, "initialize", [uintCV(80), trueCV()], BUY80), okTrue);
+  tx("R12 initialize sell spread 80 seated", call(DEP, "initialize", [uintCV(80), trueCV()], SELL80), okTrue);
+  ev("R12 the mocked rung reads the mock: floor = native / 2", "(current-floor)", `u${NATIVE / 2n}`, BUY80);
+  // one side at a time: with the other side empty no deposit needs a price (keyless)
+  tx("R12 S deposits 5 STX into the mocked sell band rung -> pushed", call(S, "deposit", [uintCV(USTX), NO_UPDATE], SELL80), okTrue);
+  state("R12 sell resting 5 STX", SELL80, (v) => field(v, "resting") === `u${USTX}` && field(v, "held-ustx") === "u0");
+  tx("R12 S withdraws all", call(S, "withdraw", [uintCV(999_999_999)], SELL80), okTrue);
+  tx("R12 A deposits 2000 sats into the mocked buy band rung after 435 advanced burn blocks -> pushed", call(A, "deposit", [uintCV(2000), NO_UPDATE], BUY80), okTrue);
+  state("R12 resting 2000", BUY80, (v) => field(v, "resting") === "u2000" && field(v, "held-sats") === "u0");
+  ev("R12 its order rests at the mocked floor with the band spread", `(get-token-x-order '${BUY80})`, (v) => field(v, "limit") === `u${NATIVE / 2n}` && field(v, "spread-bps") === "(some u80)");
+  tx("R12 A withdraws all", call(A, "withdraw", [uintCV(999_999)], BUY80), okTrue);
+  state("R12 buy empty", BUY80, (v) => field(v, "total-shares") === "u0" && field(v, "resting") === "u0");
+  state("R12 sell empty", SELL80, (v) => field(v, "total-shares") === "u0" && field(v, "resting") === "u0");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
