@@ -867,8 +867,8 @@ against this source.
 | v6 rungs-replace-keyless (+ R10/R11 band rungs held under the minimum) | 232/232 | `a8b13fcddf9671daf6e6e20207384beb` |
 | v6 rungs-keyless buy / sell (+ zero-padded hundredths) | 38 / 38 | `0124c42a93ccca1e3d783d218d2158a1` / `6343bc2a39a972a5b85a515a8a65a908` |
 | v6 rungs-keyless buy-peg / sell-peg | 41 / 41 | `672d3cdca06a352d28f00004c598f493` / `8ff938cbd99e211faa75aff338fe160f` |
-| vault v6 parked (+ V3/V7-V15 the rest of the vault on this stack) | 196/196 | `9b1125d0128cc8e2371dcd7e0a56438f` |
-| router v5 on the v6 stack (`V6=1`, + W18/W19 pro-rata XYK / Velar splits both ways) | 275/275 | `08121faed3949526413beda14c4306aa` |
+| vault v6 parked (+ V3/V7-V15 the rest of the vault on this stack, V11b the sBTC-side crossing reprice; V11 back at +10% on the router dust fix 6d8b5f2) | 202/202 | `a9e9e858284b359068ddbd622e8872b1` |
+| router v5 on the v6 stack (`V6=1`, + W18/W19 pro-rata XYK / Velar splits both ways; router at 6d8b5f2: a residual worth at most one unit of the other token stays home) | 275/275 | `4e1afb02c8207cbd48927749153a81a3` |
 
 ## Full rerun 2026-09-15, on the spread guard (06f57a3) and the peg-track comment strip (296c73f), source at 296c73f
 

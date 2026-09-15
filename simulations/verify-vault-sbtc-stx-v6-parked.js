@@ -183,8 +183,8 @@ async function main() {
   const BID_IN = Number((MID * 101n) / 100n);   // in range: crosses the parker's in-range ask
   const L_SELL_SBTC = Number((MID * 90n) / 100n); // floor for an sBTC seller
   const L_SELL_STX = Number((MID * 110n) / 100n); // ceiling for an STX seller
-  const L_ROUTER_STX = Number((MID * 104n) / 100n); // router STX sell: under the fillers' +5% asks, so the whole amount goes to the pools (a book leg that
-  // absorbs nearly all of an STX sale leaves rounding dust under one sat's worth, and the DLMM refuses it with u2003, sinking the swap: see the report)
+  const L_ROUTER_STX = Number((MID * 110n) / 100n); // router STX sell at +10%: the book leg (the fillers' +5% asks) absorbs nearly all of it and the
+  // rounding dust under one sat's worth stays home (router 6d8b5f2: before, the DLMM refused that dust with u2003 and sank the swap; V11 sold at +4% to dodge it)
   const STX_5 = 5_000_000, STX_20 = 20_000_000, STX_100 = 100_000_000;
   const depStx = intent("jing-deposit", WSTX_ASSET_NAME, STX_5, BID_OUT, 20);
   const slStx = intent("jing-set-limit", WSTX_ASSET_NAME, STX_5, BID_OUT2, 21);
@@ -262,7 +262,7 @@ async function main() {
   tx("V11 execute-router-swap 5000 sats -> STX with a fresh update + mid", exec(KEEPER, "execute-router-swap", routerSell, [someCV(UPD), uintCV(Number(MID))]), okHash);
   tx("V11 execute-router-swap 5000 sats with a STALE update: the book leg is caught, pools only, still ok", exec(KEEPER, "execute-router-swap", routerSellStale, [someCV(STALE), uintCV(Number(MID))]), okHash);
   vaultSbtc("V11 vault sBTC before the router buy", () => true);
-  tx("V11 execute-router-swap 100 STX -> sBTC at +4% (no ask inside the limit: pools only)", exec(KEEPER, "execute-router-swap", routerBuy, [someCV(UPD), uintCV(Number(MID))]), okHash);
+  tx("V11 execute-router-swap 100 STX -> sBTC at +10%: the book leg takes the +5% asks, the dust under one sat stays home (router 6d8b5f2)", exec(KEEPER, "execute-router-swap", routerBuy, [someCV(UPD), uintCV(Number(MID))]), okHash);
   vaultSbtc("V11 vault sBTC after", () => true);
 
   // ---- V11b the sBTC-side CROSSING reprice: a 3000-sat ask repriced into range against an in-range bid swaps into it

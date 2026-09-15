@@ -1,6 +1,6 @@
 # Trace coverage: markets-sbtc-stx-jing-v6
 
-From `simulations/trace-coverage.mjs` on 2026-09-15, source at b8b6f3e: 30 simulations, 1923 transactions (208 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage.mjs` on 2026-09-15, source at b8b6f3e: 30 simulations, 1926 transactions (208 without a trace), every evaluated expression read from the stxer debug traces.
 
 | metric | value |
 |---|---|
@@ -117,5 +117,5 @@ From `simulations/trace-coverage.mjs` on 2026-09-15, source at b8b6f3e: 30 simul
 | `6343bc2a` | 33 | 4952 | 4952 |
 | `672d3cdc` | 35 | 4952 | 4952 |
 | `8ff938cb` | 35 | 4952 | 4952 |
-| `9b1125d0` | 165 | 4952 | 4953 |
-| `08121fae` | 102 | 4953 | 4973 |
+| `a9e9e858` | 168 | 4952 | 4953 |
+| `4e1afb02` | 102 | 4953 | 4973 |
