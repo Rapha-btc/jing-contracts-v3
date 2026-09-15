@@ -265,6 +265,7 @@ async function main() {
   const MKT_B = `${DEP}.markets-b`, MKT_C = `${DEP}.markets-c`;
   tx("R8 verify the v6 market a second time -> u5003", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(err u5003)");
   tx("R8 stranger verifies -> u5001", call(KEEPER, "set-verified-contract", [contractPrincipalCV(DEP, "jing-ladder")], CORE_ID), "(err u5001)");
+  tx("R8 verify a standard principal (no code, no hash) -> u5002", call(DEP, "set-verified-contract", [standardPrincipalCV(KEEPER)], CORE_ID), "(err u5002)");
   deploy(DEP, "markets-b", src(MKT));
   tx("R8 initialize a second market naming itself as canonical, unverified -> u5005", call(DEP, "initialize", [contractPrincipalCV(DEP, "markets-b"), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), "(err u5005)");
   tx("R8 initialize it naming the verified v6 market as canonical (same bytes) -> ok, registered", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], MKT_B), okTrue);

@@ -1,6 +1,6 @@
 # Executed coverage from the stxer results (Full rerun 2026-09-14)
 
-From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transactions, 244 error returns. "Produced" means a step returned that code or a print carried that event, in at least one of the listed sims.
+From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1607 transactions, 248 error returns. "Produced" means a step returned that code or a print carried that event, in at least one of the listed sims.
 
 
 ## markets-sbtc-stx-jing-v6
@@ -11,7 +11,7 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 | `u1002` | ERR_ALREADY_SETTLED | 908a895c, 879657b5 |
 | `u1003` | ERR_STALE_PRICE | **none** |
 | `u1004` | ERR_PRICE_UNCERTAIN | 98965765 |
-| `u1005` | ERR_NOTHING_TO_WITHDRAW | 9ce42eb1, 5aa3e49f, 8084a860, dbbfd7d9, 879657b5 |
+| `u1005` | ERR_NOTHING_TO_WITHDRAW | 9ce42eb1, 5aa3e49f, 8084a860, 868ef1fe, 879657b5 |
 | `u1006` | ERR_ZERO_PRICE | **none** |
 | `u1007` | ERR_PAUSED | 908a895c |
 | `u1008` | ERR_NOT_AUTHORIZED | 8a8c2463, 908a895c |
@@ -33,35 +33,35 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 | `u1025` | ERR_FEED_TIMESTAMP_MISSING | 98965765 |
 | `u1026` | ERR_BAD_SPREAD | 091acd48, cc8d690b, 802a3103 |
 | `u1027` | ERR_CYCLE_OPEN | dda78b56 |
-| `u1028` | ERR_NOT_A_SEAT | bc321d10, 2ce70d55 |
+| `u1028` | ERR_NOT_A_SEAT | bc321d10, 57978ebf |
 
 ## jing-core-v5
 
 | code | name | produced in |
 |---|---|---|
-| `u5001` | ERR_NOT_AUTHORIZED | 179b8bc7, 2ce70d55 |
-| `u5002` | ERR_INVALID_CONTRACT_HASH | **none** |
-| `u5003` | ERR_ALREADY_REGISTERED | 2ce70d55 |
-| `u5005` | ERR_NOT_VERIFIED | 2ce70d55 |
-| `u5006` | ERR_HASH_MISMATCH | 2ce70d55 |
-| `u5008` | ERR_TIMELOCK_NOT_ELAPSED | 2ce70d55 |
-| `u5016` | ERR_PAUSED | 2ce70d55 |
-| `u5017` | ERR_NOT_PAUSED | 2ce70d55 |
-| `u5018` | ERR_NO_PENDING_OWNER | 2ce70d55 |
+| `u5001` | ERR_NOT_AUTHORIZED | 179b8bc7, 57978ebf |
+| `u5002` | ERR_INVALID_CONTRACT_HASH | 57978ebf |
+| `u5003` | ERR_ALREADY_REGISTERED | 57978ebf |
+| `u5005` | ERR_NOT_VERIFIED | 57978ebf |
+| `u5006` | ERR_HASH_MISMATCH | 57978ebf |
+| `u5008` | ERR_TIMELOCK_NOT_ELAPSED | 57978ebf |
+| `u5016` | ERR_PAUSED | 57978ebf |
+| `u5017` | ERR_NOT_PAUSED | 57978ebf |
+| `u5018` | ERR_NO_PENDING_OWNER | 57978ebf |
 
 | event | produced in |
 |---|---|
-| `deposit-x` | 8a8c2463, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 2ce70d55, d7f6ab1f, 5ba21f23, dc165127, dbbfd7d9, 879657b5 |
-| `deposit-y` | 8a8c2463, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 2ce70d55, d7f6ab1f, 40829b83, 7184028e, 879657b5 |
-| `refund-x` | 8a8c2463, 908a895c, a7ccab31, 8084a860, dda78b56, 091acd48, cc8d690b, 802a3103, 6256d0b4, c663e202, 2ce70d55, 5ba21f23, dc165127, dbbfd7d9, 879657b5 |
-| `refund-y` | 8a8c2463, 908a895c, 98965765, a7ccab31, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 6326641b, c663e202, 2ce70d55, 40829b83, 7184028e, 879657b5 |
-| `withdraw-x` | 908a895c, 8084a860, dda78b56, 802a3103, 918d5678, 2ce70d55, 5ba21f23, dc165127 |
-| `withdraw-y` | 8084a860, 6256d0b4, 2ce70d55, 40829b83, 7184028e |
-| `set-limit-x` | 908a895c, 9ce42eb1, a7ccab31, 5aa3e49f, 091acd48, cc8d690b, 802a3103, bc321d10, dbbfd7d9 |
+| `deposit-x` | 8a8c2463, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 57978ebf, d7f6ab1f, 5ba21f23, dc165127, 868ef1fe, 879657b5 |
+| `deposit-y` | 8a8c2463, 908a895c, 98965765, ef2ed5c1, 9ce42eb1, a7ccab31, 5aa3e49f, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 57978ebf, d7f6ab1f, 40829b83, 7184028e, 879657b5 |
+| `refund-x` | 8a8c2463, 908a895c, a7ccab31, 8084a860, dda78b56, 091acd48, cc8d690b, 802a3103, 6256d0b4, c663e202, 57978ebf, 5ba21f23, dc165127, 868ef1fe, 879657b5 |
+| `refund-y` | 8a8c2463, 908a895c, 98965765, a7ccab31, 8084a860, dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 6256d0b4, 6326641b, c663e202, 57978ebf, 40829b83, 7184028e, 879657b5 |
+| `withdraw-x` | 908a895c, 8084a860, dda78b56, 802a3103, 918d5678, 57978ebf, 5ba21f23, dc165127 |
+| `withdraw-y` | 8084a860, 6256d0b4, 57978ebf, 40829b83, 7184028e |
+| `set-limit-x` | 908a895c, 9ce42eb1, a7ccab31, 5aa3e49f, 091acd48, cc8d690b, 802a3103, bc321d10, 868ef1fe |
 | `set-limit-y` | 8a8c2463, a7ccab31, dda78b56, cc8d690b, 6256d0b4, bc321d10 |
-| `peg-x` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 62783a57, 6326641b, bc321d10, 2ce70d55, d7f6ab1f, dc165127 |
-| `peg-y` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 6256d0b4, 62783a57, 6326641b, 52b52f6f, bc321d10, 2ce70d55, 7184028e |
-| `park-x` | 8a8c2463, 8084a860, cc8d690b, 918d5678, bc321d10, dbbfd7d9 |
+| `peg-x` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 802a3103, 918d5678, 62783a57, 6326641b, bc321d10, 57978ebf, d7f6ab1f, dc165127 |
+| `peg-y` | dda78b56, 179b8bc7, 091acd48, cc8d690b, 6256d0b4, 62783a57, 6326641b, 52b52f6f, bc321d10, 57978ebf, 7184028e |
+| `park-x` | 8a8c2463, 8084a860, cc8d690b, 918d5678, bc321d10, 868ef1fe |
 | `readmit-x` | 8084a860, cc8d690b |
 | `park-y` | 8a8c2463, 8084a860, 6256d0b4 |
 | `readmit-y` | 8a8c2463, 8084a860, 6256d0b4 |
@@ -79,92 +79,92 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 
 | code | name | produced in |
 |---|---|---|
-| `u6001` | ERR_NOT_AUTHORIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u6002` | ERR_INVALID_CONTRACT_HASH | 2ce70d55 |
+| `u6001` | ERR_NOT_AUTHORIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u6002` | ERR_INVALID_CONTRACT_HASH | 57978ebf |
 | `u6003` | ERR_NOT_VERIFIED | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u6004` | ERR_HASH_MISMATCH | 2ce70d55 |
+| `u6004` | ERR_HASH_MISMATCH | 57978ebf |
 | `u6005` | ERR_ALREADY_REGISTERED | **none** |
-| `u6006` | ERR_PRICE_TAKEN | dbbfd7d9 |
+| `u6006` | ERR_PRICE_TAKEN | 868ef1fe |
 | `u6007` | ERR_BAD_SIDE | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u6008` | ERR_NO_PENDING_OWNER | 2ce70d55 |
-| `u6009` | ERR_TIMELOCK_NOT_ELAPSED | 2ce70d55 |
-| `u6010` | ERR_NOT_REGISTERED | bc321d10, 2ce70d55 |
-| `u6011` | ERR_BAND_FULL | bc321d10, 2ce70d55 |
-| `u6012` | ERR_ALREADY_SEATED | 2ce70d55 |
+| `u6008` | ERR_NO_PENDING_OWNER | 57978ebf |
+| `u6009` | ERR_TIMELOCK_NOT_ELAPSED | 57978ebf |
+| `u6010` | ERR_NOT_REGISTERED | bc321d10, 57978ebf |
+| `u6011` | ERR_BAND_FULL | bc321d10, 57978ebf |
+| `u6012` | ERR_ALREADY_SEATED | 57978ebf |
 
 | event | produced in |
 |---|---|
-| `canonical-set` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `rung-registered` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `band-seated` | 2ce70d55 |
-| `max-band-per-side-set` | 8a8c2463, 8084a860, cc8d690b, 918d5678, 6256d0b4, bc321d10, 2ce70d55, dbbfd7d9 |
-| `band-retired` | bc321d10, 2ce70d55 |
-| `rung-deposit` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `rung-push` | 52b52f6f, 2ce70d55 |
-| `rung-withdraw` | 802a3103, 918d5678, 6256d0b4, c663e202, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `rung-claim` | 179b8bc7, 091acd48, c663e202, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `canonical-set` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `rung-registered` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `band-seated` | 57978ebf |
+| `max-band-per-side-set` | 8a8c2463, 8084a860, cc8d690b, 918d5678, 6256d0b4, bc321d10, 57978ebf, 868ef1fe |
+| `band-retired` | bc321d10, 57978ebf |
+| `rung-deposit` | 179b8bc7, 091acd48, 802a3103, 918d5678, 6256d0b4, 62783a57, 6326641b, c663e202, 52b52f6f, bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `rung-push` | 52b52f6f, 57978ebf |
+| `rung-withdraw` | 802a3103, 918d5678, 6256d0b4, c663e202, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `rung-claim` | 179b8bc7, 091acd48, c663e202, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 | `rung-epoch-closed` | 179b8bc7 |
-| `owner-proposed` | 2ce70d55 |
-| `owner-accepted` | 2ce70d55 |
+| `owner-proposed` | 57978ebf |
+| `owner-accepted` | 57978ebf |
 
 ## jing-buy-stx-core-spread
 
 | code | name | produced in |
 |---|---|---|
-| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7003` | ERR_NOT_INITIALIZED | 2ce70d55 |
+| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7003` | ERR_NOT_INITIALIZED | 57978ebf |
 | `u7004` | ERR_ZERO_AMOUNT | 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7005` | ERR_TOO_SMALL | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7006` | ERR_NO_POSITION | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7006` | ERR_NO_POSITION | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7007` | ERR_INSUFFICIENT | **none** |
 | `u7008` | ERR_ZERO_PRICE | dc165127, 7184028e |
 | `u7010` | ERR_BAD_SPREAD | dc165127, 7184028e |
-| `u7009` | ERR_BAD_NAME | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7009` | ERR_BAD_NAME | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 
 ## jing-sell-stx-core-spread
 
 | code | name | produced in |
 |---|---|---|
-| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7003` | ERR_NOT_INITIALIZED | 2ce70d55 |
+| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7003` | ERR_NOT_INITIALIZED | 57978ebf |
 | `u7004` | ERR_ZERO_AMOUNT | 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7005` | ERR_TOO_SMALL | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7006` | ERR_NO_POSITION | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7006` | ERR_NO_POSITION | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7007` | ERR_INSUFFICIENT | **none** |
 | `u7008` | ERR_ZERO_PRICE | dc165127, 7184028e |
 | `u7010` | ERR_BAD_SPREAD | dc165127, 7184028e |
-| `u7009` | ERR_BAD_NAME | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7009` | ERR_BAD_NAME | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 
 ## jing-buy-stx
 
 | code | name | produced in |
 |---|---|---|
-| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7003` | ERR_NOT_INITIALIZED | 2ce70d55 |
+| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7003` | ERR_NOT_INITIALIZED | 57978ebf |
 | `u7004` | ERR_ZERO_AMOUNT | 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7005` | ERR_TOO_SMALL | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7006` | ERR_NO_POSITION | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7006` | ERR_NO_POSITION | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7007` | ERR_INSUFFICIENT | **none** |
 | `u7008` | ERR_ZERO_PRICE | dc165127, 7184028e |
-| `u7009` | ERR_BAD_NAME | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7009` | ERR_BAD_NAME | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 
 ## jing-buy-stx-market-spread
 
 | code | name | produced in |
 |---|---|---|
-| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7003` | ERR_NOT_INITIALIZED | 2ce70d55 |
+| `u7001` | ERR_NOT_AUTHORIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7002` | ERR_ALREADY_INITIALIZED | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7003` | ERR_NOT_INITIALIZED | 57978ebf |
 | `u7004` | ERR_ZERO_AMOUNT | 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7005` | ERR_TOO_SMALL | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u7006` | ERR_NO_POSITION | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7006` | ERR_NO_POSITION | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 | `u7007` | ERR_INSUFFICIENT | **none** |
 | `u7008` | ERR_ZERO_PRICE | dc165127, 7184028e |
 | `u7010` | ERR_BAD_SPREAD | dc165127, 7184028e |
-| `u7009` | ERR_BAD_NAME | 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u7009` | ERR_BAD_NAME | 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
 
 ## swap-router-sbtc-stx-jing-v5
 
@@ -182,27 +182,22 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 
 | code | name | produced in |
 |---|---|---|
-| `u6001` | ERR_NOT_OWNER | bc321d10, 2ce70d55, 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u6002` | ERR_INVALID_SIGNATURE | 2ce70d55 |
+| `u6001` | ERR_NOT_OWNER | bc321d10, 57978ebf, 5ba21f23, 40829b83, dc165127, 7184028e |
+| `u6002` | ERR_INVALID_SIGNATURE | 57978ebf |
 | `u6003` | ERR_REPLAY | 5ba21f23, 40829b83, dc165127, 7184028e |
-| `u6004` | ERR_EXPIRED | 2ce70d55 |
-| `u6006` | ERR_NO_FUNDS | dbbfd7d9 |
-| `u6011` | ERR_INVALID_SIDE | bc321d10, 2ce70d55 |
-| `u6013` | ERR_INVALID_PRICE | **none** |
-| `u6020` | ERR_ALREADY_INITIALIZED | **none** |
-| `u6021` | ERR_PUBKEY_NOT_SET | **none** |
-| `u6022` | ERR_AMOUNT_MISMATCH | dbbfd7d9 |
+| `u6004` | ERR_EXPIRED | 57978ebf |
+| `u6006` | ERR_NO_FUNDS | 868ef1fe |
+| `u6011` | ERR_INVALID_SIDE | bc321d10, 57978ebf |
+| `u6013` | ERR_INVALID_PRICE | 868ef1fe |
+| `u6020` | ERR_ALREADY_INITIALIZED | 868ef1fe |
+| `u6021` | ERR_PUBKEY_NOT_SET | 868ef1fe |
+| `u6022` | ERR_AMOUNT_MISMATCH | 868ef1fe |
 | `u6023` | ERR_REBATE_MISMATCH | **none** |
 
-## Never produced by any run, open (5)
+## Never produced by any run, open (0)
 
-- jing-core-v5 ERR_INVALID_CONTRACT_HASH u5002
-- vault-sbtc-stx-v6 ERR_INVALID_PRICE u6013
-- vault-sbtc-stx-v6 ERR_ALREADY_INITIALIZED u6020
-- vault-sbtc-stx-v6 ERR_PUBKEY_NOT_SET u6021
-- vault-sbtc-stx-v6 ERR_REBATE_MISMATCH u6023
 
-## Never produced, known unreachable or defensive (9)
+## Never produced, known unreachable or defensive (10)
 
 - markets-sbtc-stx-jing-v6 ERR_STALE_PRICE u1003: shadowed: the market passes MAX_STALENESS to the Lazer oracle, which refuses a stale update first (its u1002; gaps G7)
 - markets-sbtc-stx-jing-v6 ERR_ZERO_PRICE u1006: needs a signed Lazer update with a zero price: not forgeable on a fork
@@ -213,6 +208,7 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 - jing-sell-stx-core-spread ERR_INSUFFICIENT u7007: same as the buy rung
 - jing-buy-stx ERR_INSUFFICIENT u7007: same as the buy rung
 - jing-buy-stx-market-spread ERR_INSUFFICIENT u7007: same as the buy rung
+- vault-sbtc-stx-v6 ERR_REBATE_MISMATCH u6023: defensive: the v6 market's taker rebate is a constant (20 bps), so a vault bound to it can never see a mismatch; the guard is for a future market with a different rebate
 
 ## Sims read
 
@@ -238,11 +234,11 @@ From `simulations/sim-coverage.mjs` on 2026-09-15: 28 simulations, 1603 transact
 | v6 rungs-fill | 40/40 | `c663e202` | 35 | 0 | 18 |
 | v6 rungs-push | 39/39 | `52b52f6f` | 37 | 0 | 9 |
 | v6 rungs-miner-band | 174/174 | `bc321d10` | 167 | 7 | 14 |
-| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover; + R8: core-v5 admin: verify twice u5003, register unverified u5005 / byte-different u5006, pause u5016, unpause timelock u5008 / u5017, owner handover u5018 / u5001, no timelock on the core's handover) | 198/198 | `2ce70d55` | 199 | 22 | 25 |
+| v6 rungs-replace-keyless (+ R7: uninitialized rung u7003/u7006, non-canonical rung u6004, ladder owner handover; + R8: core-v5 admin: verify twice u5003, a standard principal u5002, register unverified u5005 / byte-different u5006, pause u5016, unpause timelock u5008 / u5017, owner handover u5018 / u5001, no timelock on the core's handover) | 199/199 | `57978ebf` | 200 | 23 | 25 |
 | v6 small-share-x (mirror of peg-batch Z6: an ask under 0.2% of the side is rolled, small-share-roll-x logged) | 23/23 | `d7f6ab1f` | 21 | 0 | 10 |
 | v6 rungs-keyless buy / sell | 37 / 37 | `5ba21f23` | 54 | 9 | 10 |
 | v6 rungs-keyless buy / sell | 37 / 37 | `40829b83` | 54 | 9 | 10 |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc165127` | 56 | 11 | 11 |
 | v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `7184028e` | 56 | 11 | 11 |
-| vault v6 parked | 137/137 | `dbbfd7d9` | 137 | 3 | 10 |
+| vault v6 parked (+ V1: initialize twice u6020, an intent before the pubkey u6021, a zero limit u6013) | 140/140 | `868ef1fe` | 140 | 6 | 10 |
 | router v5 on the v6 stack (`V6=1 verify-swap-router-v3-lazer.js`; the harness now deploys the ladder before the market) | 248/248 | `879657b5` | 247 | 12 | 13 |

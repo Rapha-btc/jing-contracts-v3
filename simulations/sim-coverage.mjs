@@ -115,6 +115,7 @@ const KNOWN = {
   "jing-sell-stx-core-spread ERR_INSUFFICIENT u7007": "same as the buy rung",
   "jing-buy-stx ERR_INSUFFICIENT u7007": "same as the buy rung",
   "jing-buy-stx-market-spread ERR_INSUFFICIENT u7007": "same as the buy rung",
+  "vault-sbtc-stx-v6 ERR_REBATE_MISMATCH u6023": "defensive: the v6 market's taker rebate is a constant (20 bps), so a vault bound to it can never see a mismatch; the guard is for a future market with a different rebate",
 };
 const open = missing.filter((m) => !KNOWN[m]), known = missing.filter((m) => KNOWN[m]);
 L(md ? `\n## Never produced by any run, open (${open.length})\n` : `\n== never produced, open (${open.length})`);

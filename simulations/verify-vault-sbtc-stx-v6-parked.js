@@ -111,7 +111,11 @@ async function main() {
   tx("V1 deploy vault v6 (source as is, next-stack refs)", (b) => b.withSender(OWNER).addContractDeploy({ contract_name: VAULT_NAME, source_code: vaultSrc, clarity_version: ClarityVersion.Clarity5 }), "(ok true)");
   tx("V1 chavita verifies the vault hash in jing-core-v5", call(CHAVITA, CORE_ID, "set-verified-contract", [vaultCV]), "(ok true)");
   tx("V1 owner initializes", call(OWNER, VAULT_ID, "initialize", [vaultCV]), "(ok true)");
+  tx("V1 initialize again -> u6020", call(OWNER, VAULT_ID, "initialize", [vaultCV]), "(err u6020)");
+  tx("V1 an intent before the pubkey is set -> u6021", exec(OWNER, "execute-jing-deposit", dep, [UPD]), "(err u6021)");
   tx("V1 set-owner-pubkey", call(OWNER, VAULT_ID, "set-owner-pubkey", [bufferCV(Buffer.from(TEST_INTENT_PUBKEY_HEX, "hex"))]), "(ok true)");
+  const dep0 = intent("jing-deposit", SBTC_ASSET_NAME, SBTC_20K, 0, 99);
+  tx("V1 an intent with limit-price 0 -> u6013 (refused before the signature is even checked)", exec(OWNER, "execute-jing-deposit", dep0, [UPD]), "(err u6013)");
   tx("V1 set-keeper", call(OWNER, VAULT_ID, "set-keeper", [someCV(standardPrincipalCV(KEEPER))]), "(ok true)");
   tx("V1 deposit-sbtc 20k", call(OWNER, VAULT_ID, "deposit-sbtc", [uintCV(SBTC_20K)]), "(ok true)");
 
