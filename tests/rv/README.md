@@ -226,11 +226,16 @@ What the first property sweeps taught, none of it a contract defect:
     crossed 100,000 bytes with the change (100,655; 95,894 stripped), so
     every v6 harness now strips comment lines before deploying, as the
     deploy form is.
-  - **the read does not model the queue**: on a full side a taker smaller
+  - **the read did not model the queue**: on a full side a taker smaller
     than the smallest resident is refused by the size rule (u1010) before
     any fill. Six slots in the fuzz build make it frequent; forty open
-    slots in production make it rare, but a taker sized by the read can
-    still be refused on a crowded side.
+    slots in production make it rare. FIXED the same day: the read runs
+    `side-full` and `find-smallest` for the taker exactly as the deposit
+    core does, reports `min-taker` (the smallest unseated resident plus
+    one, net terms, zero on an open side) as a new tuple field, and reads
+    zero caps when its net-cap could not enter; router v5 drops the book
+    leg when the net is under `min-taker`, so the AMMs take that order.
+    The property no longer discards u1010.
 - `readmit-restores` and `settle-binding-side-clears` rarely fire under
   random test order (a park with a free slot after it; a crossing book
   right before a settle); both are exercised by the invariant sweeps'

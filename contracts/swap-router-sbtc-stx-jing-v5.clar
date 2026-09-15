@@ -727,9 +727,8 @@
   ;; fail (the public already refused a zero mid), so it returns a plain uint.
   (match update
     v (let (
-        (cap (get gross-cap
-          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc tx-sender)
-        ))
+        (quote (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc tx-sender))
+        (cap (get gross-cap quote))
         (size (if (> cap amount)
           amount
           cap
@@ -741,7 +740,9 @@
           (get min-token-y mins)
         ))
       )
-      (if (>= net min-dep)
+      ;; under the market minimum, or under the bar a full side sets for a
+      ;; newcomer (min-taker, net terms): no book leg, the AMMs take it
+      (if (and (>= net min-dep) (>= net (get min-taker quote)))
         size
         u0
       )

@@ -518,10 +518,9 @@
       (ok false)
       (match (swap (get gross-cap cap) lim 0x .mock-ft "mock-ft" .mock-ft "mock-ft" deposit-x)
         r (ok true)
-        ;; u1010: on a full side a taker smaller than the smallest resident is
-        ;; refused by the size rule; the capacity read does not model the
-        ;; queue (found by this property; 6 slots here, 40 open in production)
-        e (if (or (is-eq e u1007) (is-eq e u5016) (is-eq e u1010))
+        ;; u1010 is no longer discarded: the read models the queue since
+        ;; 2026-09-15 (min-taker; zero caps when net-cap cannot enter)
+        e (if (or (is-eq e u1007) (is-eq e u5016))
             (ok false)
             ;; diagnostic: a partial fill encodes how many opposite in-range
             ;; makers the settlement would roll as small-share (under 0.2%

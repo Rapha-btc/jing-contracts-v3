@@ -2161,6 +2161,24 @@
       (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
       (net (- amount rebate))
       (cycle (var-get current-cycle))
+      (depositors (if deposit-x
+        (get-token-x-depositors cycle)
+        (get-token-y-depositors cycle)
+      ))
+      ;; a full side: the taker (a newcomer, in range or it fills nothing)
+      ;; goes through the same priority door as a maker, park-tenth, before
+      ;; the core's size rule; that needs the mid, read once here as
+      ;; deposit does for a newcomer on a full side (2026-09-15; before, a
+      ;; taker met the size rule alone and a switched-off resident kept its
+      ;; slot against a smaller taker)
+      (full (if deposit-x
+        (side-full-x depositors tx-sender)
+        (side-full-y depositors tx-sender)
+      ))
+      (price (if full
+        (try! (fresh-classification-price update))
+        u0
+      ))
     )
     (asserts! (> net u0) ERR_DEPOSIT_TOO_SMALL)
     (asserts!
@@ -2183,6 +2201,13 @@
       )
       ERR_HAS_RESTING_POSITION
     )
+    (and
+      full
+      (try! (if deposit-x
+        (park-tenth-token-x cycle price limit-price net depositors)
+        (park-tenth-token-y cycle price limit-price net depositors)
+      ))
+    )
     (if deposit-x
       (begin
         (and
@@ -2192,12 +2217,12 @@
           ))
         )
         (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none u0 u0 tx-trait tx-name))
+        (try! (deposit-token-x-core net limit-price none u0 price tx-trait tx-name))
       )
       (begin
         (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
         (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none u0 u0 ty-trait ty-name))
+        (try! (deposit-token-y-core net limit-price none u0 price ty-trait ty-name))
       )
     )
     (var-set crossing true)
@@ -3443,13 +3468,93 @@
         (get walk bids)
         (get walk asks)
       ))
-      (net-cap (+ mid-cap walk-cap))
+      ;; the queue: on a side full for this taker, swap sends it through the
+      ;; maker door (park-tenth: a switched-off resident is parked first,
+      ;; then an out-of-range resident in the N-best region is demoted for
+      ;; an in-range newcomer) and only with nobody to park that way through
+      ;; the core's size rule, where it must bring more than the smallest
+      ;; unseated resident, else u1010. min-taker is that bar in net terms
+      ;; (0 when the side is open or the door parks someone else); a
+      ;; net-cap under it cannot enter, so every cap reads zero (found by
+      ;; the RV sizing property, 2026-09-15)
+      (depositors (if deposit-x
+        (get-token-x-depositors cycle)
+        (get-token-y-depositors cycle)
+      ))
+      (full (if deposit-x
+        (side-full-x depositors taker)
+        (side-full-y depositors taker)
+      ))
+      (door-parks (and
+        full
+        (if deposit-x
+          (or
+            (is-some (get found (fold first-off-x-fold depositors {
+              price: mid,
+              seated: (var-get seated-x),
+              found: none,
+            })))
+            (> (len (get out (fold top-x-fold depositors {
+              price: mid,
+              slots: (var-get distance-slots),
+              seated: (var-get seated-x),
+              out: (list),
+            }))) u0)
+          )
+          (or
+            (is-some (get found (fold first-off-y-fold depositors {
+              price: mid,
+              seated: (var-get seated-y),
+              found: none,
+            })))
+            (> (len (get out (fold top-y-fold depositors {
+              price: mid,
+              slots: (var-get distance-slots),
+              seated: (var-get seated-y),
+              out: (list),
+            }))) u0)
+          )
+        )
+      ))
+      (smallest (if (or (not full) door-parks)
+        u0
+        (if deposit-x
+          (get smallest (fold find-smallest-token-x-fold depositors {
+            cycle: cycle,
+            seated: (var-get seated-x),
+            smallest: u999999999999999999,
+            smallest-principal: taker,
+          }))
+          (get smallest (fold find-smallest-token-y-fold depositors {
+            cycle: cycle,
+            seated: (var-get seated-y),
+            smallest: u999999999999999999,
+            smallest-principal: taker,
+          }))
+        )
+      ))
+      (min-taker (if (and full (not door-parks))
+        (+ smallest u1)
+        u0
+      ))
+      (admitted (or (not full) door-parks (> (+ mid-cap walk-cap) smallest)))
+      (net-cap (if admitted
+        (+ mid-cap walk-cap)
+        u0
+      ))
     )
     {
-      mid-cap: mid-cap,
-      walk-cap: walk-cap,
+      mid-cap: (if admitted
+        mid-cap
+        u0
+      ),
+      walk-cap: (if admitted
+        walk-cap
+        u0
+      ),
       net-cap: net-cap,
       gross-cap: (gross-up net-cap),
+      min-taker: min-taker,
     }
   )
 )

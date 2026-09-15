@@ -32,9 +32,12 @@ new Rendezvous fuzz harness (`tests/rv/README.md`), none from a submission:
   capacity with sBTC got u1017. Router v5 passes `tx-sender`. Reported by
   the fuzz sizing property, seed -2050959550; a submission on the same
   point after this date is a duplicate.
-- Known and documented, not fixed: the read does not model the size rule
-  on a full side. A taker smaller than the smallest resident is refused
-  u1010 before any fill. Rare with 40 open slots.
+- **`get-taker-capacity` models the queue** (same day, after `b7dc673`): on
+  a side full for the taker it reports `min-taker` (the smallest unseated
+  resident plus one, net terms; zero on an open side) as a new tuple field
+  and reads zero caps when its net-cap could not enter (the size rule,
+  u1010). Router v5 drops the book leg under `min-taker`. Adding a field
+  keeps every `get gross-cap` caller working.
 
 The commented source is over the 100,000-byte deploy limit since `b7dc673`
 (100,655; 95,894 with comment-only lines stripped). Every harness deploys
