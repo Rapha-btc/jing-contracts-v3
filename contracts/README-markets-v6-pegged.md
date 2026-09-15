@@ -286,25 +286,31 @@ A new maker arriving when the side holds MAX_DEPOSITORS orders:
 ```
 new maker, side full
   |- peg switched off right now (sentinel)      -> refused, u1010
+  |- a switched-off resident exists              -> park it (every path)
+  |- in range AND nobody out of range            -> core size rule, everyone
   |- in range, OR out of range and better than the N-th best
   |  out-of-range price (N = distance-slots, default 10)
-  |     |- a switched-off resident exists          -> park it
-  |     |- else the N-th best is demoted:
-  |     |     bigger than the smallest of the size region
-  |     |     (every other out-of-range resident)    -> park that smallest
-  |     |     else                                   -> park the N-th best
-  |     |- nobody out of range at all                -> size rule
-  |- else                                            -> size rule
-
-size rule (the core): bigger than the smallest resident PARKS it and takes
-its slot, else u1010.
+  |     the N-th best is demoted:
+  |       bigger than the smallest of the size region
+  |       (every other out-of-range resident)      -> park that smallest
+  |       else (or the region is empty)            -> park the N-th best
+  |- else (out of range, no price edge)            -> size rule INSIDE THE
+     REGION: bigger than its smallest parks it, else u1010; empty -> u1010
 ```
+
+core size rule (in range, nobody out of range): bigger than the smallest
+resident PARKS it and takes its slot, else u1010.
 
 Parked = funds and price kept, readmittable when a slot frees. Nothing on
 a full book is refunded any more (v5 refunded the size-bumped maker; since
 2026-09-13 it is parked like everyone else, so a bumped whale keeps its
 price and comes back when a slot frees). In-range residents are in neither
-region and are never displaced by a newcomer's priority, only by size.
+region and are never displaced by an out-of-range newcomer, on price or on
+size; only a bigger in-range newcomer on a side with nobody out of range
+can park one (2026-09-14, d1b32bd: until then the out-of-range no-edge case
+fell through to the core's range-blind size rule, and a 5,000-sat maker 2%
+off the mid parked a 1,000-sat peg sitting at the mid; found by the
+CityCoins vault harness, `citycoins-protocol/simulations/stxer-ccd016-v2-parked.js`).
 
 History. v5 had: in range parks the farthest resident, everything else
 size. 2026-09-13 (bounty mtxs6nxg7a6d97081b11) added: switched off is
@@ -815,6 +821,40 @@ dial, retire then seat again.
 The market gained one additive public, `prune-seats` (99,608 bytes, no
 deposit path touched); the Lazer market harnesses are due a rerun with a
 key.
+
+## Full rerun 2026-09-14, after the park rule change (d1b32bd) and prune-seats (d9ee89e)
+
+Every v6 harness on the market at d1b32bd. One expectation moved:
+bounty-fixes section P, "P3 deposits 1 STX while parked" (out of range on a
+side full of in-range makers) is now u1010 and P3 stays parked, where it
+used to park N1 on size.
+
+| harness | result | sim |
+|---|---|---|
+| markets v6 bounty-fixes | 200/200 | `35061e54c3777eed18447424c0319809` |
+| markets v6 gaps | 67/67 | `09bcb25ac2b861a5e0b2c3c6cb45ae9e` |
+| markets v6 lazer-paths | 35/35 | `989657650df21b6fc003e5fdeeadde1d` |
+| markets v6 multifill | 44/44 | `ef2ed5c1963e36033ed335d605957f1b` |
+| markets v6 regression | 23/23 | `9ce42eb1554a25e40740284a9b0a3c89` |
+| markets v6 remainder-cross | 116/116 | `a7ccab312c60ce500cc2ace1d5a3a53a` |
+| markets v6 stress | 126/126 | `5aa3e49f7d5323cf12c695b93094f82d` |
+| markets v6 withdraw | 102/102 | `8084a860801c771dbe81a9ad41e31c28` |
+| v6 peg-batch | 93/93 | `dda78b5607e8d9a00fef68242f2d5362` |
+| v6 peg-edges | 60/60 | `179b8bc739b6134f3fb0b87216ffae78` |
+| v6 peg | 76/76 | `091acd48299b25a18b8757a08e5d6845` |
+| v6 peg-mirror | 44/44 | `cc8d690b85c571f3ae91d2c124809ca6` |
+| v6 peg-more | 51/51 | `802a310391cc533233773cefb09f788e` |
+| v6 peg-park | 41/41 | `e2a0b12c7bb989c1176e629123b9a873` |
+| v6 peg-park-y | 77/77 | `6256d0b4f2f2cf1a7375312bf2cca474` |
+| v6 peg-track | 30/30 | `62783a5798b22194cc1c7f5f6ba91a2a` |
+| v6 peg-walk-order | 60/60 | `6326641b159092034822d28a464ba557` |
+| v6 rungs-fill | 40/40 | `c663e202dd9bc608ba246a9f982cb79f` |
+| v6 rungs-push | 39/39 | `52b52f6f88c53a4c6e69d7ade314fc11` |
+| v6 rungs-miner-band | 174/174 | `bc321d10fdf831eea71301b73ad75b77` |
+| v6 rungs-replace-keyless | 149/149 | `6b9eaf85f9901250375daf934cd454ab` |
+| v6 rungs-keyless buy / sell | 37 / 37 | `5ba21f238b41ac6512c8ecca01e9cc70` / `40829b8367990bc3515b4882892a39b3` |
+| v6 rungs-keyless buy-peg / sell-peg | 40 / 40 | `dc16512744c46d4c86e1739a029eea9b` / `7184028e9d74d8fd705ca28d88fc478c` |
+| vault v6 parked | 137/137 | `dbbfd7d9d7eac338e4d1efbeb6b1cc5e` |
 
 ## Full rerun 2026-09-13, after the three bounty fixes
 

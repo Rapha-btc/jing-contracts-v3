@@ -28,6 +28,28 @@ on a path that will be exercised in normal operation. Celestial Mast (1)
 second: a real defect with a real panic path, no theft, owner-recoverable.
 Nobody has attempted the 5,000-sat read-count bonus.
 
+## 0. Found by us while testing the CityCoins vault on this book (MEDIUM, fixed d1b32bd)
+
+Invariant B in this bounty's own list: "in-range resident parked by an
+out-of-range newcomer". It held. `park-tenth-token-x/y` returned
+`(ok false)` for an out-of-range newcomer with no price edge, and the
+core's size rule then ran `find-smallest-token-x-fold`, which skips seated
+makers only: the smallest ordinary maker of ANY range was parked. A
+5,000-sat ask 2% over the mid parked a 1,000-sat zero-spread peg sitting
+at the mid (the CityCoins vault, `stxer-ccd016-v2-parked.js`, first run).
+The README even described it: "never displaced by a newcomer's priority,
+only by size". Two "smallest" folds with different regions was the root.
+
+Fix: `park-tenth` takes the newcomer's size (amount + parked carry); the
+out-of-range no-edge case now fights inside the out-of-range region only
+(`smallest-outside-*-fold`: not seated, not top N, not in range), bigger
+parks the region's smallest, else u1010, empty region u1010. A switched-off
+resident is parked first on every path. The core's size rule among everyone
+is reached only by an in-range newcomer on a side with nobody out of range.
+Full v6 rerun in `contracts/README-markets-v6-pegged.md` ("Full rerun
+2026-09-14"); bounty-fixes section P rewritten (P3's out-of-range deposit
+onto a side full of in-range makers is u1010, P3 stays parked).
+
 ## 1. Replaced or retired rung locked its members out (HIGH, fixed 824f08b)
 
 Claim: after a band replace or `retire-band`, the old rung's members can

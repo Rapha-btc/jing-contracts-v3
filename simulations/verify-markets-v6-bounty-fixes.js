@@ -460,27 +460,28 @@ async function main() {
   tx("P P3 swaps STX while parked on y -> u1018", swap(P3, 1_000_000n, HUGE, false, PID), "(err u1018)");
   ev("P P3 still parked after the refused swap", `(get-token-y-parked '${P3})`, "u2000000", PID);
   ev("P P3 limit untouched", `(get-token-y-limit '${P3})`, `u${LP3}`, PID);
-  // v6: a parked maker deposits straight back. Out of range and the side full,
-  // the combined size (2 parked + 1 new) beats the smallest live maker (2 STX,
-  // N1 first in the list), which is bumped and refunded
-  const n1Before = cap("N1 stx before P3's bump", `(stx-get-balance '${N1})`, PID);
-  // size rule (2026-09-13): the bumped smallest is PARKED, not refunded
-  tx("P P3 deposits 1 STX while parked: side full, combined 3 STX beats the smallest (N1) on size -> N1 parked, P3 live", depositY(P3, 1_000_000n, LP3, PID), "(ok u1000000)");
-  const n1After = cap("N1 stx after the bump", `(stx-get-balance '${N1})`, PID);
-  ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
-  ev("P P3 live with 3 STX", `(get-token-y-deposit u0 '${P3})`, "u3000000", PID);
-  ev("P N1 off the book", `(get-token-y-deposit u0 '${N1})`, "u0", PID);
-  ev("P N1 parked 2 STX (funds and price kept)", `(get-token-y-parked '${N1})`, "u2000000", PID);
+  // v6: a parked maker deposits straight back. Out of range (bid -5%) and the
+  // side full of IN-RANGE makers (P1, N1, N3): until 2026-09-13 the combined
+  // 3 STX beat the smallest (N1) on size and N1 was refunded, then parked.
+  // 2026-09-14: an out-of-range newcomer with no price edge only fights
+  // inside the out-of-range region, which is empty here -> u1010, P3 stays
+  // parked, N1 stays live. An in-range order is never displaced by one far
+  // from the mid.
+  tx("P P3 deposits 1 STX while parked: out of range, nobody out of range on the book -> u1010 (no in-range maker is displaced)", depositY(P3, 1_000_000n, LP3, PID), "(err u1010)");
+  ev("P P3 still parked 2 STX", `(get-token-y-parked '${P3})`, "u2000000", PID);
+  ev("P N1 still live", `(get-token-y-deposit u0 '${N1})`, "u2000000", PID);
   ev("P N1 limit kept", `(get-token-y-limit '${N1})`, `u${HUGE}`, PID);
-  tx("P N1 cancels its parked 2 STX -> refund", cancelY(N1, PID), "(ok u2000000)");
-  ev("P N1 parked cleared", `(get-token-y-parked '${N1})`, "u0", PID);
-  ev("P totals 7 STX (P1 2 + N3 2 + P3 3)", "(get total-token-y (get-cycle-totals u0))", "u7000000", PID);
+  tx("P N1 cancels its live 2 STX -> refund", cancelY(N1, PID), "(ok u2000000)");
+  ev("P totals 4 STX (P1 2 + N3 2)", "(get total-token-y (get-cycle-totals u0))", "u4000000", PID);
+  tx("P readmit P3 (parked, a slot is free now) -> ok", readmitY(DEPLOYER, P3), "(ok u2000000)");
+  ev("P P3 live 2 STX", `(get-token-y-deposit u0 '${P3})`, "u2000000", PID);
+  ev("P P3 parked cleared", `(get-token-y-parked '${P3})`, "u0", PID);
+  tx("P P3 cancels -> refund", cancelY(P3, PID), "(ok u2000000)");
   tx("P readmit P3 (no longer parked) -> u1022", readmitY(DEPLOYER, P3), "(err u1022)");
   tx("P readmit P1 (live, not parked) -> u1022", readmitY(DEPLOYER, P1), "(err u1022)");
   // x mirror: clear the y side first so in-range asks pass the crossing gate
   tx("P P1 cancels", cancelY(P1, PID), "(ok u2000000)");
   tx("P N3 cancels", cancelY(N3, PID), "(ok u2000000)");
-  tx("P P3 cancels", cancelY(P3, PID), "(ok u3000000)");
   ev("P y side empty", "(len (get-token-y-depositors u0))", "u0", PID);
   tx("PX Q1 ask 3000 at +10% (gap 10%)", depositX(Q1, 3000n, LQ1, PID), "(ok u3000)");
   tx("PX Q2 ask 3000 in range", depositX(Q2, 3000n, 1n, PID), "(ok u3000)");
@@ -607,7 +608,6 @@ async function main() {
   check(`B1 taker sBTC gain == ${T1_SBTC_GAIN}`, t1After.value - t1Before.value, (d) => d === T1_SBTC_GAIN);
   check("B2 escrow unchanged (atomic)", escAfter.value - escBefore.value, (d) => d === 0n);
   check(`B4 taker sBTC gain == ${XB - (XB * FEE) / BPS}`, t3After.value - t3Before.value, (d) => d === XB - (XB * FEE) / BPS);
-  check("P N1 wallet unchanged by the size bump (parked, not refunded)", n1After.value - n1Before.value, (d) => d === 0n);
   check("PX Q1 refund landed (3000 sats)", q1After.value - q1Before.value, (d) => d === 3000n);
 
   console.log(`\n${checks - failures}/${checks} checks green`);
