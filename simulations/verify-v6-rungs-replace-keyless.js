@@ -26,10 +26,15 @@
 //      left on y; sync-seat has nothing to sync (u1028 all round), the
 //      market copy is stale; prune-seats clears it, keeps every current
 //      seat on x, adds nothing
+//   R7 the leftovers of the coverage matrix: a rung before initialize
+//      (u7003 / u7006), a rung whose code differs from the canonical
+//      (u6004 at register), and the ladder's owner handover (propose,
+//      accept before the timelock u6009, after 145 burn blocks ok, no
+//      pending u6008, stranger u6001), handed back at the end
 //
 // Run: npx tsx simulations/verify-v6-rungs-replace-keyless.js
 import fs from "node:fs";
-import { ClarityVersion, uintCV, trueCV, falseCV, bufferCV, stringAsciiCV, contractPrincipalCV, deserializeCV, cvToString } from "@stacks/transactions";
+import { ClarityVersion, uintCV, trueCV, falseCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, someCV, noneCV, deserializeCV, cvToString } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 
 const DEP = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
@@ -221,6 +226,34 @@ async function main() {
   ev("R6 x copy still 3", "(len (get-seated-x))", "u3");
   tx("R6 sync-seat spread 50 -> now 4 on x", call(KEEPER, "sync-seat", [cp(BUY50)]), (v) => String(v).startsWith("(ok"));
   ev("R6 x copy 4", "(len (get-seated-x))", "u4");
+
+  // =============== R7: uninitialized rung, non-canonical rung, owner handover ===============
+  const BUY60 = `${DEP}.jing-buy-stx-spread-60`, BUY70 = `${DEP}.jing-buy-stx-spread-70`;
+  deploy(DEP, nm(BUY60), BUY_SRC);
+  tx("R7 deposit into a rung nobody initialized -> u7003", call(A, "deposit", [uintCV(SATS), NO_UPDATE], BUY60), "(err u7003)");
+  tx("R7 push on it -> u7003", call(KEEPER, "push", [NO_UPDATE], BUY60), "(err u7003)");
+  tx("R7 withdraw on it -> u7006 (no position)", call(A, "withdraw", [uintCV(1)], BUY60), "(err u7006)");
+  tx("R7 claim on it -> u7006", call(A, "claim", [], BUY60), "(err u7006)");
+  ev("R7 not registered", `(is-registered '${BUY60})`, "false", LADDER);
+  deploy(DEP, nm(BUY70), BUY_SRC + "\n;; one byte off the canonical: a different contract hash\n");
+  tx("R7 initialize a rung whose code is not the canonical's -> u6004 (hash mismatch at register)", call(DEP, "initialize", [uintCV(70), trueCV()], BUY70), "(err u6004)");
+  ev("R7 spread 70 stays free", '(get-rung "buy-band" u70)', "none", LADDER);
+  tx("R7 stranger propose-owner -> u6001", call(KEEPER, "propose-owner", [someCV(standardPrincipalCV(KEEPER))], LADDER), "(err u6001)");
+  tx("R7 accept-owner with nothing pending -> u6008", call(KEEPER, "accept-owner", [], LADDER), "(err u6008)");
+  tx("R7 owner proposes the keeper", call(DEP, "propose-owner", [someCV(standardPrincipalCV(KEEPER))], LADDER), okTrue);
+  ev("R7 pending = keeper, eligible in 144 burn blocks", "(get-pending-owner)", (v) => String(v).includes(KEEPER), LADDER);
+  tx("R7 a stranger accepts -> u6001", call(A, "accept-owner", [], LADDER), "(err u6001)");
+  tx("R7 the keeper accepts before the timelock -> u6009", call(KEEPER, "accept-owner", [], LADDER), "(err u6009)");
+  b = b.addAdvanceBlocks({ bitcoin_blocks: 145, stacks_blocks_per_bitcoin: 1 });
+  tx("R7 145 burn blocks later the keeper accepts -> ok", call(KEEPER, "accept-owner", [], LADDER), okTrue);
+  ev("R7 owner = keeper", "(get-owner)", KEEPER, LADDER);
+  tx("R7 the old owner can no longer retire -> u6001", call(DEP, "retire-band", [stringAsciiCV("buy-band"), uintCV(20)], LADDER), "(err u6001)");
+  tx("R7 the new owner proposes none: cancels any pending", call(KEEPER, "propose-owner", [noneCV()], LADDER), okTrue);
+  tx("R7 accept with none pending -> u6008", call(DEP, "accept-owner", [], LADDER), "(err u6008)");
+  tx("R7 the keeper hands it back: proposes the deployer", call(KEEPER, "propose-owner", [someCV(standardPrincipalCV(DEP))], LADDER), okTrue);
+  b = b.addAdvanceBlocks({ bitcoin_blocks: 145, stacks_blocks_per_bitcoin: 1 });
+  tx("R7 the deployer accepts -> ok", call(DEP, "accept-owner", [], LADDER), okTrue);
+  ev("R7 owner = deployer again", "(get-owner)", DEP, LADDER);
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);

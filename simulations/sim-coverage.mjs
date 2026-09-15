@@ -102,7 +102,24 @@ for (const [n, d] of Object.entries(defined)) {
     }
   }
 }
-L(md ? `\n## Never produced by any run (${missing.length})\n` : `\n== never produced (${missing.length})`);
-for (const m of missing) L(md ? `- ${m}` : m);
+// Known unreachable or defensive, with the reason; listed apart so the gap
+// list above stays actionable.
+const KNOWN = {
+  "markets-sbtc-stx-jing-v6 ERR_ALREADY_SETTLED u1002": "defensive: settlement bumps current-cycle, so the settlements map can never already hold the current cycle",
+  "markets-sbtc-stx-jing-v6 ERR_STALE_PRICE u1003": "shadowed: the market passes MAX_STALENESS to the Lazer oracle, which refuses a stale update first (its u1002; gaps G7)",
+  "markets-sbtc-stx-jing-v6 ERR_ZERO_PRICE u1006": "needs a signed Lazer update with a zero price: not forgeable on a fork",
+  "markets-sbtc-stx-jing-v6 ERR_EXPO_MISMATCH u1014": "needs a signed Lazer update whose two feeds carry different exponents: not forgeable on a fork",
+  "markets-sbtc-stx-jing-v6 ERR_NOTHING_FILLED u1015": "dead constant: defined, never raised",
+  "jing-ladder ERR_ALREADY_REGISTERED u6005": "needs a byte-identical rung to call register twice; initialize is once, so only a rung's own code could, and the canonical code does not",
+  "jing-buy-stx-core-spread ERR_INSUFFICIENT u7007": "a member whose shares round to zero sats after fills: dust-level rounding, not reached by the fill sizes in the harnesses",
+  "jing-sell-stx-core-spread ERR_INSUFFICIENT u7007": "same as the buy rung",
+  "jing-buy-stx ERR_INSUFFICIENT u7007": "same as the buy rung",
+  "jing-buy-stx-market-spread ERR_INSUFFICIENT u7007": "same as the buy rung",
+};
+const open = missing.filter((m) => !KNOWN[m]), known = missing.filter((m) => KNOWN[m]);
+L(md ? `\n## Never produced by any run, open (${open.length})\n` : `\n== never produced, open (${open.length})`);
+for (const m of open) L(md ? `- ${m}` : m);
+L(md ? `\n## Never produced, known unreachable or defensive (${known.length})\n` : `\n== known unreachable / defensive (${known.length})`);
+for (const m of known) L(md ? `- ${m}: ${KNOWN[m]}` : `${m}: ${KNOWN[m]}`);
 if (md) { L(`\n## Sims read\n\n| harness | result | sim | steps | distinct codes | distinct events |\n|---|---|---|---|---|---|`); for (const r of rows) for (const id of r.ids) L(`| ${r.name} | ${r.result} | \`${id.slice(0, 8)}\` | ${perSim[id]?.steps ?? "?"} | ${perSim[id]?.codes.size ?? "?"} | ${perSim[id]?.events.size ?? "?"} |`); }
 console.log(out.join("\n"));
