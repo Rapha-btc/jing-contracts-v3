@@ -1,4 +1,18 @@
-;; title: swap-router-sbtc-stx-jing-v4
+;; title: swap-router-sbtc-stx-jing-v6
+;; v6: the market is markets-sbtc-stx-jing-v7 (pending orders, jing-core-v6).
+;; The Jing leg is PLACED, never filled in this transaction: `place-swap`
+;; escrows `jing-amount` on the market and stamps the order with this
+;; block's time; anyone then settles it (`settle-order` on the market,
+;; keeper by default) with a print newer than that stamp, and the market
+;; pays the user directly. So `jing-in` is the escrowed amount, `jing-out`
+;; u0, `jing-placed` true, and `min-out` covers the AMM legs only (it is
+;; measured on the wallet, and the book pays later). The AMM legs run as
+;; before, in the same transaction. No print enters the router any more.
+;; `ttl` (60 to 600 s) is the placed order's life and `jing-min-out` the
+;; least the book fill may pay (the market refuses to settle under it and
+;; refunds at expiry). The smart entries derive `jing-min-out` from the
+;; limit (the whole book leg at the limit). The router is still called WITHOUT as-contract, so the escrow is
+;; the user's, the order is keyed by the user and the fill pays the user.
 ;; v3: the smart swaps take `mid` from the caller instead of verifying the
 ;; update a second time through refresh-mid (the market verifies it inside
 ;; swap regardless); a zero limit or mid is refused up front (u3006 /
@@ -106,7 +120,7 @@
 ;; it is bound to a fully qualified principal, and a call through a constant
 ;; cannot sit inside `define-read-only` (the analyzer cannot see the callee
 ;; is read-only), so the getter at the bottom spells the id out.
-(define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6)
+(define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v7)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 (define-constant ASSET_SBTC "sbtc-token")
@@ -133,9 +147,11 @@
 (define-constant ERR_MIN_OUT (err u3002))
 (define-constant ERR_BAD_VENUE (err u3003))
 (define-constant ERR_SPLIT_MISMATCH (err u3004))
-(define-constant ERR_VAA_REQUIRED (err u3005))
+(define-constant ERR_BAD_TTL (err u3005)) ;; was ERR_VAA_REQUIRED: a book leg without a print now places
 (define-constant ERR_ZERO_LIMIT (err u3006))
 (define-constant ERR_ZERO_MID (err u3007))
+(define-constant MIN_TAKER_TTL u60)
+(define-constant MAX_TAKER_TTL u600)
 
 ;; ---------------------------------------------------------------------------
 ;; balances
@@ -160,29 +176,35 @@
 ;; crumbs) and `out` what it paid, mid + walk. `none` = the market said no
 ;; and was rolled back. `deposit-x` true sells sBTC (token-x), false STX.
 
-(define-private (jing-swap
+;; leg 1, placed shape: the escrow is the whole amount, nothing paid yet.
+;; `none` = the market refused (open order already, under the minimum,
+;; resting position, paused, bad ttl) and was rolled back.
+(define-private (jing-place
     (amount uint)
     (limit-price uint)
-    (update (buff 8192))
+    (ttl uint)
+    (min-out uint)
     (deposit-x bool)
   )
-  (match (contract-call? JING_MARKET swap amount limit-price update SBTC ASSET_SBTC WSTX
-    ASSET_WSTX deposit-x
+  (match (contract-call? JING_MARKET place-swap amount limit-price ttl min-out SBTC
+    deposit-x
   )
     res (some {
-      spent: (- amount
-        (if deposit-x
-          (get token-x-rolled res)
-          (get token-y-rolled res)
-        )
-        (get rebate-refunded res)
-      ),
-      out: (if deposit-x
-        (get token-y-received res)
-        (get token-x-received res)
-      ),
+      spent: amount,
+      out: u0,
     })
     e none
+  )
+)
+
+;; a placed leg needs a ttl the market accepts; an empty leg does not
+(define-private (valid-ttl
+    (jing-amount uint)
+    (ttl uint)
+  )
+  (or
+    (is-eq jing-amount u0)
+    (and (>= ttl MIN_TAKER_TTL) (<= ttl MAX_TAKER_TTL))
   )
 )
 
@@ -374,7 +396,8 @@
     (amount uint)
     (jing-amount uint)
     (limit-price uint)
-    (update (optional (buff 8192)))
+    (ttl uint)
+    (jing-min-out uint)
     (fallback (optional uint))
     (amm-amounts {
       dlmm: uint,
@@ -399,13 +422,12 @@
       ERR_SPLIT_MISMATCH
     )
     (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
+    (asserts! (valid-ttl jing-amount ttl) ERR_BAD_TTL)
     (let (
         (user tx-sender)
         (stx-before (stx-get-balance user))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap! update ERR_VAA_REQUIRED)
-            true
-          )
+          (jing-place jing-amount limit-price ttl jing-min-out true)
           none
         ))
         (jing-in (jing-spent jing))
@@ -433,6 +455,7 @@
         user: user,
         amount: amount,
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -451,6 +474,7 @@
       })
       (ok {
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -475,7 +499,8 @@
     (amount uint)
     (jing-amount uint)
     (limit-price uint)
-    (update (optional (buff 8192)))
+    (ttl uint)
+    (jing-min-out uint)
     (fallback (optional uint))
     (amm-amounts {
       dlmm: uint,
@@ -500,13 +525,12 @@
       ERR_SPLIT_MISMATCH
     )
     (asserts! (valid-fallback fallback) ERR_BAD_VENUE)
+    (asserts! (valid-ttl jing-amount ttl) ERR_BAD_TTL)
     (let (
         (user tx-sender)
         (sbtc-before (sbtc-balance user))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap! update ERR_VAA_REQUIRED)
-            false
-          )
+          (jing-place jing-amount limit-price ttl jing-min-out false)
           none
         ))
         (jing-in (jing-spent jing))
@@ -534,6 +558,7 @@
         user: user,
         amount: amount,
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -552,6 +577,7 @@
       })
       (ok {
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -582,8 +608,8 @@
 ;;          off the same Lazer payload as `update`; the market verifies the
 ;;          update itself inside `swap`) says how much the book fills in
 ;;          full inside the limit; the leg is min(amount, capacity), or
-;;          nothing when that is under the market's min deposit or
-;;          `update` is none.
+;;          nothing when that is under the market's min deposit. With
+;;          `update` none the leg is PLACED (see the v6 note at the top).
 ;;   XYK    constant product with fee f and reserves (in, out): the
 ;;   Velar  largest input whose AVERAGE price still respects the limit is
 ;;          closed form, cap = (out * k / P - in) / k with k = 1 - f and
@@ -714,19 +740,16 @@
 (define-private (jing-size
     (amount uint)
     (limit uint)
-    (update (optional (buff 8192)))
     (mid uint)
     (sell-sbtc bool)
   )
-  ;; `mid` is a SIZING HINT from the caller, read off the same Lazer payload
-  ;; `update` was fetched from. It is not trusted and does not need to be:
-  ;; the market verifies the update inside `swap` and settles at its own mid.
-  ;; A wrong hint only mis-sizes the book leg (refused fill-or-kill, or short
-  ;; with the rest going to the AMMs). This saves the second oracle
-  ;; verification the v2 router paid through refresh-mid. Nothing here can
-  ;; fail (the public already refused a zero mid), so it returns a plain uint.
-  (match update
-    v (let (
+  ;; `mid` is a SIZING HINT from the caller. It is not trusted and does not
+  ;; need to be: the market settles at its own verified mid (inside `swap`,
+  ;; or at settle-swap for a placed order). A wrong hint only mis-sizes the
+  ;; book leg (refused fill-or-kill, short with the rest going to the AMMs,
+  ;; or an IOC remainder refunded at settlement). Nothing here can fail (the
+  ;; public already refused a zero mid), so it returns a plain uint.
+  (let (
         (quote (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc tx-sender))
         (cap (get gross-cap quote))
         (size (if (> cap amount)
@@ -746,8 +769,6 @@
         size
         u0
       )
-    )
-    u0
   )
 )
 
@@ -988,7 +1009,7 @@
 (define-public (smart-swap-sbtc-for-stx
     (amount uint)
     (limit-price uint)
-    (update (optional (buff 8192)))
+    (ttl uint)
     (mid uint)
     (min-stx-out uint)
   )
@@ -998,13 +1019,16 @@
     ;; zero would abort at runtime (audit submission, LOW); refuse with a code
     (asserts! (> limit-price u0) ERR_ZERO_LIMIT)
     (asserts! (> mid u0) ERR_ZERO_MID)
+    (asserts! (valid-ttl u1 ttl) ERR_BAD_TTL)
     (let (
         (user tx-sender)
         (stx-before (stx-get-balance user))
         ;; stage 1: the book
-        (jing-amount (jing-size amount limit-price update mid true))
+        (jing-amount (jing-size amount limit-price mid true))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap-panic update) true)
+          (jing-place jing-amount limit-price ttl
+            (limit-min jing-amount limit-price true) true
+          )
           none
         ))
         (jing-in (jing-spent jing))
@@ -1025,6 +1049,7 @@
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -1038,6 +1063,7 @@
       })
       (ok {
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -1056,7 +1082,7 @@
 (define-public (smart-swap-stx-for-sbtc
     (amount uint)
     (limit-price uint)
-    (update (optional (buff 8192)))
+    (ttl uint)
     (mid uint)
     (min-sbtc-out uint)
   )
@@ -1066,13 +1092,16 @@
     ;; zero would abort at runtime (audit submission, LOW); refuse with a code
     (asserts! (> limit-price u0) ERR_ZERO_LIMIT)
     (asserts! (> mid u0) ERR_ZERO_MID)
+    (asserts! (valid-ttl u1 ttl) ERR_BAD_TTL)
     (let (
         (user tx-sender)
         (sbtc-before (sbtc-balance user))
         ;; stage 1: the book
-        (jing-amount (jing-size amount limit-price update mid false))
+        (jing-amount (jing-size amount limit-price mid false))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap-panic update) false)
+          (jing-place jing-amount limit-price ttl
+            (limit-min jing-amount limit-price false) false
+          )
           none
         ))
         (jing-in (jing-spent jing))
@@ -1093,6 +1122,7 @@
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -1106,6 +1136,7 @@
       })
       (ok {
         jing-ok: (is-some jing),
+        jing-placed: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
         dlmm-in: (get in dlmm),
@@ -1125,7 +1156,7 @@
 ;; id on purpose: a constant is not allowed in a read-only call (see above).
 (define-read-only (get-jing-min-deposits)
   (contract-call?
-    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
+    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v7
     get-min-deposits
   )
 )

@@ -50,3 +50,27 @@ export async function fetchLazerUpdateAny(ids = [1, 45]) {
   const ts = Number(d.timestampUs) / 1e6;
   return { hex: d.hex, px: BigInt(d.priceX), py: BigInt(d.priceY), ts, expo: d.exponent, futX: Number(d.timestampUs), futY: Number(d.timestampUs) };
 }
+
+// Per-feed publish times of a Lazer update, read through the mainnet
+// decoder's read-only `decode-lazer-payload` (the evm envelope is
+// 4 magic + 65 signature + 2 payload length + payload). `at` is the OLDER of
+// the two feeds' feed-update-timestamps in whole seconds: what markets v7
+// anchors on (a fresh envelope can carry a price Lazer carried forward).
+export async function lazerFeedTimes(hex, ids = [1, 45]) {
+  const { bufferCV, serializeCV, hexToCV, cvToJSON } = await import("@stacks/transactions");
+  const buf = Buffer.from(hex.replace(/^0x/, ""), "hex");
+  const len = buf.readUInt16BE(69);
+  const payload = buf.subarray(71, 71 + len);
+  const base = process.env.STACKS_API_URL || "http://77.42.3.101/stacks-api";
+  const r = await fetch(`${base}/v2/contracts/call-read/SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8/pyth-lazer-decoder-v1/decode-lazer-payload`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sender: "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8", arguments: ["0x" + Buffer.from(serializeCV(bufferCV(payload)), "hex").toString("hex").replace(/^0x/, "")] }),
+  });
+  const j = await r.json();
+  if (!j.okay) throw new Error(`decode-lazer-payload: ${JSON.stringify(j).slice(0, 200)}`);
+  const v = cvToJSON(hexToCV(j.result)).value.value;
+  const feeds = v["price-feeds"].value.map((f) => f.value);
+  const tsOf = (id) => { const f = feeds.find((x) => Number(x["feed-id"].value) === id); const t = f?.["feed-update-timestamp"]?.value?.value; if (!t) throw new Error(`feed ${id}: no feed-update-timestamp`); return Number(t) / 1e6; };
+  const x = tsOf(ids[0]), y = tsOf(ids[1]);
+  return { x, y, at: Math.floor(Math.min(x, y)), envelope: Number(v.timestamp.value) / 1e6 };
+}

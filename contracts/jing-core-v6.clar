@@ -1,3 +1,12 @@
+;; jing-core-v6: jing-core-v5 byte for byte, plus three logs for the pending
+;; orders of markets-sbtc-stx-jing-v7 (place-order / settle-order /
+;; refund-order), so every market event keeps going through the registry
+;; (no print left in the market). Events only, no equity movement: the
+;; escrow is credited at settlement through the existing log-deposit-x/y,
+;; and a refund returns funds that were never credited. log-place-order and
+;; log-settle-order carry the pause gate like deposits and settlements;
+;; log-refund-order does not, like cancels and withdraws (funds must stay
+;; recoverable while paused).
 (define-constant ERR_NOT_AUTHORIZED (err u5001))
 (define-constant ERR_INVALID_CONTRACT_HASH (err u5002))
 (define-constant ERR_ALREADY_REGISTERED (err u5003))
@@ -1449,6 +1458,109 @@
       out: out,
       equity-in: (get-token-equity token-in contract-caller),
       equity-out: (get-token-equity token-out contract-caller),
+    })
+    (ok true)
+  )
+)
+
+;; ---------------------------------------------------------------------------
+;; pending orders (markets v7): every action that needs a price is a submit
+;; (place, no print) and a settle (anyone, a print newer than the submit).
+;; kind: u0 deposit, u1 swap, u2 set-limit, u3 reprice-or-swap, u4 readmit.
+;; outcome: u0 rested, u1 filled, u2 refused (crossing: money back or the
+;; previous limit kept), u3 stays parked. Events only, no equity movement:
+;; the escrow is credited at settlement through log-deposit-x/y.
+
+(define-public (log-place-order
+    (who principal)
+    (deposit-x bool)
+    (kind uint)
+    (amount uint)
+    (limit uint)
+    (spread-bps (optional uint))
+    (min-out uint)
+    (placed-at uint)
+    (expiry uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (try! (check-not-paused))
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "place-order",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      deposit-x: deposit-x,
+      kind: kind,
+      amount: amount,
+      limit: limit,
+      spread-bps: spread-bps,
+      min-out: min-out,
+      placed-at: placed-at,
+      expiry: expiry,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-settle-order
+    (who principal)
+    (deposit-x bool)
+    (kind uint)
+    (outcome uint)
+    (publish-time uint)
+    (mid uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (try! (check-not-paused))
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "settle-order",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      settler: tx-sender,
+      deposit-x: deposit-x,
+      kind: kind,
+      outcome: outcome,
+      publish-time: publish-time,
+      mid: mid,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-refund-order
+    (who principal)
+    (caller principal)
+    (deposit-x bool)
+    (kind uint)
+    (amount uint)
+    (placed-at uint)
+    (expiry uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "refund-order",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      who: who,
+      caller: caller,
+      deposit-x: deposit-x,
+      kind: kind,
+      amount: amount,
+      placed-at: placed-at,
+      expiry: expiry,
     })
     (ok true)
   )
