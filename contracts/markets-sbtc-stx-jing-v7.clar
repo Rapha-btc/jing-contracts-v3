@@ -1704,7 +1704,6 @@
       (amount (get-token-y-deposit cycle tx-sender))
       (parked (get-token-y-parked tx-sender))
     )
-    (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
@@ -1739,7 +1738,6 @@
       (amount (get-token-x-deposit cycle tx-sender))
       (parked (get-token-x-parked tx-sender))
     )
-    (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
@@ -2094,7 +2092,6 @@
   (let (
       (amount (get-token-y-deposit (var-get current-cycle) tx-sender))
     )
-    (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
@@ -2121,7 +2118,6 @@
   (let (
       (amount (get-token-x-deposit (var-get current-cycle) tx-sender))
     )
-    (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
@@ -2327,6 +2323,10 @@
           (get-token-x-deposit (var-get current-cycle) who)
           (get-token-y-deposit (var-get current-cycle) who)
         ))
+        (parked (if deposit-x
+          (get-token-x-parked who)
+          (get-token-y-parked who)
+        ))
         (outcome (if (or (is-eq kind KIND_SWAP) (and (is-eq kind KIND_REPRICE) takes))
           (begin
             (and
@@ -2345,10 +2345,7 @@
                   (get amount order)
                   live
                 )
-                (if (is-eq kind KIND_SWAP)
-                  (get limit order)
-                  eff
-                )
+                (get limit order)
                 feeds tx-trait tx-name ty-trait ty-name deposit-x true
               ))))
               (var-set taker-override none)
@@ -2376,11 +2373,14 @@
               )
             )
             (if (or (is-eq kind KIND_SET_LIMIT) (is-eq kind KIND_REPRICE))
-              (begin
-                (try! (apply-limit who deposit-x (get limit order) (get spread-bps order)
-                  (get placed-at order)
-                ))
-                OUT_RESTED
+              (if (and (is-eq live u0) (is-eq parked u0))
+                OUT_REFUSED
+                (begin
+                  (try! (apply-limit who deposit-x (get limit order) (get spread-bps order)
+                    (get placed-at order)
+                  ))
+                  OUT_RESTED
+                )
               )
               (begin
                 (try! (book-order who deposit-x order price eff tx-trait tx-name ty-trait ty-name))

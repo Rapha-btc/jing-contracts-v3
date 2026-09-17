@@ -103,7 +103,12 @@ new.
 | u1035 | ERR_MIN_OUT | a fill would pay less than the order's `min-out` (settlement reverts, order stays) |
 
 `u1016 ERR_MUST_USE_SWAP` is no longer raised: a crossing resting submit
-is refused at settlement (outcome `u2`).
+is refused at settlement (outcome `u2`). A set-limit or reprice whose
+position was cancelled between submit and settle is also outcome `u2`
+(nothing to apply). `set-limit` and `reprice-or-swap` submits are not
+pause-gated, as on v6; a crossing reprice walks the book up to the raw
+limit (a peg's cap), as v6 did. A settled readmit logs a `deposit-x/y`
+with delta 0 next to `readmit-x/y`; v6 logged the readmit alone.
 
 ## Events: jing-core-v6
 
@@ -181,8 +186,8 @@ Results, 2026-09-16:
 
 | harness | result | stxer |
 |---------|--------|-------|
-| `verify-v7-taker-anchor-lazer.js` | 86/86 | https://stxer.xyz/simulations/mainnet/a9e8415f07b131b1ab4cb0df6c28fd00 |
-| `verify-v7-router-v6-lazer.js` | 39/39 | https://stxer.xyz/simulations/mainnet/182cf8dc727fd6ba58624bfa79e61f5e |
+| `verify-v7-taker-anchor-lazer.js` | 86/86 | https://stxer.xyz/simulations/mainnet/c6253cfb742d90b0d6326b56e8f19f04 |
+| `verify-v7-router-v6-lazer.js` | 39/39 | https://stxer.xyz/simulations/mainnet/babcbbb63645ec0d0fe5a032c9527046 |
 
 `clarinet check` on a manifest with core-v6, the ladder and v7: clean
 (pre-existing `unwrap-panic` warnings only). The router cannot be checked
