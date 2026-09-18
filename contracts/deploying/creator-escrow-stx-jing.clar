@@ -1,5 +1,3 @@
-;; Derived from creator-escrow-v3: native STX funding/payouts; allows one delivery.
-;; Amounts are microSTX (1 STX = 1,000,000). For one creator, repeat both creator slots.
 (define-constant OWNER tx-sender)
 (define-constant REVIEW_WINDOW_BURN_BLOCKS u288)
 (define-constant CLAIM_GRACE_BURN_BLOCKS u288)

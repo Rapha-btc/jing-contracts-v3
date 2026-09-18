@@ -44,7 +44,8 @@
     "rv:core:props": "rv . markets-sbtc-stx-jing-v6-on-core test --runs=300",
     "rv:rungs:props": "for r in jing-buy-stx jing-sell-stx jing-buy-stx-market-spread jing-sell-stx-market-spread jing-buy-stx-core-spread jing-sell-stx-core-spread; do rv . $r test --runs=300 || exit 1; done",
     "rv:router": "rv . swap-router-sbtc-stx-jing-v5 invariant --runs=500",
-    "rv:router:props": "rv . swap-router-sbtc-stx-jing-v5 test --runs=500"
+    "rv:router:props": "rv . swap-router-sbtc-stx-jing-v5 test --runs=500",
+    "verify:creator-stx-stxer": "node simulations/verify-creator-stx-stxer.js"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",

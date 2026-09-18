@@ -1,0 +1,10 @@
+[project]
+name = "creator-stx"
+description = "Single creator STX bounty escrow"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+[contracts.creator-escrow-stx-jing]
+path = "contracts/deploying/creator-escrow-stx-jing.clar"
+clarity_version = 4
+epoch = "3.3"
