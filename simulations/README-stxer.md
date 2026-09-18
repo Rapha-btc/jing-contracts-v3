@@ -595,3 +595,10 @@ When parsing the V2 API response (`/devtools/v2/simulations/{id}`):
 
 A reusable parser is at the bottom of every sim's run output and in
 the per-sim sections above.
+
+## v6 real oracle confidence values
+
+[Price confidence evidence](README-v6-price-confidence.md) records a signed
+BTC/STX update read through deployed v6 on a mainnet fork, with raw prices,
+confidence values, the exact `price / 50` thresholds, dollar conversions,
+and the reproducible `probe-v6-confidence-stxer.js` harness.
