@@ -166,8 +166,15 @@
 
 (define-read-only (invariant-unfilled-index-bounds)
   (and (<= (var-get unfilled-index) SCALE)
+       ;; An OPEN epoch that still has shares must sit above BOTH floors. The
+       ;; dust bound alone is on an amount and leaves the index unbounded below:
+       ;; new-index is actual * SCALE / total-shares, so a growing total-shares
+       ;; truncates it to 0 while the amount is still above dust, and at 0 a
+       ;; deposit divides by zero and every withdraw is u7007, permanently.
+       ;; This conjunct is the one that fails on that path.
        (or (is-eq (var-get total-shares) u0)
-           (>= (+ (market-size) (stx-get-balance current-contract)) SOLD_OUT_DUST))))
+           (and (>= (+ (market-size) (stx-get-balance current-contract)) SOLD_OUT_DUST)
+                (>= (var-get unfilled-index) SOLD_OUT_INDEX)))))
 
 (define-read-only (invariant-paid-index-le-proceeds)
   (is-eq (len (filter rv-paid-ahead RV-ACCOUNTS)) u0))

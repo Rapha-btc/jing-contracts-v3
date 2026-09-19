@@ -48,6 +48,8 @@
 ;; upgrade path: bless the new code, deploy it at the same spread; the old
 ;; rung keeps its funds, its resting order and its `registered` row so its
 ;; members can still withdraw and claim, only its band status goes)
+;; the market's MAX_DEPOSITORS: its seated list is (list 50 principal)
+(define-constant MAX_SEATS_PER_SIDE u50)
 (define-data-var max-band-per-side uint u10)
 (define-map band-count (string-ascii 8) uint)
 (define-read-only (get-max-band-per-side) (var-get max-band-per-side))
@@ -329,10 +331,15 @@
 (define-public (set-max-band-per-side (n uint))
   (begin
     (asserts! (is-eq tx-sender (var-get contract-owner)) ERR_NOT_AUTHORIZED)
+    ;; floor: never under the seats already held. CEILING: never over the
+    ;; market's slot count either - the market's seat list is (list 50
+    ;; principal) and its add does `as-max-len? ... u50`, so a 51st seat
+    ;; aborts the rung's own initialize with a VM panic it cannot report.
     (asserts!
       (and
         (>= n (get-band-count SIDE_BUY_BAND))
         (>= n (get-band-count SIDE_SELL_BAND))
+        (<= n MAX_SEATS_PER_SIDE)
       )
       ERR_BAND_FULL
     )

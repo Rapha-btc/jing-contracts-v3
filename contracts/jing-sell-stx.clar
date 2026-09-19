@@ -19,6 +19,7 @@
 (define-constant ERR_INSUFFICIENT (err u7007))
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_NAME (err u7009))
+(define-constant ERR_INDEX_COLLAPSED (err u7011))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
 ;; under this many micro-STX: a walk fill is sized in whole sats so a fully
@@ -29,6 +30,18 @@
 ;; closed a small pool late and a big one early). The pool is sold out, the
 ;; next deposit starts a fresh epoch; what is left rides into it.
 (define-constant SOLD_OUT_DUST u10000)
+
+;; and the floor under the index itself. The dust test above is on an AMOUNT,
+;; which leaves `unfilled-index` unbounded from below: new-index reduces to
+;; actual * SCALE / total-shares, so once total-shares passes actual * SCALE the
+;; index truncates to 0 while `actual` is still above the dust floor and the
+;; epoch stays open. It gets there on its own, because shares are minted as
+;; amount * SCALE / unfilled-index, so every sell-down and top-up cycle mints
+;; more of them. At index 0 a deposit divides by zero, every withdraw is u7007
+;; and sync freezes the zero, with no way back. Closing on EITHER test keeps the
+;; absolute dust behaviour and restores the guarantee the index never reaches 0
+;; while an epoch is open.
+(define-constant SOLD_OUT_INDEX u1000000)
 
 (define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
@@ -216,7 +229,7 @@
         ;; sold out (down to sub-sat dust): close the epoch, restart the pool.
         ;; Dust still resting rides into the next epoch as a gift.
         (and
-          (< actual SOLD_OUT_DUST)
+          (or (< actual SOLD_OUT_DUST) (< new-index SOLD_OUT_INDEX))
           (begin
             (map-set epoch-final-proceeds current-epoch new-proceeds)
             (is-ok (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
@@ -243,6 +256,16 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
+    ;; Belt and braces on the share mint below, which divides by this index.
+    ;; `sync` just closed the epoch and reset the index to SCALE if it had
+    ;; fallen under SOLD_OUT_INDEX, so this holds by construction. It is
+    ;; written down because the one thing that can go wrong at that mint is
+    ;; UNRECOVERABLE rather than merely wrong - a zero index means deposit
+    ;; divides by zero, every withdraw is ERR_INSUFFICIENT and nothing can
+    ;; reset it - and because this whole class began with a guarantee in
+    ;; `sync` quietly losing its enforcement. A named refusal beats a
+    ;; DivisionByZero, and this assert fails loudly if that ever happens again.
+    (asserts! (>= (var-get unfilled-index) SOLD_OUT_INDEX) ERR_INDEX_COLLAPSED)
     (try! (settle-proceeds member))
     (try! (stx-transfer? amount member current-contract))
     (let (

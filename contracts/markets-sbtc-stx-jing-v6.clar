@@ -57,6 +57,7 @@
 (define-constant ERR_BAD_SPREAD (err u1026))
 (define-constant ERR_CYCLE_OPEN (err u1027))
 (define-constant ERR_NOT_A_SEAT (err u1028))
+(define-constant ERR_SEATS_FULL (err u1029))
 
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
@@ -96,8 +97,8 @@
     (who principal)
   )
   (if (is-some (index-of? lst who))
-    lst
-    (unwrap-panic (as-max-len? (append lst who) u50))
+    (some lst)
+    (as-max-len? (append lst who) u50)
   )
 )
 
@@ -134,9 +135,17 @@
       (y (contract-call? .jing-ladder is-band-y who))
     )
     (asserts! (or x y) ERR_NOT_A_SEAT)
-    ;; only the side the ladder seats it on is touched and pruned
-    (and x (var-set seated-x (filter still-seated-x (with-seat (var-get seated-x) who))))
-    (and y (var-set seated-y (filter still-seated-y (with-seat (var-get seated-y) who))))
+    ;; only the side the ladder seats it on is touched
+    ;;
+    ;; PRUNE FIRST, THEN ADD. The other order cannot seat a replacement on a
+    ;; full side: appending to 50 entries fails `as-max-len?` before the filter
+    ;; that would have dropped the rung it replaces ever runs, so the
+    ;; documented upgrade path aborts exactly when every seat is taken. Pruning
+    ;; first frees the retired holder's slot, and the add then fits.
+    (and x (var-set seated-x
+      (unwrap! (with-seat (filter still-seated-x (var-get seated-x)) who) ERR_SEATS_FULL)))
+    (and y (var-set seated-y
+      (unwrap! (with-seat (filter still-seated-y (var-get seated-y)) who) ERR_SEATS_FULL)))
     (ok {
       x: x,
       y: y,
@@ -1156,6 +1165,7 @@
     (spread-bps (optional uint))
     (carry uint)
     (price uint)
+    (parked-already bool)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1174,7 +1184,17 @@
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-y-parked tx-sender))
 
-    (if (and (is-eq existing u0) (side-full-y depositors tx-sender))
+    ;; AT MOST ONE PARK PER ARRIVAL. `parked-already` is park-tenth's own
+    ;; answer. Without it the size rule below can park a SECOND resident for
+    ;; one newcomer: park-tenth removes its victim, the re-test here sees the
+    ;; open region still at the cap (a retired or replaced seat holder keeps
+    ;; its funds and order while dropping out of the seated list, so the
+    ;; region sits one above), and this branch fires too. Worse, the fold it
+    ;; uses ranks on size alone and never reads the limit price, so that
+    ;; second victim can be a maker who is IN RANGE - the outcome invariant B
+    ;; forbids. The priority rule already chose the right victim; when it
+    ;; chose one, this rule has nothing left to decide.
+    (if (and (is-eq existing u0) (not parked-already) (side-full-y depositors tx-sender))
       (let (
           (smallest-info (fold find-smallest-token-y-fold depositors {
             cycle: cycle,
@@ -1282,12 +1302,14 @@
     ;; (see it), and only an in-range newcomer with nobody out of range
     ;; falls through to the core's size rule.
     (asserts! (not (and new-maker full (is-eq bid u0))) ERR_QUEUE_FULL)
-    (and
-      new-maker
-      full
-      (try! (park-tenth-token-y cycle price bid (+ amount parked) depositors))
-    )
-    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price t asset-name))))
+    ;; park-tenth's answer, carried into the core so the size rule cannot
+    ;; park a second resident for this one arrival
+    (let ((bumped (and
+        new-maker
+        full
+        (try! (park-tenth-token-y cycle price bid (+ amount parked) depositors))
+      )))
+    (let ((deposited (try! (deposit-token-y-core amount limit-price spread-bps parked price bumped t asset-name))))
       (try! (log-peg-y-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -1296,7 +1318,7 @@
         ))
       )
       (ok deposited)
-    )
+    ))
   )
 )
 (define-private (deposit-token-x-core
@@ -1305,6 +1327,7 @@
     (spread-bps (optional uint))
     (carry uint)
     (price uint)
+    (parked-already bool)
     (t <ft-trait>)
     (asset-name (string-ascii 128))
   )
@@ -1322,7 +1345,17 @@
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
     (and (> carry u0) (map-delete token-x-parked tx-sender))
-    (if (and (is-eq existing u0) (side-full-x depositors tx-sender))
+    ;; AT MOST ONE PARK PER ARRIVAL. `parked-already` is park-tenth's own
+    ;; answer. Without it the size rule below can park a SECOND resident for
+    ;; one newcomer: park-tenth removes its victim, the re-test here sees the
+    ;; open region still at the cap (a retired or replaced seat holder keeps
+    ;; its funds and order while dropping out of the seated list, so the
+    ;; region sits one above), and this branch fires too. Worse, the fold it
+    ;; uses ranks on size alone and never reads the limit price, so that
+    ;; second victim can be a maker who is IN RANGE - the outcome invariant B
+    ;; forbids. The priority rule already chose the right victim; when it
+    ;; chose one, this rule has nothing left to decide.
+    (if (and (is-eq existing u0) (not parked-already) (side-full-x depositors tx-sender))
       (let (
           (smallest-info (fold find-smallest-token-x-fold depositors {
             cycle: cycle,
@@ -1427,12 +1460,14 @@
     (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
     ;; mirror of the y side
     (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
-    (and
-      new-maker
-      full
-      (try! (park-tenth-token-x cycle price ask (+ amount parked) depositors))
-    )
-    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price t asset-name))))
+    ;; park-tenth's answer, carried into the core so the size rule cannot
+    ;; park a second resident for this one arrival
+    (let ((bumped (and
+        new-maker
+        full
+        (try! (park-tenth-token-x cycle price ask (+ amount parked) depositors))
+      )))
+    (let ((deposited (try! (deposit-token-x-core amount limit-price spread-bps parked price bumped t asset-name))))
       (try! (log-peg-x-if spread-bps limit-price))
       (and
         (> parked u0)
@@ -1441,7 +1476,7 @@
         ))
       )
       (ok deposited)
-    )
+    ))
   )
 )
 (define-public (cancel-token-y-deposit
@@ -2201,28 +2236,31 @@
       )
       ERR_HAS_RESTING_POSITION
     )
-    (and
-      full
-      (try! (if deposit-x
-        (park-tenth-token-x cycle price limit-price net depositors)
-        (park-tenth-token-y cycle price limit-price net depositors)
-      ))
-    )
-    (if deposit-x
-      (begin
-        (and
-          (> rebate u0)
-          (try! (contract-call? tx-trait transfer rebate tx-sender current-contract
-            none
-          ))
+    ;; same one-park-per-arrival rule as a plain deposit: a taker that comes
+    ;; through park-tenth must not then meet the core's size rule as well
+    (let ((bumped (and
+        full
+        (try! (if deposit-x
+          (park-tenth-token-x cycle price limit-price net depositors)
+          (park-tenth-token-y cycle price limit-price net depositors)
+        ))
+      )))
+      (if deposit-x
+        (begin
+          (and
+            (> rebate u0)
+            (try! (contract-call? tx-trait transfer rebate tx-sender current-contract
+              none
+            ))
+          )
+          (var-set pending-rebate-x rebate)
+          (try! (deposit-token-x-core net limit-price none u0 price bumped tx-trait tx-name))
         )
-        (var-set pending-rebate-x rebate)
-        (try! (deposit-token-x-core net limit-price none u0 price tx-trait tx-name))
-      )
-      (begin
-        (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
-        (var-set pending-rebate-y rebate)
-        (try! (deposit-token-y-core net limit-price none u0 price ty-trait ty-name))
+        (begin
+          (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
+          (var-set pending-rebate-y rebate)
+          (try! (deposit-token-y-core net limit-price none u0 price bumped ty-trait ty-name))
+        )
       )
     )
     (var-set crossing true)
