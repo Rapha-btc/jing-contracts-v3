@@ -3,8 +3,8 @@
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
 (define-constant TAKER_REBATE_BPS u20)
-;; The taker rebate on the FRESHEST print. It rises to TAKER_REBATE_MAX_BPS as
-;; the print ages toward MAX_STALENESS, because a stale print the caller chose
+;; The taker rebate on the FRESHEST print. It rises to TAKER_REBATE_MAX_BPS once
+;; the print is older than REBATE_GRACE_SECS, because a stale print the caller chose
 ;; is a free option on the mid and the maker on the other side is the one
 ;; writing it. Charging for age prices that option instead of giving it away.
 (define-constant TAKER_REBATE_MAX_BPS u50)
@@ -16,6 +16,11 @@
 ;; the mid to move half a percent inside the window just to be filled, and if
 ;; it moved that far you would have made more by swapping.
 (define-constant MAKER_MARGIN_BPS u50)
+;; Free window before the surcharge starts. A print this old is not an option
+;; being exercised, it is a Stacks block going by: fetch, read the wallet
+;; prompt, confirm, wait for a block. Charging inside it taxes block time
+;; rather than staleness, and every honest taker pays it.
+(define-constant REBATE_GRACE_SECS u30)
 
 (define-read-only (get-maker-margin-bps)
   MAKER_MARGIN_BPS
@@ -35,10 +40,17 @@
 ;; MAX_STALENESS. Ages past the window cannot occur (fresh-classification-price
 ;; rejects them) but the clamp keeps the arithmetic total.
 (define-private (rebate-bps-for-age (age uint))
-  (if (>= age MAX_STALENESS)
-    TAKER_REBATE_MAX_BPS
-    (+ TAKER_REBATE_BPS
-      (/ (* (- TAKER_REBATE_MAX_BPS TAKER_REBATE_BPS) age) MAX_STALENESS)
+  (if (<= age REBATE_GRACE_SECS)
+    TAKER_REBATE_BPS
+    (if (>= age MAX_STALENESS)
+      TAKER_REBATE_MAX_BPS
+      ;; linear across the chargeable part only: 20 bps at the end of the
+      ;; grace window, 50 bps at MAX_STALENESS
+      (+ TAKER_REBATE_BPS
+        (/ (* (- TAKER_REBATE_MAX_BPS TAKER_REBATE_BPS) (- age REBATE_GRACE_SECS))
+          (- MAX_STALENESS REBATE_GRACE_SECS)
+        )
+      )
     )
   )
 )
