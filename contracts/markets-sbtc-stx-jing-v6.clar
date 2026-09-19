@@ -3,7 +3,45 @@
 (define-constant MAX_DEPOSITORS u50)
 (define-constant FEE_BPS u10)
 (define-constant TAKER_REBATE_BPS u20)
+;; The taker rebate on the FRESHEST print. It rises to TAKER_REBATE_MAX_BPS as
+;; the print ages toward MAX_STALENESS, because a stale print the caller chose
+;; is a free option on the mid and the maker on the other side is the one
+;; writing it. Charging for age prices that option instead of giving it away.
+(define-constant TAKER_REBATE_MAX_BPS u50)
+;; How far from crossing a MAKER entry must sit. Without it the rebate is
+;; dodgeable: enter on a 60-second print with a limit that does not cross at
+;; that stale mid but does at the real one, then let a refresh fill it, and you
+;; got taker execution at maker cost. The margin must exceed TAKER_REBATE_BPS,
+;; or the dodge is still cheaper than paying. At 50 against 20 you would need
+;; the mid to move half a percent inside the window just to be filled, and if
+;; it moved that far you would have made more by swapping.
+(define-constant MAKER_MARGIN_BPS u50)
 
+(define-read-only (get-maker-margin-bps)
+  MAKER_MARGIN_BPS
+)
+(define-read-only (get-taker-rebate-max-bps)
+  TAKER_REBATE_MAX_BPS
+)
+;; A maker entry is tested against a mid pushed this far AGAINST it, so
+;; anything within the margin of crossing is refused and must use swap.
+(define-private (widen-up (price uint))
+  (+ price (/ (* price MAKER_MARGIN_BPS) BPS_PRECISION))
+)
+(define-private (widen-down (price uint))
+  (- price (/ (* price MAKER_MARGIN_BPS) BPS_PRECISION))
+)
+;; Linear from TAKER_REBATE_BPS at age 0 to TAKER_REBATE_MAX_BPS at
+;; MAX_STALENESS. Ages past the window cannot occur (fresh-classification-price
+;; rejects them) but the clamp keeps the arithmetic total.
+(define-private (rebate-bps-for-age (age uint))
+  (if (>= age MAX_STALENESS)
+    TAKER_REBATE_MAX_BPS
+    (+ TAKER_REBATE_BPS
+      (/ (* (- TAKER_REBATE_MAX_BPS TAKER_REBATE_BPS) age) MAX_STALENESS)
+    )
+  )
+)
 (define-read-only (get-taker-rebate-bps)
   TAKER_REBATE_BPS
 )
@@ -182,6 +220,12 @@
 
 (define-data-var pending-rebate-x uint u0)
 (define-data-var pending-rebate-y uint u0)
+;; The rate the escrowed rebate above was quoted at. Settlement must apply the
+;; rate the taker was charged, not a constant: the escrow is a ceiling and the
+;; difference is refunded, so a batch computing a flat 20 bps would hand the
+;; staleness surcharge straight back.
+(define-data-var pending-rebate-bps-x uint TAKER_REBATE_BPS)
+(define-data-var pending-rebate-bps-y uint TAKER_REBATE_BPS)
 (define-data-var crossing bool false)
 (define-data-var taker-too-small bool false)
 
@@ -1066,21 +1110,40 @@
   )
 )
 
-(define-private (fresh-classification-price (update (buff 8192)))
+(define-private (fresh-classification-price-aged (update (buff 8192)))
   (let (
       (feeds (try! (lazer-feeds update)))
       (feed-x (get feed-x feeds))
       (feed-y (get feed-y feeds))
       (min-freshness (- stacks-block-time MAX_STALENESS))
+      (pub-x (get publish-time feed-x))
+      (pub-y (get publish-time feed-y))
+      ;; the OLDER of the two feeds is what the pair price is really worth:
+      ;; a fresh envelope can carry a price Lazer carried forward
+      (oldest (if (< pub-x pub-y)
+        pub-x
+        pub-y
+      ))
     )
-    (asserts! (> (get publish-time feed-x) min-freshness) ERR_STALE_PRICE)
-    (asserts! (> (get publish-time feed-y) min-freshness) ERR_STALE_PRICE)
+    (asserts! (> pub-x min-freshness) ERR_STALE_PRICE)
+    (asserts! (> pub-y min-freshness) ERR_STALE_PRICE)
     (asserts! (> (get price feed-x) 0) ERR_ZERO_PRICE)
     (asserts! (> (get price feed-y) 0) ERR_ZERO_PRICE)
-    (ok (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
-      (to-uint (get price feed-y))
-    ))
+    (ok {
+      price: (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
+        (to-uint (get price feed-y))
+      ),
+      ;; a print stamped in the future reads as age 0 rather than underflowing
+      age: (if (> oldest stacks-block-time)
+        u0
+        (- stacks-block-time oldest)
+      ),
+    })
   )
+)
+
+(define-private (fresh-classification-price (update (buff 8192)))
+  (ok (get price (try! (fresh-classification-price-aged update))))
 )
 
 (define-private (live-bid-fold
@@ -1297,7 +1360,8 @@
       (bid (order-y-price limit-price spread-bps price))
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
-    (asserts! (not (would-take-as-y price bid)) ERR_MUST_USE_SWAP)
+    ;; widened: anything within MAKER_MARGIN_BPS of crossing must use swap
+    (asserts! (not (would-take-as-y (widen-down price) bid)) ERR_MUST_USE_SWAP)
     ;; Priority on a full book: switched off gets no slot; else park-tenth
     ;; (see it), and only an in-range newcomer with nobody out of range
     ;; falls through to the core's size rule.
@@ -1457,7 +1521,8 @@
       (ask (order-x-price limit-price spread-bps price))
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
-    (asserts! (not (would-take-as-x price ask)) ERR_MUST_USE_SWAP)
+    ;; widened: anything within MAKER_MARGIN_BPS of crossing must use swap
+    (asserts! (not (would-take-as-x (widen-up price) ask)) ERR_MUST_USE_SWAP)
     ;; mirror of the y side
     (asserts! (not (and new-maker full (is-eq ask MAX_UINT))) ERR_QUEUE_FULL)
     ;; park-tenth's answer, carried into the core so the size rule cannot
@@ -1698,7 +1763,8 @@
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (not (side-full-y depositors who)) ERR_QUEUE_FULL)
-    (asserts! (not (would-take-as-y price limit)) ERR_MUST_USE_SWAP)
+    ;; widened: anything within MAKER_MARGIN_BPS of crossing must use swap
+    (asserts! (not (would-take-as-y (widen-down price) limit)) ERR_MUST_USE_SWAP)
     (map-set token-y-deposits {
       cycle: cycle,
       depositor: who,
@@ -1734,7 +1800,8 @@
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (not (side-full-x depositors who)) ERR_QUEUE_FULL)
-    (asserts! (not (would-take-as-x price limit)) ERR_MUST_USE_SWAP)
+    ;; widened: anything within MAKER_MARGIN_BPS of crossing must use swap
+    (asserts! (not (would-take-as-x (widen-up price) limit)) ERR_MUST_USE_SWAP)
     (map-set token-x-deposits {
       cycle: cycle,
       depositor: who,
@@ -1773,7 +1840,8 @@
     (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
       (let ((price (try! (fresh-classification-price update))))
         (asserts!
-          (not (would-take-as-y price (order-y-price limit-price spread-bps price)))
+          ;; widened, as the deposit gates are
+          (not (would-take-as-y (widen-down price) (order-y-price limit-price spread-bps price)))
           ERR_MUST_USE_SWAP
         )
       )
@@ -1808,7 +1876,8 @@
     (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
       (let ((price (try! (fresh-classification-price update))))
         (asserts!
-          (not (would-take-as-x price (order-x-price limit-price spread-bps price)))
+          ;; widened, as the deposit gates are
+          (not (would-take-as-x (widen-up price) (order-x-price limit-price spread-bps price)))
           ERR_MUST_USE_SWAP
         )
       )
@@ -1857,12 +1926,20 @@
           (would-take-as-y price (order-y-price limit-price spread-bps price))
         )
       )
-      (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
+      (let (
+          ;; same staleness surcharge as swap: this branch IS a take, and the
+          ;; print it takes against is the one the caller supplied. Parsed
+          ;; again here rather than hoisted, so the non-crossing branch still
+          ;; needs no print at all, exactly as before.
+          (bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
+          (rebate (/ (* amount bps) BPS_PRECISION))
+        )
         (and
           (> rebate u0)
           (try! (stx-transfer? rebate tx-sender current-contract))
         )
         (var-set pending-rebate-y rebate)
+        (var-set pending-rebate-bps-y bps)
         (var-set crossing true)
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-y result
@@ -1915,7 +1992,14 @@
           (would-take-as-x price (order-x-price limit-price spread-bps price))
         )
       )
-      (let ((rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION)))
+      (let (
+          ;; same staleness surcharge as swap: this branch IS a take, and the
+          ;; print it takes against is the one the caller supplied. Parsed
+          ;; again here rather than hoisted, so the non-crossing branch still
+          ;; needs no print at all, exactly as before.
+          (bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
+          (rebate (/ (* amount bps) BPS_PRECISION))
+        )
         (and
           (> rebate u0)
           (try! (contract-call? tx-trait transfer rebate tx-sender current-contract
@@ -1923,6 +2007,7 @@
           ))
         )
         (var-set pending-rebate-x rebate)
+        (var-set pending-rebate-bps-x bps)
         (var-set crossing true)
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-x result
@@ -2193,7 +2278,13 @@
     (deposit-x bool)
   )
   (let (
-      (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+      ;; the print is parsed once here and reused for BOTH the rebate and the
+      ;; mid below. swap always settles, and settle parses too, so this is the
+      ;; same print the fill will clear against - the rebate cannot be quoted
+      ;; off a different one than the trade uses.
+      (aged (try! (fresh-classification-price-aged update)))
+      ;; older print, bigger rebate: the caller picked it, the maker pays for it
+      (rebate (/ (* amount (rebate-bps-for-age (get age aged))) BPS_PRECISION))
       (net (- amount rebate))
       (cycle (var-get current-cycle))
       (depositors (if deposit-x
@@ -2211,7 +2302,7 @@
         (side-full-y depositors tx-sender)
       ))
       (price (if full
-        (try! (fresh-classification-price update))
+        (get price aged)
         u0
       ))
     )
@@ -2254,11 +2345,13 @@
             ))
           )
           (var-set pending-rebate-x rebate)
+          (var-set pending-rebate-bps-x (rebate-bps-for-age (get age aged)))
           (try! (deposit-token-x-core net limit-price none u0 price bumped tx-trait tx-name))
         )
         (begin
           (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
           (var-set pending-rebate-y rebate)
+          (var-set pending-rebate-bps-y (rebate-bps-for-age (get age aged)))
           (try! (deposit-token-y-core net limit-price none u0 price bumped ty-trait ty-name))
         )
       )
@@ -2305,7 +2398,7 @@
       (x-fee (/ (* x-traded FEE_BPS) BPS_PRECISION))
       (reb-y (if y-is-taker
         (let (
-            (r (/ (* y-traded TAKER_REBATE_BPS) BPS_PRECISION))
+            (r (/ (* y-traded (var-get pending-rebate-bps-y)) BPS_PRECISION))
             (pending-rey (var-get pending-rebate-y))
           )
           (if (> r pending-rey)
@@ -2318,7 +2411,7 @@
       (reb-x (if y-is-taker
         u0
         (let (
-            (r (/ (* x-traded TAKER_REBATE_BPS) BPS_PRECISION))
+            (r (/ (* x-traded (var-get pending-rebate-bps-x)) BPS_PRECISION))
             (pending-rex (var-get pending-rebate-x))
           )
           (if (> r pending-rex)
@@ -3442,8 +3535,10 @@
 
 (define-private (gross-up (net uint))
   (let (
-      (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_BPS)))
-      (n (- g (/ (* g TAKER_REBATE_BPS) BPS_PRECISION)))
+      ;; the ceiling rate on purpose: a quote that assumed the fresh-print
+      ;; rate would under-state what a taker on an old print has to send
+      (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_MAX_BPS)))
+      (n (- g (/ (* g TAKER_REBATE_MAX_BPS) BPS_PRECISION)))
     )
     (if (> n net)
       (- g u1)
