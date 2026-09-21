@@ -153,6 +153,36 @@ only to the contract's permitted dust/rebate refunds.
 
 ## Validation and reproduction
 
+### Epoch closure and continuation: verified scope
+
+The verified run checks that fully consumed rungs at 0–80 bps on both sides
+advance to `epoch u1` with `total-shares u0`. Buy-side closure checks are steps
+347/352/357/362/367/372/377/382/387; sell-side checks are
+398/403/408/413/418/423/428/433/438. Subsequent calls claim the old positions,
+check that the user positions are cleared, and reject double claims.
+
+After those closures and claims, steps **447–451** deposit into buy rungs
+0/10/20 again and withdraw all three in one call. Steps **452–456** repeat
+this on the sell side. These checks demonstrate that deposits and withdrawals
+continue after a rung epoch closes.
+
+The run does **not** execute a second taker sweep after those new deposits,
+close a second trading epoch, or test an old unclaimed position overlapping
+a new user's position in the next epoch. Rung epochs and the market's
+`current-cycle` are separate state; these assertions do not constitute a
+dedicated market-cycle rollover test. No failures were found in the covered
+scenarios; this is not a claim that all epoch transitions are bug-free.
+
+### Full-fill requirement
+
+Steps **263** and **279** attempt oversized taker swaps and return
+`(err u1017)` (`ERR_PARTIAL_FILL`). Steps 261–265 and 277–281 show unchanged
+input and output balances across each rejected swap. A successful taker must
+fill its requested amount, subject to permitted dust refunds; leaving part
+of the last maker rung unconsumed is compatible with that requirement.
+
+### Running the checks
+
 Run from the repository root:
 
 ```sh
