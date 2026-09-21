@@ -2,6 +2,13 @@
 
 The Jing protocol on Stacks: a fair-batch swap venue for sBTC pairs, plus tools that let users automate trades and borrow against their position. This repo holds the smart contracts; the file layout below is the same one you'll see in the `contracts/` folder.
 
+## v6-2 ladder deposits and simulations
+
+See [the ladder dispatch README](contracts/README-jing-ladder-dispatch.md) for the
+one-call deposit and withdrawal helper, verified Stxer simulation, and exact
+step numbers for multi-rung deposits, exits, taker fills, and funded-seat
+replacement.
+
 ## Layout
 
 ```

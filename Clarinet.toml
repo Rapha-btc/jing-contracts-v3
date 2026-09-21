@@ -328,6 +328,16 @@ path = "contracts/jing-ladder.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.jing-rung-deposit-trait]
+path = "contracts/jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-dispatch]
+path = "contracts/jing-ladder-dispatch.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.jing-buy-stx]
 path = "contracts/jing-buy-stx.clar"
 clarity_version = 5

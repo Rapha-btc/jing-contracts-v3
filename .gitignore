@@ -6,3 +6,4 @@ node_modules/
 tests/rv/.build/
 .rendezvous-regressions/
 simulations/_run-all-results.tsv
+simulations/results/
