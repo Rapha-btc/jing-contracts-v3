@@ -11,7 +11,7 @@ path, ladder-owned protected seats with a local copy on the market, and the
 two miner-band rungs. Design and every harness id:
 `contracts/README-markets-v6-pegged.md`.
 
-Two submissions so far, both real, both fixed on master. **No winner picked
+Nine submissions so far; the real findings are fixed on master. **No winner picked
 yet**: the bounty is open until it closes and later entries are reviewed the
 same way. Nothing in scope is deployed, so every fix rides the next deploy.
 
@@ -59,6 +59,7 @@ or stuck-funds path, which is the space this bounty pays for.
 | 6 | Light Brio | LOW: `set-max-band-per-side` asserts a floor but no ceiling, so the dial can be set to 51; the market's seated list is `(list 50 principal)` and the 51st rung's `initialize` dies in `unwrap-panic` | yes | LOW | **Fixed** (section 6). Correct, exact, and honest about what it did not clear. |
 | 7 | Devoted Basilisk | NOVEL HIGH: `sync-seat` appends via `with-seat` BEFORE it filters, so at 50 live seats a replacement builds a 51-element list and panics before the prune that would free its slot can run. Plus independent confirmation of the CRITICAL and of the two-park | yes | HIGH | **Fixed** (section 4). The append-before-filter ordering is novel and distinct from both the dial ceiling and the already-fixed stale-seat prune. |
 | 8 | Swift Lumen | Source-bounded confirmation; independently reached the replacement-at-50 edge and explicitly declined to claim it as novel because submission 7 had already disclosed it | yes | n/a | No novel finding, and says so. Noted here because declining to relabel a known mechanism as your own is the behaviour this bounty wants. |
+| 9 | Noble Ox | The Sep. 19 maker-margin change omitted the widened maker check from both non-crossing `reprice-or-swap` branches. An existing maker could write a limit inside the protected band, where `set-token-*-limit` rejected the same order, without taking or paying the age-adjusted rebate | yes | MEDIUM | **Fixed and fork-proven** (section 7): actual crosses still swap; non-crossing writes inside 40 bps now return u1016 on both sides; safe writes and an empty opposite book still work. Exact-source stxer matrix 22/22. |
 
 Leading submission: **Diamond Lance / Nilo** (5). The only CRITICAL, and the
 only finding in either round where member funds are lost rather than delayed:
@@ -70,9 +71,13 @@ commit whose whole purpose was to make that same code better.
 submission 4's attempted correction (see the table). **Devoted Basilisk** (7)
 third: a genuinely novel HIGH plus accurate independent confirmation of two
 others. Glowing Key (3) named the over-cap state first; Diamond Lance built
-the full consequence on top of it, so both are cited in section 5.
+the full consequence on top of it, so both are cited in section 5. Noble Ox
+(9) is a valid later MEDIUM regression report, but it does not outrank the
+CRITICAL or the earlier novel HIGH findings.
 
-Nobody has attempted the 5,000-sat read-count bonus.
+Nobody has delivered a qualifying 5,000-sat read-count bonus result. Devoted
+Basilisk proposed removing the redundant second full-book fold, but supplied
+no measured 20%+ fork result with runtime and source-size evidence.
 
 ### Severity in plain terms
 
@@ -85,6 +90,7 @@ operator an aborted transaction or costs a maker a slot it can take back:
 | 4 (HIGH) | a replacement rung cannot take a seat on a full side; its `initialize` panics | safe |
 | 5 (HIGH) | one arrival parks two makers instead of one, and the second can be in range | safe; parked keeps its equity and is readmittable |
 | 6 (LOW) | the operator sets the dial to 51 and the 51st rung cannot deploy | safe |
+| 7 (MEDIUM) | a repricing maker enters inside the protected band and may receive maker treatment after a refresh | safe; stale-price option / fee bypass |
 
 ## 0. Found by us while testing the CityCoins vault on this book (MEDIUM, fixed d1b32bd)
 
@@ -372,6 +378,43 @@ never deploy and the reason was invisible.
 Fix: a `MAX_SEATS_PER_SIDE u50` constant on the ladder and a third conjunct
 in the same assert, so the dial is bounded on both ends and the refusal is
 `ERR_BAND_FULL` rather than a panic downstream.
+
+## 7. `reprice-or-swap` bypassed the maker margin (MEDIUM, fixed)
+
+Found by Noble Ox after the Sep. 19 maker-margin change. Both
+`reprice-or-swap-token-y` and `reprice-or-swap-token-x` wrote the caller's
+new order first, then classified it only against the un-widened oracle mid.
+An order 30 bps from the mid therefore took the non-crossing branch, paid no
+age-adjusted rebate and stayed on the book, while `set-token-*-limit` rejected
+the identical maker write through `widen-down` / `widen-up`.
+
+Fix: keep the real-mid test first, so an actual cross still swaps and pays.
+In the non-crossing branch, when the opposite list is non-empty, apply the
+same widened check used by deposit, readmit and set-limit; a near maker exits
+u1016 and the earlier limit/log writes unwind atomically. An empty opposite
+book still needs no oracle classification. The operator selected a 40-bps
+maker band: STX bids are tested against a mid widened down 40 bps, sBTC asks
+against a mid widened up 40 bps.
+
+The stale-price charge was also made deliberately simple: 20 bps through 30
+seconds, then one additional bp per second. Accepted updates stop at age 79,
+so the largest successful charge is 69 bps; the u70 ceiling is used by
+`gross-up` and by the defensive age clamp. Lazer feed timestamps are converted
+from microseconds to seconds before age is calculated, so `age`,
+`REBATE_GRACE_SECS` and `MAX_STALENESS` use the same unit.
+
+Focused exact-source stxer harness:
+
+| harness | result | sim |
+|---|---|---|
+| `simulations/verify-v6-reprice-margin-lazer.js` | 22/22 | `429e20c92193e871f18da61f0a9e7c27` |
+
+The matrix deploys two fresh v6 markets and proves both directions: a near
+maker may rest while the opposite book is empty; a maker 60 bps away is
+accepted; a maker 30 bps away is rejected u1016; and an order crossing the
+real mid still executes through the swap branch. The harness removes comment
+lines, blank lines and leading indentation from deployment text only (80,813
+bytes before the 40-bps edit); the readable contract source is unchanged.
 
 ## Verification (stxer mainnet forks, no Pyth key)
 

@@ -12,10 +12,10 @@
 ;; dodgeable: enter on a 60-second print with a limit that does not cross at
 ;; that stale mid but does at the real one, then let a refresh fill it, and you
 ;; got taker execution at maker cost. The margin must exceed TAKER_REBATE_BPS,
-;; or the dodge is still cheaper than paying. At 50 against 20 you would need
-;; the mid to move half a percent inside the window just to be filled, and if
+;; or the dodge is still cheaper than paying. At 40 against 20 you would need
+;; the mid to move 0.4 percent inside the window just to be filled, and if
 ;; it moved that far you would have made more by swapping.
-(define-constant MAKER_MARGIN_BPS u50)
+(define-constant MAKER_MARGIN_BPS u40)
 ;; Free window before the surcharge starts. A print this old is not an option
 ;; being exercised, it is a Stacks block going by: fetch, read the wallet
 ;; prompt, confirm, wait for a block. Charging inside it taxes block time
