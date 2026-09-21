@@ -153,6 +153,69 @@ only to the contract's permitted dust/rebate refunds.
 
 ## Validation and reproduction
 
+### Rendezvous fuzz results — September 21, 2026
+
+Ran the two miner-band rung templates used by this ladder against a local
+**v6-2** market build, the ladder registry, and the dispatcher. Across seven
+RV runs: **4,300 trials, 3,982 passes, 318 discarded property trials, zero
+reported failures or logged runtime panics**. Discarded trials did not satisfy
+the property preconditions; they are not counted as passes.
+
+| Target | Mode | Seed | Trials | Passed | Discarded |
+| --- | --- | --- | --- | --- | --- |
+| `jing-buy-stx-core-spread` | Invariants | 210921 | 1,000 | 1,000 | 0 |
+| `jing-buy-stx-core-spread` | Properties | 210923 | 500 | 349 | 151 |
+| `jing-sell-stx-core-spread` | Invariants | 210922 | 500 | 500 | 0 |
+| `jing-sell-stx-core-spread` | Properties | 210922 | 500 | 333 | 167 |
+| `jing-ladder` | Invariants | 210924 | 500 | 500 | 0 |
+| `jing-ladder-dispatch` | Properties | 210921 | 1,000 | 1,000 | 0 |
+| `jing-ladder-dispatch` | Invariants | 210922 | 300 | 300 | 0 |
+
+The rung checks cover share totals, asset backing, proceeds and closed-epoch
+indexes, withdrawal bounds, deposit/withdraw drain resistance, claim/sync
+idempotence, guard prices, and seat protection. The buy invariant run executed
+128 successful taker calls and 31 settlements; the sell run executed 7 taker
+calls and 14 settlements. Multiple RV accounts share persistent state.
+
+The dispatcher properties randomize side, user, batch size, weighted amounts,
+and invalid-input/failure cases. They verify 1–10-rung round trips, retired-rung
+exits, duplicate/zero/wrong-side targets, incorrect totals, and exact wallet
+and per-rung credit/balance rollback when a later rung errors or returns
+`ok false`. The invariant run checks custody, fixture backing, and user
+ownership; it executed 329 successful public calls, including 287 scenario
+driver calls, so it exercises state changes rather than only rejected inputs.
+
+Reproduce all seven runs from the repository root:
+
+```sh
+npm run rv:ladder-suite
+# Recheck saved logs and regenerate the JSON summary without rerunning:
+node tests/rv/run-ladder.mjs --summarize
+```
+
+Logs and `rv-ladder-summary.json` (including source hashes) are written under
+`simulations/results/`. The runner rejects incomplete reports, failed checks,
+logged runtime errors, and invariant runs without successful calls, even when
+the RV process exits zero. RV samples invariants after random sequences;
+these trial totals are not the number of individual contract calls.
+
+**Scope:** these are local RV tests, not new Stxer simulations. Rung tests use
+the existing mock token/oracles/registry, pre-initialized rungs, and a smaller
+market queue; `RV_MARKET_VERSION=v6-2` selects v6-2 source for the local market
+dependency named `v6-market`. The dispatcher uses ten STX-backed fixtures on
+both sides to isolate routing and rollback. The registry suite substitutes
+the code-hash gate. Production contracts were not changed. Real sBTC,
+signatures, deployed dependencies, and actual code-hash gates remain covered
+by the separate Stxer run above. The fuzz results do not establish a specific
+number of complete epoch closures or replace a dedicated second-epoch trading
+scenario; the epoch coverage boundary below still applies.
+
+During harness development, private-function calls incorrectly bypassed the
+public response rollback boundary. The properties now invoke the public
+deposit/withdraw functions before inspecting rollback. An initial dispatcher
+invariant run had no successful mutations; it was superseded by the driven
+run in the table. Neither preliminary run is included in the totals above.
+
 ### Epoch closure and continuation: verified scope
 
 The verified run checks that fully consumed rungs at 0–80 bps on both sides

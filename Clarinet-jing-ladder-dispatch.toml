@@ -1,0 +1,75 @@
+# Isolated RV manifest: production dispatcher, mock registry and ten STX-backed rungs.
+[project]
+name = "rv-ladder-dispatch"
+description = "Dispatcher routing and rollback properties"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.jing-rung-deposit-trait]
+path = "contracts/jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-dispatch-registry]
+path = "tests/rv/dispatch-registry.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-0]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-1]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-2]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-3]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-4]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-5]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-6]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-7]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-8]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.rv-rung-9]
+path = "tests/rv/dispatch-rung.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-dispatch]
+path = "tests/rv/.build/jing-ladder-dispatch.clar"
+clarity_version = 5
+epoch = "3.4"

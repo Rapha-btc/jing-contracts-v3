@@ -61,6 +61,11 @@ LOCAL_SIP010=".sip-010-trait.sip-010-trait"
 build_market() {
   local name="$1"
   local src="${SUTS[$name]:-}"
+  # Select v6-2 for the same local market dependency without editing production
+  # rungs or the root manifest. All other fuzz transformations stay identical.
+  if [ "$name" = "markets-sbtc-stx-jing-v6" ] && [ "${RV_MARKET_VERSION:-v6}" = "v6-2" ]; then
+    src="contracts/markets-sbtc-stx-jing-v6-2.clar"
+  fi
   local invariants="tests/rv/$name.invariants.clar"
   local out="$OUT/$name.clar"
   # the on-core market variant is the v6 build with the real core-v5 as its

@@ -40,6 +40,7 @@
     "rv:build": "bash tests/rv/build.sh markets-sbtc-stx-jing-v6 && bash tests/rv/build.sh jing-core-v5 && bash tests/rv/build.sh markets-sbtc-stx-jing-v6-on-core && for r in jing-ladder jing-buy-stx jing-sell-stx jing-buy-stx-market-spread jing-sell-stx-market-spread jing-buy-stx-core-spread jing-sell-stx-core-spread; do bash tests/rv/build.sh $r; done && bash tests/rv/build.sh swap-router-sbtc-stx-jing-v5",
     "rv:v6": "rv . markets-sbtc-stx-jing-v6 invariant --runs=1000",
     "rv:ladder": "rv . jing-ladder invariant --runs=500",
+    "rv:ladder-suite": "node tests/rv/run-ladder.mjs",
     "rv:rungs": "for r in jing-buy-stx jing-sell-stx jing-buy-stx-market-spread jing-sell-stx-market-spread jing-buy-stx-core-spread jing-sell-stx-core-spread; do rv . $r invariant --runs=500 || exit 1; done",
     "rv:core": "rv . markets-sbtc-stx-jing-v6-on-core invariant --runs=1000",
     "rv:v6:props": "rv . markets-sbtc-stx-jing-v6 test --runs=500",
