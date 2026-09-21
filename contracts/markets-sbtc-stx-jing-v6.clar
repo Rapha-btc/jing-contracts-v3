@@ -7,7 +7,7 @@
 ;; the print is older than REBATE_GRACE_SECS, because a stale print the caller chose
 ;; is a free option on the mid and the maker on the other side is the one
 ;; writing it. Charging for age prices that option instead of giving it away.
-(define-constant TAKER_REBATE_MAX_BPS u50)
+(define-constant TAKER_REBATE_MAX_BPS u70)
 ;; How far from crossing a MAKER entry must sit. Without it the rebate is
 ;; dodgeable: enter on a 60-second print with a limit that does not cross at
 ;; that stale mid but does at the real one, then let a refresh fill it, and you
@@ -36,21 +36,16 @@
 (define-private (widen-down (price uint))
   (- price (/ (* price MAKER_MARGIN_BPS) BPS_PRECISION))
 )
-;; Linear from TAKER_REBATE_BPS at age 0 to TAKER_REBATE_MAX_BPS at
-;; MAX_STALENESS. Ages past the window cannot occur (fresh-classification-price
-;; rejects them) but the clamp keeps the arithmetic total.
+;; The first REBATE_GRACE_SECS cost the base rebate. After that, add one bp
+;; per second, reaching the ceiling at MAX_STALENESS. Ages at or past the
+;; window cannot occur (fresh-classification-price rejects them), but the
+;; clamp keeps the arithmetic total.
 (define-private (rebate-bps-for-age (age uint))
   (if (<= age REBATE_GRACE_SECS)
     TAKER_REBATE_BPS
     (if (>= age MAX_STALENESS)
       TAKER_REBATE_MAX_BPS
-      ;; linear across the chargeable part only: 20 bps at the end of the
-      ;; grace window, 50 bps at MAX_STALENESS
-      (+ TAKER_REBATE_BPS
-        (/ (* (- TAKER_REBATE_MAX_BPS TAKER_REBATE_BPS) (- age REBATE_GRACE_SECS))
-          (- MAX_STALENESS REBATE_GRACE_SECS)
-        )
-      )
+      (+ TAKER_REBATE_BPS (- age REBATE_GRACE_SECS))
     )
   )
 )
@@ -1961,13 +1956,28 @@
           ))
         )
       )
-      (ok {
-        token-x-received: u0,
-        token-y-rolled: u0,
-        token-y-received: u0,
-        token-x-rolled: u0,
-        rebate-refunded: u0,
-      })
+      (begin
+        ;; A non-crossing reprice is still a maker write, so enforce the same
+        ;; margin as deposit-token-y and set-token-y-limit.
+        (if (> (len (get-token-x-depositors cycle)) u0)
+          (let ((price (try! (fresh-classification-price update))))
+            (asserts!
+              (not (would-take-as-y (widen-down price)
+                (order-y-price limit-price spread-bps price)
+              ))
+              ERR_MUST_USE_SWAP
+            )
+          )
+          true
+        )
+        (ok {
+          token-x-received: u0,
+          token-y-rolled: u0,
+          token-y-received: u0,
+          token-x-rolled: u0,
+          rebate-refunded: u0,
+        })
+      )
     )
   )
 )
@@ -2029,13 +2039,27 @@
           ))
         )
       )
-      (ok {
-        token-x-received: u0,
-        token-y-rolled: u0,
-        token-y-received: u0,
-        token-x-rolled: u0,
-        rebate-refunded: u0,
-      })
+      (begin
+        ;; Mirror: a non-crossing reprice must stay outside the maker margin.
+        (if (> (len (get-token-y-depositors cycle)) u0)
+          (let ((price (try! (fresh-classification-price update))))
+            (asserts!
+              (not (would-take-as-x (widen-up price)
+                (order-x-price limit-price spread-bps price)
+              ))
+              ERR_MUST_USE_SWAP
+            )
+          )
+          true
+        )
+        (ok {
+          token-x-received: u0,
+          token-y-rolled: u0,
+          token-y-received: u0,
+          token-x-rolled: u0,
+          rebate-refunded: u0,
+        })
+      )
     )
   )
 )
