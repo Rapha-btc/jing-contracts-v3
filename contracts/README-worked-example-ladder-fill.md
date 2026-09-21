@@ -1,8 +1,9 @@
-# Worked example: one swap against the ladder
+# Worked example: swaps against the ladder
 
-One real swap on `markets-sbtc-stx-jing-v6-2`, read line by line. It shows
-the batch at the mid, the walk down the ladder, the 10 bps fee, the 20 bps
-rebate, and the two small refunds at the end.
+Two real swaps on `markets-sbtc-stx-jing-v6-2`, read line by line: one
+taker selling STX (step 183), then one buying STX (step 217, further down).
+Together they show the batch at the mid, the walk through the ladder, the
+10 bps fee, the 20 bps rebate, and the small refunds at the end.
 
 Source: stxer mainnet simulation
 [e7f2a812...](https://stxer.xyz/simulations/mainnet/e7f2a81202bf7a2ae063abba9629195b?page=10),
@@ -177,6 +178,89 @@ If the leftover STX had been 1 STX or more, the whole swap would revert
 Each maker gets its spread plus 0.1% (the 20 bps rebate minus the 10 bps
 fee). That is why a ladder rung at the mid still earns: it buys 0.1% under
 the mid on every fill.
+
+---
+
+## Example 2: the mirror trade (step 217)
+
+Same simulation, **step 217** (`swap`, tx `cc1cab69aacd...`). This time a
+taker (`SP1RNYKV...ETSV0`) **pays sBTC to buy STX**. It fills against the
+ladder's **sell-STX** rungs, which rest 20 STX each and ask above the mid.
+The mid is the same, 398.64 sats per STX.
+
+### The short version
+
+- The taker pays **43,446 sats** and gets **108.429072 STX**.
+- That is **400.69 sats per STX**, about **0.51% over the mid**, fees and
+  rebates included. Their worst accepted price was 400.85.
+- Six sell rungs fill: `spread-0` at the mid, `spread-10` ... `-40` in full,
+  `spread-50` in part.
+
+### What is different from example 1
+
+Everything is mirrored:
+
+| | Example 1 (step 183) | Example 2 (step 217) |
+|---|---|---|
+| Taker pays | STX | sBTC |
+| Rebate reserve | 0.546870 STX (20 bps) | 86 sats (20 bps) |
+| Makers filled | buy-STX rungs, below the mid | sell-STX rungs, above the mid |
+| Taker's 10 bps fee | in sats (sBTC it receives) | in STX (STX it receives) |
+| Maker's 10 bps fee | in STX | in sats |
+| Rebate paid in | STX | sats |
+
+The rule is the same both ways: **each side pays 10 bps on what it
+receives**, and **the taker pays the maker 20 bps**, in the token the maker
+receives.
+
+### Step by step
+
+1. **Taker pays in (events 0-1).** 86 sats rebate reserve (20 bps of
+   43,450) and 43,364 sats to spend.
+2. **Orders away from the mid wait (events 3-16).** The `limit-roll` lines.
+   Note `jing-buy-stx-spread-50` shows `amount u11458`: that is the 20,000
+   sats it rested, minus the 8,542 that filled in example 1.
+3. **Batch at the mid (events 17-23).** `sell-stx-spread-0` sells its 20 STX.
+4. **Walk up the ladder (events 25-57).** Rungs 10-50 fill, each a little
+   higher than the one before.
+5. **Refund (event 58).** 4 sats of the rebate reserve come back
+   (`rebate-refunded u4`).
+
+| Rung | Price (sats/STX) | STX traded | Taker fee (STX) | **STX to taker** | Sats traded | Maker fee (sats) | Rebate (sats) | **Sats to rung** | Dust back to rung (STX) |
+|---|---|---|---|---|---|---|---|---|---|
+| spread-0 (batch) | 398.64 | 20.000000 | 0.020000 | **19.980000** | 7,972 | 7 | 15 | **7,980** | - |
+| spread-10 | 399.04 | 19.997880 | 0.019997 | **19.977883** | 7,980 | 7 | 15 | **7,988** | 0.002120 |
+| spread-20 | 399.44 | 19.997890 | 0.019997 | **19.977893** | 7,988 | 7 | 15 | **7,996** | 0.002110 |
+| spread-30 | 399.84 | 19.997860 | 0.019997 | **19.977863** | 7,996 | 7 | 15 | **8,004** | 0.002140 |
+| spread-40 | 400.24 | 19.997789 | 0.019997 | **19.977792** | 8,004 | 8 | 16 | **8,012** | 0.002211 |
+| spread-50 (part) | 400.65 | 8.546187 | 0.008546 | **8.537641** | 3,424 | 3 | 6 | **3,427** | - |
+| **Total** | | **108.537606** | **0.108534** | **108.429072** | **43,364** | **39** | **82** | | |
+
+Read one row, `spread-10`: the rung sells 19.997880 STX at 399.04 sats per
+STX. The taker gets that STX minus its 10 bps fee. The rung gets 7,980 sats,
+minus its 7-sat fee, plus a 15-sat rebate: 7,988 sats.
+
+### A new kind of dust: the maker's leftover
+
+Events 29, 36, 43 and 50 send about 0.002 STX **back to the rung**
+(`refund-y`). A sell rung rested exactly 20 STX. The walk fills it in whole
+sats, so a few thousand micro-STX are left over. That is below the 1 STX
+minimum, so it cannot keep resting and goes back to the maker. It is the
+maker-side twin of the taker's `token-y-rolled` refund in example 1.
+
+### Where every unit went
+
+| | STX | sats |
+|---|---|---|
+| Taker paid | | 43,446 (43,450 - 4 refunded) |
+| Taker received | 108.429072 | |
+| Treasury, taker's fee | 0.108534 | |
+| Treasury, makers' fee | | 39 |
+| Rebates, taker to makers | | 82 (of the 86 reserved) |
+
+Each sell rung sold its STX for more than the mid: about 0.1% more at
+`spread-0` and about 0.6% more at `spread-50`. That is its spread, plus the
+20 bps rebate, minus the 10 bps fee.
 
 ---
 
