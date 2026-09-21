@@ -221,6 +221,7 @@ receives.
    Note `jing-buy-stx-spread-50` shows `amount u11458`: that is the 20,000
    sats it rested, minus the 8,542 that filled in example 1.
 3. **Batch at the mid (events 17-23).** `sell-stx-spread-0` sells its 20 STX.
+   See "What happens to a rung that fills" below.
 4. **Walk up the ladder (events 25-57).** Rungs 10-50 fill, each a little
    higher than the one before.
 5. **Refund (event 58).** 4 sats of the rebate reserve come back
@@ -240,13 +241,50 @@ Read one row, `spread-10`: the rung sells 19.997880 STX at 399.04 sats per
 STX. The taker gets that STX minus its 10 bps fee. The rung gets 7,980 sats,
 minus its 7-sat fee, plus a 15-sat rebate: 7,988 sats.
 
-### A new kind of dust: the maker's leftover
+### What happens to a rung that fills
 
-Events 29, 36, 43 and 50 send about 0.002 STX **back to the rung**
-(`refund-y`). A sell rung rested exactly 20 STX. The walk fills it in whole
-sats, so a few thousand micro-STX are left over. That is below the 1 STX
-minimum, so it cannot keep resting and goes back to the maker. It is the
-maker-side twin of the taker's `token-y-rolled` refund in example 1.
+Take `sell-stx-spread-0` in the batch. Its whole order fills:
+
+- The settlement log shows `y-cleared u20000000`: all 20 STX it rested
+  cleared at the mid.
+- Its payout log (`distribute-y-depositor`) shows `equity-y u0` and
+  `y-rolled u0`: nothing is left resting, and nothing carries to the next
+  cycle.
+- It receives **7,980 sats** (event 20): 7,972 cleared, minus the 7-sat fee,
+  plus the 15-sat rebate.
+
+So after this step the rung holds **no STX** in the market. Its members'
+shares are now backed by those 7,980 sats. A position is not "reduced" and
+left open: when it fills in full, it is closed, and the proceeds replace it.
+
+Rungs 10-40 end the same way, apart from a small leftover (next section).
+`spread-50` fills only in part and keeps resting about 11.45 STX.
+
+### The maker's leftover: about 0.002 STX per rung
+
+Events 29, 36, 43 and 50 send a tiny amount of STX **back to the rung**
+(`refund-y`). This is rounding change, not a fee. Take `spread-10`:
+
+1. The rung rested exactly **20.000000 STX**.
+2. The walk fills in **whole sats**. At this rung's price, 1 sat costs about
+   **2,506 micro-STX** (0.0025 STX).
+3. 7,980 sats at that price is **19.997880 STX** traded.
+4. That leaves 20.000000 - 19.997880 = **0.002120 STX**. That is less than
+   one more sat costs, so it cannot fill.
+5. It is also far below the **1 STX minimum** to keep resting. The contract
+   sends it back to the rung instead of leaving a dead scrap in the book.
+
+| Rung | Rested | Traded | **Back to rung** |
+|---|---|---|---|
+| spread-10 | 20.000000 | 19.997880 | **0.002120** |
+| spread-20 | 20.000000 | 19.997890 | **0.002110** |
+| spread-30 | 20.000000 | 19.997860 | **0.002140** |
+| spread-40 | 20.000000 | 19.997789 | **0.002211** |
+
+The rung keeps this change, and its position in the market is fully closed.
+It is the maker-side twin of the taker's `token-y-rolled` refund in
+example 1: in both cases a remainder below the minimum goes back to its
+owner instead of resting.
 
 ### Where every unit went
 
