@@ -16,9 +16,9 @@
 ;; v3: the smart swaps take `mid` from the caller instead of verifying the
 ;; update a second time through refresh-mid (the market verifies it inside
 ;; swap regardless); a zero limit or mid is refused up front (u3006 /
-;; u3007). Market unchanged: markets-sbtc-stx-jing-v6 (deployed as
+;; u3007). Market unchanged: markets-sbtc-stx-jing-v6-2 (deployed as
 ;; markets-sbtc-stx-jingswap).
-;; v2: the market is markets-sbtc-stx-jing-v6 on Pyth Lazer; `update` is a
+;; v2: the market is markets-sbtc-stx-jing-v6-2 on Pyth Lazer; `update` is a
 ;; signed Lazer update (both feeds, evm format, with confidence) instead of
 ;; a Hermes VAA. Nothing else changed.
 ;; Retail swap router for the sBTC/STX pair: Jing's maker/taker book plus
@@ -108,10 +108,10 @@
 ;; proceeds land as real STX, which is why `stx-get-balance` is the right
 ;; measure on that side.
 
-;; v5: the router v4 bytes bound to markets-sbtc-stx-jing-v6 (pegged orders,
+;; v5: the router v4 bytes bound to markets-sbtc-stx-jing-v6-2 (pegged orders,
 ;; jing-core-v5). The router only calls swap, get-taker-capacity and
 ;; get-min-deposits, whose arities did not change; nothing else moved.
-;; The market: markets-sbtc-stx-jing-v6 at chavita.btc's address, the same
+;; The market: markets-sbtc-stx-jing-v6-2 at chavita.btc's address, the same
 ;; deployer as jing-core-v3. v2 there (8906186) predates the bounty fixes
 ;; and the post-walk swap tuple this wrapper relies on, so it is never the
 ;; target. The stxer harness deploys v3 at exactly this id against the live
