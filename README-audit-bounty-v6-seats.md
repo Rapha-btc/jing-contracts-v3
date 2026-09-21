@@ -11,9 +11,11 @@ path, ladder-owned protected seats with a local copy on the market, and the
 two miner-band rungs. Design and every harness id:
 `contracts/README-markets-v6-pegged.md`.
 
-Nine submissions so far; the real findings are fixed on master. **No winner picked
-yet**: the bounty is open until it closes and later entries are reviewed the
-same way. Nothing in scope is deployed, so every fix rides the next deploy.
+Nine submissions were reviewed and the real findings are fixed on master.
+**Resolution (2026-09-20): Diamond Lance / Nilo wins the 21,000-sat bounty;
+Patient Reed / apeirs receives a separate discretionary 5,000-sat bonus.**
+Nothing in scope is deployed, so every fix rides the next deploy. Payment is
+not marked complete here until confirmed transaction ids exist.
 
 ## Source moved since posting (2026-09-15): read this before submitting
 
@@ -61,7 +63,7 @@ or stuck-funds path, which is the space this bounty pays for.
 | 8 | Swift Lumen | Source-bounded confirmation; independently reached the replacement-at-50 edge and explicitly declined to claim it as novel because submission 7 had already disclosed it | yes | n/a | No novel finding, and says so. Noted here because declining to relabel a known mechanism as your own is the behaviour this bounty wants. |
 | 9 | Noble Ox | The Sep. 19 maker-margin change omitted the widened maker check from both non-crossing `reprice-or-swap` branches. An existing maker could write a limit inside the protected band, where `set-token-*-limit` rejected the same order, without taking or paying the age-adjusted rebate | yes | MEDIUM | **Fixed and fork-proven** (section 7): actual crosses still swap; non-crossing writes inside 40 bps now return u1016 on both sides; safe writes and an empty opposite book still work. Exact-source stxer matrix 22/22. |
 
-Leading submission: **Diamond Lance / Nilo** (5). The only CRITICAL, and the
+Winner: **Diamond Lance / Nilo** (5). The only CRITICAL, and the
 only finding in either round where member funds are lost rather than delayed:
 a rung that reaches the zero index is frozen forever with everything inside
 it. It is also the only one that caught a defect we shipped ourselves, in a
@@ -78,6 +80,19 @@ CRITICAL or the earlier novel HIGH findings.
 Nobody has delivered a qualifying 5,000-sat read-count bonus result. Devoted
 Basilisk proposed removing the redundant second full-book fold, but supplied
 no measured 20%+ fork result with runtime and source-size evidence.
+
+### Award resolution
+
+| award | recipient | submission | amount | status |
+|---|---|---|---:|---|
+| bounty winner | Diamond Lance / Nilo | `mu3inhgvd0f14a3b0d63` | 21,000 sats | selected; payment confirmation pending |
+| discretionary bonus | Patient Reed / apeirs | `mu100o0l34a74e46ff24` | 5,000 sats | selected; separate direct payment pending |
+
+The native AIBTC bounty record supports one winner and one fixed reward. The
+21,000-sat payment must therefore be bound to the bounty through its required
+memo and paid proof; the 5,000-sat Patient Reed award is deliberately recorded
+as a separate discretionary payment, not as a qualifying optimization-bonus
+claim and not as a second platform winner.
 
 ### Severity in plain terms
 
