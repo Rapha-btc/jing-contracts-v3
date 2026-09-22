@@ -614,6 +614,102 @@
   )
 )
 
+(define-public (log-limit-y
+    (depositor principal)
+    (limit uint)
+    (spread-bps (optional uint))
+    (cycle uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "limit-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
+      spread-bps: spread-bps,
+      cycle: cycle,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-limit-x
+    (depositor principal)
+    (limit uint)
+    (spread-bps (optional uint))
+    (cycle uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "limit-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
+      spread-bps: spread-bps,
+      cycle: cycle,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-limit-y
+    (depositor principal)
+    (limit uint)
+    (spread-bps (optional uint))
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-limit-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
+      spread-bps: spread-bps,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-limit-x
+    (depositor principal)
+    (limit uint)
+    (spread-bps (optional uint))
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-limit-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      limit: limit,
+      spread-bps: spread-bps,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-peg-x
     (depositor principal)
     (spread-bps uint)

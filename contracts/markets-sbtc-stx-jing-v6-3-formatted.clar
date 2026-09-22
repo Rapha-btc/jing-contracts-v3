@@ -73,6 +73,8 @@
 (define-constant ERR_CYCLE_OPEN (err u1027))
 (define-constant ERR_NOT_A_SEAT (err u1028))
 (define-constant ERR_SEATS_FULL (err u1029))
+(define-constant ERR_NOTHING_PENDING (err u1030))
+(define-constant ERR_PRICE_BEFORE_ORDER (err u1032))
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
 (define-data-var paused bool false)
@@ -243,6 +245,28 @@
     spread-bps: (optional uint),
     placed-at: uint,
   }
+)
+(define-map token-y-pending-limits
+  principal
+  {
+    limit: uint,
+    spread-bps: (optional uint),
+    submitted-at: uint,
+  }
+)
+(define-map token-x-pending-limits
+  principal
+  {
+    limit: uint,
+    spread-bps: (optional uint),
+    submitted-at: uint,
+  }
+)
+(define-read-only (get-token-y-pending-limit (depositor principal))
+  (map-get? token-y-pending-limits depositor)
+)
+(define-read-only (get-token-x-pending-limit (depositor principal))
+  (map-get? token-x-pending-limits depositor)
 )
 (define-map token-y-parked
   principal
@@ -1057,6 +1081,7 @@
         u0
         (- stacks-block-time oldest)
       ),
+      at: oldest,
     })
   )
 )
@@ -1813,7 +1838,6 @@
 (define-public (set-token-y-limit
     (limit-price uint)
     (spread-bps (optional uint))
-    (update (buff 8192))
   )
   (begin
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
@@ -1825,31 +1849,73 @@
       )
       ERR_NOTHING_TO_WITHDRAW
     )
-    (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
-      (let ((price (try! (fresh-classification-price update))))
-        (asserts!
-          (not (gate-takes-as-y price (order-y-price limit-price spread-bps price)))
-          ERR_MUST_USE_SWAP
+    (if (is-eq (len (get-token-x-depositors (var-get current-cycle))) u0)
+      (begin
+        (map-set token-y-deposit-limits tx-sender {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          placed-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price
+          spread-bps (var-get current-cycle) (var-get token-x)
+          (var-get token-y)
+        ))
+        (ok true)
+      )
+      (begin
+        (map-set token-y-pending-limits tx-sender {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          submitted-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-pending-limit-y tx-sender limit-price
+          spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+        ))
+        (ok false)
+      )
+    )
+  )
+)
+(define-public (settle-token-y-limit
+    (who principal)
+    (update (buff 8192))
+  )
+  (let (
+      (pending (unwrap! (map-get? token-y-pending-limits who) ERR_NOTHING_PENDING))
+      (fresh (try! (fresh-classification-price-aged update)))
+      (price (get price fresh))
+      (limit-price (get limit pending))
+      (spread-bps (get spread-bps pending))
+    )
+    (asserts! (> (get at fresh) (get submitted-at pending))
+      ERR_PRICE_BEFORE_ORDER
+    )
+    (map-delete token-y-pending-limits who)
+    (if (or
+        (would-take-as-y price (order-y-price limit-price spread-bps price))
+        (and
+          (is-eq (get-token-y-deposit (var-get current-cycle) who) u0)
+          (is-eq (get-token-y-parked who) u0)
         )
       )
-      true
+      (ok false)
+      (begin
+        (map-set token-y-deposit-limits who {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          placed-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-limit-y who limit-price spread-bps
+          (var-get current-cycle) (var-get token-x) (var-get token-y)
+        ))
+        (ok true)
+      )
     )
-    (map-set token-y-deposit-limits tx-sender {
-      limit: limit-price,
-      spread-bps: spread-bps,
-      placed-at: stacks-block-time,
-    })
-    (try! (contract-call? .jing-core-v5 log-set-limit-y tx-sender limit-price
-      (var-get token-x) (var-get token-y)
-    ))
-    (try! (log-peg-y-if spread-bps limit-price))
-    (ok true)
   )
 )
 (define-public (set-token-x-limit
     (limit-price uint)
     (spread-bps (optional uint))
-    (update (buff 8192))
   )
   (begin
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
@@ -1861,25 +1927,68 @@
       )
       ERR_NOTHING_TO_WITHDRAW
     )
-    (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
-      (let ((price (try! (fresh-classification-price update))))
-        (asserts!
-          (not (gate-takes-as-x price (order-x-price limit-price spread-bps price)))
-          ERR_MUST_USE_SWAP
+    (if (is-eq (len (get-token-y-depositors (var-get current-cycle))) u0)
+      (begin
+        (map-set token-x-deposit-limits tx-sender {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          placed-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price
+          spread-bps (var-get current-cycle) (var-get token-x)
+          (var-get token-y)
+        ))
+        (ok true)
+      )
+      (begin
+        (map-set token-x-pending-limits tx-sender {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          submitted-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-pending-limit-x tx-sender limit-price
+          spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+        ))
+        (ok false)
+      )
+    )
+  )
+)
+(define-public (settle-token-x-limit
+    (who principal)
+    (update (buff 8192))
+  )
+  (let (
+      (pending (unwrap! (map-get? token-x-pending-limits who) ERR_NOTHING_PENDING))
+      (fresh (try! (fresh-classification-price-aged update)))
+      (price (get price fresh))
+      (limit-price (get limit pending))
+      (spread-bps (get spread-bps pending))
+    )
+    (asserts! (> (get at fresh) (get submitted-at pending))
+      ERR_PRICE_BEFORE_ORDER
+    )
+    (map-delete token-x-pending-limits who)
+    (if (or
+        (would-take-as-x price (order-x-price limit-price spread-bps price))
+        (and
+          (is-eq (get-token-x-deposit (var-get current-cycle) who) u0)
+          (is-eq (get-token-x-parked who) u0)
         )
       )
-      true
+      (ok false)
+      (begin
+        (map-set token-x-deposit-limits who {
+          limit: limit-price,
+          spread-bps: spread-bps,
+          placed-at: stacks-block-time,
+        })
+        (try! (contract-call? .jing-core-v6 log-limit-x who limit-price spread-bps
+          (var-get current-cycle) (var-get token-x) (var-get token-y)
+        ))
+        (ok true)
+      )
     )
-    (map-set token-x-deposit-limits tx-sender {
-      limit: limit-price,
-      spread-bps: spread-bps,
-      placed-at: stacks-block-time,
-    })
-    (try! (contract-call? .jing-core-v5 log-set-limit-x tx-sender limit-price
-      (var-get token-x) (var-get token-y)
-    ))
-    (try! (log-peg-x-if spread-bps limit-price))
-    (ok true)
   )
 )
 (define-public (reprice-or-swap-token-y
@@ -1903,7 +2012,7 @@
     (map-set token-y-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
-      placed-at: u0,
+      placed-at: stacks-block-time,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-y tx-sender limit-price
       (var-get token-x) (var-get token-y)
@@ -1976,7 +2085,7 @@
     (map-set token-x-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
-      placed-at: u0,
+      placed-at: stacks-block-time,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-x tx-sender limit-price
       (var-get token-x) (var-get token-y)
