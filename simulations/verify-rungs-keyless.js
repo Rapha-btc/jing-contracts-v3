@@ -1,3 +1,4 @@
+import { rungReceipt } from "./_rung-receipt.js";
 // verify-rungs-keyless.js
 // SELF-VERIFYING stxer mainnet-fork harness for jing-ladder + one rung
 // (jing-buy-stx or jing-sell-stx, SIDE=buy|sell) against the LIVE
@@ -90,34 +91,34 @@ evalc("ladder get-rung", `(contract-call? '${LADDER} get-rung "${SIDE_STR}" u${C
 
 // ---- 3. deposits: under the minimum is held, over is pushed ----
 call("deposit below MIN_DEPOSIT -> u7005", A, RID, "deposit", [uintCV(1), NO_UPDATE], "(err u7005)");
-call("A deposit 500 (under market min) -> held", A, RID, "deposit", [u(500), NO_UPDATE], "(ok true)");
+call("A deposit 500 (under market min) -> held", A, RID, "deposit", [u(500), NO_UPDATE], rungReceipt("deposit"));
 evalc("state after 500: held 500, resting 0", "(get-state)");
-call("A deposit 600 -> 1100 pushed to market", A, RID, "deposit", [u(600), NO_UPDATE], "(ok true)");
+call("A deposit 600 -> 1100 pushed to market", A, RID, "deposit", [u(600), NO_UPDATE], rungReceipt("deposit"));
 evalc("state after 1100: held 0, resting 1100", "(get-state)");
 
 // ---- 4. operator raises the market minimum to 5000: the rung must follow ----
 call("operator set-min to 5000", DEP, MARKET, BUY ? "set-min-token-x-deposit" : "set-min-token-y-deposit", [uintCV(MIN1)], "(ok true)");
 evalc("min-market now 5000", "(min-market)");
-call("A deposit 1000 with min 5000: to-push 1000 < 5000 -> HELD (stale constant would push and abort u1004)", A, RID, "deposit", [u(1000), NO_UPDATE], "(ok true)");
+call("A deposit 1000 with min 5000: to-push 1000 < 5000 -> HELD (stale constant would push and abort u1004)", A, RID, "deposit", [u(1000), NO_UPDATE], rungReceipt("deposit"));
 evalc("state: held 1000, resting 1100", "(get-state)");
-call("A deposit 4000 -> 5000 pushed, resting 6100", A, RID, "deposit", [u(4000), NO_UPDATE], "(ok true)");
+call("A deposit 4000 -> 5000 pushed, resting 6100", A, RID, "deposit", [u(4000), NO_UPDATE], rungReceipt("deposit"));
 evalc("state: held 0, resting 6100", "(get-state)");
 
 // ---- 5. withdraws: partial keeps >= min on market, else whole-cancel + hold ----
 call("withdraw 0 -> u7004", A, RID, "withdraw", [uintCV(0)], "(err u7004)");
 call("stranger withdraw -> u7006", STRANGER, RID, "withdraw", [u(1)], "(err u7006)");
-call("A withdraw 500: 6100-500=5600 >= 5000 -> partial withdraw-token", A, RID, "withdraw", [u(500)], "(ok true)");
+call("A withdraw 500: 6100-500=5600 >= 5000 -> partial withdraw-token", A, RID, "withdraw", [u(500)], rungReceipt("withdraw"));
 evalc("state: held 0, resting 5600", "(get-state)");
-call("A withdraw 1000: 5600-1000=4600 < 5000 -> whole cancel, 4600 held", A, RID, "withdraw", [u(1000)], "(ok true)");
+call("A withdraw 1000: 5600-1000=4600 < 5000 -> whole cancel, 4600 held", A, RID, "withdraw", [u(1000)], rungReceipt("withdraw"));
 evalc("state: held 4600, resting 0", "(get-state)");
 evalc("A position: 4600 unsold", `(get-position '${A})`);
 
 // ---- 6. second member; shares; full exits ----
-call("B deposit 2000 -> 6600 pushed", B, RID, "deposit", [u(2000), NO_UPDATE], "(ok true)");
+call("B deposit 2000 -> 6600 pushed", B, RID, "deposit", [u(2000), NO_UPDATE], rungReceipt("deposit"));
 evalc("state: held 0, resting 6600, shares 6600e12", "(get-state)");
 evalc("B position 2000", `(get-position '${B})`);
 evalc("A before exit", balOf(A), "A0");
-call("A withdraw everything (999999): 6600-4600=2000 < 5000 -> whole cancel, pays 4600, holds 2000", A, RID, "withdraw", [u(999999)], "(ok true)");
+call("A withdraw everything (999999): 6600-4600=2000 < 5000 -> whole cancel, pays 4600, holds 2000", A, RID, "withdraw", [u(999999)], rungReceipt("withdraw"));
 evalc("A after exit", balOf(A), "A1");
 evalc("state: held 2000, resting 0, shares 2000e12", "(get-state)");
 evalc("A position gone", `(get-position '${A})`);
@@ -130,7 +131,7 @@ call("sync (anyone) folds the gift as proceeds", STRANGER, RID, "sync", [], "(ok
 evalc("B position: proceeds = whole gift", `(get-position '${B})`);
 call("B claim -> ok", B, RID, "claim", [], null);
 evalc("B position after claim: proceeds 0", `(get-position '${B})`);
-call("B withdraw 2000 (from held) -> ok", B, RID, "withdraw", [u(2000)], "(ok true)");
+call("B withdraw 2000 (from held) -> ok", B, RID, "withdraw", [u(2000)], rungReceipt("withdraw"));
 evalc("state: empty pool, shares 0", "(get-state)");
 evalc("rung sats/ustx balance 0", balOf(RID));
 
@@ -147,7 +148,7 @@ async function main() {
   plan.forEach((p, i) => {
     const s = steps[i];
     if (p.kind === "deploy") { const t = s?.Result?.Transaction; const ok = !!t && !("Err" in t) && !t.Ok?.vm_error; const why = t?.Ok?.vm_error || t?.Err; console.log(`${ok ? "✅" : "❌"} [${i}] ${p.label}${ok ? "" : ` -> ${why}`}`); ok ? pass++ : fail++; }
-    else if (p.kind === "tx") { const d = decodeTx(s); const ok = p.expect === null ? d.ok : d.str === p.expect; console.log(`${ok ? "✅" : "❌"} [${i}] ${p.label}\n        got ${d.str}${ok ? "" : `  EXPECTED ${p.expect}`}`); ok ? pass++ : fail++; }
+    else if (p.kind === "tx") { const d = decodeTx(s); const ok = p.expect === null ? d.ok : (typeof p.expect === "function" ? p.expect(d.str) : d.str === p.expect); console.log(`${ok ? "✅" : "❌"} [${i}] ${p.label}\n        got ${d.str}${ok ? "" : `  EXPECTED ${p.expect}`}`); ok ? pass++ : fail++; }
     else { const v = decodeEval(s); if (p.capture) captured[p.capture] = v; console.log(`ℹ️  [${i}] ${p.label}: ${v}`); }
   });
   if (captured.A0 && captured.A1) { const d = uintFromOk(captured.A1) - uintFromOk(captured.A0); const ok = d === BigInt(4600 * U); console.log(`${ok ? "✅" : "❌"} A exit delta ${d} (expected ${4600 * U})`); ok ? pass++ : fail++; }

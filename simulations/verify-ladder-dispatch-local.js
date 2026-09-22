@@ -50,7 +50,8 @@ const fixture = `
       (asserts! (not (is-eq amount u13)) (err u999))
       (try! (stx-transfer? amount tx-sender current-contract))
       (map-set credits tx-sender (+ amount (credit tx-sender)))
-      (ok (not (is-eq amount u17)))
+      (asserts! (not (is-eq amount u17)) (err u997))
+      (ok { amount: amount, shares: amount, epoch: u0, stx-paid: u0, sbtc-paid: u0 })
     ))
   (define-public (withdraw (amount uint))
     (let ((member tx-sender) (have (credit tx-sender)))
@@ -61,8 +62,9 @@ const fixture = `
         (try! (as-contract? ((with-stx take))
           (try! (stx-transfer? take current-contract member))
         ))
-        (ok (not (is-eq amount u17))))))
-  (define-public (claim) (ok true))
+        (asserts! (not (is-eq amount u17)) (err u997))
+        (ok { stx: take, sbtc: u0 }))))
+  (define-public (claim) (ok { stx: u0, sbtc: u0 }))
 `;
 for (let i = 0; i < 10; i++) {
   deploy(`rung-${i}`, fixture);
@@ -72,8 +74,26 @@ const entries = list => Cl.list(list.map(([i, amount]) => Cl.tuple({ rung: cp(`r
 const dispatch = (total, rows, side = 'sell') => call('jing-ladder-dispatch', `deposit-${side}`, [Cl.uint(total), entries(rows), Cl.bufferFromHex('')]);
 const withdraw = (rows, side = 'sell') => call('jing-ladder-dispatch', `withdraw-${side}`, [entries(rows)]);
 const credit = i => read(`rung-${i}`, 'credit', [Cl.standardPrincipal(USER)]);
+// Exact response checks, including every per-rung result and the aggregate.
+const sortedTuple = fields => Cl.tuple(Object.fromEntries(Object.entries(fields).sort(([a], [b]) => a.localeCompare(b))));
+const expectedDeposit = (total, rows) => cvToString(Cl.ok(sortedTuple({
+  amount: Cl.uint(total), rungs: Cl.uint(rows.length),
+  'stx-paid': Cl.uint(0), 'sbtc-paid': Cl.uint(0),
+  positions: Cl.list(rows.map(([i, amount]) => sortedTuple({
+    rung: cp(`rung-${i}`), amount: Cl.uint(amount), shares: Cl.uint(amount),
+    epoch: Cl.uint(0),
+    'stx-paid': Cl.uint(0), 'sbtc-paid': Cl.uint(0),
+  }))),
+})));
+const expectedExit = rows => cvToString(Cl.ok(sortedTuple({
+  rungs: Cl.uint(rows.length), withdrawn: Cl.uint(rows.length), sbtc: Cl.uint(0),
+  stx: Cl.uint(rows.reduce((sum, [, take]) => sum + take, 0)),
+  positions: Cl.list(rows.map(([i, take]) => sortedTuple({
+    rung: cp(`rung-${i}`), stx: Cl.uint(take), sbtc: Cl.uint(0),
+  }))),
+})));
 const rows = Array.from({ length: 10 }, (_, i) => [i, (i + 1) * 100]);
-check('weighted ten-rung dispatch', string(dispatch(5500, rows)), '(ok (tuple (amount u5500) (rungs u10)))');
+check('weighted ten-rung dispatch with exact receipt', string(dispatch(5500, rows)), expectedDeposit(5500, rows));
 for (let i = 0; i < 10; i++) {
   check(`user owns rung ${i}`, credit(i), `u${(i + 1) * 100}`);
   check(`helper owns no shares ${i}`, read(`rung-${i}`, 'credit', [cp('jing-ladder-dispatch')]), 'u0');
@@ -88,7 +108,7 @@ const invalid = [
   ['duplicate', 200, [[0, 100], [0, 100]], 'sell', 7105],
   ['wrong side', 100, [[0, 100]], 'buy', 7104],
   ['second leg errors', 113, [[0, 100], [1, 13]], 'sell', 999],
-  ['second leg returns false after transfer', 117, [[0, 100], [1, 17]], 'sell', 7107],
+  ['second leg errors after transfer', 117, [[0, 100], [1, 17]], 'sell', 997],
   ['uint budget overflow prevented', (1n << 128n) - 1n, [[0, (1n << 128n) - 1n], [1, 1]], 'sell', 7102],
 ];
 for (const [label, total, list, side, error] of invalid) {
@@ -101,21 +121,21 @@ for (const [label, total, list, side, error] of invalid) {
 call('jing-ladder', 'set-seat', [cp('rung-0'), Cl.uint(0)]);
 check('retired rung rejected', string(dispatch(100, [[0, 100]])), '(err u7104)');
 call('jing-ladder', 'set-seat', [cp('rung-0'), Cl.uint(1)]);
-check('current buy seat accepted', string(dispatch(100, [[0, 100]], 'buy')), '(ok (tuple (amount u100) (rungs u1)))');
+check('current buy seat accepted', string(dispatch(100, [[0, 100]], 'buy')), expectedDeposit(100, [[0, 100]]));
 check('same seat rejected on sell side', string(dispatch(100, [[0, 100]], 'sell')), '(err u7104)');
 const withdrawBalance = BigInt(balance(USER).slice(1));
 check('rung 1 holds deposited STX', balance(`${DEP}.rung-1`), 'u200');
 check('rung 2 holds deposited STX', balance(`${DEP}.rung-2`), 'u300');
 check('rung 3 holds deposited STX', balance(`${DEP}.rung-3`), 'u400');
 check('one call withdraws three sell rungs', string(withdraw([[1, 50], [2, 999999], [3, 100]])),
-  '(ok (tuple (rungs u3) (withdrawn u3)))');
+  expectedExit([[1, 50], [2, 300], [3, 100]]));
 check('partial withdraw credited', credit(1), 'u150');
 check('oversized request capped to full position', credit(2), 'u0');
 check('third rung partially withdrawn', credit(3), 'u300');
 check('three-rung proceeds paid directly to user', balance(USER), `u${withdrawBalance + 450n}`);
 call('jing-ladder', 'set-seat', [cp('rung-4'), Cl.uint(0)]);
 check('retired but registered rung remains withdrawable', string(withdraw([[4, 999999]])),
-  '(ok (tuple (rungs u1) (withdrawn u1)))');
+  expectedExit([[4, 500]]));
 check('retired rung fully exited', credit(4), 'u0');
 check('withdraw rejects wrong registered side', string(withdraw([[0, 1]], 'sell')), '(err u7108)');
 check('withdraw rejects zero amount', string(withdraw([[1, 0]])), '(err u7103)');
@@ -125,13 +145,13 @@ check('later withdraw error rolls entire batch back', string(withdraw([[1, 10], 
 check('failed batch restores wallet', balance(USER), exitBefore);
 check('failed batch restores first rung', credit(1), exitCredit1);
 check('failed batch preserves failing rung', credit(5), exitCredit5);
-check('false withdraw rolls entire batch back', string(withdraw([[1, 10], [5, 17]])), '(err u7109)');
-check('false batch restores wallet', balance(USER), exitBefore);
-check('false batch restores first rung', credit(1), exitCredit1);
-check('false batch restores second rung', credit(5), exitCredit5);
+check('post-transfer error rolls entire batch back', string(withdraw([[1, 10], [5, 17]])), '(err u997)');
+check('post-transfer error batch restores wallet', balance(USER), exitBefore);
+check('post-transfer error batch restores first rung', credit(1), exitCredit1);
+check('post-transfer error batch restores second rung', credit(5), exitCredit5);
 deploy('forwarder', `
-  (use-trait rung-deposit .jing-rung-deposit-trait.rung-deposit-trait)
-  (define-public (forward (target <rung-deposit>))
+  (use-trait rung .jing-rung-deposit-trait.rung-trait)
+  (define-public (forward (target <rung>))
     (contract-call? .jing-ladder-dispatch deposit-buy u100
       (list { rung: target, amount: u100 }) 0x))
 `);

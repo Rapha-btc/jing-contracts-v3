@@ -1,3 +1,4 @@
+import { rungReceipt } from "./_rung-receipt.js";
 // Regression harness for the partial-withdraw share burn in jing-buy-stx
 // (bounty finding, Proud Haven, 2026-09-09: floor(amount*SCALE/fi) burned too
 // few shares once fi < SCALE, so 98 x withdraw(1) paid 98 sats on a 66-sat
@@ -77,8 +78,8 @@ call("initialize rung", DEP, RUNG, "initialize", [uintCV(33150)], "(ok true)");
 
 // A owns 100 shares; B owns 1,400. The 500-sat fill leaves 1,000 of 1,500,
 // so A's indexed entitlement becomes floor(100 * 2/3) = 66 sats.
-call("A deposits 100 sats", A, RUNG, "deposit", [uintCV(100), noUpdate], "(ok true)");
-call("B deposits 1400 sats", B, RUNG, "deposit", [uintCV(1400), noUpdate], "(ok true)");
+call("A deposits 100 sats", A, RUNG, "deposit", [uintCV(100), noUpdate], rungReceipt("deposit"));
+call("B deposits 1400 sats", B, RUNG, "deposit", [uintCV(1400), noUpdate], rungReceipt("deposit"));
 call("mock consumes 500 sats as a fill", DEP, MARKET, "simulate-fill-x",
   [contractPrincipalCV(DEP, RUNG_NAME), uintCV(500)], "(ok u1000)");
 call("sync records the 2/3 unfilled fraction", DEP, RUNG, "sync", [], "(ok true)");
@@ -89,7 +90,7 @@ evalc("A sBTC balance immediately before withdrawals", `(contract-call? '${SBTC}
 // shares. Repeating it exhausts A's shares after receiving 98 sats.
 for (let i = 1; i <= 98; i++) {
   // ceil burn: 2 shares per sat at fi = 2/3, so 100 shares last exactly 50 sats
-  call(`A withdraws 1 sat (${i}/98)`, A, RUNG, "withdraw", [uintCV(1)], i <= 50 ? "(ok true)" : "(err u7006)");
+  call(`A withdraws 1 sat (${i}/98)`, A, RUNG, "withdraw", [uintCV(1)], i <= 50 ? rungReceipt("withdraw") : "(err u7006)");
 }
 evalc("A position after repeated withdrawals", `(get-position '${A})`, "position1");
 evalc("A sBTC balance after repeated withdrawals", `(contract-call? '${SBTC} get-balance '${A})`, "balance1");
@@ -109,7 +110,7 @@ async function main() {
       if (!ok) console.log(`FAIL ${item.label}: ${JSON.stringify(r)}`);
     } else if (item.kind === "tx") {
       const decoded = decodeTx(step);
-      const ok = decoded.ok && (item.expect === null || decoded.text === item.expect);
+      const ok = decoded.ok && (item.expect === null || (typeof item.expect === "function" ? item.expect(decoded.text) : decoded.text === item.expect));
       ok ? passed++ : failed++;
       if (!ok) console.log(`FAIL ${item.label}: ${decoded.text}; expected ${item.expect}`);
     } else {
@@ -135,4 +136,3 @@ async function main() {
   if (failed) process.exit(1);
 }
 main().catch((e) => { console.error(e); process.exit(1); });
-

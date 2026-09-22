@@ -1,3 +1,4 @@
+import { rungReceipt } from "./_rung-receipt.js";
 // verify-v6-rungs-fill-lazer.js
 // The FIXED rungs on markets-sbtc-stx-jing-v6 with a real fill (PYTH_API_KEY):
 // the keyless harness never fills. Deploys the v6 stack + ladder + one fixed
@@ -65,8 +66,8 @@ async function main() {
   tx(`init ${SELL}`, call(DEP, "initialize", [uintCV(SELL_C)], rid(SELL)), "(ok true)");
 
   // F1 both rungs rest: fixed orders on v6 carry spread-bps none
-  tx("F1 A deposits 20000 sats into the buy rung", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), "(ok true)");
-  tx("F1 S deposits 60 STX into the sell rung (x side rests: price read)", call(S, "deposit", [uintCV(60_000_000), UPD], rid(SELL)), "(ok true)");
+  tx("F1 A deposits 20000 sats into the buy rung", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), rungReceipt("deposit"));
+  tx("F1 S deposits 60 STX into the sell rung (x side rests: price read)", call(S, "deposit", [uintCV(60_000_000), UPD], rid(SELL)), rungReceipt("deposit"));
   ev("F1 buy rung order: fixed at its price", `(get-token-x-order '${rid(BUY)})`, (v) => field(v, "limit") === `u${BUY_P}` && field(v, "spread-bps") === "none");
   ev("F1 sell rung order: fixed at its price", `(get-token-y-order '${rid(SELL)})`, (v) => field(v, "limit") === `u${SELL_P}` && field(v, "spread-bps") === "none");
 
@@ -90,8 +91,8 @@ async function main() {
   tx("F3 S claims", call(S, "claim", [], rid(SELL)), (v) => String(v).startsWith("(ok"));
   const s1 = ev("F3 S sBTC after", `(contract-call? '${SBTC} get-balance '${S})`, () => true);
   // F4 exits: what is left comes back
-  tx("F4 A withdraws everything", call(A, "withdraw", [uintCV(999_999_999)], rid(BUY)), "(ok true)");
-  tx("F4 S withdraws everything", call(S, "withdraw", [uintCV(999_999_999_999n)], rid(SELL)), "(ok true)");
+  tx("F4 A withdraws everything", call(A, "withdraw", [uintCV(999_999_999)], rid(BUY)), rungReceipt("withdraw"));
+  tx("F4 S withdraws everything", call(S, "withdraw", [uintCV(999_999_999_999n)], rid(SELL)), rungReceipt("withdraw"));
   ev("F4 buy rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(BUY));
   ev("F4 sell rung empty", "(get-state)", (v) => field(v, "total-shares") === "u0", rid(SELL));
 
@@ -111,9 +112,9 @@ async function main() {
   tx(`init ${SELLP} (spread 0: pegged at the mid)`, call(DEP, "initialize", [uintCV(0), uintCV(SELLP_C)], rid(SELLP)), "(ok true)");
   tx(`init ${SELLB} (spread 0, seated)`, call(DEP, "initialize", [uintCV(0), trueCV()], rid(SELLB)), "(ok true)");
   const STX5 = 5_000_000;
-  tx("F5 S deposits 5 STX into the in-range fixed sell rung (x side empty: no crossing)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLF)), "(ok true)");
-  tx("F5 S deposits 5 STX into the zero-spread sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), "(ok true)");
-  tx("F5 S deposits 5 STX into the zero-spread sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), "(ok true)");
+  tx("F5 S deposits 5 STX into the in-range fixed sell rung (x side empty: no crossing)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLF)), rungReceipt("deposit"));
+  tx("F5 S deposits 5 STX into the zero-spread sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), rungReceipt("deposit"));
+  tx("F5 S deposits 5 STX into the zero-spread sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), rungReceipt("deposit"));
   for (const r of [SELLF, SELLP, SELLB]) ev(`F5 ${r} resting 5 STX`, "(get-state)", (v) => field(v, "resting") === `u${STX5}` && field(v, "held-ustx") === "u0", rid(r));
   tx("F5 S rests a deep direct bid: 100 STX at -2%", call(S, "deposit-token-y", [uintCV(100_000_000), uintCV((MID * 98n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u100000000)");
   const SATS_25_STX = (25n * 10n ** 16n) / MID; // ~25 STX worth of sats: the three rungs (15 STX) cleared whole at the mid, the rest walks the deep bid
@@ -124,7 +125,7 @@ async function main() {
     tx(`F5 sync ${r}: sold out -> the epoch closes`, call(B, "sync", [], rid(r)), "(ok true)");
     ev(`F5 ${r} epoch 1, shares reset, nothing resting or held`, "(get-state)", (v) => field(v, "epoch") === "u1" && field(v, "total-shares") === "u0" && field(v, "resting") === "u0" && field(v, "held-ustx") === "u0", rid(r));
     ev(`F5 ${r} S's position: from the closed epoch, only sats owed`, `(get-position '${S})`, (v) => field(v, "stx") === "u0" && uintOf(field(v, "sbtc")) > 0n, rid(r));
-    tx(`F5 S claims on ${r} (old epoch: paid in full, position gone)`, call(S, "claim", [], rid(r)), "(ok true)");
+    tx(`F5 S claims on ${r} (old epoch: paid in full, position gone)`, call(S, "claim", [], rid(r)), rungReceipt("claim"));
     ev(`F5 ${r} S's position gone`, `(get-position '${S})`, (v) => field(v, "shares") === "u0" && field(v, "sbtc") === "u0", rid(r));
     tx(`F5 S withdraws on ${r} -> u7006 (no position)`, call(S, "withdraw", [uintCV(1)], rid(r)), "(err u7006)");
   }

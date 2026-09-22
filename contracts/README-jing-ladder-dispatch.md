@@ -5,6 +5,111 @@ seated band rungs, or withdraws the user's unsold positions from 1–10
 registered rungs, in one transaction. Deploy `jing-rung-deposit-trait.clar`
 under the same principal first. Both contracts are simulation-verified source; they have not been deployed on-chain.
 
+Both deposit and withdrawal entry points use one `rung-trait`, defined in
+`jing-rung-deposit-trait.clar`. It requires all three rung methods: `deposit`,
+`withdraw`, and `claim`. The helper still exposes no batch-claim function.
+The historical Stxer walkthrough below uses the original separate traits and
+boolean responses. The current response interface is documented next.
+
+## Current response interface
+
+All six rung templates now return structured receipts. Trading, transfers,
+share mint/burn calculations, held-fund behavior, and sold-out withdrawal
+errors are unchanged. `settle-proceeds` already returned the amount paid;
+deposit and withdrawal now retain that value for their receipts.
+
+```clarity
+;; Direct rung deposit. amount uses sats for buy, micro-STX for sell.
+(ok { amount: uint, shares: uint, epoch: uint,
+      stx-paid: uint, sbtc-paid: uint })
+;; Direct rung withdrawal or claim. Actual transfers, not requested caps.
+(ok { stx: uint, sbtc: uint })
+```
+
+`shares` means shares minted by this deposit, not the user's total shares.
+The rung's held balance remains available in its deposit log and `get-state`;
+it is not duplicated in the return value.
+`stx-paid`/`sbtc-paid` are gross proceeds paid during a deposit, not net wallet
+changes after deducting its input. STX fields always use micro-STX and sBTC
+fields use satoshis. Buy-rung claims return `sbtc: u0`; sell-rung claims
+return `stx: u0`, because claims pay proceeds without withdrawing unsold input.
+
+The helper preserves allocation order in a `positions` list and totals payouts:
+
+```clarity
+;; deposit-buy / deposit-sell
+(ok { amount: uint, rungs: uint, stx-paid: uint, sbtc-paid: uint,
+      positions: (list { rung: principal, amount: uint, shares: uint,
+        epoch: uint, stx-paid: uint, sbtc-paid: uint }) })
+;; withdraw-buy / withdraw-sell
+(ok { rungs: uint, withdrawn: uint, stx: uint, sbtc: uint,
+      positions: (list { rung: principal, stx: uint, sbtc: uint }) })
+```
+
+These are schema sketches: each list has a maximum of ten entries. A row is
+this call's receipt, not a full account-position snapshot. Shares and epochs
+remain per-rung; only actual payouts are summed. `rungs` and
+`withdrawn` remain counts. Errors still roll the whole batch back. Tuple
+success responses replace `(ok true)`; `(ok false)` no longer satisfies the
+trait, so helper error codes 7107/7109 are retired, not reassigned.
+
+This is a breaking interface change for clients and traits that expected
+boolean results. The deployed ladder, v6-2 market, and v5-2 router do not
+consume these rung responses and need no changes. The final rung source has
+a new code hash: approve that version as canonical before registering it.
+
+### Receipt verification
+
+The latest run uses the final reviewed contracts from commit `60843e3`, with
+no held-balance field in deposit responses. Held balances remain in rung logs
+and state. All changes described here are simulation-only; no deployments or
+user transactions were broadcast.
+
+- [Latest Stxer run: 1,152/1,152 checks, 789 steps](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534).
+  Returned payouts are compared to actual wallet deltas; per-rung payout sums,
+  order, deposit amounts, minted shares and epochs are checked.
+  Steps **109/164** show ten-rung deposits; **403/409** show top-ups paying
+  nonzero accrued proceeds (23.112555 STX / 3,572 sats); **685/701** show
+  three-rung withdrawals; **779** exits both replaced/retired positions.
+- [Earlier pre-top-up run: 1,148/1,148 checks](https://stxer.xyz/simulations/mainnet/d49a00d3281d82cba59e235f3d1c6e00)
+  also checks withdrawal receipts that pay both unsold input and accrued
+  proceeds. It predates the top-up scenarios and held-field removal; use the
+  latest run for the final ABI. The intermediate 1,182-check run
+  `b411bac022f006c2f0e95b2c9e6c075e` is also superseded by the latest run.
+- **122/122 local dispatcher checks** pass with exact receipt comparisons,
+  including capped withdrawals and rollback after a later transfer errors.
+- **2,800 RV property trials, rerun on the final response interface:**
+  2,263 passed, 537 discarded, zero failures.
+  Buy/sell core-spread: 500 trials each, seeds 210925/210926; each fixed and
+  market-spread rung: 200 trials, seed 210927; dispatcher: 1,000 trials,
+  seed 210925. New properties compare receipts with actual transfers and
+  rung state. Mocks and the earlier fuzz scope limitations still apply.
+
+Current-run transaction shortcuts (one-based steps, including read-only calls):
+
+| Scenario | Step(s) |
+| --- | --- |
+| Deposit across ten buy rungs | [109](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x74aedde877a92f021902d993b63457ba0286f0c0d8337032ff8cde56d3d1a061) |
+| Deposit across ten sell rungs | [164](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x4182c63ff57240420a874115a582cc9d75d5ddfeda41aa640d03bf1d47eaa619) |
+| Takers fill five rungs and part of the sixth | [239](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x3cfc67fcbe23790bdbee1f20e83429b0971531c89eec6443d2b0a4312d788cd5), [273](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x15f9a8aae2a74690bcab63debdf31e081bfcc82bcb59d55f0ff9f9c3013ba10e) |
+| Top-up deposits report accrued STX/sBTC payouts | [403](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x4382fd5da783798b42dd53a8e2eda0e32663de8104861e8144ccf8600c60d08c), [409](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x8efbbe658ef278a51ea845da5dbd839648165c451b5c1b2b06bcf707d3b77395) |
+| Withdraw three buy/sell positions in one call | [685](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x738bbc5dda0f064a8043f8a9e91bd9b58bcf50981a6e0e6ec01260d191de1e16), [701](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x9c8fcadc630065892e455f1d9d7ee919b627e7054c35ff9a8ea8b9fa4e85e947) |
+| Replace funded seat; verify funds retained | 744–751 |
+| Change protected spread 90 → 100 | 771–775 |
+| Withdraw replaced and retired positions together | [779](https://stxer.xyz/simulations/mainnet/721d70f932ec18f595ec2c12b7c50534/txid/0x46176e1039544f143a6445a6b5ba129fdca52c5c92fa5d796c3de76c7e236d69) |
+
+Older rung lifecycle scripts have been adapted to the tuple response shapes
+and syntax-checked; they were not all rerun on Stxer for this revision. The
+latest fork result above is from `verify-v6-2-ten-rung-ladder.js`.
+
+Run `node simulations/verify-v6-2-ten-rung-ladder.js` for the updated fork
+suite and `npm run verify:ladder-dispatch-local` for local checks. RV receipt
+properties are appended to each rung's existing invariant file; build with
+`RV_MARKET_VERSION=v6-2 bash tests/rv/build.sh markets-sbtc-stx-jing-v6`, then
+`bash tests/rv/build.sh <rung>` and `npx rv . <rung> test --runs=500 --seed=210925`.
+For the helper, run `node tests/rv/build-dispatch.mjs`, then
+`npx rv . jing-ladder-dispatch test --runs=1000 --seed=210925`.
+
 | Function | User intent | Input units |
 | --- | --- | --- |
 | `deposit-buy` | Buy STX by supplying sBTC to buy rungs | satoshis |
@@ -16,7 +121,7 @@ The two deposit functions accept:
 
 ```clarity
 (total uint)
-(allocations (list 10 { rung: <rung-deposit>, amount: uint }))
+(allocations (list 10 { rung: <rung>, amount: uint }))
 (update (buff 8192))
 ```
 
@@ -48,7 +153,7 @@ const functionArgs = [
   Cl.bufferFromHex(signedLazerUpdateHex),
 ];
 // Call jing-ladder-dispatch.deposit-buy with these arguments.
-// Return: (ok { amount: u200000, rungs: u10 }).
+// Return includes amount: u200000, rungs: u10, payout totals, and 10 receipts.
 ```
 
 Use integer arithmetic for splits. For an equal split, distribute any division
@@ -59,7 +164,7 @@ buy rungs and 100,000 micro-STX for sell rungs).
 The two withdrawal functions accept:
 
 ```clarity
-(requests (list 10 { rung: <rung-exit>, amount: uint }))
+(requests (list 10 { rung: <rung>, amount: uint }))
 ```
 
 Each positive amount is a per-rung maximum. A request at or above the user's
@@ -80,8 +185,8 @@ calls are required:
 `tx-sender` must equal `contract-caller`. A contract wallet can call under its
 own contract identity; forwarding an external user's identity is refused.
 
-Validation happens before any deposit. If any rung returns an error or
-`(ok false)`, the entire dispatch reverts, including earlier deposits and their
+Validation happens before any deposit. If any rung returns an error,
+the entire dispatch reverts, including earlier deposits and their
 transfers. Rung errors are propagated unchanged. Helper errors:
 
 | Error | Meaning |
@@ -92,9 +197,7 @@ transfers. Rung errors are propagated unchanged. Helper errors:
 | `u7104` | Target is not currently seated on the requested side |
 | `u7105` | Duplicate target |
 | `u7106` | Indirect call retaining another sender's identity |
-| `u7107` | Rung returned `(ok false)` |
 | `u7108` | Withdrawal target is unregistered or registered on the wrong side |
-| `u7109` | Rung withdrawal returned `(ok false)` |
 
 ## Allocation is not market admission
 
@@ -117,7 +220,7 @@ Shares and proceeds belong to the user; no postcondition should assume the
 helper receives the input. These simulations used zero transaction fees and
 did not validate a frontend-generated postcondition set.
 
-## Stxer walkthrough: exact steps
+## Historical Stxer walkthrough: exact steps (original boolean interface)
 
 Open the [verified 517-step simulation](https://stxer.xyz/simulations/mainnet/20bba9456f560023c8ea7a1d923f676c). Step numbers below are
 **one-based**, matching Stxer's UI, and include both transactions and read-only
@@ -153,7 +256,7 @@ only to the contract's permitted dust/rebate refunds.
 
 ## Validation and reproduction
 
-### Rendezvous fuzz results — September 21, 2026
+### Historical Rendezvous fuzz results — before receipt responses
 
 Ran the two miner-band rung templates used by this ladder against a local
 **v6-2** market build, the ladder registry, and the dispatcher. Across seven

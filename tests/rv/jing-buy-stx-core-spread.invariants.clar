@@ -373,3 +373,39 @@
 
 (define-read-only (invariant-rung-never-minted)
   (is-eq (contract-call? .mock-ft get-minted current-contract) u0))
+
+;; Rich receipts must match actual transfers and the final accounting state.
+(define-public (test-deposit-receipt (raw uint))
+  (let ((amount (+ MIN_DEPOSIT (mod raw u1000000)))
+        (before (stx-get-balance tx-sender)))
+    (match (deposit amount 0x)
+      receipt (if (and
+          (is-eq (get amount receipt) amount)
+          (is-eq (get shares receipt) (/ (* amount SCALE) (var-get unfilled-index)))
+          (is-eq (get epoch receipt) (var-get epoch))
+          (is-eq (get sbtc-paid receipt) u0)
+          (is-eq (get stx-paid receipt) (- (stx-get-balance tx-sender) before)))
+        (ok true) (err u9110))
+      error (ok false))))
+
+(define-public (test-withdraw-receipt (raw uint))
+  (let ((amount (+ u1 (mod raw u1000000)))
+        (stx-before (stx-get-balance tx-sender))
+        (sbtc-before (unwrap-panic (contract-call? .mock-ft get-balance tx-sender))))
+    (match (withdraw amount)
+      receipt (if (and
+          (is-eq (get stx receipt) (- (stx-get-balance tx-sender) stx-before))
+          (is-eq (get sbtc receipt) (- (unwrap-panic (contract-call? .mock-ft get-balance tx-sender)) sbtc-before))
+          (<= (get sbtc receipt) amount))
+        (ok true) (err u9111))
+      error (ok false))))
+
+(define-public (test-claim-receipt)
+  (let ((stx-before (stx-get-balance tx-sender))
+        (sbtc-before (unwrap-panic (contract-call? .mock-ft get-balance tx-sender))))
+    (match (claim)
+      receipt (if (and
+          (is-eq (get stx receipt) (- (stx-get-balance tx-sender) stx-before))
+          (is-eq (get sbtc receipt) (- (unwrap-panic (contract-call? .mock-ft get-balance tx-sender)) sbtc-before)))
+        (ok true) (err u9112))
+      error (ok false))))

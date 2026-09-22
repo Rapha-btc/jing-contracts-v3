@@ -6,11 +6,38 @@
 ;; Public boundaries are essential when catching errors: a direct call to a
 ;; private implementation does not roll back earlier legs before inspection.
 (define-public (rv-dispatch (total uint)
- (allocations (list 10 {rung: <rung-deposit>, amount: uint}))
+ (allocations (list 10 {rung: <rung>, amount: uint}))
  (update (buff 8192)) (buy bool))
- (if buy (deposit-buy total allocations update) (deposit-sell total allocations update)))
-(define-public (rv-withdraw (requests (list 10 {rung: <rung-exit>, amount: uint})) (buy bool))
- (if buy (withdraw-buy requests) (withdraw-sell requests)))
+ (let ((before (stx-get-balance tx-sender))
+       (result (try! (if buy (deposit-buy total allocations update) (deposit-sell total allocations update)))))
+  (asserts! (and
+    (is-eq (get amount result) total)
+    (is-eq (get rungs result) (len allocations))
+    (is-eq (len (get positions result)) (len allocations))
+    (is-eq (get stx-paid result) u0) (is-eq (get sbtc-paid result) u0)
+    (is-eq (- before (stx-get-balance tx-sender)) total)
+    (fold rv-check-deposit-row (get positions result) true)
+  ) (err u9210))
+  (ok result)))
+(define-public (rv-withdraw (requests (list 10 {rung: <rung>, amount: uint})) (buy bool))
+ (let ((before (stx-get-balance tx-sender))
+       (result (try! (if buy (withdraw-buy requests) (withdraw-sell requests)))))
+  (asserts! (and
+    (is-eq (get rungs result) (len requests))
+    (is-eq (get withdrawn result) (len requests))
+    (is-eq (len (get positions result)) (len requests))
+    (is-eq (get sbtc result) u0)
+    (is-eq (get stx result) (- (stx-get-balance tx-sender) before))
+    (is-eq (get stx result) (fold rv-sum-exits (get positions result) u0))
+  ) (err u9211))
+  (ok result)))
+(define-private (rv-check-deposit-row
+ (row {rung: principal, amount: uint, shares: uint, epoch: uint,
+   stx-paid: uint, sbtc-paid: uint}) (valid bool))
+ (and valid (is-eq (get amount row) (get shares row))
+  (is-eq (get epoch row) u0) (is-eq (get stx-paid row) u0) (is-eq (get sbtc-paid row) u0)))
+(define-private (rv-sum-exits (row {rung: principal, stx: uint, sbtc: uint}) (total uint))
+ (+ total (get stx row)))
 ;; RV invariant mode excludes test-* functions. This driver ensures successful
 ;; state mutations occur alongside raw, usually invalid, random trait lists.
 (define-public (rv-drive (raw uint) (count uint) (buy bool) (choice uint))
@@ -122,7 +149,7 @@
    (asserts! (is-eq before (rv-snapshot)) (err u9200))
    (ok true))))
 
-;; Invalid sums, duplicates, zero legs, retired seats, late err / ok false.
+;; Invalid sums, duplicates, zero legs, retired seats, two late error paths.
 ;; Catch the error so this property can inspect rollback rather than relying
 ;; on the outer property itself reverting.
 (define-public (test-deposit-rollback (raw uint) (count uint) (buy bool) (choice uint))
@@ -168,7 +195,7 @@
   ) u0 n)))) 0x buy)))
    (asserts! (is-eq result (err (if (is-eq mode u0) u7102
      (if (is-eq mode u1) u7105 (if (is-eq mode u2) u7103
-     (if (is-eq mode u3) u7104 (if (is-eq mode u4) u999 u7107))))))) (err u9201))
+     (if (is-eq mode u3) u7104 (if (is-eq mode u4) u999 u997))))))) (err u9201))
    (asserts! (is-eq before (rv-snapshot)) (err u9202))
    (ok true))))
 
@@ -229,7 +256,7 @@
           (if (is-eq mode u2) (not buy) buy))))
    (asserts! (is-eq result (err (if (is-eq mode u0) u7105
      (if (is-eq mode u1) u7103 (if (is-eq mode u2) u7108
-     (if (is-eq mode u3) u999 u7109)))))) (err u9203))
+     (if (is-eq mode u3) u999 u997)))))) (err u9203))
    (asserts! (is-eq before (rv-snapshot)) (err u9204))
    (ok true))))
 

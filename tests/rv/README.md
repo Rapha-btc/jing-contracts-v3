@@ -1,10 +1,12 @@
 # Rendezvous (RV) property fuzzing
 
 For the September 21 **v6-2 band-rung, ladder, and dispatcher** runs, see the
-[ladder README](../../contracts/README-jing-ladder-dispatch.md#rendezvous-fuzz-results--september-21-2026).
+[ladder README](../../contracts/README-jing-ladder-dispatch.md#historical-rendezvous-fuzz-results--before-receipt-responses).
 Run `npm run rv:ladder-suite` to build the isolated targets and reproduce all
 seven seeded runs. This runner checks log contents as well as process status.
 The historical results below refer to their original versions and dates.
+The [current receipt properties and validation results](../../contracts/README-jing-ladder-dispatch.md#receipt-verification)
+cover the tuple responses for deposit, withdrawal, claim, and batch dispatch.
 
 `@stacks/rendezvous@1.0.0-rc.1` harness for the v3 markets. Runs random
 tx sequences against the production contract source (with a small set

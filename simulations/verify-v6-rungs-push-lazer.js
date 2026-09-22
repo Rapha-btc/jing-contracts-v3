@@ -1,3 +1,4 @@
+import { rungReceipt } from "./_rung-receipt.js";
 // verify-v6-rungs-push-lazer.js
 // Sponsor-friendly rung deposits on markets-sbtc-stx-jing-v6: a member
 // deposits with an EMPTY update (0x00, no oracle read, signable offline and
@@ -78,7 +79,7 @@ async function main() {
 
   // =============== P1: held on 0x00, pushed by a keeper ===============
   tx("P1 S rests a bid at -5% (the y side is not empty: x deposits need a price)", call(S, "deposit-token-y", [uintCV(5_000_000), uintCV((MID * 95n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u5000000)");
-  tx("P1 A deposits 20000 sats with an EMPTY update: the market refuses the read, the rung holds", call(A, "deposit", [uintCV(20000), NO_UPDATE], rid(BUY)), "(ok true)");
+  tx("P1 A deposits 20000 sats with an EMPTY update: the market refuses the read, the rung holds", call(A, "deposit", [uintCV(20000), NO_UPDATE], rid(BUY)), rungReceipt("deposit"));
   state("P1 held 20000, resting 0", rid(BUY), (v) => field(v, "held-sats") === "u20000" && field(v, "resting") === "u0");
   ev("P1 A's position counts the held sats", `(get-position '${A})`, (v) => field(v, "sbtc") === "u20000", rid(BUY));
   tx("P1 keeper push(0x00): refused, nothing moves -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(BUY)), "(ok false)");
@@ -89,13 +90,13 @@ async function main() {
   tx("P1 push again with nothing held -> (ok false)", call(KEEPER, "push", [UPD], rid(BUY)), "(ok false)");
 
   // =============== P2: a top-up under the minimum, held then pushed ===============
-  tx("P2 A deposits 500 sats with 0x00: held", call(A, "deposit", [uintCV(500), NO_UPDATE], rid(BUY)), "(ok true)");
+  tx("P2 A deposits 500 sats with 0x00: held", call(A, "deposit", [uintCV(500), NO_UPDATE], rid(BUY)), rungReceipt("deposit"));
   state("P2 held 500, resting 20000", rid(BUY), (v) => field(v, "held-sats") === "u500" && field(v, "resting") === "u20000");
   tx("P2 keeper push(update): 500 + 20000 over the minimum -> pushed", call(KEEPER, "push", [UPD], rid(BUY)), "(ok true)");
   state("P2 held 0, resting 20500", rid(BUY), (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u20500");
 
   // =============== P3: the sell peg rung, STX side ===============
-  tx("P3 S deposits 5 STX into the sell peg rung with 0x00 (asks rest: price needed): held", call(S, "deposit", [uintCV(5_000_000), NO_UPDATE], rid(SELL)), "(ok true)");
+  tx("P3 S deposits 5 STX into the sell peg rung with 0x00 (asks rest: price needed): held", call(S, "deposit", [uintCV(5_000_000), NO_UPDATE], rid(SELL)), rungReceipt("deposit"));
   state("P3 held 5 STX, resting 0", rid(SELL), (v) => field(v, "held-ustx") === "u5000000" && field(v, "resting") === "u0");
   const p3 = tx("P3 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(SELL)), "(ok true)");
   state("P3 held 0, resting 5 STX", rid(SELL), (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u5000000");
@@ -103,7 +104,7 @@ async function main() {
   tx("P3 push again with nothing held -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(SELL)), "(ok false)");
 
   // =============== P4: a pre-signed deposit with a STALE signed update ===============
-  tx("P4 A deposits 3000 sats with a STALE (signed, old) update: the market refuses the read, the rung holds", call(A, "deposit", [uintCV(3000), STALE], rid(BUY)), "(ok true)");
+  tx("P4 A deposits 3000 sats with a STALE (signed, old) update: the market refuses the read, the rung holds", call(A, "deposit", [uintCV(3000), STALE], rid(BUY)), rungReceipt("deposit"));
   state("P4 held 3000, resting 20500", rid(BUY), (v) => field(v, "held-sats") === "u3000" && field(v, "resting") === "u20500");
   ev("P4 A's position counts the held sats (23500)", `(get-position '${A})`, (v) => field(v, "sbtc") === "u23500", rid(BUY));
   tx("P4 keeper push(STALE) -> (ok false), still held", call(KEEPER, "push", [STALE], rid(BUY)), "(ok false)");
@@ -115,7 +116,7 @@ async function main() {
   deploy(SELLF, src("jing-sell-stx"));
   tx("canonical sell-stx", call(DEP, "set-canonical", [stringAsciiCV("sell-stx"), contractPrincipalCV(DEP, SELLF)], LADDER), "(ok true)");
   tx(`init ${SELLF}`, call(DEP, "initialize", [uintCV(SELLF_C)], rid(SELLF)), "(ok true)");
-  tx("P5 S deposits 5 STX into the fixed sell rung with 0x00 (asks rest: price needed): held", call(S, "deposit", [uintCV(5_000_000), NO_UPDATE], rid(SELLF)), "(ok true)");
+  tx("P5 S deposits 5 STX into the fixed sell rung with 0x00 (asks rest: price needed): held", call(S, "deposit", [uintCV(5_000_000), NO_UPDATE], rid(SELLF)), rungReceipt("deposit"));
   state("P5 held 5 STX, resting 0", rid(SELLF), (v) => field(v, "held-ustx") === "u5000000" && field(v, "resting") === "u0");
   tx("P5 keeper push(0x00): refused -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(SELLF)), "(ok false)");
   const p5 = tx("P5 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(SELLF)), "(ok true)");
@@ -127,7 +128,7 @@ async function main() {
   deploy(BUYP, src("jing-buy-stx-market-spread"));
   tx("canonical buy-peg", call(DEP, "set-canonical", [stringAsciiCV("buy-peg"), contractPrincipalCV(DEP, BUYP)], LADDER), "(ok true)");
   tx(`init ${BUYP}`, call(DEP, "initialize", [uintCV(BPS), uintCV(BUYP_C)], rid(BUYP)), "(ok true)");
-  tx("P6 A deposits 3000 sats into the buy peg rung with 0x00 (bids rest: price needed): held", call(A, "deposit", [uintCV(3000), NO_UPDATE], rid(BUYP)), "(ok true)");
+  tx("P6 A deposits 3000 sats into the buy peg rung with 0x00 (bids rest: price needed): held", call(A, "deposit", [uintCV(3000), NO_UPDATE], rid(BUYP)), rungReceipt("deposit"));
   state("P6 held 3000, resting 0", rid(BUYP), (v) => field(v, "held-sats") === "u3000" && field(v, "resting") === "u0");
   tx("P6 keeper push(0x00): refused -> (ok false)", call(KEEPER, "push", [NO_UPDATE], rid(BUYP)), "(ok false)");
   const p6 = tx("P6 keeper push(update) -> pushed", call(KEEPER, "push", [UPD], rid(BUYP)), "(ok true)");

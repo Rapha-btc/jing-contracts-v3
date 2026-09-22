@@ -90,10 +90,35 @@ async function main() {
   const sweepY = gross(80_000n * price('buy', 75) / SCALE);
   const sweepX = gross(80_000_000n * SCALE / price('sell', 75));
   let b = SimulationBuilder.new({ stacksNodeAPI: API });
-  const steps = [], swaps = [], snapshots = [];
+  const steps = [], swaps = [], snapshots = [], receipts = [];
   function tx(label, sender, cid, fn, args, want = '(ok true)') {
+    const isHelper = cid === HELPER;
+    const isRung = /\.jing-(buy|sell)-stx-/.test(cid);
+    const hasReceipt = (isHelper && /^(deposit|withdraw)-/.test(fn)) ||
+      (isRung && ['deposit', 'withdraw', 'claim'].includes(fn));
+    const deposit = fn.startsWith('deposit');
+    const before = hasReceipt ? Object.fromEntries(['stx', 'sbtc'].map(asset =>
+      [asset, ev(`${label}: receipt ${asset} before`, balance(sender, asset))])) : null;
+    // Earlier versions returned bool/count-only responses. Validate the same
+    // success/count expectations here, then verify every new field below.
+    if (hasReceipt && want === '(ok true)') want = ok;
+    if (hasReceipt && typeof want === 'string' && want.startsWith('(ok (tuple')) {
+      const expected = [...want.matchAll(/\((amount|rungs|withdrawn) (u\d+)\)/g)];
+      want = value => ok(value) && expected.every(([, key, amount]) => field(value, key) === amount);
+    }
     b = b.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
-    const st = { label, kind: 'tx', want }; steps.push(st); return st;
+    const st = { label, kind: 'tx', want }; steps.push(st);
+    if (hasReceipt) {
+      const after = Object.fromEntries(['stx', 'sbtc'].map(asset =>
+        [asset, ev(`${label}: receipt ${asset} after`, balance(sender, asset))]));
+      const entries = isHelper ? args[deposit ? 1 : 0].value.map(e => ({
+        cid: cvToString(e.value.rung), amount: BigInt(e.value.amount.value),
+      })) : [{ cid, amount: deposit || fn === 'withdraw' ? BigInt(args[0].value) : 0n }];
+      const states = deposit && !(typeof want === 'string' && want.startsWith('(err'))
+        ? entries.map(e => ev(`${label}: receipt state ${e.cid}`, '(get-state)', observe, e.cid)) : [];
+      receipts.push({ st, sender, cid, fn, isHelper, deposit, entries, before, after, states });
+    }
+    return st;
   }
   function ev(label, code, want = observe, cid = MARKET) {
     b = b.addEvalCode(cid, code); const st = { label, kind: 'eval', want }; steps.push(st); return st;
@@ -204,6 +229,13 @@ async function main() {
   }
   take('T5 STX taker fills 50 through 80 and part of 90', 'buy', sweepY, 95, [50, 60, 70, 80, 90]);
   take('T6 sBTC taker fills 50 through 80 and part of 90', 'sell', sweepX, 95, [50, 60, 70, 80, 90]);
+  // A top-up also pays accrued proceeds. Exercise nonzero deposit payouts
+  // through the helper on both sides before the explicit claim/exit phase.
+  for (const side of ['buy', 'sell']) {
+    const amount = side === 'buy' ? 100n : 100_000n;
+    dispatch(`top up partially filled ${side}-90 and report accrued payout`, side,
+      amount, [[90, amount]], ok);
+  }
   const claims = [];
   for (const side of ['buy', 'sell']) {
     const who = side === 'buy' ? A : S, asset = side === 'buy' ? 'stx' : 'sbtc';
@@ -327,6 +359,40 @@ async function main() {
     verify(`${c.side} member actually received claims`, c.received, n => BigInt(n) > 0n);
   }
   for (const a of ['stx', 'sbtc']) verify(`exact ${a} conservation across market, rungs, users and treasury`, after[a].actual, before[a].actual);
+  const positiveDepositPayouts = { stx: 0, sbtc: 0 };
+  for (const receipt of receipts) {
+    const { st, deposit, isHelper, entries, states } = receipt;
+    if (!ok(st.actual)) {
+      for (const asset of ['stx', 'sbtc']) verify(`${st.label}: rejected receipt preserves ${asset}`,
+        receipt.after[asset].actual, receipt.before[asset].actual);
+      continue;
+    }
+    const value = deserializeCV(st.rawStep.Result.Transaction.Ok.result).value.value;
+    const rows = isHelper ? value.positions.value.map(row => row.value) : [value];
+    verify(`${st.label}: receipt row count`, rows.length, entries.length);
+    for (const asset of ['stx', 'sbtc']) {
+      const key = deposit ? `${asset}-paid` : asset;
+      const reported = BigInt(value[key].value);
+      if (deposit && reported > 0n) positiveDepositPayouts[asset]++;
+      const inputAsset = receipt.fn === 'deposit-buy' || (deposit && receipt.cid.includes('.jing-buy-')) ? 'sbtc' : 'stx';
+      const input = deposit && asset === inputAsset ? BigInt(value.amount.value) : 0n;
+      const actual = num(receipt.after[asset].actual) - num(receipt.before[asset].actual) + input;
+      verify(`${st.label}: reported ${key} equals wallet transfer`, reported.toString(), actual.toString());
+      verify(`${st.label}: ${key} equals sum of rows`, reported.toString(),
+        rows.reduce((sum, row) => sum + BigInt(row[key].value), 0n).toString());
+    }
+    rows.forEach((row, index) => {
+      if (isHelper) verify(`${st.label}: receipt rung ${index}`, cvToString(row.rung), entries[index].cid);
+      if (deposit) {
+        verify(`${st.label}: receipt input ${index}`, String(row.amount.value), String(entries[index].amount));
+        verify(`${st.label}: receipt epoch ${index}`, `u${row.epoch.value}`, field(states[index].actual, 'epoch'));
+        const minted = entries[index].amount * 1_000_000_000_000n / num(field(states[index].actual, 'unfilled-index'));
+        verify(`${st.label}: receipt minted shares ${index}`, String(row.shares.value), String(minted));
+      }
+    });
+  }
+  for (const asset of ['stx', 'sbtc']) verify(`deposit receipt exercises nonzero ${asset} proceeds`,
+    positiveDepositPayouts[asset], n => n > 0);
   const report = {
     simulation: `https://stxer.xyz/simulations/mainnet/${sid}`, market: MARKET,
     marketSourceHash: sha(live.source), rungSourceHashes: sourceHashes,
@@ -337,7 +403,7 @@ async function main() {
     claims: claims.map(c => ({ side: c.side, asset: c.asset, received: c.received })),
     fees: Object.fromEntries(['stx', 'sbtc'].map(a => [a, String(num(feeAfter[a].actual) - num(feeBefore[a].actual))])),
     snapshots: snapshots.map(s => ({ label: s.label, rows: s.rows.map(r => ({ side: r.side, spread: r.spread, state: r.state.actual })) })),
-    assertions: steps.map(s => ({ label: s.label, result: s.actual })),
+    assertions: steps.map((s, index) => ({ step: index + 1, label: s.label, result: s.actual })),
   };
   fs.writeFileSync(`${prefix}.json`, JSON.stringify(report, null, 2));
   console.log(`\n${checks - failures}/${checks} passed; report ${prefix}.json`);

@@ -1,3 +1,4 @@
+import { rungReceipt } from "./_rung-receipt.js";
 // verify-v6-rungs-miner-band-lazer.js
 // Miner-band spread rungs (jing-buy-stx-core-spread / jing-sell-stx-core-spread
 // a separate rung type, initialize(bps) only): the guard is not a fixed floor / cap from the
@@ -77,7 +78,7 @@ async function main() {
 
   // =============== M2: a push rests with the band as its floor ===============
   tx("M2 S rests a bid at -5% (the y side is not empty: x deposits need a price)", call(S, "deposit-token-y", [uintCV(5_000_000), uintCV((MID * 95n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u5000000)");
-  tx("M2 A deposits 20000 sats with a fresh update: pushed with floor = miner-mid / 2", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), "(ok true)");
+  tx("M2 A deposits 20000 sats with a fresh update: pushed with floor = miner-mid / 2", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), rungReceipt("deposit"));
   state("M2 held 0, resting 20000", rid(BUY), (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u20000");
   const lim = ev("M2 the market's stored limit for the rung", `(get-token-x-limit '${rid(BUY)})`, (v) => uintOf(v) > 0n);
   ev("M2 the rung's stored floor after the first push", "(get-floor)", (v) => uintOf(v) > 0n, rid(BUY));
@@ -89,7 +90,7 @@ async function main() {
   const lim2 = ev("M3 limit after refresh (same block: unchanged)", `(get-token-x-limit '${rid(BUY)})`, (v) => uintOf(v) > 0n);
 
   // =============== M4/M5: the sell rung ===============
-  tx("M4 S deposits 5 STX into the sell rung with a fresh update: pushed with cap = miner-mid * 2", call(S, "deposit", [uintCV(5_000_000), UPD], rid(SELL)), "(ok true)");
+  tx("M4 S deposits 5 STX into the sell rung with a fresh update: pushed with cap = miner-mid * 2", call(S, "deposit", [uintCV(5_000_000), UPD], rid(SELL)), rungReceipt("deposit"));
   state("M4 held 0, resting 5 STX", rid(SELL), (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u5000000");
   const limS = ev("M4 the market's stored cap for the sell rung", `(get-token-y-limit '${rid(SELL)})`, (v) => uintOf(v) > 0n);
   ev("M4 effective bid at mid = mid - 20 bps (in band: the cap is far over)", `(token-y-limit-at '${rid(SELL)} u${MID})`, `u${(MID * (10000n - BPS)) / 10000n}`);
@@ -124,7 +125,7 @@ async function main() {
   ev("S2 x side: 40 fillers + the rung = 41", "(len (get-token-x-depositors u0))", "u41");
   tx("S3 filler 41 at +5%: the open region is full (40) although 41 rest -> u1010", call(FILLERS[40], "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), UPD, sbtcT, sbtcA]), "(err u1010)");
   ev("S3 still 41", "(len (get-token-x-depositors u0))", "u41");
-  tx("S4 A tops the rung up by 1000: a protected maker only sees the hard cap -> pushed", call(A, "deposit", [uintCV(1000), UPD], rid(BUY)), "(ok true)");
+  tx("S4 A tops the rung up by 1000: a protected maker only sees the hard cap -> pushed", call(A, "deposit", [uintCV(1000), UPD], rid(BUY)), rungReceipt("deposit"));
   state("S4 rung resting 21000", rid(BUY), (v) => field(v, "resting") === "u21000" && field(v, "held-sats") === "u0");
   tx("S5 fund the parker", call(A, "transfer", [uintCV(3000), standardPrincipalCV(A), standardPrincipalCV(KEEPER), noneCV()], SBTC), "(ok true)");
   tx("S5 an in-range ask (3000 at 1) on the full open region: parks the 10th best filler, never the rung", call(KEEPER, "deposit-token-x", [uintCV(3000), uintCV(1), noneCV(), UPD, sbtcT, sbtcA]), "(ok u3000)");
