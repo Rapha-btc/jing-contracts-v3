@@ -18,7 +18,7 @@ record what holds, what does not, and what we decided.
 | 4 | Rushing Orion | Gate admits an order that overlaps a resting order just outside the mid | Holds: not covered by the first v6-3 draft | Fixed in v6-3 (book search to `min/max(limit, mid -/+ 0.4%)`) |
 | 5 | Void Kael | `unwrap-panic` on a full depositor list (low) + gap 6 (min raised under resting orders) | Low, holds; gap 6 holds | Fixed in v6-3 + `jing-ladder-v1` |
 | 6 | Hasty Dex | Same HIGH as #2, with executed PoC + control sims | Holds; duplicate of #2, first executed proof | Covered by v6-3 |
-| 7 | Eternal Harp | H-1a/H-1b gate, M-1 gate skips the confidence check, L-1..L-3, I-1 | H-1a/H-1b: covered by #2; M-1: holds, edge case | _in review_ |
+| 7 | Eternal Harp | H-1a/H-1b gate, M-1 gate skips the confidence check, L-1..L-3, I-1 | H-1a/H-1b covered by #2; M-1 edge case; L-3 does not hold; rest skip | M-1 kept as is; nothing new to fix |
 
 ---
 
@@ -597,4 +597,25 @@ maker.
 The report did not trace `advance-cycle` into `cross-remainder-*`; one
 fork run of the claimed sequence would have shown the revert. It was
 stated as a finding without that check.
+
+### L-1 - the 70 bps cap is unreachable: skip
+
+Same as #2 LOW (max charged is 69 bps). Harmless.
+
+### I-1 - a switched-off peg holds a slot: skip, by design
+
+A pegged order whose mid moves past its cap switches itself off (priced at
+`u0` / `MAX_UINT`) and never fills until the mid comes back, but still sits
+in the depositor list. By design: when a full side admits an in-range maker,
+a switched-off peg is the first to be parked (`park-one-token-x/y` treats it
+as the maker farthest from the mid - `README-markets-v6-pegged.md`), so the
+slot comes back when someone needs it.
+
+### Verdict on #7
+
+Of seven items, none new beyond #2 needs a change: H-1a/H-1b are the #2
+blind spot (fixed in v6-3); M-1 holds as an edge case, kept as is; L-1 is a
+duplicate; L-2 is the design trade-off (real fix: v7 two-transaction
+settle); L-3 does not hold; I-1 is by design. The executed end-to-end fork
+run of the #2 exploit is useful evidence.
 
