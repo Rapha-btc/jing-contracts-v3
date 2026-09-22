@@ -562,3 +562,19 @@ volatile - when makers most need to move their orders. That cost outweighs
 the rare dodge it would close. (Cancels do not use the gate and keep
 working either way.)
 
+### L-2 - age is measured on the Stacks clock: skip
+
+The same clock issue as #1, from the other side. `age` uses
+`stacks-block-time`, which the miner sets; if it runs behind real time, an
+update looks younger than it is and the taker pays slightly less. There is
+no on-chain wall clock to measure against, so it cannot be closed inside
+this design.
+
+**The real fix is structural: the v7 two-transaction design** (submit the
+order in one transaction, settle it in a later one with a print that must
+postdate the order - `contracts/aborted/markets-sbtc-stx-jing-v7`). That
+removes the choose-your-print option entirely, so neither the curve nor
+the clock matters. It was set aside for atomicity (the book leg can no
+longer be bundled with AMM legs in one transaction); v6-x prices the
+option instead, and this residual is part of that trade-off.
+
