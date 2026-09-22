@@ -2253,15 +2253,6 @@ placed-at: stacks-block-time,
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(map-set token-y-deposit-limits tx-sender {
-limit: limit-price,
-spread-bps: spread-bps,
-placed-at: stacks-block-time,
-})
-(try! (contract-call? .jing-core-v5 log-set-limit-y tx-sender limit-price
-(var-get token-x) (var-get token-y)
-))
-(try! (log-peg-y-if spread-bps limit-price))
 (if (and
 (> (len (get-token-x-depositors cycle)) u0)
 (let ((price (try! (fresh-classification-price update))))
@@ -2272,6 +2263,14 @@ placed-at: stacks-block-time,
 (bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
+(map-set token-y-deposit-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+placed-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price spread-bps
+(var-get current-cycle) (var-get token-x) (var-get token-y)
+))
 (and
 (> rebate u0)
 (try! (stx-transfer? rebate tx-sender current-contract))
@@ -2288,14 +2287,27 @@ tx-trait tx-name
 )
 )
 (begin
-(if (> (len (get-token-x-depositors cycle)) u0)
-(let ((price (try! (fresh-classification-price update))))
-(asserts!
-(not (gate-takes-as-y price (order-y-price limit-price spread-bps price)))
-ERR_MUST_USE_SWAP
+(if (is-eq (len (get-token-x-depositors cycle)) u0)
+(begin
+(map-set token-y-deposit-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+placed-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price spread-bps
+(var-get current-cycle) (var-get token-x) (var-get token-y)
+))
 )
+(begin
+(map-set token-y-pending-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+submitted-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-pending-limit-y tx-sender limit-price
+spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+))
 )
-true
 )
 (ok {
 token-x-received: u0,
@@ -2326,15 +2338,6 @@ rebate-refunded: u0,
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(map-set token-x-deposit-limits tx-sender {
-limit: limit-price,
-spread-bps: spread-bps,
-placed-at: stacks-block-time,
-})
-(try! (contract-call? .jing-core-v5 log-set-limit-x tx-sender limit-price
-(var-get token-x) (var-get token-y)
-))
-(try! (log-peg-x-if spread-bps limit-price))
 (if (and
 (> (len (get-token-y-depositors cycle)) u0)
 (let ((price (try! (fresh-classification-price update))))
@@ -2345,6 +2348,14 @@ placed-at: stacks-block-time,
 (bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
+(map-set token-x-deposit-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+placed-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price spread-bps
+(var-get current-cycle) (var-get token-x) (var-get token-y)
+))
 (and
 (> rebate u0)
 (try! (contract-call? tx-trait transfer rebate tx-sender current-contract
@@ -2363,14 +2374,27 @@ tx-trait tx-name
 )
 )
 (begin
-(if (> (len (get-token-y-depositors cycle)) u0)
-(let ((price (try! (fresh-classification-price update))))
-(asserts!
-(not (gate-takes-as-x price (order-x-price limit-price spread-bps price)))
-ERR_MUST_USE_SWAP
+(if (is-eq (len (get-token-y-depositors cycle)) u0)
+(begin
+(map-set token-x-deposit-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+placed-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price spread-bps
+(var-get current-cycle) (var-get token-x) (var-get token-y)
+))
 )
+(begin
+(map-set token-x-pending-limits tx-sender {
+limit: limit-price,
+spread-bps: spread-bps,
+submitted-at: stacks-block-time,
+})
+(try! (contract-call? .jing-core-v6 log-pending-limit-x tx-sender limit-price
+spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+))
 )
-true
 )
 (ok {
 token-x-received: u0,
