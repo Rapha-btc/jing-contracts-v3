@@ -14,7 +14,7 @@ record what holds, what does not, and what we decided.
 |---|---|---|---|---|
 | 1 | Diamond Lance ("Nilo") | Grace window too short for the block clock (F) | Real, but smaller than claimed: ~3 bps average | Keep as is, documented |
 | 2 | Patient Reed | Margin gate bypassable (B+D+E) | HIGH holds; MEDIUM partly; LOW holds | HIGH fixed in `markets-sbtc-stx-jing-v6-3` (source, not deployed); MEDIUM + LOW open |
-| 3 | Light Brio | | _pending_ | |
+| 3 | Light Brio | Same HIGH/MEDIUM/LOW as #2 | Holds, but all duplicates of #2 (posted 3 h later) | Covered by #2 |
 | 4 | Rushing Orion | | _pending_ | |
 | 5 | Void Kael | | _pending_ | |
 | 6 | Hasty Dex | | _pending_ | |
@@ -316,8 +316,44 @@ the same time: each is inside the other's 0.4% and willing at the mid. The
 second to arrive is refused and must use Swap. In v6-2 they could coexist
 only because of the blind spot.
 
-### Before deploy
+### Fork proof
 
-- A stxer mainnet-fork sim: the dodge succeeds on v6-2, and v6-3 refuses it.
+`simulations/verify-v6-3-gate-blind-band.js`, **41/41 green**:
+[stxer d3eca001...](https://stxer.xyz/simulations/mainnet/d3eca001827169de81c37facd4a5dcec).
+Fresh copies of the v6-2 and v6-3 sources are deployed on the fork, so the
+live book cannot interfere. Both sides:
+
+| Step | v6-2 source | v6-3 |
+|---|---|---|
+| Maker rests 20 bps through the mid (inside the blind band) | admitted | admitted |
+| Entrant 5% through the mid, y side | **admitted**; settle clears at the mid; maker gets 5,994,000 uSTX = fee only, no rebate | **refused `u1016`** |
+| Entrant 5% through the mid, x side | **admitted**; settle clears at the mid; maker gets 2,388 sats = fee only, no rebate | **refused `u1016`** |
+| Control: 30 bps from crossing | - | refused |
+| Control: 100 bps away | - | admitted |
+
+### Before deploy
 - `jing-core-v5` `set-verified-contract` for the v6-3 hash, a router bound
   to v6-3, and the three apps repointed.
+
+---
+
+## 3. Light Brio - duplicates of #2
+
+- **F-1 HIGH** (gate and fill disagree on the price): same bug as #2 HIGH,
+  with a numeric repro, and it notes the bug breaks the invariant stated in
+  `README-markets-v6-pegged.md`. Not new.
+- **F-2 MEDIUM** (flat 40 bps margin vs a rebate rising with age): same as
+  #2 MEDIUM. Clean numbers: the rebate reaches 40 bps at 50 s, 69 at 79 s.
+  Fix proposed: widen by `rebate-bps-for-age(age)`; the deposit path already
+  computes the age and drops it.
+- **F-3 LOW** (70 bps unreachable): duplicate.
+- **N-1** (`widen-up/down` truncate to 0 for a price under 250): true in
+  arithmetic, unreachable in practice - real prices are ~2.5e13 in contract
+  units.
+- **Design note** (back-port the v7 structural fix): v7 was set aside for
+  atomicity (the book leg could not be bundled with AMM legs in one
+  transaction). Not a finding.
+
+**Verdict:** well evidenced, nothing new over #2, which was first on every
+point.
+
