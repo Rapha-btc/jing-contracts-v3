@@ -1126,42 +1126,6 @@
     )
   )
 )
-(define-private (gate-takes-as-x
-    (mid uint)
-    (limit uint)
-  )
-  (and
-    (> mid u0)
-    (>= (widen-up mid) limit)
-    (get found
-      (fold live-bid-fold (get-token-y-depositors (var-get current-cycle)) {
-        price: (if (> limit (widen-down mid))
-          limit
-          (widen-down mid)
-        ),
-        found: false,
-      })
-    )
-  )
-)
-(define-private (gate-takes-as-y
-    (mid uint)
-    (limit uint)
-  )
-  (and
-    (> mid u0)
-    (<= (widen-down mid) limit)
-    (get found
-      (fold live-offer-fold (get-token-x-depositors (var-get current-cycle)) {
-        price: (if (< limit (widen-up mid))
-          limit
-          (widen-up mid)
-        ),
-        found: false,
-      })
-    )
-  )
-)
 (define-private (deposit-token-y-core
     (amount uint)
     (limit-price uint)
@@ -1290,7 +1254,7 @@
       (bid (order-y-price limit-price spread-bps price))
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
-    (asserts! (not (gate-takes-as-y price bid)) ERR_MUST_USE_SWAP)
+    (asserts! (not (would-take-as-y (widen-down price) bid)) ERR_MUST_USE_SWAP)
     (asserts! (not (and
       new-maker
       full
@@ -1446,7 +1410,7 @@
       (ask (order-x-price limit-price spread-bps price))
     )
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
-    (asserts! (not (gate-takes-as-x price ask)) ERR_MUST_USE_SWAP)
+    (asserts! (not (would-take-as-x (widen-up price) ask)) ERR_MUST_USE_SWAP)
     (asserts!
       (not (and
         new-maker
@@ -1690,7 +1654,7 @@
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (not (side-full-y depositors who)) ERR_QUEUE_FULL)
-    (asserts! (not (gate-takes-as-y price limit)) ERR_MUST_USE_SWAP)
+    (asserts! (not (would-take-as-y (widen-down price) limit)) ERR_MUST_USE_SWAP)
     (map-set token-y-deposits {
       cycle: cycle,
       depositor: who,
@@ -1725,7 +1689,7 @@
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
     (asserts! (not (side-full-x depositors who)) ERR_QUEUE_FULL)
-    (asserts! (not (gate-takes-as-x price limit)) ERR_MUST_USE_SWAP)
+    (asserts! (not (would-take-as-x (widen-up price) limit)) ERR_MUST_USE_SWAP)
     (map-set token-x-deposits {
       cycle: cycle,
       depositor: who,
@@ -1763,7 +1727,9 @@
     (if (> (len (get-token-x-depositors (var-get current-cycle))) u0)
       (let ((price (try! (fresh-classification-price update))))
         (asserts!
-          (not (gate-takes-as-y price (order-y-price limit-price spread-bps price)))
+          (not (would-take-as-y (widen-down price)
+            (order-y-price limit-price spread-bps price)
+          ))
           ERR_MUST_USE_SWAP
         )
       )
@@ -1798,7 +1764,9 @@
     (if (> (len (get-token-y-depositors (var-get current-cycle))) u0)
       (let ((price (try! (fresh-classification-price update))))
         (asserts!
-          (not (gate-takes-as-x price (order-x-price limit-price spread-bps price)))
+          (not (would-take-as-x (widen-up price)
+            (order-x-price limit-price spread-bps price)
+          ))
           ERR_MUST_USE_SWAP
         )
       )
@@ -1870,7 +1838,9 @@
         (if (> (len (get-token-x-depositors cycle)) u0)
           (let ((price (try! (fresh-classification-price update))))
             (asserts!
-              (not (gate-takes-as-y price (order-y-price limit-price spread-bps price)))
+              (not (would-take-as-y (widen-down price)
+                (order-y-price limit-price spread-bps price)
+              ))
               ERR_MUST_USE_SWAP
             )
           )
@@ -1944,7 +1914,9 @@
         (if (> (len (get-token-y-depositors cycle)) u0)
           (let ((price (try! (fresh-classification-price update))))
             (asserts!
-              (not (gate-takes-as-x price (order-x-price limit-price spread-bps price)))
+              (not (would-take-as-x (widen-up price)
+                (order-x-price limit-price spread-bps price)
+              ))
               ERR_MUST_USE_SWAP
             )
           )
