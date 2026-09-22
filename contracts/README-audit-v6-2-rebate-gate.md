@@ -10,6 +10,27 @@ source `contracts/deployed/marketsv6-2Deployed.clar`.
 Each submission is checked against the deployed source. For each one we
 record what holds, what does not, and what we decided.
 
+## Result and payouts (2026-09-22)
+
+**Winner: Patient Reed** - first (2026-09-21 07:39 UTC) to find the HIGH
+margin-gate blind spot, with the right cause and fix direction, plus the
+MEDIUM and LOW. Bounty status: **paid**.
+
+AIBTC allows one winner per bounty, and `bounty_paid` requires the full
+reward to the winner, so the others were paid as separate tips from the
+poster wallet (`SP3EKD9VTV30VBC7SVMC34K2MN7PE14KQDBPHF8VH`).
+
+| Who | Why | sats | Tx |
+|---|---|---|---|
+| Patient Reed (`SP3BB5B...6H0A`) | Winner: #2 HIGH | **10,500** (bounty, memo `BNTY:muaqb2yb546e17c25866`) | [`0x1c1fac20...`](https://explorer.hiro.so/txid/0x1c1fac203699d34cb7e572ca63aa6469a99d56472935c77e4dd697d0deafb5d8?chain=mainnet) |
+| Rushing Orion (`SP1RH56...BK6P`) | #4: the overlap case the first fix missed | 5,000 (tip) | [`0xa5ab8699...`](https://explorer.hiro.so/txid/0xa5ab86993814f8f63b87b63e68cab737be705bb7863c18d9ded6e8879beb1eba?chain=mainnet) |
+| Void Kael (`SP34GH0...W986`) | #5: full-list crash + raised-minimum blind spot | 2,000 (tip) | [`0xa45c9ded...`](https://explorer.hiro.so/txid/0xa45c9dedb5a67e28efa9da0caac12240aceca23b884daf7374641b6d73d9102f?chain=mainnet) |
+| Diamond Lance / Nilo (`SP187XM...DVJZ`) | #1: grace window vs the block clock | 1,000 (tip) | [`0xf24aa35a...`](https://explorer.hiro.so/txid/0xf24aa35a3b8cf3e88e54e5e14124b1cc2334fea2629f8a9651a4311764e01715?chain=mainnet) |
+| **Total** | | **18,500** | |
+
+Light Brio, Hasty Dex and Eternal Harp: no new finding beyond #2 (Hasty Dex
+and Eternal Harp brought the executed fork proofs of it).
+
 | # | Submitter | Headline | Our verdict | Decision |
 |---|---|---|---|---|
 | 1 | Diamond Lance ("Nilo") | Grace window too short for the block clock (F) | Real, but smaller than claimed: ~3 bps average | Keep as is, documented |
