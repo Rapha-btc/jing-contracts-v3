@@ -15,7 +15,7 @@ record what holds, what does not, and what we decided.
 | 1 | Diamond Lance ("Nilo") | Grace window too short for the block clock (F) | Real, but smaller than claimed: ~3 bps average | Keep as is, documented |
 | 2 | Patient Reed | Margin gate bypassable (B+D+E) | HIGH holds; MEDIUM partly; LOW holds | HIGH fixed in `markets-sbtc-stx-jing-v6-3` (source, not deployed); MEDIUM + LOW open |
 | 3 | Light Brio | Same HIGH/MEDIUM/LOW as #2 | Holds, but all duplicates of #2 (posted 3 h later) | Covered by #2 |
-| 4 | Rushing Orion | | _pending_ | |
+| 4 | Rushing Orion | Gate admits an order that overlaps a resting order just outside the mid | Holds: not covered by the first v6-3 draft | Fixed in v6-3 (book search to `min/max(limit, mid -/+ 0.4%)`) |
 | 5 | Void Kael | | _pending_ | |
 | 6 | Hasty Dex | | _pending_ | |
 | 7 | Eternal Harp | | _pending_ | |
@@ -201,8 +201,8 @@ Two strengths, both need a new market version:
 
 | Book scan at | Closes | Leaves open |
 |---|---|---|
-| the raw mid (`price`) - **shipped in v6-3** | the dodge above: cross now, settle at the real mid | an order resting just across a nearby ask, filled when the mid moves < 0.4% |
-| `min(bid, widen-up price)` (stricter, not shipped) | both: anything that crosses, or would cross within the 0.4% margin | nothing the margin is meant to cover |
+| the raw mid (`price`) - first v6-3 draft | the dodge above: cross now, settle at the real mid | an order resting just across a nearby ask, filled when the mid moves < 0.4% |
+| `min(bid, widen-up price)` - **shipped in v6-3** | both: anything that crosses, or would cross within the 0.4% margin | nothing the margin is meant to cover |
 
 The cap at the bid's own limit matters: without it, a bid at 99.7 would be
 refused because of an ask at 100.3, although the two are 0.6% apart and
@@ -234,80 +234,65 @@ constant.
 ### Decision
 
 **HIGH: fixed in `contracts/markets-sbtc-stx-jing-v6-3.clar`** (readable copy:
-`markets-sbtc-stx-jing-v6-3-formatted.clar`). The book search now uses the
-real mid. We chose the minimum fix (search at the mid) over the strict one
-(search at mid + 0.4%): it closes the exploit, because settlement clears at
-the mid. See "The v6-3 change" below. Not deployed yet.
+`markets-sbtc-stx-jing-v6-3-formatted.clar`). Not deployed yet.
 
 **MEDIUM (age-aware margin) and LOW (unreachable 70 bps cap): open.** Not in
 v6-3.
 
 ### The v6-3 change
 
-v6-3 is v6-2 with one change. `clarinet check` passes (run on a minimal
-manifest, since the repo manifest still lists `markets-sbtc-stx-jing-v7`,
-which moved to `contracts/aborted/`).
+The rule, in sats per STX with the mid at 400 (0.4% = 1.6 sats):
+**refuse a new order if it could fill after the mid moves less than 1.6
+sats.** For a new buy: refuse if the buy is at or above 398.4 **and** some
+seller asks at or below **min(the buy price, 401.6)**.
 
-**1. Two new private functions, one per side:**
+| New buy | Resting sell | Fills when the mid... | v6-2 | v6-3 |
+|---|---|---|---|---|
+| up to 402 | 399 | is 400 already | admitted (bug) | **refused** |
+| up to 401.2 | 400.8 | moves +0.8 | admitted (bug) | **refused** (Rushing Orion, #4) |
+| up to 398.8 | 399.2 | never | admitted | admitted |
+| up to 410 | 408 | moves +8 (2%) | admitted | admitted |
+
+A first version of v6-3 searched the book at the raw mid (400). That closed
+row 1 but not row 2; the search now goes up to `min(limit, mid + 0.4%)`.
+
+In contract units (STX per BTC, the inverse of sats per STX), the two gate
+functions take the mid and the new order's price and do both steps:
 
 ```clarity
-(define-private (gate-takes-as-y (entrant-price uint) (book-price uint) (limit uint))
+(define-private (gate-takes-as-y (mid uint) (limit uint))     ;; new STX deposit
   (and
-    (> entrant-price u0)          ;; 0 = other side empty, no oracle read: gate off
-    (<= entrant-price limit)      ;; half 1: is the new order within 0.4% of the mid?
-    (get found                    ;; half 2: is any resting x order willing at the REAL mid?
-      (fold live-offer-fold (get-token-x-depositors (var-get current-cycle))
-        { price: book-price, found: false }))))
+    (> mid u0)                                  ;; 0 = other side empty: gate off
+    (<= (widen-down mid) limit)                 ;; within 0.4% of the mid (or through it)
+    (get found (fold live-offer-fold (get-token-x-depositors (var-get current-cycle))
+      { price: (if (< limit (widen-up mid)) limit (widen-up mid)),  ;; min(limit, mid + 0.4%)
+        found: false }))))
 ```
 
-`gate-takes-as-x` is the mirror: `>=` instead of `<=` (an x order wants at
-least its limit), and it searches the y side with `live-bid-fold`.
+`gate-takes-as-x` (new sBTC deposit) is the mirror: `(>= (widen-up mid) limit)`
+and a search of the STX side down to `max(limit, mid - 0.4%)`.
 
-**2. All eight gate calls pass the real mid for the search:**
+All eight gate calls become `(gate-takes-as-y price bid)` /
+`(gate-takes-as-x price ask)` - deposit, readmit, set-limit and both
+reprice-or-swap paths.
 
-```clarity
-;; v6-2: (would-take-as-y (widen-down price) bid)        search at mid moved 0.4%
-;; v6-3: (gate-takes-as-y (widen-down price) price bid)  search at the real mid
-```
+**Pegged resting orders.** The search prices each resting order at the
+search price. That is exact for fixed orders and for spread-0 pegs (which
+sit at whatever the mid is, down to their own floor/cap). Pegs with a
+spread never fill in the batch - only takers walking the book fill them -
+so they cannot be the other side of this dodge.
 
-Deposit, readmit, set-limit and both reprice-or-swap paths, on both sides.
-
-**3. `would-take-as-x/y` are unchanged, and still needed.** They answer a
+**`would-take-as-x/y` are unchanged, and still needed.** They answer a
 different question with one price:
 
 | Function | Question | Prices |
 |---|---|---|
 | `would-take-as-*` | Do you cross **right now**? | real mid for both halves |
-| `gate-takes-as-*` | Are you **too close** to crossing to rest as a maker? | shifted mid for your order, real mid for the book |
+| `gate-takes-as-*` | Could you fill as a maker after a move **under 0.4%**? | shifted mid for your order, `min/max(limit, mid -/+ 0.4%)` for the book |
 
 `would-take-as-*` is used inside `reprice-or-swap-token-y/x` ("this reprice
 crosses now: charge the rebate and settle") and by the apps as a read-only
 ("this limit crosses, use Market").
-
-### Example in sats per STX (the x side)
-
-Contract prices are STX per BTC, the inverse of sats per STX, so every
-direction flips in code. In sats per STX, with the mid at **396.47**:
-
-- Depositing sBTC (x side) = **buying STX**. Limit: pay **at most** N sats per
-  STX.
-- Depositing STX (y side) = **selling STX**. Limit: receive **at least** N
-  sats per STX.
-- The gate moves the mid 0.4% toward the new buyer, i.e. cheaper STX:
-  396.47 / 1.004 = **394.89**. In contract units that is `widen-up`.
-
-A resting STX seller asks **396.00**. A new buyer bids up to **397.00**. At
-the real mid (396.47) both accept, so they trade at once: the buyer is a
-taker.
-
-| | Half 1: buyer accepts 394.89? | Half 2: seller accepts ... | Result |
-|---|---|---|---|
-| v6-2 | yes (394.89 <= 397) | at 394.89? no (wants >= 396) | **admitted** - the bug |
-| v6-3 | yes | at 396.47 (real mid)? yes | **refused**, `ERR_MUST_USE_SWAP` |
-
-The v6-2 blind spot on this side: STX sellers asking between 394.89 and
-396.47, for example a sell rung pegged at the mid. On the y side it is the
-mirror.
 
 ### Consequence for at-mid rungs
 
@@ -318,17 +303,16 @@ only because of the blind spot.
 
 ### Fork proof
 
-`simulations/verify-v6-3-gate-blind-band.js`, **41/41 green**:
-[stxer d3eca001...](https://stxer.xyz/simulations/mainnet/d3eca001827169de81c37facd4a5dcec).
+`simulations/verify-v6-3-gate-blind-band.js`, **77/77 green**:
+[stxer 23444cec...](https://stxer.xyz/simulations/mainnet/23444cec2a3f15f53eed454fd1a123d3).
 Fresh copies of the v6-2 and v6-3 sources are deployed on the fork, so the
 live book cannot interfere. Both sides:
 
-| Step | v6-2 source | v6-3 |
+| Case | v6-2 source | v6-3 |
 |---|---|---|
-| Maker rests 20 bps through the mid (inside the blind band) | admitted | admitted |
-| Entrant 5% through the mid, y side | **admitted**; settle clears at the mid; maker gets 5,994,000 uSTX = fee only, no rebate | **refused `u1016`** |
-| Entrant 5% through the mid, x side | **admitted**; settle clears at the mid; maker gets 2,388 sats = fee only, no rebate | **refused `u1016`** |
-| Control: 30 bps from crossing | - | refused |
+| Entrant 5% through a maker resting 20 bps through the mid | **admitted**; settle clears at the mid; maker gets fee only, no rebate (5,994,000 uSTX / 2,415 sats) | **refused `u1016`** |
+| Entrant 30 bps through a maker resting 20 bps OUTSIDE the mid (overlap, #4) | **admitted** | **refused `u1016`** |
+| Control: 30 bps away, cannot meet the resting order | - | admitted |
 | Control: 100 bps away | - | admitted |
 
 ### Before deploy
@@ -356,4 +340,63 @@ live book cannot interfere. Both sides:
 
 **Verdict:** well evidenced, nothing new over #2, which was first on every
 point.
+
+---
+
+## 4. Rushing Orion - the gate admits an overlapping order
+
+### Claim
+
+The gate tests the widened mid, not the entrant's own price, so an order
+that crosses the book is admitted and never gets `ERR_MUST_USE_SWAP`. Their
+example: mid 100, resting ask 100.2, new bid 100.3 (crossing it by 10 bps)
+is admitted.
+
+### What we checked
+
+In sats per STX, mid 400: a seller rests at 400.8 (above the mid, not
+trading now) and a new buyer pays up to 401.2. The two overlap. They fill
+at the next settlement as soon as the mid moves up 0.8 sats (0.2%), and the
+buyer pays 10 bps instead of the 30 it would pay through Swap. The margin
+promises a maker fill only after a move of more than 0.4%.
+
+- v6-2 admits it (book searched at 398.4).
+- **The first v6-3 draft also admitted it** (book searched at the raw mid,
+  400: the 400.8 seller is not willing there).
+- v6-3 as pushed refuses it: the book is searched up to
+  `min(401.2, 401.6)` = 401.2, which finds the 400.8 seller.
+
+So this report found a case the fix for #2 alone did not cover.
+
+### What the report got wrong
+
+It says the entrant's own test (`(<= price limit)`) also "gets easier" as
+the test price drops. It gets stricter: moving the price toward the order
+catches more orders near the mid.
+
+### The three conditions of the v6-3 gate, in plain words
+
+For a new sBTC deposit (buying STX at up to B sats per STX, mid 400). The
+order is refused only if all three hold:
+
+1. `(> mid u0)` - someone rests on the STX side, at any price. (The contract
+   reads the price only when the other side has orders, so 0 means empty.)
+2. `(>= (widen-up mid) limit)` - B is at or above 398.4: within 0.4% of the
+   mid, or through it, so a move of 0.4% or less can bring the mid to it.
+3. the fold - some STX seller asks at or below `min(B, 401.6)`, both the
+   buy price and the mid + 0.4%. That seller and B meet after a move of
+   0.4% or less.
+
+Condition 2 is not redundant. A seller resting far below the mid (395) and
+a buy at 397 overlap, but only a 0.75% drop fills them. Condition 3 alone
+would refuse the buy; condition 2 lets it in, correctly.
+
+Condition 3 in two branches: for B up to 401.6 (every buy below the mid
+included), search sellers at or below B; above 401.6, search only up to
+401.6, because a seller between 401.6 and B needs more than a 0.4% move.
+
+### Decision
+
+**Fixed in v6-3** and proven on the fork (see "Fork proof" under #2: the
+`mkt-overlap-*` cases, both sides).
 

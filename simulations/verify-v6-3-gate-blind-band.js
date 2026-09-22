@@ -5,7 +5,8 @@
 // order priced between the widened mid and the real mid was invisible. An
 // entrant crossing it was admitted as a maker; settlement at the real mid
 // then filled both with the 10 bps fee and no taker rebate. v6-3 scans the
-// book at the real mid and refuses the same entry with ERR_MUST_USE_SWAP.
+// book up to min(limit, mid + 0.4%) for a y entrant (max(limit, mid - 0.4%)
+// for an x entrant) and refuses the same entry with ERR_MUST_USE_SWAP.
 //
 // Fresh copies of both sources are deployed on the fork (v6-2 source is
 // byte-identical to the live contract), so the live book cannot interfere.
@@ -14,7 +15,11 @@
 //   2. an entrant deposits 5% through the mid on the other side
 //      v6-2: admitted, settle clears both at the mid, maker gets no rebate
 //      v6-3: refused u1016
-//   3. v6-3 controls: 30 bps from crossing -> refused; 100 bps -> admitted
+//   3. v6-3 controls: an order that can never meet the resting one is
+//      admitted (30 and 100 bps away)
+//   4. Rushing Orion's case: the resting order sits 20 bps OUTSIDE the mid
+//      (not willing at the mid) and the entrant overlaps it at 30 bps. A
+//      0.2% move would fill both at maker cost. v6-2 admits it; v6-3 refuses.
 import fs from "node:fs";
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV,
@@ -58,6 +63,10 @@ async function main() {
     "63y": { name: "mkt-blindband-v63-y", file: "markets-sbtc-stx-jing-v6-3" },
     "62x": { name: "mkt-blindband-v62-x", file: "markets-sbtc-stx-jing-v6-2" },
     "63x": { name: "mkt-blindband-v63-x", file: "markets-sbtc-stx-jing-v6-3" },
+    "62o": { name: "mkt-overlap-v62-y", file: "markets-sbtc-stx-jing-v6-2" },
+    "63o": { name: "mkt-overlap-v63-y", file: "markets-sbtc-stx-jing-v6-3" },
+    "62q": { name: "mkt-overlap-v62-x", file: "markets-sbtc-stx-jing-v6-2" },
+    "63q": { name: "mkt-overlap-v63-x", file: "markets-sbtc-stx-jing-v6-3" },
   };
   for (const m of Object.values(M)) {
     m.cid = `${DEP}.${m.name}`;
@@ -92,8 +101,9 @@ async function main() {
       ev(`[${name}] maker got 5,994,000 uSTX = fee only, NO rebate`, cid, `(stx-get-balance '${maker})`, "u5994000");
     } else {
       tx(`[${name}] entrant bid 5% through the mid REFUSED`, depY(entrant, cid, 6_000_000, up(500n)), "(err u1016)");
-      tx(`[${name}] control: bid 30 bps from crossing still refused`, depY(entrant, cid, 6_000_000, down(30n)), "(err u1016)");
-      tx(`[${name}] control: bid 100 bps away admitted as a maker`, depY(entrant, cid, 6_000_000, down(100n)), "(ok u6000000)");
+      const e2 = who(), e3 = who(); fundStx(e2, 6_000_000); fundStx(e3, 6_000_000);
+      tx(`[${name}] control: bid 30 bps under (never meets the ask) admitted`, depY(e2, cid, 6_000_000, down(30n)), "(ok u6000000)");
+      tx(`[${name}] control: bid 100 bps under admitted`, depY(e3, cid, 6_000_000, down(100n)), "(ok u6000000)");
     }
   }
 
@@ -113,9 +123,32 @@ async function main() {
       ev(`[${name}] maker got sBTC (printed)`, cid, `(unwrap-panic (contract-call? '${SBTC} get-balance '${maker}))`, (v) => /^u[1-9]/.test(v));
     } else {
       tx(`[${name}] entrant ask 5% through the mid REFUSED`, depX(entrant, cid, 3000, down(500n)), "(err u1016)");
-      tx(`[${name}] control: ask 30 bps from crossing still refused`, depX(entrant, cid, 3000, up(30n)), "(err u1016)");
-      tx(`[${name}] control: ask 100 bps away admitted as a maker`, depX(entrant, cid, 3000, up(100n)), "(ok u3000)");
+      const e2 = who(), e3 = who(); fundSbtc(e2, 3000); fundSbtc(e3, 3000);
+      tx(`[${name}] control: ask 30 bps over (never meets the bid) admitted`, depX(e2, cid, 3000, up(30n)), "(ok u3000)");
+      tx(`[${name}] control: ask 100 bps over admitted`, depX(e3, cid, 3000, up(100n)), "(ok u3000)");
     }
+  }
+
+  // ---- Rushing Orion: resting order 20 bps OUTSIDE the mid, entrant overlaps at 30 ----
+  // y entrant: resting x ask wants >= mid + 20 bps (not willing at the mid);
+  // the entrant pays up to mid + 30 bps, so the two overlap.
+  for (const key of ["62o", "63o"]) {
+    const { cid, name } = M[key];
+    const maker = who(), entrant = who();
+    fundSbtc(maker, 3000); fundStx(entrant, 6_000_000);
+    tx(`[${name}] maker rests sBTC ask 20 bps over the mid`, depX(maker, cid, 3000, up(20n)), "(ok u3000)");
+    tx(`[${name}] entrant bid 30 bps over overlaps it: ${key === "62o" ? "ADMITTED (bug)" : "REFUSED"}`,
+      depY(entrant, cid, 6_000_000, up(30n)), key === "62o" ? "(ok u6000000)" : "(err u1016)");
+  }
+  // x entrant mirror: resting y bid pays <= mid - 20 bps; the entrant wants
+  // >= mid - 30 bps, so the two overlap.
+  for (const key of ["62q", "63q"]) {
+    const { cid, name } = M[key];
+    const maker = who(), entrant = who();
+    fundStx(maker, 6_000_000); fundSbtc(entrant, 3000);
+    tx(`[${name}] maker rests STX bid 20 bps under the mid`, depY(maker, cid, 6_000_000, down(20n)), "(ok u6000000)");
+    tx(`[${name}] entrant ask 30 bps under overlaps it: ${key === "62q" ? "ADMITTED (bug)" : "REFUSED"}`,
+      depX(entrant, cid, 3000, down(30n)), key === "62q" ? "(ok u3000)" : "(err u1016)");
   }
 
   const sid = await b.run();
