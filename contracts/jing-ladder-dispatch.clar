@@ -10,8 +10,7 @@
 ;; helper guarantees allocation, not immediate execution or market admission.
 ;; Frontend: deny-mode postconditions bounding the user's input-asset spend by
 ;; total. Read rung get-position / get-state after confirmation for held/resting.
-(use-trait rung-deposit .jing-rung-deposit-trait.rung-deposit-trait)
-(use-trait rung-exit .jing-rung-deposit-trait.rung-exit-trait)
+(use-trait rung .jing-rung-deposit-trait.rung-trait)
 
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
 (define-constant ERR_EMPTY (err u7101))
@@ -27,7 +26,7 @@
 ;; Check the entire allocation before the first asset transfer. Subtract from a
 ;; budget instead of summing caller-provided uints (avoids addition overflow).
 (define-private (validate-one
-    (entry { rung: <rung-deposit>, amount: uint })
+    (entry { rung: <rung>, amount: uint })
     (acc (response {
       remaining: uint,
       buy: bool,
@@ -59,7 +58,7 @@
 )
 
 (define-private (deposit-one
-    (entry { rung: <rung-deposit>, amount: uint })
+    (entry { rung: <rung>, amount: uint })
     (acc (response { update: (buff 8192), count: uint } uint))
   )
   (let (
@@ -75,7 +74,7 @@
 
 (define-private (dispatch
     (total uint)
-    (allocations (list 10 { rung: <rung-deposit>, amount: uint }))
+    (allocations (list 10 { rung: <rung>, amount: uint }))
     (update (buff 8192))
     (buy bool)
   )
@@ -104,7 +103,7 @@
 
 (define-public (deposit-buy
     (total uint)
-    (allocations (list 10 { rung: <rung-deposit>, amount: uint }))
+    (allocations (list 10 { rung: <rung>, amount: uint }))
     (update (buff 8192))
   )
   (dispatch total allocations update true)
@@ -112,7 +111,7 @@
 
 (define-public (deposit-sell
     (total uint)
-    (allocations (list 10 { rung: <rung-deposit>, amount: uint }))
+    (allocations (list 10 { rung: <rung>, amount: uint }))
     (update (buff 8192))
   )
   (dispatch total allocations update false)
@@ -123,7 +122,7 @@
 ;; targets before any sync or withdrawal. The registry's canonical gate is the
 ;; trust boundary, including for old code whose canonical has since changed.
 (define-private (validate-exit
-    (entry { rung: <rung-exit>, amount: uint })
+    (entry { rung: <rung>, amount: uint })
     (acc (response { buy: bool, seen: (list 10 principal) } uint))
   )
   (let (
@@ -145,7 +144,7 @@
 )
 
 (define-private (exit-one
-    (entry { rung: <rung-exit>, amount: uint })
+    (entry { rung: <rung>, amount: uint })
     (acc (response { buy: bool, withdrawn: uint } uint))
   )
   (let ((state (try! acc)) (target (get rung entry)))
@@ -158,7 +157,7 @@
 )
 
 (define-private (withdraw-many
-    (requests (list 10 { rung: <rung-exit>, amount: uint }))
+    (requests (list 10 { rung: <rung>, amount: uint }))
     (buy bool)
   )
   (begin
@@ -184,13 +183,13 @@
 ;; positions return their rung error and roll the whole batch back; use each
 ;; rung's claim for sold-out positions. Funds always go directly to tx-sender.
 (define-public (withdraw-buy
-    (requests (list 10 { rung: <rung-exit>, amount: uint }))
+    (requests (list 10 { rung: <rung>, amount: uint }))
   )
   (withdraw-many requests true)
 )
 
 (define-public (withdraw-sell
-    (requests (list 10 { rung: <rung-exit>, amount: uint }))
+    (requests (list 10 { rung: <rung>, amount: uint }))
   )
   (withdraw-many requests false)
 )
