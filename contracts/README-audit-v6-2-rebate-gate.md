@@ -201,8 +201,8 @@ Two strengths, both need a new market version:
 
 | Book scan at | Closes | Leaves open |
 |---|---|---|
-| the raw mid (`price`) | the dodge above: cross now, settle at the real mid | an order resting just across a nearby ask, filled when the mid moves < 0.4% |
-| `min(bid, widen-up price)` (recommended) | both: anything that crosses, or would cross within the 0.4% margin | nothing the margin is meant to cover |
+| the raw mid (`price`) - **shipped in v6-3** | the dodge above: cross now, settle at the real mid | an order resting just across a nearby ask, filled when the mid moves < 0.4% |
+| `min(bid, widen-up price)` (stricter, not shipped) | both: anything that crosses, or would cross within the 0.4% margin | nothing the margin is meant to cover |
 
 The cap at the bid's own limit matters: without it, a bid at 99.7 would be
 refused because of an ask at 100.3, although the two are 0.6% apart and
