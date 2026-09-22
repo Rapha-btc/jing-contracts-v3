@@ -358,6 +358,16 @@ path = "contracts/markets-sbtc-stx-jing-v6.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.markets-sbtc-stx-jing-v6-2]
+path = "contracts/markets-sbtc-stx-jing-v6-2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-stx-jing-v6-3]
+path = "contracts/markets-sbtc-stx-jing-v6-3.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.markets-sbtc-stx-jing-v7]
 path = "contracts/markets-sbtc-stx-jing-v7.clar"
 clarity_version = 5

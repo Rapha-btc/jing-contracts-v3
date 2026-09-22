@@ -13,7 +13,7 @@ record what holds, what does not, and what we decided.
 | # | Submitter | Headline | Our verdict | Decision |
 |---|---|---|---|---|
 | 1 | Diamond Lance ("Nilo") | Grace window too short for the block clock (F) | Real, but smaller than claimed: ~3 bps average | Keep as is, documented |
-| 2 | Patient Reed | Margin gate bypassable (B+D+E) | HIGH holds; MEDIUM partly; LOW holds | _open: needs a redeploy_ |
+| 2 | Patient Reed | Margin gate bypassable (B+D+E) | HIGH holds; MEDIUM partly; LOW holds | HIGH fixed in `markets-sbtc-stx-jing-v6-3` (source, not deployed); MEDIUM + LOW open |
 | 3 | Light Brio | | _pending_ | |
 | 4 | Rushing Orion | | _pending_ | |
 | 5 | Void Kael | | _pending_ | |
@@ -151,9 +151,62 @@ entrant: 20 bps per fill, more if the entrant also picks a stale print for
 the settlement. That breaks the fee model the bounty is about, so we accept
 HIGH in scope.
 
-**Fix.** Split the price: widened price for the entrant's own test, raw mid
-for the book scan, e.g. `(would-take-as-y-gated (widen-down price) price bid)`.
-Needs a new market version.
+**The rule the gate should enforce, in one line.** A new bid must stay at
+least 0.4% away from every resting ask it could hit; if it is closer, or
+crosses it, it is refused and must use Swap. (Mirror for a new ask.)
+
+**Worked numbers.** Mid = 100. A resting ask sells at 99.8 or more. A new
+bid pays up to 105.
+
+- At the real mid (100) both are willing, so they trade at once. The bid is
+  a taker and should be refused (or pay the rebate through Swap).
+- The gate instead looks for asks willing at **99.6** (the widened mid). The
+  ask at 99.8 is not, so the gate sees nobody to cross and admits the bid.
+- Settlement then matches the two at 100. The bid pays 10 bps and no rebate.
+
+So the gate only checks part of the book. Asks between 99.6 and the mid are
+the ones it misses.
+
+**Why.** `would-take-as-y` takes one price and uses it for two questions:
+
+1. Is the entrant willing at this price? Widening the mid **toward** the
+   entrant (down, for a bid) makes this stricter. Correct.
+2. Is any resting ask willing at this price? Here the same move makes the
+   search **smaller**: an ask at A is willing only when the price is at or
+   above A, so a lower price finds fewer asks. Backwards.
+
+**Fix.** Give the book scan its own price. For a new bid:
+
+```clarity
+;; entrant test at the mid moved toward the bid (unchanged);
+;; book scan at the mid moved AWAY from it, capped at the bid's own limit
+(define-read-only (would-take-as-y-gated (entrant-price uint) (book-price uint) (limit uint))
+  (and
+    (> entrant-price u0)
+    (<= entrant-price limit)
+    (get found (fold live-offer-fold (get-token-x-depositors (var-get current-cycle))
+      { price: book-price, found: false }))))
+
+(asserts! (not (would-take-as-y-gated
+  (widen-down price)
+  (if (< bid (widen-up price)) bid (widen-up price))   ;; min(bid, mid + 40 bps)
+  bid)) ERR_MUST_USE_SWAP)
+```
+
+The ask side mirrors it: entrant test at `(widen-up price)`, book scan at
+`max(ask, widen-down price)` through `live-bid-fold`. Apply at all eight
+gate sites.
+
+Two strengths, both need a new market version:
+
+| Book scan at | Closes | Leaves open |
+|---|---|---|
+| the raw mid (`price`) | the dodge above: cross now, settle at the real mid | an order resting just across a nearby ask, filled when the mid moves < 0.4% |
+| `min(bid, widen-up price)` (recommended) | both: anything that crosses, or would cross within the 0.4% margin | nothing the margin is meant to cover |
+
+The cap at the bid's own limit matters: without it, a bid at 99.7 would be
+refused because of an ask at 100.3, although the two are 0.6% apart and
+cannot trade inside the margin.
 
 ### MEDIUM - a flat 40 bps margin against a rebate that rises to 69: **partly holds**
 
@@ -180,6 +233,91 @@ constant.
 
 ### Decision
 
-_Open._ The HIGH needs a new market version (v6-3). To decide: ship the
-split-price gate (and optionally the age-aware margin) now, or wait and
-batch it with other findings from this bounty.
+**HIGH: fixed in `contracts/markets-sbtc-stx-jing-v6-3.clar`** (readable copy:
+`markets-sbtc-stx-jing-v6-3-formatted.clar`). The book search now uses the
+real mid. We chose the minimum fix (search at the mid) over the strict one
+(search at mid + 0.4%): it closes the exploit, because settlement clears at
+the mid. See "The v6-3 change" below. Not deployed yet.
+
+**MEDIUM (age-aware margin) and LOW (unreachable 70 bps cap): open.** Not in
+v6-3.
+
+### The v6-3 change
+
+v6-3 is v6-2 with one change. `clarinet check` passes (run on a minimal
+manifest, since the repo manifest still lists `markets-sbtc-stx-jing-v7`,
+which moved to `contracts/aborted/`).
+
+**1. Two new private functions, one per side:**
+
+```clarity
+(define-private (gate-takes-as-y (entrant-price uint) (book-price uint) (limit uint))
+  (and
+    (> entrant-price u0)          ;; 0 = other side empty, no oracle read: gate off
+    (<= entrant-price limit)      ;; half 1: is the new order within 0.4% of the mid?
+    (get found                    ;; half 2: is any resting x order willing at the REAL mid?
+      (fold live-offer-fold (get-token-x-depositors (var-get current-cycle))
+        { price: book-price, found: false }))))
+```
+
+`gate-takes-as-x` is the mirror: `>=` instead of `<=` (an x order wants at
+least its limit), and it searches the y side with `live-bid-fold`.
+
+**2. All eight gate calls pass the real mid for the search:**
+
+```clarity
+;; v6-2: (would-take-as-y (widen-down price) bid)        search at mid moved 0.4%
+;; v6-3: (gate-takes-as-y (widen-down price) price bid)  search at the real mid
+```
+
+Deposit, readmit, set-limit and both reprice-or-swap paths, on both sides.
+
+**3. `would-take-as-x/y` are unchanged, and still needed.** They answer a
+different question with one price:
+
+| Function | Question | Prices |
+|---|---|---|
+| `would-take-as-*` | Do you cross **right now**? | real mid for both halves |
+| `gate-takes-as-*` | Are you **too close** to crossing to rest as a maker? | shifted mid for your order, real mid for the book |
+
+`would-take-as-*` is used inside `reprice-or-swap-token-y/x` ("this reprice
+crosses now: charge the rebate and settle") and by the apps as a read-only
+("this limit crosses, use Market").
+
+### Example in sats per STX (the x side)
+
+Contract prices are STX per BTC, the inverse of sats per STX, so every
+direction flips in code. In sats per STX, with the mid at **396.47**:
+
+- Depositing sBTC (x side) = **buying STX**. Limit: pay **at most** N sats per
+  STX.
+- Depositing STX (y side) = **selling STX**. Limit: receive **at least** N
+  sats per STX.
+- The gate moves the mid 0.4% toward the new buyer, i.e. cheaper STX:
+  396.47 / 1.004 = **394.89**. In contract units that is `widen-up`.
+
+A resting STX seller asks **396.00**. A new buyer bids up to **397.00**. At
+the real mid (396.47) both accept, so they trade at once: the buyer is a
+taker.
+
+| | Half 1: buyer accepts 394.89? | Half 2: seller accepts ... | Result |
+|---|---|---|---|
+| v6-2 | yes (394.89 <= 397) | at 394.89? no (wants >= 396) | **admitted** - the bug |
+| v6-3 | yes | at 396.47 (real mid)? yes | **refused**, `ERR_MUST_USE_SWAP` |
+
+The v6-2 blind spot on this side: STX sellers asking between 394.89 and
+396.47, for example a sell rung pegged at the mid. On the y side it is the
+mirror.
+
+### Consequence for at-mid rungs
+
+With v6-3, a buy rung and a sell rung both pegged at the mid cannot rest at
+the same time: each is inside the other's 0.4% and willing at the mid. The
+second to arrive is refused and must use Swap. In v6-2 they could coexist
+only because of the blind spot.
+
+### Before deploy
+
+- A stxer mainnet-fork sim: the dodge succeeds on v6-2, and v6-3 refuses it.
+- `jing-core-v5` `set-verified-contract` for the v6-3 hash, a router bound
+  to v6-3, and the three apps repointed.
