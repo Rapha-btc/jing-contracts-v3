@@ -19,9 +19,8 @@
 (define-constant ERR_NOT_SEATED (err u7104))
 (define-constant ERR_DUPLICATE (err u7105))
 (define-constant ERR_DIRECT_CALL (err u7106))
-(define-constant ERR_DEPOSIT_FALSE (err u7107))
 (define-constant ERR_NOT_REGISTERED_SIDE (err u7108))
-(define-constant ERR_EXIT_FALSE (err u7109))
+;; u7107/u7109 retired: successful rung responses are tuples, never booleans.
 
 ;; Check the entire allocation before the first asset transfer. Subtract from a
 ;; budget instead of summing caller-provided uints (avoids addition overflow).
@@ -59,16 +58,24 @@
 
 (define-private (deposit-one
     (entry { rung: <rung>, amount: uint })
-    (acc (response { update: (buff 8192), count: uint } uint))
+    (acc (response {
+      update: (buff 8192), count: uint, stx-paid: uint, sbtc-paid: uint,
+      positions: (list 10 { rung: principal, amount: uint, shares: uint,
+        epoch: uint, stx-paid: uint, sbtc-paid: uint }),
+    } uint))
   )
   (let (
       (state (try! acc))
       (target (get rung entry))
+      (result (try! (contract-call? target deposit (get amount entry) (get update state))))
     )
-    (asserts! (try! (contract-call? target deposit (get amount entry) (get update state)))
-      ERR_DEPOSIT_FALSE
-    )
-    (ok { update: (get update state), count: (+ (get count state) u1) })
+    (ok {
+      update: (get update state), count: (+ (get count state) u1),
+      stx-paid: (+ (get stx-paid state) (get stx-paid result)),
+      sbtc-paid: (+ (get sbtc-paid state) (get sbtc-paid result)),
+      positions: (unwrap! (as-max-len? (append (get positions state)
+        (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
+    })
   )
 )
 
@@ -88,7 +95,9 @@
           (ok { remaining: total, buy: buy, seen: (list) })))))
       (asserts! (is-eq (get remaining validated) u0) ERR_TOTAL)
     )
-    (let ((done (try! (fold deposit-one allocations (ok { update: update, count: u0 })))))
+    (let ((done (try! (fold deposit-one allocations (ok {
+          update: update, count: u0, stx-paid: u0, sbtc-paid: u0, positions: (list),
+        })))))
       (print {
         event: "ladder-dispatched",
         member: tx-sender,
@@ -96,7 +105,10 @@
         amount: total,
         rungs: (get count done),
       })
-      (ok { amount: total, rungs: (get count done) })
+      (ok { amount: total, rungs: (get count done),
+        stx-paid: (get stx-paid done), sbtc-paid: (get sbtc-paid done),
+        positions: (get positions done),
+      })
     )
   )
 )
@@ -145,14 +157,23 @@
 
 (define-private (exit-one
     (entry { rung: <rung>, amount: uint })
-    (acc (response { buy: bool, withdrawn: uint } uint))
+    (acc (response { withdrawn: uint, stx: uint, sbtc: uint,
+      positions: (list 10 { rung: principal, stx: uint, sbtc: uint }),
+    } uint))
   )
   (let ((state (try! acc)) (target (get rung entry)))
     ;; Every rung's withdraw first syncs and pays accrued proceeds, then caps
     ;; the request at the user's unsold inventory. A sold-out position returns
     ;; its normal ERR_NO_POSITION and rolls this whole batch back.
-    (asserts! (try! (contract-call? target withdraw (get amount entry))) ERR_EXIT_FALSE)
-    (ok (merge state { withdrawn: (+ (get withdrawn state) u1) }))
+    (let ((result (try! (contract-call? target withdraw (get amount entry)))))
+      (ok {
+        withdrawn: (+ (get withdrawn state) u1),
+        stx: (+ (get stx state) (get stx result)),
+        sbtc: (+ (get sbtc state) (get sbtc result)),
+        positions: (unwrap! (as-max-len? (append (get positions state)
+          (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
+      })
+    )
   )
 )
 
@@ -165,13 +186,14 @@
     (asserts! (> (len requests) u0) ERR_EMPTY)
     (try! (fold validate-exit requests (ok { buy: buy, seen: (list) })))
     (let ((done (try! (fold exit-one requests
-          (ok { buy: buy, withdrawn: u0 })))))
+          (ok { withdrawn: u0, stx: u0, sbtc: u0, positions: (list) })))))
       (print {
         event: "ladder-withdrawn", member: tx-sender, buy: buy,
         rungs: (len requests), withdrawn: (get withdrawn done),
       })
       (ok {
         rungs: (len requests), withdrawn: (get withdrawn done),
+        stx: (get stx done), sbtc: (get sbtc done), positions: (get positions done),
       })
     )
   )

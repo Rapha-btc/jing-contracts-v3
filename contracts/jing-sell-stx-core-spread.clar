@@ -355,7 +355,6 @@
           (is-eq (var-get held-ustx) u0) (var-get held-ustx)
         ))
         (ok { amount: amount, shares: shares, epoch: epo,
-          rung-held-after: (var-get held-ustx),
           stx-paid: u0, sbtc-paid: paid })
       )
     )
