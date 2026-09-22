@@ -578,3 +578,23 @@ the clock matters. It was set aside for atomicity (the book leg can no
 longer be bundled with AMM legs in one transaction); v6-x prices the
 option instead, and this residual is part of that trade-off.
 
+### L-3 - a rolled swapper pays a rebate for no fill: skip, does not hold
+
+**Claim.** A swapper whose own limit makes the batch roll their deposit
+still pays part of the rebate, gets no fill, and is left as a next-cycle
+maker.
+
+**Does not hold.** A swap is fill-or-kill:
+
+1. `settle-with-refresh` ends with `advance-cycle`, so the "next cycle"
+   the rolled deposit was moved to is now the current cycle.
+2. `cross-remainder-as-x/y` then reads the swapper's remaining deposit in
+   that cycle, walks the book, and asserts `rem < min-deposit`, else
+   `ERR_PARTIAL_FILL`.
+3. So a swap that does not fill reverts entirely: no rebate is paid and no
+   order is left resting.
+
+The report did not trace `advance-cycle` into `cross-remainder-*`; one
+fork run of the claimed sequence would have shown the revert. It was
+stated as a finding without that check.
+
