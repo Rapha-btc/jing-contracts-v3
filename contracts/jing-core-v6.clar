@@ -396,9 +396,8 @@
     (delta uint)
     (limit uint)
     (cycle uint)
-    ;; the resident this deposit displaced on size, if any. It is PARKED
-    ;; (funds and price kept in the market, readmittable), not refunded, so
-    ;; its equity stays: no debit here. The market logs park-x for it.
+    (spread-bps (optional uint))
+    (readmitted uint)
     (parked (optional principal))
     (parked-amount uint)
     (token-x principal)
@@ -410,6 +409,8 @@
     (credit-if-not-registered token-x depositor delta)
     (print {
       event: "deposit-x",
+      spread-bps: spread-bps,
+      readmitted: readmitted,
       market: contract-caller,
       token-x: token-x,
       token-y: token-y,
@@ -436,9 +437,8 @@
     (delta uint)
     (limit uint)
     (cycle uint)
-    ;; the resident this deposit displaced on size, if any. It is PARKED
-    ;; (funds and price kept in the market, readmittable), not refunded, so
-    ;; its equity stays: no debit here. The market logs park-y for it.
+    (spread-bps (optional uint))
+    (readmitted uint)
     (parked (optional principal))
     (parked-amount uint)
     (token-x principal)
@@ -450,6 +450,8 @@
     (credit-if-not-registered token-y depositor delta)
     (print {
       event: "deposit-y",
+      spread-bps: spread-bps,
+      readmitted: readmitted,
       market: contract-caller,
       token-x: token-x,
       token-y: token-y,
@@ -569,46 +571,6 @@
       parked: parked,
       cycle: cycle,
       equity-y: (get-token-equity token-y depositor),
-    })
-    (ok true)
-  )
-)
-
-(define-public (log-set-limit-x
-    (depositor principal)
-    (limit uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "set-limit-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      limit: limit,
-    })
-    (ok true)
-  )
-)
-
-(define-public (log-set-limit-y
-    (depositor principal)
-    (limit uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "set-limit-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      limit: limit,
     })
     (ok true)
   )
@@ -901,54 +863,6 @@
       limit: limit,
       spread-bps: spread-bps,
       submitted-at: submitted-at,
-    })
-    (ok true)
-  )
-)
-
-(define-public (log-peg-x
-    (depositor principal)
-    (spread-bps uint)
-    (floor uint)
-    (cycle uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "peg-x",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      spread-bps: spread-bps,
-      floor: floor,
-      cycle: cycle,
-    })
-    (ok true)
-  )
-)
-
-(define-public (log-peg-y
-    (depositor principal)
-    (spread-bps uint)
-    (cap uint)
-    (cycle uint)
-    (token-x principal)
-    (token-y principal)
-  )
-  (begin
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "peg-y",
-      market: contract-caller,
-      token-x: token-x,
-      token-y: token-y,
-      depositor: depositor,
-      spread-bps: spread-bps,
-      cap: cap,
-      cycle: cycle,
     })
     (ok true)
   )
@@ -1745,3 +1659,4 @@
     (ok true)
   )
 )
+
