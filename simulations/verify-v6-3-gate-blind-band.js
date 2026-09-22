@@ -67,7 +67,10 @@ async function main() {
     "63o": { name: "mkt-overlap-v63-y", file: "markets-sbtc-stx-jing-v6-3" },
     "62q": { name: "mkt-overlap-v62-x", file: "markets-sbtc-stx-jing-v6-2" },
     "63q": { name: "mkt-overlap-v63-x", file: "markets-sbtc-stx-jing-v6-3" },
+    "63m": { name: "mkt-minraise-v63-y", file: "markets-sbtc-stx-jing-v6-3" },
   };
+  // v6-3 reads its seats from jing-ladder-v1 (v6-2 from the live jing-ladder).
+  tx("deploy jing-ladder-v1", (bb) => bb.withSender(DEP).addContractDeploy({ contract_name: "jing-ladder-v1", source_code: src("jing-ladder-v1"), clarity_version: ClarityVersion.Clarity5 }), (v) => !v.includes("ERR"));
   for (const m of Object.values(M)) {
     m.cid = `${DEP}.${m.name}`;
     tx(`deploy ${m.name}`, (bb) => bb.withSender(DEP).addContractDeploy({ contract_name: m.name, source_code: src(m.file), clarity_version: ClarityVersion.Clarity5 }), (v) => !v.includes("ERR"));
@@ -150,6 +153,25 @@ async function main() {
     tx(`[${name}] entrant ask 30 bps under overlaps it: ${key === "62q" ? "ADMITTED (bug)" : "REFUSED"}`,
       depX(entrant, cid, 3000, down(30n)), key === "62q" ? "(ok u3000)" : "(err u1016)");
   }
+
+  // ---- Void Kael gap 6: the owner raises the minimum after an order rests ----
+  // The resting 3000-sat ask is now under the 5000-sat minimum. The taker
+  // walk skips it, but the batch at the mid still fills it, so the gate must
+  // still see it.
+  {
+    const { cid, name } = M["63m"];
+    const maker = who(), entrant = who();
+    fundSbtc(maker, 3000); fundStx(entrant, 6_000_000);
+    tx(`[${name}] maker rests 3000-sat ask 20 bps under the mid`, depX(maker, cid, 3000, down(20n)), "(ok u3000)");
+    tx(`[${name}] owner raises the sBTC minimum to 5000`, call(DEP, cid, "set-min-token-x-deposit", [uintCV(5000)]), "(ok true)");
+    tx(`[${name}] entrant crossing the now-small ask still REFUSED`, depY(entrant, cid, 6_000_000, up(500n)), "(err u1016)");
+  }
+
+  // ---- jing-ladder-v1 seat cap: strictly under the market's 50 slots ----
+  const LAD = `${DEP}.jing-ladder-v1`;
+  tx("ladder-v1: 50 seats per side refused", call(DEP, LAD, "set-max-band-per-side", [uintCV(50)]), (v) => v.startsWith("(err"));
+  tx("ladder-v1: 49 seats per side accepted", call(DEP, LAD, "set-max-band-per-side", [uintCV(49)]), "(ok true)");
+  tx("v6-3: sync-seat-count prunes and reads 49", call(DEP, M["63y"].cid, "sync-seat-count", []), "(ok u49)");
 
   const sid = await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}`);

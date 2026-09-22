@@ -88,8 +88,8 @@ TAKER_REBATE_BPS
 (define-read-only (get-seated-y) (var-get seated-y))
 (define-read-only (is-protected-x (who principal)) (is-some (index-of? (var-get seated-x) who)))
 (define-read-only (is-protected-y (who principal)) (is-some (index-of? (var-get seated-y) who)))
-(define-private (still-seated-x (p principal)) (contract-call? .jing-ladder is-band-x p))
-(define-private (still-seated-y (p principal)) (contract-call? .jing-ladder is-band-y p))
+(define-private (still-seated-x (p principal)) (contract-call? .jing-ladder-v1 is-band-x p))
+(define-private (still-seated-y (p principal)) (contract-call? .jing-ladder-v1 is-band-y p))
 (define-private (with-seat
 (lst (list 50 principal))
 (who principal)
@@ -100,7 +100,7 @@ TAKER_REBATE_BPS
 )
 )
 (define-private (refresh-seat-count)
-(let ((n (contract-call? .jing-ladder get-max-band-per-side)))
+(let ((n (contract-call? .jing-ladder-v1 get-max-band-per-side)))
 (var-set seats-per-side (if (> n MAX_DEPOSITORS)
 MAX_DEPOSITORS
 n
@@ -109,7 +109,11 @@ n
 )
 )
 (define-public (sync-seat-count)
+(begin
+(var-set seated-x (filter still-seated-x (var-get seated-x)))
+(var-set seated-y (filter still-seated-y (var-get seated-y)))
 (ok (refresh-seat-count))
+)
 )
 (define-public (prune-seats)
 (begin
@@ -120,8 +124,8 @@ n
 )
 (define-public (sync-seat (who principal))
 (let (
-(x (contract-call? .jing-ladder is-band-x who))
-(y (contract-call? .jing-ladder is-band-y who))
+(x (contract-call? .jing-ladder-v1 is-band-x who))
+(y (contract-call? .jing-ladder-v1 is-band-y who))
 )
 (asserts! (or x y) ERR_NOT_A_SEAT)
 (and x (var-set seated-x
@@ -1048,6 +1052,46 @@ acc
 )
 )
 )
+(define-private (gate-bid-fold
+(depositor principal)
+(acc {
+price: uint,
+found: bool,
+})
+)
+(if (get found acc)
+acc
+(let ((amount (get-token-y-deposit (var-get current-cycle) depositor)))
+(if (and
+(> amount u0)
+(<= (get price acc) (token-y-limit-at depositor (get price acc)))
+)
+(merge acc { found: true })
+acc
+)
+)
+)
+)
+(define-private (gate-offer-fold
+(depositor principal)
+(acc {
+price: uint,
+found: bool,
+})
+)
+(if (get found acc)
+acc
+(let ((amount (get-token-x-deposit (var-get current-cycle) depositor)))
+(if (and
+(> amount u0)
+(>= (get price acc) (token-x-limit-at depositor (get price acc)))
+)
+(merge acc { found: true })
+acc
+)
+)
+)
+)
 (define-read-only (would-take-as-x
 (price uint)
 (limit uint)
@@ -1086,7 +1130,7 @@ found: false,
 (> mid u0)
 (>= (widen-up mid) limit)
 (get found
-(fold live-bid-fold (get-token-y-depositors (var-get current-cycle)) {
+(fold gate-bid-fold (get-token-y-depositors (var-get current-cycle)) {
 price: (if (> limit (widen-down mid))
 limit
 (widen-down mid)
@@ -1104,7 +1148,7 @@ found: false,
 (> mid u0)
 (<= (widen-down mid) limit)
 (get found
-(fold live-offer-fold (get-token-x-depositors (var-get current-cycle)) {
+(fold gate-offer-fold (get-token-x-depositors (var-get current-cycle)) {
 price: (if (< limit (widen-up mid))
 limit
 (widen-up mid)
@@ -1157,9 +1201,9 @@ price (var-get token-x) tok-y
 (try! (stx-transfer? amount tx-sender current-contract))
 (var-set bumped-token-y-principal smallest-who)
 (map-set token-y-depositor-list cycle
-(unwrap-panic (as-max-len?
+(unwrap! (as-max-len?
 (append (filter not-eq-bumped-token-y depositors) tx-sender) u50
-))
+) ERR_QUEUE_FULL)
 )
 (map-delete token-y-deposits {
 cycle: cycle,
@@ -1201,7 +1245,7 @@ spread-bps: spread-bps,
 )
 (if (is-eq existing u0)
 (map-set token-y-depositor-list cycle
-(unwrap-panic (as-max-len? (append depositors tx-sender) u50))
+(unwrap! (as-max-len? (append depositors tx-sender) u50) ERR_QUEUE_FULL)
 )
 true
 )
@@ -1300,9 +1344,9 @@ price tok-x (var-get token-y)
 (try! (contract-call? t transfer amount tx-sender current-contract none))
 (var-set bumped-token-x-principal smallest-who)
 (map-set token-x-depositor-list cycle
-(unwrap-panic (as-max-len?
+(unwrap! (as-max-len?
 (append (filter not-eq-bumped-token-x depositors) tx-sender) u50
-))
+) ERR_QUEUE_FULL)
 )
 (map-delete token-x-deposits {
 cycle: cycle,
@@ -1344,7 +1388,7 @@ spread-bps: spread-bps,
 )
 (if (is-eq existing u0)
 (map-set token-x-depositor-list cycle
-(unwrap-panic (as-max-len? (append depositors tx-sender) u50))
+(unwrap! (as-max-len? (append depositors tx-sender) u50) ERR_QUEUE_FULL)
 )
 true
 )
@@ -1623,7 +1667,7 @@ depositor: who,
 amount
 )
 (map-set token-y-depositor-list cycle
-(unwrap-panic (as-max-len? (append depositors who) u50))
+(unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
@@ -1658,7 +1702,7 @@ depositor: who,
 amount
 )
 (map-set token-x-depositor-list cycle
-(unwrap-panic (as-max-len? (append depositors who) u50))
+(unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (get total-token-x totals) amount) })

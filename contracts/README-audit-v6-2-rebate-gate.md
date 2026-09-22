@@ -16,7 +16,7 @@ record what holds, what does not, and what we decided.
 | 2 | Patient Reed | Margin gate bypassable (B+D+E) | HIGH holds; MEDIUM partly; LOW holds | HIGH fixed in `markets-sbtc-stx-jing-v6-3` (source, not deployed); MEDIUM + LOW open |
 | 3 | Light Brio | Same HIGH/MEDIUM/LOW as #2 | Holds, but all duplicates of #2 (posted 3 h later) | Covered by #2 |
 | 4 | Rushing Orion | Gate admits an order that overlaps a resting order just outside the mid | Holds: not covered by the first v6-3 draft | Fixed in v6-3 (book search to `min/max(limit, mid -/+ 0.4%)`) |
-| 5 | Void Kael | | _pending_ | |
+| 5 | Void Kael | `unwrap-panic` on a full depositor list (low) + gap 6 (min raised under resting orders) | Low, holds; gap 6 holds | Fixed in v6-3 + `jing-ladder-v1` |
 | 6 | Hasty Dex | | _pending_ | |
 | 7 | Eternal Harp | | _pending_ | |
 
@@ -303,8 +303,9 @@ only because of the blind spot.
 
 ### Fork proof
 
-`simulations/verify-v6-3-gate-blind-band.js`, **77/77 green**:
-[stxer 23444cec...](https://stxer.xyz/simulations/mainnet/23444cec2a3f15f53eed454fd1a123d3).
+`simulations/verify-v6-3-gate-blind-band.js`, **90/90 green**:
+[stxer ea2528d7...](https://stxer.xyz/simulations/mainnet/ea2528d7ac9336dc2e324a9270ec3ae9)
+(also covers #5 below).
 Fresh copies of the v6-2 and v6-3 sources are deployed on the fork, so the
 live book cannot interfere. Both sides:
 
@@ -399,4 +400,90 @@ included), search sellers at or below B; above 401.6, search only up to
 
 **Fixed in v6-3** and proven on the fork (see "Fork proof" under #2: the
 `mkt-overlap-*` cases, both sides).
+
+---
+
+## 5. Void Kael - a full list can crash, and a raised minimum hides orders
+
+### Finding 1 (low): `unwrap-panic` on the depositor list
+
+**Claim.** New orders are added with `(unwrap-panic (as-max-len? ... u50))`.
+If the list is already full, the transaction aborts with a VM panic instead
+of `ERR_QUEUE_FULL`. Only `side-full-*` prevents that, and it relies on "no
+more seated rungs than `seats-per-side`", which the market does not check.
+
+**What we checked.**
+
+1. The ladder does enforce the limit: `claim-seat` refuses a seat past
+   `max-band-per-side`, and `set-max-band-per-side` cannot go under the seats
+   held.
+2. `sync-seat` drops stale seats and refreshes the count in one transaction.
+3. **Gap:** `sync-seat-count` (public) refreshed the count **without**
+   dropping stale seats. Retire rungs, lower the limit, call
+   `sync-seat-count`: the market could hold more seated rungs than the limit,
+   and on a full side the next unseated order crashed on the add.
+4. **Configuration edge:** the deployed `jing-ladder` accepts
+   `max-band-per-side = 50` (no ceiling). Then all 50 slots are reserved and
+   every unseated maker is refused even on an empty book. The repo ladder had
+   a `(<= n 50)` ceiling, which still allowed exactly 50.
+
+Impact: a failed transaction, no funds lost, cleared by anyone calling
+`prune-seats`. Rare.
+
+**Fix (v6-3 + `jing-ladder-v1`):**
+
+- The six add sites use `(unwrap! ... ERR_QUEUE_FULL)`: a clean refusal. (The
+  remaining `unwrap-panic` calls are in fold/slice helpers that return no
+  response, where `unwrap!` is not allowed; they move existing depositors and
+  cannot exceed 50.)
+- `sync-seat-count` drops stale seats first, like `prune-seats`. Now every
+  path that refreshes the count prunes first, so seated <= limit always holds.
+- New `jing-ladder-v1`: the seat cap is **strictly under 50**
+  (`(< n MAX_SEATS_PER_SIDE)`). v6-3 reads `.jing-ladder-v1`.
+
+### Gap 6 (reported as unproven): a raised minimum hides orders from the gate
+
+**Claim.** The gate's search skips resting orders under the minimum deposit.
+If such an order exists and settlement still fills it, the blind spot comes
+back.
+
+**What we checked.** It holds:
+
+| Path | Checks each order against the minimum? | A below-minimum order... |
+|---|---|---|
+| Gate search (`live-*-fold`) | yes, skips it | was invisible to the gate |
+| Taker walk | yes, skips it | cannot be walked |
+| Batch at the mid (`filter-limit-violating-*`) | no, price only | **still fills at the mid** |
+
+Such an order exists only if the **owner raises the minimum** after it rests:
+every deposit path enforces the minimum, and fill leftovers under it are
+refunded. Settlement also needs the side total to reach the minimum. The leak
+is the 20 bps rebate on those small orders. Very low.
+
+**Why `live-*-fold` skips small orders.** Most likely to match the taker walk,
+so "would you take?" counts only orders a taker can walk. That is right for
+`would-take-as-*`, wrong for the gate.
+
+**Fix (v6-3).** Two new searches, `gate-bid-fold` / `gate-offer-fold`: copies
+of `live-*-fold` without the minimum check. `gate-takes-as-*` use them;
+`would-take-as-*` keep `live-*-fold`.
+
+We considered the other way round - make the batch skip small orders too.
+Rejected: those orders would never fill (batch and walk both skip them) and
+would hold a slot until cancelled, and it changes settlement, the riskiest
+code, including the totals and clearing math.
+
+### Fork proof
+
+In `verify-v6-3-gate-blind-band.js` (90/90):
+
+- `jing-ladder-v1`: 50 seats refused `u6011`, 49 accepted.
+- v6-3 `sync-seat-count` prunes and reads `u49`.
+- `mkt-minraise-v63-y`: a 3000-sat ask rests, the owner raises the minimum to
+  5000, an entrant crossing it is still refused `u1016`.
+
+### What the report missed
+
+It marked the gate direction clean at all eight sites and found no dodge
+that pays - missing #2 HIGH and #4.
 
