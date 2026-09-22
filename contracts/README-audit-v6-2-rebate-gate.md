@@ -17,7 +17,7 @@ record what holds, what does not, and what we decided.
 | 3 | Light Brio | Same HIGH/MEDIUM/LOW as #2 | Holds, but all duplicates of #2 (posted 3 h later) | Covered by #2 |
 | 4 | Rushing Orion | Gate admits an order that overlaps a resting order just outside the mid | Holds: not covered by the first v6-3 draft | Fixed in v6-3 (book search to `min/max(limit, mid -/+ 0.4%)`) |
 | 5 | Void Kael | `unwrap-panic` on a full depositor list (low) + gap 6 (min raised under resting orders) | Low, holds; gap 6 holds | Fixed in v6-3 + `jing-ladder-v1` |
-| 6 | Hasty Dex | | _pending_ | |
+| 6 | Hasty Dex | Same HIGH as #2, with executed PoC + control sims | Holds; duplicate of #2, first executed proof | Covered by v6-3 |
 | 7 | Eternal Harp | | _pending_ | |
 
 ---
@@ -486,4 +486,37 @@ In `verify-v6-3-gate-blind-band.js` (90/90):
 
 It marked the gate direction clean at all eight sites and found no dodge
 that pays - missing #2 HIGH and #4.
+
+---
+
+## 6. Hasty Dex - #2 HIGH, executed on a fork
+
+**Finding (HIGH).** The same gate blind spot as #2: a maker at 0.998 x mid is
+invisible to the gate, a crossing taker is admitted, and
+`settle-with-refresh` fills both at the raw mid with no rebate.
+
+**What is new: an executed proof with a control.** Mainnet fork at block
+9036616, with a real Lazer update from a live transaction
+(`0x47895dc7...cc25`):
+
+- PoC ([stxer 343c0070...](https://stxer.xyz/simulations/mainnet/343c007094ba596c44aa153542dc57ea)):
+  maker x-offer 500,000 sats at 0.998 x mid admitted; taker y-bid 1,500 STX
+  at 1.02 x mid admitted; settle fills at the mid; the taker pays only the
+  0.1% fee; `pending-rebate-y = u0`.
+- Control ([stxer 01a3f8ac...](https://stxer.xyz/simulations/mainnet/01a3f8ac7e2caa9e213485bacf5ccf9a)):
+  the maker at 0.990 x mid (outside the band); the same taker is refused
+  `u1016`.
+
+This matches our own fork proof under #2.
+
+**Their fix** - evaluate the gate at the raw mid - is our first v6-3 draft,
+which does not cover #4. v6-3 as pushed goes further.
+
+**Informational notes:** the 69 bps real cap (duplicate); post-settlement
+rolls lose no value; the 50-slot eviction accounting is consistent. Not
+findings.
+
+**Verdict:** duplicate of #2 on substance (posted ~10 h after #2), but the
+first submission with an executed proof and a control. Its value is
+evidence, not novelty.
 
