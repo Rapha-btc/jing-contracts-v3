@@ -160,6 +160,7 @@
     })
   )
 )
+(define-data-var settle-at uint u0)
 (define-data-var current-cycle uint u0)
 (define-data-var settle-token-y-cleared uint u0)
 (define-data-var settle-token-x-cleared uint u0)
@@ -232,6 +233,7 @@
   {
     limit: uint,
     spread-bps: (optional uint),
+    placed-at: uint,
   }
 )
 (define-map token-x-deposit-limits
@@ -239,6 +241,7 @@
   {
     limit: uint,
     spread-bps: (optional uint),
+    placed-at: uint,
   }
 )
 (define-map token-y-parked
@@ -307,6 +310,7 @@
   (default-to {
     limit: u0,
     spread-bps: none,
+    placed-at: u0,
   }
     (map-get? token-y-deposit-limits depositor)
   )
@@ -315,6 +319,7 @@
   (default-to {
     limit: u0,
     spread-bps: none,
+    placed-at: u0,
   }
     (map-get? token-x-deposit-limits depositor)
   )
@@ -1272,6 +1277,7 @@
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          placed-at: u0,
         })
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) carry amount) })
@@ -1293,6 +1299,7 @@
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          placed-at: u0,
         })
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
@@ -1431,6 +1438,7 @@
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          placed-at: u0,
         })
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) carry amount) })
@@ -1452,6 +1460,7 @@
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          placed-at: u0,
         })
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
@@ -1822,6 +1831,7 @@
     (map-set token-y-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
+      placed-at: u0,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-y tx-sender limit-price
       (var-get token-x) (var-get token-y)
@@ -1857,6 +1867,7 @@
     (map-set token-x-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
+      placed-at: u0,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-x tx-sender limit-price
       (var-get token-x) (var-get token-y)
@@ -1886,6 +1897,7 @@
     (map-set token-y-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
+      placed-at: u0,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-y tx-sender limit-price
       (var-get token-x) (var-get token-y)
@@ -1958,6 +1970,7 @@
     (map-set token-x-deposit-limits tx-sender {
       limit: limit-price,
       spread-bps: spread-bps,
+      placed-at: u0,
     })
     (try! (contract-call? .jing-core-v5 log-set-limit-x tx-sender limit-price
       (var-get token-x) (var-get token-y)
