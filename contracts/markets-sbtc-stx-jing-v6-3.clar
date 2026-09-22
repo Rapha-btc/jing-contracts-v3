@@ -3,19 +3,9 @@
 (define-constant FEE_BPS u10)
 (define-constant TAKER_REBATE_BPS u20)
 (define-constant TAKER_REBATE_MAX_BPS u70)
-(define-constant MAKER_MARGIN_BPS u40)
 (define-constant REBATE_GRACE_SECS u30)
-(define-read-only (get-maker-margin-bps)
-MAKER_MARGIN_BPS
-)
 (define-read-only (get-taker-rebate-max-bps)
 TAKER_REBATE_MAX_BPS
-)
-(define-private (widen-up (price uint))
-(+ price (/ (* price MAKER_MARGIN_BPS) BPS_PRECISION))
-)
-(define-private (widen-down (price uint))
-(- price (/ (* price MAKER_MARGIN_BPS) BPS_PRECISION))
 )
 (define-private (rebate-bps-for-age (age uint))
 (if (<= age REBATE_GRACE_SECS)
@@ -60,7 +50,6 @@ TAKER_REBATE_BPS
 (define-constant ERR_WRONG_TRAIT (err u1013))
 (define-constant ERR_EXPO_MISMATCH (err u1014))
 (define-constant ERR_NOTHING_FILLED (err u1015))
-(define-constant ERR_MUST_USE_SWAP (err u1016))
 (define-constant ERR_PARTIAL_FILL (err u1017))
 (define-constant ERR_HAS_RESTING_POSITION (err u1018))
 (define-constant ERR_ZERO_MIN_DEPOSIT (err u1019))
@@ -1234,42 +1223,6 @@ found: false,
 (get found
 (fold live-offer-fold (get-token-x-depositors (var-get current-cycle)) {
 price: price,
-found: false,
-})
-)
-)
-)
-(define-private (gate-takes-as-x
-(mid uint)
-(limit uint)
-)
-(and
-(> mid u0)
-(>= (widen-up mid) limit)
-(get found
-(fold gate-bid-fold (get-token-y-depositors (var-get current-cycle)) {
-price: (if (> limit (widen-down mid))
-limit
-(widen-down mid)
-),
-found: false,
-})
-)
-)
-)
-(define-private (gate-takes-as-y
-(mid uint)
-(limit uint)
-)
-(and
-(> mid u0)
-(<= (widen-down mid) limit)
-(get found
-(fold gate-offer-fold (get-token-x-depositors (var-get current-cycle)) {
-price: (if (< limit (widen-up mid))
-limit
-(widen-up mid)
-),
 found: false,
 })
 )
