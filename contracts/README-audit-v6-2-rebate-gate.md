@@ -18,7 +18,7 @@ record what holds, what does not, and what we decided.
 | 4 | Rushing Orion | Gate admits an order that overlaps a resting order just outside the mid | Holds: not covered by the first v6-3 draft | Fixed in v6-3 (book search to `min/max(limit, mid -/+ 0.4%)`) |
 | 5 | Void Kael | `unwrap-panic` on a full depositor list (low) + gap 6 (min raised under resting orders) | Low, holds; gap 6 holds | Fixed in v6-3 + `jing-ladder-v1` |
 | 6 | Hasty Dex | Same HIGH as #2, with executed PoC + control sims | Holds; duplicate of #2, first executed proof | Covered by v6-3 |
-| 7 | Eternal Harp | | _pending_ | |
+| 7 | Eternal Harp | H-1a/H-1b gate, M-1 gate skips the confidence check, L-1..L-3, I-1 | H-1a/H-1b: covered by #2; M-1: holds, edge case | _in review_ |
 
 ---
 
@@ -519,4 +519,46 @@ findings.
 **Verdict:** duplicate of #2 on substance (posted ~10 h after #2), but the
 first submission with an executed proof and a control. Its value is
 evidence, not novelty.
+
+---
+
+## 7. Eternal Harp
+
+Reviewed one idea at a time.
+
+### H-1a - an empty side skips the gate: skip (covered by #2)
+
+With the other side empty, the contract does not read the price, so any
+limit can rest (even `MAX_UINT`). On its own that takes nothing: there is
+nobody to trade with. Harp uses it only as step one - rest an order, then
+cross it from the other side and self-settle. That second step is the #2
+blind spot, refused by v6-3 (`u1016`).
+
+### H-1b - the gate is "under-inclusive" and "over-inclusive": skip
+
+- Under-inclusive (misses real crosses): the #2 blind spot, fixed.
+- Over-inclusive (blocks honest orders that cross nothing): does not hold.
+  The gate only finds offers at or below the search price, so an offer above
+  it (their example: bid 0.997 x mid, cheapest offer 1.01 x mid) is not found
+  and the bid is admitted, in v6-2 and v6-3. The claim reads the search
+  direction backwards.
+
+### M-1 - the gate accepts updates settlement would reject: keep as is
+
+**Claim.** Settlement refuses an update when Pyth's confidence band is too
+wide (`ERR_PRICE_UNCERTAIN`) or the two feeds' exponents differ; the gate's
+price function (`fresh-classification-price-aged`) checks neither.
+
+**Holds, as an edge case.** The gate is only for resting orders (deposit,
+readmit, set-limit, reprice); crossing goes through Swap, which settles, and
+settlement does check. In a volatile moment the shaky mid of a low-confidence
+update could admit an order that really crosses; it then fills only when a
+good update settles, and only if it truly crossed within the window. Same
+dodge as #2, via a bad update instead of an old one; rare.
+
+**Decision: no fix.** Adding the check to the gate would make deposits and
+**reprices** fail with `ERR_PRICE_UNCERTAIN` exactly when the market is
+volatile - when makers most need to move their orders. That cost outweighs
+the rare dodge it would close. (Cancels do not use the gate and keep
+working either way.)
 
