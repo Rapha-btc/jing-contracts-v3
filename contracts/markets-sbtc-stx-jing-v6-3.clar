@@ -225,7 +225,6 @@ principal
 {
 limit: uint,
 spread-bps: (optional uint),
-placed-at: uint,
 }
 )
 (define-map token-x-deposit-limits
@@ -233,7 +232,6 @@ principal
 {
 limit: uint,
 spread-bps: (optional uint),
-placed-at: uint,
 }
 )
 (define-map token-y-pending-deposits
@@ -362,7 +360,6 @@ min-token-x: (var-get min-token-x-deposit),
 (default-to {
 limit: u0,
 spread-bps: none,
-placed-at: u0,
 }
 (map-get? token-y-deposit-limits depositor)
 )
@@ -371,7 +368,6 @@ placed-at: u0,
 (default-to {
 limit: u0,
 spread-bps: none,
-placed-at: u0,
 }
 (map-get? token-x-deposit-limits depositor)
 )
@@ -1252,7 +1248,6 @@ depositor: who,
 (map-set token-y-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) carry amount) })
@@ -1274,7 +1269,6 @@ depositor: who,
 (map-set token-y-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
@@ -1473,7 +1467,6 @@ depositor: who,
 (map-set token-x-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) carry amount) })
@@ -1495,7 +1488,6 @@ depositor: who,
 (map-set token-x-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
@@ -1889,9 +1881,6 @@ amount
 (merge totals { total-token-y: (+ (get total-token-y totals) amount) })
 )
 (map-delete token-y-parked who)
-(map-set token-y-deposit-limits who
-(merge (get-token-y-order who) { placed-at: stacks-block-time })
-)
 (try! (contract-call? .jing-core-v5 log-readmit-y who amount cycle price
 (var-get token-x) (var-get token-y)
 ))
@@ -1961,9 +1950,6 @@ amount
 (merge totals { total-token-x: (+ (get total-token-x totals) amount) })
 )
 (map-delete token-x-parked who)
-(map-set token-x-deposit-limits who
-(merge (get-token-x-order who) { placed-at: stacks-block-time })
-)
 (try! (contract-call? .jing-core-v5 log-readmit-x who amount cycle price
 (var-get token-x) (var-get token-y)
 ))
@@ -1991,7 +1977,6 @@ ERR_NOTHING_TO_WITHDRAW
 (map-set token-y-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2049,7 +2034,6 @@ u0 price (var-get token-x) (var-get token-y)
 (map-set token-y-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-y who limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2078,7 +2062,6 @@ ERR_NOTHING_TO_WITHDRAW
 (map-set token-x-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2136,7 +2119,6 @@ u0 price (var-get token-x) (var-get token-y)
 (map-set token-x-deposit-limits who {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-x who limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2177,7 +2159,6 @@ placed-at: stacks-block-time,
 (map-set token-y-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2203,7 +2184,6 @@ tx-trait tx-name
 (map-set token-y-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2262,7 +2242,6 @@ rebate-refunded: u0,
 (map-set token-x-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2290,7 +2269,6 @@ tx-trait tx-name
 (map-set token-x-deposit-limits tx-sender {
 limit: limit-price,
 spread-bps: spread-bps,
-placed-at: stacks-block-time,
 })
 (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price spread-bps
 (var-get current-cycle) (var-get token-x) (var-get token-y)
