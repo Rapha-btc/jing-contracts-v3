@@ -662,6 +662,102 @@
   )
 )
 
+(define-public (log-settle-refused-y
+    (depositor principal)
+    (action (string-ascii 8))
+    (reason (string-ascii 12))
+    (amount uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "settle-refused-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      action: action,
+      reason: reason,
+      amount: amount,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-settle-refused-x
+    (depositor principal)
+    (action (string-ascii 8))
+    (reason (string-ascii 12))
+    (amount uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "settle-refused-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      action: action,
+      reason: reason,
+      amount: amount,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-readmit-y
+    (depositor principal)
+    (amount uint)
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-readmit-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-readmit-x
+    (depositor principal)
+    (amount uint)
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-readmit-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-pending-deposit-y
     (depositor principal)
     (amount uint)
@@ -692,6 +788,7 @@
     (depositor principal)
     (amount uint)
     (price uint)
+    (reason (string-ascii 12))
     (token-x principal)
     (token-y principal)
   )
@@ -705,6 +802,7 @@
       depositor: depositor,
       amount: amount,
       price: price,
+      reason: reason,
     })
     (ok true)
   )
@@ -740,6 +838,7 @@
     (depositor principal)
     (amount uint)
     (price uint)
+    (reason (string-ascii 12))
     (token-x principal)
     (token-y principal)
   )
@@ -753,6 +852,7 @@
       depositor: depositor,
       amount: amount,
       price: price,
+      reason: reason,
     })
     (ok true)
   )
