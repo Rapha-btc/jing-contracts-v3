@@ -662,6 +662,102 @@
   )
 )
 
+(define-public (log-pending-deposit-y
+    (depositor principal)
+    (amount uint)
+    (limit uint)
+    (spread-bps (optional uint))
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-deposit-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      limit: limit,
+      spread-bps: spread-bps,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-refund-y
+    (depositor principal)
+    (amount uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-refund-y",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-deposit-x
+    (depositor principal)
+    (amount uint)
+    (limit uint)
+    (spread-bps (optional uint))
+    (submitted-at uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-deposit-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      limit: limit,
+      spread-bps: spread-bps,
+      submitted-at: submitted-at,
+    })
+    (ok true)
+  )
+)
+
+(define-public (log-pending-refund-x
+    (depositor principal)
+    (amount uint)
+    (price uint)
+    (token-x principal)
+    (token-y principal)
+  )
+  (begin
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (print {
+      event: "pending-refund-x",
+      market: contract-caller,
+      token-x: token-x,
+      token-y: token-y,
+      depositor: depositor,
+      amount: amount,
+      price: price,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-pending-limit-y
     (depositor principal)
     (limit uint)
