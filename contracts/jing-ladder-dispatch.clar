@@ -12,7 +12,7 @@
 ;; total. Read rung get-position / get-state after confirmation for held/resting.
 (use-trait rung .jing-rung-deposit-trait.rung-trait)
 
-(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder)
+(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1)
 (define-constant ERR_EMPTY (err u7101))
 (define-constant ERR_TOTAL (err u7102))
 (define-constant ERR_ZERO_AMOUNT (err u7103))
