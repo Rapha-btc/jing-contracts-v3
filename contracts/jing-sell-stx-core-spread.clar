@@ -324,37 +324,40 @@
     ;; `sync` quietly losing its enforcement. A named refusal beats a
     ;; DivisionByZero, and this assert fails loudly if that ever happens again.
     (asserts! (>= (var-get unfilled-index) SOLD_OUT_INDEX) ERR_INDEX_COLLAPSED)
-    (try! (settle-proceeds member))
-    (try! (stx-transfer? amount member current-contract))
-    (let (
-        (to-push (+ amount (var-get held-ustx)))
-        (shares (/ (* amount SCALE) (var-get unfilled-index)))
-        (pos (position-of member))
-        (epo (var-get epoch))
-      )
-      ;; the market's minimum is on the whole position (live + parked + new);
-      ;; the market's deposit takes a parked position back by itself (a free
-      ;; slot, else the smallest maker is bumped when the combined size is
-      ;; bigger); if it refuses (queue full, crossing, stale update) the
-      ;; funds are held here instead of aborting for every member
-      (if (and
-          (>= (+ to-push (market-size)) (min-market))
-          (is-ok (push-to-market to-push update))
+    (let ((paid (try! (settle-proceeds member))))
+      (try! (stx-transfer? amount member current-contract))
+      (let (
+          (to-push (+ amount (var-get held-ustx)))
+          (shares (/ (* amount SCALE) (var-get unfilled-index)))
+          (pos (position-of member))
+          (epo (var-get epoch))
         )
-        (var-set held-ustx u0)
-        (var-set held-ustx to-push)
+        ;; the market's minimum is on the whole position (live + parked + new);
+        ;; the market's deposit takes a parked position back by itself (a free
+        ;; slot, else the smallest maker is bumped when the combined size is
+        ;; bigger); if it refuses (queue full, crossing, stale update) the
+        ;; funds are held here instead of aborting for every member
+        (if (and
+            (>= (+ to-push (market-size)) (min-market))
+            (is-ok (push-to-market to-push update))
+          )
+          (var-set held-ustx u0)
+          (var-set held-ustx to-push)
+        )
+        (map-set positions member {
+          epoch: epo,
+          shares: (+ (get shares pos) shares),
+          paid-index: (var-get proceeds-index),
+        })
+        (var-set total-shares (+ (var-get total-shares) shares))
+        ;; the log is best effort: a member's funds never hang on a print
+        (is-ok (contract-call? LADDER log-deposit member amount shares epo
+          (is-eq (var-get held-ustx) u0) (var-get held-ustx)
+        ))
+        (ok { amount: amount, shares: shares, epoch: epo,
+          rung-held-after: (var-get held-ustx),
+          stx-paid: u0, sbtc-paid: paid })
       )
-      (map-set positions member {
-        epoch: epo,
-        shares: (+ (get shares pos) shares),
-        paid-index: (var-get proceeds-index),
-      })
-      (var-set total-shares (+ (var-get total-shares) shares))
-      ;; the log is best effort: a member's funds never hang on a print
-      (is-ok (contract-call? LADDER log-deposit member amount shares epo
-        (is-eq (var-get held-ustx) u0) (var-get held-ustx)
-      ))
-      (ok true)
     )
   )
 )
@@ -394,43 +397,44 @@
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (try! (sync))
-    (try! (settle-proceeds member))
-    ;; an old-epoch member was paid out and deleted by settle-proceeds
-    (asserts! (is-some (map-get? positions member)) ERR_NO_POSITION)
-    (let (
-        (fi (var-get unfilled-index))
-        (mine (/ (* (get shares pos) fi) SCALE))
-        ;; round the burn UP: a floor here paid `amount` for fewer shares than
-        ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
-        (shares-out (if (>= amount mine)
-          (get shares pos)
-          (/ (+ (* amount SCALE) (- fi u1)) fi)
+    (let ((paid (try! (settle-proceeds member))))
+      ;; an old-epoch member was paid out and deleted by settle-proceeds
+      (asserts! (is-some (map-get? positions member)) ERR_NO_POSITION)
+      (let (
+          (fi (var-get unfilled-index))
+          (mine (/ (* (get shares pos) fi) SCALE))
+          ;; round the burn UP: a floor here paid `amount` for fewer shares than
+          ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
+          (shares-out (if (>= amount mine)
+            (get shares pos)
+            (/ (+ (* amount SCALE) (- fi u1)) fi)
+          ))
+          (take (if (>= amount mine)
+            mine
+            amount
+          ))
+          (epo (var-get epoch))
+        )
+        (asserts! (> take u0) ERR_INSUFFICIENT)
+        (try! (pull-to-held-ustx take))
+        (try! (as-contract? ((with-stx take))
+          (try! (stx-transfer? take current-contract member))
         ))
-        (take (if (>= amount mine)
-          mine
-          amount
+        (var-set held-ustx (- (var-get held-ustx) take))
+        (if (is-eq shares-out (get shares pos))
+          (map-delete positions member)
+          (map-set positions member {
+            epoch: epo,
+            shares: (- (get shares pos) shares-out),
+            paid-index: (var-get proceeds-index),
+          })
+        )
+        (var-set total-shares (- (var-get total-shares) shares-out))
+        (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
+          (var-get held-ustx)
         ))
-        (epo (var-get epoch))
+        (ok { stx: take, sbtc: paid })
       )
-      (asserts! (> take u0) ERR_INSUFFICIENT)
-      (try! (pull-to-held-ustx take))
-      (try! (as-contract? ((with-stx take))
-        (try! (stx-transfer? take current-contract member))
-      ))
-      (var-set held-ustx (- (var-get held-ustx) take))
-      (if (is-eq shares-out (get shares pos))
-        (map-delete positions member)
-        (map-set positions member {
-          epoch: epo,
-          shares: (- (get shares pos) shares-out),
-          paid-index: (var-get proceeds-index),
-        })
-      )
-      (var-set total-shares (- (var-get total-shares) shares-out))
-      (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
-        (var-get held-ustx)
-      ))
-      (ok true)
     )
   )
 )
@@ -441,7 +445,7 @@
     (try! (sync))
     (let ((paid (try! (settle-proceeds tx-sender))))
       (is-ok (contract-call? LADDER log-claim tx-sender paid (var-get epoch)))
-      (ok true)
+      (ok { stx: u0, sbtc: paid })
     )
   )
 )
