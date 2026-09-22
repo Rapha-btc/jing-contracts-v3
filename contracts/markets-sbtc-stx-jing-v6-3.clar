@@ -1128,7 +1128,6 @@ acc
 (let ((amount (get-token-y-deposit (var-get current-cycle) depositor)))
 (if (and
 (> amount u0)
-(>= amount (var-get min-token-y-deposit))
 (<= (get price acc) (token-y-limit-at depositor (get price acc)))
 )
 (merge acc { found: true })
@@ -1138,47 +1137,6 @@ acc
 )
 )
 (define-private (live-offer-fold
-(depositor principal)
-(acc {
-price: uint,
-found: bool,
-})
-)
-(if (get found acc)
-acc
-(let ((amount (get-token-x-deposit (var-get current-cycle) depositor)))
-(if (and
-(> amount u0)
-(>= amount (var-get min-token-x-deposit))
-(>= (get price acc) (token-x-limit-at depositor (get price acc)))
-)
-(merge acc { found: true })
-acc
-)
-)
-)
-)
-(define-private (gate-bid-fold
-(depositor principal)
-(acc {
-price: uint,
-found: bool,
-})
-)
-(if (get found acc)
-acc
-(let ((amount (get-token-y-deposit (var-get current-cycle) depositor)))
-(if (and
-(> amount u0)
-(<= (get price acc) (token-y-limit-at depositor (get price acc)))
-)
-(merge acc { found: true })
-acc
-)
-)
-)
-)
-(define-private (gate-offer-fold
 (depositor principal)
 (acc {
 price: uint,
