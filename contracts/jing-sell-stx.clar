@@ -470,25 +470,27 @@
   )
 )
 
-;; The market escrows a deposit until a price update settles it, and escrowed
-;; micro-STX are not withdrawable: withdraw-token-y and cancel-token-y-deposit only
-;; touch the resting and parked amounts. So an exit settles the escrow first -
-;; it becomes a resting order or comes back here as balance - and only then is
-;; market-size a size the pull can actually take. An escrow waiting with no
-;; update given is refused rather than settled at a price nobody chose.
+;; An exit normally settles pending escrow before pulling funds from the market.
+;; Once pending escrow is at least 24 hours old, cancel instead: cancellation
+;; returns pending + live + parked funds without an oracle or pause check.
+;; Add the refund to held funds; withdraw synchronizes before paying the member.
 (define-private (settle-escrow (update (optional (buff 8192))))
-  (let ((escrowed (default-to u0
-      (get amount (contract-call? MARKET get-token-y-pending-deposit current-contract))
-    )))
-    (if (> escrowed u0)
+  (match (contract-call? MARKET get-token-y-pending-deposit current-contract)
+    pending (if (>= (- stacks-block-time (get submitted-at pending)) u86400)
+      (let ((refunded (try! (as-contract? ()
+          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
+        ))))
+        (var-set held-ustx (+ (var-get held-ustx) refunded))
+        (ok true)
+      )
       (begin
         (try! (contract-call? MARKET settle-token-y-deposit current-contract
           (unwrap! update ERR_UPDATE_REQUIRED) WSTX WSTX_NAME
         ))
         (ok true)
       )
-      (ok true)
     )
+    (ok true)
   )
 )
 
