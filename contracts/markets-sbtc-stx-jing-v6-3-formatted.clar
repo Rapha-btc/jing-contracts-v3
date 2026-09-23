@@ -1183,7 +1183,6 @@
       ERR_DEPOSIT_TOO_SMALL
     )
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (and (> carry u0) (map-delete token-y-parked who))
     (if (and
         (is-eq existing u0)
         (not parked-already)
@@ -1200,6 +1199,7 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
+        (and (> carry u0) (map-delete token-y-parked who))
         (map-set token-y-parked smallest-who smallest-amount)
         (try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount
           cycle price (var-get token-x) tok-y
@@ -1237,6 +1237,7 @@
         (ok amount)
       )
       (begin
+        (and (> carry u0) (map-delete token-y-parked who))
         (and (not escrowed) (try! (stx-transfer? amount who current-contract)))
         (map-set token-y-deposits {
           cycle: cycle,
@@ -1276,7 +1277,8 @@
   (let (
       (cycle (var-get current-cycle))
       (parked (get-token-y-parked tx-sender))
-      (new-maker (is-eq (get-token-y-deposit cycle tx-sender) u0))
+      (existing (get-token-y-deposit cycle tx-sender))
+      (new-maker (is-eq existing u0))
       (depositors (get-token-y-depositors cycle))
       (full (side-full-y depositors tx-sender))
     )
@@ -1287,6 +1289,9 @@
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) (var-get token-y)) ERR_WRONG_TRAIT)
+    (asserts! (>= (+ existing parked amount) (var-get min-token-y-deposit))
+      ERR_DEPOSIT_TOO_SMALL
+    )
     (if (and
         (is-eq (len (get-token-x-depositors cycle)) u0)
         (not (and new-maker full))
@@ -1367,11 +1372,30 @@
           (ok false)
         )
         bumped
-        (begin
-          (try! (deposit-token-y-core who true amount limit-price spread-bps parked price
+        (match (deposit-token-y-core who true amount limit-price spread-bps parked price
             bumped t asset-name
-          ))
-          (ok amount)
+          )
+          deposited (ok deposited)
+          deposit-error
+          (begin
+            (asserts! (or
+                (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
+                (is-eq (err deposit-error) ERR_QUEUE_FULL)
+              )
+              (err deposit-error)
+            )
+            (try! (as-contract? ((with-stx amount))
+              (try! (stx-transfer? amount current-contract who))
+            ))
+            (try! (contract-call? .jing-core-v6 log-pending-refund-y who amount price
+              (if (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
+                "too-small"
+                "queue-full"
+              )
+              (var-get token-x) (var-get token-y)
+            ))
+            (ok amount)
+          )
         )
         park-error
         (begin
@@ -1411,7 +1435,6 @@
       ERR_DEPOSIT_TOO_SMALL
     )
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
-    (and (> carry u0) (map-delete token-x-parked who))
     (if (and
         (is-eq existing u0)
         (not parked-already)
@@ -1428,6 +1451,7 @@
           (smallest-who (get smallest-principal smallest-info))
         )
         (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
+        (and (> carry u0) (map-delete token-x-parked who))
         (map-set token-x-parked smallest-who smallest-amount)
         (try! (contract-call? .jing-core-v6 log-park-x smallest-who smallest-amount
           cycle price tok-x (var-get token-y)
@@ -1465,6 +1489,7 @@
         (ok amount)
       )
       (begin
+        (and (> carry u0) (map-delete token-x-parked who))
         (and (not escrowed) (try! (contract-call? t transfer amount who current-contract none)))
         (map-set token-x-deposits {
           cycle: cycle,
@@ -1504,7 +1529,8 @@
   (let (
       (cycle (var-get current-cycle))
       (parked (get-token-x-parked tx-sender))
-      (new-maker (is-eq (get-token-x-deposit cycle tx-sender) u0))
+      (existing (get-token-x-deposit cycle tx-sender))
+      (new-maker (is-eq existing u0))
       (depositors (get-token-x-depositors cycle))
       (full (side-full-x depositors tx-sender))
     )
@@ -1515,6 +1541,9 @@
     (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
     (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
     (asserts! (is-eq (contract-of t) (var-get token-x)) ERR_WRONG_TRAIT)
+    (asserts! (>= (+ existing parked amount) (var-get min-token-x-deposit))
+      ERR_DEPOSIT_TOO_SMALL
+    )
     (if (and
         (is-eq (len (get-token-y-depositors cycle)) u0)
         (not (and new-maker full))
@@ -1595,11 +1624,30 @@
           (ok false)
         )
         bumped
-        (begin
-          (try! (deposit-token-x-core who true amount limit-price spread-bps parked price
+        (match (deposit-token-x-core who true amount limit-price spread-bps parked price
             bumped t asset-name
-          ))
-          (ok amount)
+          )
+          deposited (ok deposited)
+          deposit-error
+          (begin
+            (asserts! (or
+                (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
+                (is-eq (err deposit-error) ERR_QUEUE_FULL)
+              )
+              (err deposit-error)
+            )
+            (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
+              (try! (contract-call? t transfer amount current-contract who none))
+            ))
+            (try! (contract-call? .jing-core-v6 log-pending-refund-x who amount price
+              (if (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
+                "too-small"
+                "queue-full"
+              )
+              (var-get token-x) (var-get token-y)
+            ))
+            (ok amount)
+          )
         )
         park-error
         (begin
