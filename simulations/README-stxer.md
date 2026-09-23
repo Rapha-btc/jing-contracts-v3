@@ -8,6 +8,27 @@ verified-contract registry flow + a market-specific scenario, and runs
 documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
 nothing else).
 
+## Six-rung audit fixes (2026-09-23)
+
+All six working-tree rungs now reject tail minting below `MINT_FLOOR`,
+reset the index when the last member exits, and return old-epoch claims
+through `withdraw`. The new suite uses actual core-v6, ladder-v1, market
+v6-3 and rung source, real signed Lazer prices, and public swap fills.
+Band variants also withdraw across one closed and one live rung through
+the actual dispatcher.
+
+| Harness | N/M | Evidence |
+|---|---:|---|
+| `verify-v6-rungs-audit-tail.js` | 378/378 | [All six fork links and audit decisions](../contracts/README-audit-ladder-dispatch-spread-rungs.md#changed-functions-and-verification) |
+| `verify-v6-rungs-escrow-timeout.js` | 549/549 | [run](https://stxer.xyz/simulations/mainnet/f1057c751224a2fb57462aa68265878e) |
+| `verify-v6-3-caller-impact.js` | 198/198 | [run](https://stxer.xyz/simulations/mainnet/00097a252e657c77b26d19a9f2e3d780) |
+| `verify-v6-rungs-fill-lazer.js` | 85/85 | [run](https://stxer.xyz/simulations/mainnet/cac8b1a2c4a5e91a7667c4294abb4ddf) |
+
+Run `node simulations/verify-v6-rungs-audit-tail.js`; optional
+`SIDE=x|y KIND=fixed|peg|band` selects one scenario. The script stops on the
+first failed check. The 0.1% residual bound tested here is for an
+index-triggered close; the separate absolute-dust close is not covered.
+
 ## Router v5-3 DLMM boundary fix (2026-09-23)
 
 The router continues to target `markets-sbtc-stx-jing-v6-3`. Its depth walk
