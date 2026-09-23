@@ -1352,13 +1352,26 @@ crosses
 ))
 (ok amount)
 )
-(let ((bumped (and
-new-maker
-full
-(try! (park-tenth-token-y cycle price bid (+ amount parked) depositors))
-)))
+(match (if (and new-maker full)
+(park-tenth-token-y cycle price bid (+ amount parked) depositors)
+(ok false)
+)
+bumped
+(begin
 (try! (deposit-token-y-core who true amount limit-price spread-bps parked price bumped t asset-name))
 (ok amount)
+)
+park-error
+(begin
+(asserts! (is-eq (err park-error) ERR_QUEUE_FULL) (err park-error))
+(try! (as-contract? ((with-stx amount))
+(try! (stx-transfer? amount current-contract who))
+))
+(try! (contract-call? .jing-core-v6 log-pending-refund-y who amount price
+"queue-full" (var-get token-x) (var-get token-y)
+))
+(ok amount)
+)
 )
 )
 )
@@ -1555,13 +1568,26 @@ crosses
 ))
 (ok amount)
 )
-(let ((bumped (and
-new-maker
-full
-(try! (park-tenth-token-x cycle price ask (+ amount parked) depositors))
-)))
+(match (if (and new-maker full)
+(park-tenth-token-x cycle price ask (+ amount parked) depositors)
+(ok false)
+)
+bumped
+(begin
 (try! (deposit-token-x-core who true amount limit-price spread-bps parked price bumped t asset-name))
 (ok amount)
+)
+park-error
+(begin
+(asserts! (is-eq (err park-error) ERR_QUEUE_FULL) (err park-error))
+(try! (as-contract? ((with-ft (contract-of t) asset-name amount))
+(try! (contract-call? t transfer amount current-contract who none))
+))
+(try! (contract-call? .jing-core-v6 log-pending-refund-x who amount price
+"queue-full" (var-get token-x) (var-get token-y)
+))
+(ok amount)
+)
 )
 )
 )
