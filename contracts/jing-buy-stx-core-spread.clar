@@ -55,6 +55,7 @@
 (define-constant ERR_BAD_SPREAD (err u7010))
 (define-constant ERR_BAD_NAME (err u7009))
 (define-constant ERR_INDEX_COLLAPSED (err u7011))
+(define-constant ERR_UPDATE_REQUIRED (err u7012))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
 ;; under this many sats: a walk fill is sized in whole sats so a fully taken
@@ -433,12 +434,16 @@
   )
 )
 
-(define-public (withdraw (amount uint))
+(define-public (withdraw
+    (amount uint)
+    (update (optional (buff 8192)))
+  )
   (let (
       (member tx-sender)
       (pos (unwrap! (map-get? positions member) ERR_NO_POSITION))
     )
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (try! (settle-escrow update))
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
       ;; an old-epoch member was paid out and deleted by settle-proceeds
@@ -579,6 +584,28 @@
     (var-set floor g)
     (as-contract? ()
       (try! (contract-call? MARKET set-token-x-limit g (some (var-get spread-bps))))
+    )
+  )
+)
+
+;; The market escrows a deposit until a price update settles it, and escrowed
+;; sats are not withdrawable: withdraw-token-x and cancel-token-x-deposit only
+;; touch the resting and parked amounts. So an exit settles the escrow first -
+;; it becomes a resting order or comes back here as balance - and only then is
+;; market-size a size the pull can actually take. An escrow waiting with no
+;; update given is refused rather than settled at a price nobody chose.
+(define-private (settle-escrow (update (optional (buff 8192))))
+  (let ((escrowed (default-to u0
+      (get amount (contract-call? MARKET get-token-x-pending-deposit current-contract))
+    )))
+    (if (> escrowed u0)
+      (begin
+        (try! (contract-call? MARKET settle-token-x-deposit current-contract
+          (unwrap! update ERR_UPDATE_REQUIRED) SBTC SBTC_NAME
+        ))
+        (ok true)
+      )
+      (ok true)
     )
   )
 )

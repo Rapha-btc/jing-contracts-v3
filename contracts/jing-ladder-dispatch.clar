@@ -155,18 +155,23 @@
 (define-private (exit-one
     (entry { rung: <rung>, amount: uint })
     (acc (response { withdrawn: uint, stx: uint, sbtc: uint,
+      update: (optional (buff 8192)),
       positions: (list 10 { rung: principal, stx: uint, sbtc: uint }),
     } uint))
   )
   (let ((state (try! acc)) (target (get rung entry)))
-    ;; Every rung's withdraw first syncs and pays accrued proceeds, then caps
-    ;; the request at the user's unsold inventory. A sold-out position returns
-    ;; its normal ERR_NO_POSITION and rolls this whole batch back.
-    (let ((result (try! (contract-call? target withdraw (get amount entry)))))
+    ;; Every rung's withdraw settles its own escrow with the update carried in
+    ;; the accumulator, then syncs and pays accrued proceeds, then caps the
+    ;; request at the user's unsold inventory. A sold-out position returns its
+    ;; normal ERR_NO_POSITION and rolls this whole batch back.
+    (let ((result (try! (contract-call? target withdraw (get amount entry)
+        (get update state)
+      ))))
       (ok {
         withdrawn: (+ (get withdrawn state) u1),
         stx: (+ (get stx state) (get stx result)),
         sbtc: (+ (get sbtc state) (get sbtc result)),
+        update: (get update state),
         positions: (unwrap! (as-max-len? (append (get positions state)
           (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
       })
@@ -177,13 +182,14 @@
 (define-private (withdraw-many
     (requests (list 10 { rung: <rung>, amount: uint }))
     (buy bool)
+    (update (optional (buff 8192)))
   )
   (begin
     (asserts! (is-eq tx-sender contract-caller) ERR_DIRECT_CALL)
     (asserts! (> (len requests) u0) ERR_EMPTY)
     (try! (fold validate-exit requests (ok { buy: buy, seen: (list) })))
     (let ((done (try! (fold exit-one requests
-          (ok { withdrawn: u0, stx: u0, sbtc: u0, positions: (list) })))))
+          (ok { withdrawn: u0, stx: u0, sbtc: u0, update: update, positions: (list) })))))
       (print {
         event: "ladder-withdrawn", member: tx-sender, buy: buy,
         rungs: (len requests), withdrawn: (get withdrawn done),
@@ -196,19 +202,23 @@
   )
 )
 
-;; No oracle update needed for exits. amount is a positive per-rung cap, in
-;; sats (buy) / micro-STX (sell); requesting >= the position exits it in full.
-;; Each rung syncs and pays accrued proceeds during withdraw. Sold-out or absent
-;; positions return their rung error and roll the whole batch back; use each
-;; rung's claim for sold-out positions. Funds always go directly to tx-sender.
+;; The update is only needed when a rung still has sats escrowed on the market:
+;; that rung settles it first, and refuses with its own u7012 when none is
+;; given. Pass none when nothing is pending. amount is a positive per-rung cap,
+;; in sats (buy) / micro-STX (sell); requesting >= the position exits it in
+;; full. Each rung syncs and pays accrued proceeds during withdraw. Sold-out or
+;; absent positions return their rung error and roll the whole batch back; use
+;; each rung's claim for sold-out positions. Funds go directly to tx-sender.
 (define-public (withdraw-buy
     (requests (list 10 { rung: <rung>, amount: uint }))
+    (update (optional (buff 8192)))
   )
-  (withdraw-many requests true)
+  (withdraw-many requests true update)
 )
 
 (define-public (withdraw-sell
     (requests (list 10 { rung: <rung>, amount: uint }))
+    (update (optional (buff 8192)))
   )
-  (withdraw-many requests false)
+  (withdraw-many requests false update)
 )
