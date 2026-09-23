@@ -1649,23 +1649,43 @@
       (caller tx-sender)
       (amount (get-token-y-deposit cycle caller))
       (parked (get-token-y-parked caller))
+      (pending (map-get? token-y-pending-deposits caller))
+      (pending-amount (default-to u0 (get amount pending)))
       (totals (get-cycle-totals cycle))
       (tok-y (var-get token-y))
     )
     (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
-    (if (is-eq amount u0)
+    (asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (> pending-amount u0)
+      (begin
+        (try! (as-contract? ((with-stx pending-amount))
+          (try! (stx-transfer? pending-amount current-contract caller))
+        ))
+        (map-delete token-y-pending-deposits caller)
+        (try! (contract-call? .jing-core-v6 log-pending-refund-y caller pending-amount
+          u0 "cancel" (var-get token-x) (var-get token-y)
+        ))
+        true
+      )
+      true
+    )
+    (map-delete token-y-pending-limits caller)
+    (map-delete token-y-pending-readmits caller)
+    (map-delete token-y-deposit-limits caller)
+    (if (> parked u0)
       (begin
         (try! (as-contract? ((with-stx parked))
           (try! (stx-transfer? parked current-contract caller))
         ))
         (map-delete token-y-parked caller)
-        (map-delete token-y-deposit-limits caller)
         (try! (contract-call? .jing-core-v6 log-refund-y caller parked cycle
           (var-get token-x) tok-y
         ))
-        (ok parked)
+        true
       )
+      true
+    )
+    (if (> amount u0)
       (begin
         (try! (as-contract? ((with-stx amount))
           (try! (stx-transfer? amount current-contract caller))
@@ -1674,7 +1694,6 @@
           cycle: cycle,
           depositor: caller,
         })
-        (map-delete token-y-deposit-limits caller)
         (var-set bumped-token-y-principal caller)
         (map-set token-y-depositor-list cycle
           (filter not-eq-bumped-token-y (get-token-y-depositors cycle))
@@ -1685,9 +1704,11 @@
         (try! (contract-call? .jing-core-v6 log-refund-y caller amount cycle
           (var-get token-x) tok-y
         ))
-        (ok amount)
+        true
       )
+      true
     )
+    (ok (+ pending-amount amount parked))
   )
 )
 (define-public (cancel-token-x-deposit
@@ -1699,23 +1720,43 @@
       (caller tx-sender)
       (amount (get-token-x-deposit cycle caller))
       (parked (get-token-x-parked caller))
+      (pending (map-get? token-x-pending-deposits caller))
+      (pending-amount (default-to u0 (get amount pending)))
       (totals (get-cycle-totals cycle))
       (tok-x (var-get token-x))
     )
     (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-    (asserts! (or (> amount u0) (> parked u0)) ERR_NOTHING_TO_WITHDRAW)
-    (if (is-eq amount u0)
+    (asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)) ERR_NOTHING_TO_WITHDRAW)
+    (if (> pending-amount u0)
+      (begin
+        (try! (as-contract? ((with-ft (contract-of t) asset-name pending-amount))
+          (try! (contract-call? t transfer pending-amount current-contract caller none))
+        ))
+        (map-delete token-x-pending-deposits caller)
+        (try! (contract-call? .jing-core-v6 log-pending-refund-x caller pending-amount
+          u0 "cancel" (var-get token-x) (var-get token-y)
+        ))
+        true
+      )
+      true
+    )
+    (map-delete token-x-pending-limits caller)
+    (map-delete token-x-pending-readmits caller)
+    (map-delete token-x-deposit-limits caller)
+    (if (> parked u0)
       (begin
         (try! (as-contract? ((with-ft (contract-of t) asset-name parked))
           (try! (contract-call? t transfer parked current-contract caller none))
         ))
         (map-delete token-x-parked caller)
-        (map-delete token-x-deposit-limits caller)
         (try! (contract-call? .jing-core-v6 log-refund-x caller parked cycle tok-x
           (var-get token-y)
         ))
-        (ok parked)
+        true
       )
+      true
+    )
+    (if (> amount u0)
       (begin
         (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
           (try! (contract-call? t transfer amount current-contract caller none))
@@ -1724,7 +1765,6 @@
           cycle: cycle,
           depositor: caller,
         })
-        (map-delete token-x-deposit-limits caller)
         (var-set bumped-token-x-principal caller)
         (map-set token-x-depositor-list cycle
           (filter not-eq-bumped-token-x (get-token-x-depositors cycle))
@@ -1735,9 +1775,11 @@
         (try! (contract-call? .jing-core-v6 log-refund-x caller amount cycle tok-x
           (var-get token-y)
         ))
-        (ok amount)
+        true
       )
+      true
     )
+    (ok (+ pending-amount amount parked))
   )
 )
 (define-public (withdraw-token-y
