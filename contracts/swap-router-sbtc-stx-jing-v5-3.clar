@@ -842,14 +842,18 @@
           (/ (* raw BPS) (- BPS (get fee acc)))
           raw
         ))
+        (edge (is-eq (get bin acc) (if (get up acc) 500 -500)))
       )
       (if ok-price
         (merge acc {
           cap: (+ (get cap acc) grossed),
-          bin: (if (get up acc)
-            (+ (get bin acc) 1)
-            (- (get bin acc) 1)
+          bin: (if edge (get bin acc)
+            (if (get up acc)
+              (+ (get bin acc) 1)
+              (- (get bin acc) 1)
+            )
           ),
+          done: edge,
         })
         (merge acc { done: true })
       )

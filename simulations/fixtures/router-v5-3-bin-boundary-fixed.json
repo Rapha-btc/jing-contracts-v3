@@ -1,0 +1,8 @@
+{
+  "simulation": "https://stxer.xyz/simulations/mainnet/22825ead524c41102000f6d7e87661b1",
+  "original": "1ac1ad538ad102792f868d918b1c4fd9",
+  "checks": 22,
+  "passed": 22,
+  "result": "(ok (tuple (dlmm-in u1000) (dlmm-out u2398110) (jing-in u0) (jing-ok false) (jing-out u0) (out u2398110) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+  "vmError": null
+}

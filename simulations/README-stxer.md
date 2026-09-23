@@ -8,6 +8,13 @@ verified-contract registry flow + a market-specific scenario, and runs
 documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
 nothing else).
 
+## Router v5-3 DLMM boundary fix (2026-09-23)
+
+The router continues to target `markets-sbtc-stx-jing-v6-3`. Its depth walk
+now counts and stops at bins ±500. Fork verification: **22/22** boundary
+checks and **285/285** full router checks. See the [router simulation README](README-router-v5-3-bin-boundary.md)
+for run links, exact failure replay, coverage, and reproduction commands.
+
 ## Recent design change: jing-core multi-sig-owner model (2026-05-07)
 
 `jing-core` was simplified from a four-role two-step timelocked admin
