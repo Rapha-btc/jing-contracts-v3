@@ -1,0 +1,35 @@
+[project]
+name = "rv-v6-3"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "../mock-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-core]
+path = "../.build/v6-3/core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "../mock-lazer-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "../.build/v6-3/ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = "../.build/v6-3/market.clar"
+clarity_version = 5
+epoch = "3.4"

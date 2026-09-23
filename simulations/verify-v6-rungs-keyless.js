@@ -1,9 +1,9 @@
 import { rungReceipt } from "./_rung-receipt.js";
 // verify-v6-rungs-keyless.js
 // SELF-VERIFYING stxer mainnet-fork harness for the v6 stack, no Pyth key:
-// deploys jing-core-v5 + markets-sbtc-stx-jing-v6 under the deployer
+// deploys jing-core-v6 + markets-sbtc-stx-jing-v6-3 under the deployer
 // (SPV9K21…, neither is on mainnet), verifies + initializes the market,
-// deploys jing-ladder (with the peg sides) and ONE rung, then walks the rung:
+// deploys jing-ladder-v1 (with the peg sides) and ONE rung, then walks the rung:
 // ladder gating (canonical, hash, bad name, twice, stranger), deposits held
 // vs pushed, the operator raising the market minimum mid-flight, partial
 // withdraw, whole-cancel, full exit with exact payout, second member,
@@ -18,8 +18,8 @@ import { rungReceipt } from "./_rung-receipt.js";
 // Run: RUNG=buy-peg npx tsx simulations/verify-v6-rungs-keyless.js
 import fs from "node:fs";
 import {
-  ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
-  deserializeCV, cvToString, noneCV,
+  ClarityVersion, uintCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
+  deserializeCV, cvToString, noneCV, getAddressFromPrivateKey,
 } from "@stacks/transactions";
 import { SimulationBuilder, getSimulationResult } from "stxer";
 
@@ -28,17 +28,17 @@ const BUY = RUNG_KIND.startsWith("buy");
 const PEG = RUNG_KIND.endsWith("peg");
 
 const DEP = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22"; // core owner, market operator, ladder owner, rung deployer
-const CORE = "jing-core-v5";
-const MKT = "markets-sbtc-stx-jing-v6";
+const CORE = "jing-core-v6";
+const MKT = "markets-sbtc-stx-jing-v6-3";
 const CORE_ID = `${DEP}.${CORE}`;
 const MARKET = `${DEP}.${MKT}`;
-const LADDER = `${DEP}.jing-ladder`;
+const LADDER = `${DEP}.jing-ladder-v1`;
 const SBTC = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token";
 const WSTX = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2";
 const sbtcT = contractPrincipalCV("SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4", "sbtc-token");
 const wstxT = contractPrincipalCV("SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR", "token-stx-v-1-2");
 const A = BUY ? "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2" : "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51";
-const B = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q"; // 278k sats + 7.4k STX
+const B = getAddressFromPrivateKey("781".repeat(22).slice(0, 64) + "01", "mainnet"); // funded explicitly below
 const STRANGER = "SP000000000000000000002Q6VF78";
 
 // buy 331.50 sats/STX (below ~347 mid), sell 360.00 (above); pegs 20 bps with the same guard
@@ -61,7 +61,6 @@ const P = 1000000000000000000n / BigInt(CENTS);       // market unit, 1e18 / cen
 const U = BUY ? 1 : 1000; // sats vs uSTX (min 1000 sats / 1,000,000 uSTX)
 const u = (n) => uintCV(n * U);
 const MIN0 = 1000 * U, MIN1 = 5000 * U;
-const NO_UPDATE = bufferCV(Buffer.from("00", "hex"));
 const initArgs = (cents, bps = BPS) => PEG ? [uintCV(bps), uintCV(cents)] : [uintCV(cents)];
 const balOf = (who) => BUY ? `(contract-call? '${SBTC} get-balance '${who})` : `(stx-get-balance '${who})`;
 const orderOf = `(contract-call? '${MARKET} ${BUY ? "get-token-x-order" : "get-token-y-order"} '${RID})`;
@@ -75,23 +74,24 @@ const src = (f) => stripComments(fs.readFileSync(`./contracts/${f}.clar`, "utf8"
 const rungFile = PEG ? (BUY ? "jing-buy-stx-market-spread" : "jing-sell-stx-market-spread") : (BUY ? "jing-buy-stx" : "jing-sell-stx");
 
 const plan = [];
-const b = SimulationBuilder.new();
+const b = SimulationBuilder.new({ stacksNodeAPI: "http://77.42.3.101/stacks-api" });
 function deploy(sender, name, code) {
   b.withSender(sender).addContractDeploy({ contract_name: name, source_code: code, clarity_version: ClarityVersion.Clarity5 });
   plan.push({ kind: "deploy", label: `deploy ${name}` });
 }
 function call(label, sender, cid, fn, args, expect) {
+  if (fn === "withdraw") args = [...args, noneCV()];
   b.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
   plan.push({ kind: "tx", label, expect });
 }
 function evalc(label, code, capture) { b.addEvalCode(RID, code); plan.push({ kind: "eval", label, capture }); }
 function stxGift(from, to, ustx) { b.withSender(from).addSTXTransfer({ recipient: to, amount: ustx }); plan.push({ kind: "tx", label: `gift ${ustx} uSTX ${from.slice(0, 6)} -> rung`, expect: null }); }
 
-// ---- 1. the v6 stack: core-v5, market, verify, initialize (fresh, empty book) ----
+// ---- 1. the v6 stack: core-v6, market, verify, initialize (fresh, empty book) ----
 deploy(DEP, CORE, src(CORE));
-deploy(DEP, "jing-ladder", src("jing-ladder")); // before the market: it asks the ladder who holds a band seat
+deploy(DEP, "jing-ladder-v1", src("jing-ladder-v1")); // before the market: it asks the ladder who holds a band seat
 deploy(DEP, MKT, src(MKT));
-call("core-v5: verify the v6 market hash", DEP, CORE_ID, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], "(ok true)");
+call("core-v6: verify the v6 market hash", DEP, CORE_ID, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], "(ok true)");
 call("v6 initialize (sbtc / wstx, min 1000 sats / 1 STX, feeds 1 / 45)", DEP, MARKET, "initialize",
   [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], "(ok true)");
 
@@ -117,19 +117,19 @@ evalc(`ladder get-rung ${SIDE_STR} u${LADDER_KEY}`, `(contract-call? '${LADDER} 
 evalc("rung get-state", "(get-state)", "state0");
 
 // ---- 3. deposits: under the minimum is held, over is pushed ----
-call("deposit below MIN_DEPOSIT -> u7005", A, RID, "deposit", [uintCV(1), NO_UPDATE], "(err u7005)");
-call("A deposit 500 (under market min) -> held", A, RID, "deposit", [u(500), NO_UPDATE], rungReceipt("deposit"));
+call("deposit below MIN_DEPOSIT -> u7005", A, RID, "deposit", [uintCV(1)], "(err u7005)");
+call("A deposit 500 (under market min) -> held", A, RID, "deposit", [u(500)], rungReceipt("deposit"));
 evalc("state after 500: held 500, resting 0", "(get-state)");
-call("A deposit 600 -> 1100 pushed to market", A, RID, "deposit", [u(600), NO_UPDATE], rungReceipt("deposit"));
+call("A deposit 600 -> 1100 pushed to market", A, RID, "deposit", [u(600)], rungReceipt("deposit"));
 evalc("state after 1100: held 0, resting 1100", "(get-state)");
 evalc(`market order for the rung (${PEG ? `limit = ${guardName} in market unit, spread-bps (some u${BPS})` : "limit = price, spread-bps none"})`, orderOf, "order");
 
 // ---- 4. operator raises the market minimum to 5000: the rung must follow ----
 call("operator set-min to 5000", DEP, MARKET, BUY ? "set-min-token-x-deposit" : "set-min-token-y-deposit", [uintCV(MIN1)], "(ok true)");
 evalc("min-market now 5000", "(min-market)");
-call("A deposit 1000 with min 5000: to-push 1000 < 5000 -> HELD", A, RID, "deposit", [u(1000), NO_UPDATE], rungReceipt("deposit"));
+call("A deposit 1000 with min 5000: to-push 1000 < 5000 -> HELD", A, RID, "deposit", [u(1000)], rungReceipt("deposit"));
 evalc("state: held 1000, resting 1100", "(get-state)");
-call("A deposit 4000 -> 5000 pushed, resting 6100", A, RID, "deposit", [u(4000), NO_UPDATE], rungReceipt("deposit"));
+call("A deposit 4000 -> 5000 pushed, resting 6100", A, RID, "deposit", [u(4000)], rungReceipt("deposit"));
 evalc("state: held 0, resting 6100", "(get-state)");
 
 // ---- 5. withdraws: partial keeps >= min on market, else whole-cancel + hold ----
@@ -142,7 +142,9 @@ evalc("state: held 4600, resting 0", "(get-state)");
 evalc("A position: 4600 unsold", `(get-position '${A})`);
 
 // ---- 6. second member; shares; full exits ----
-call("B deposit 2000 -> 6600 pushed", B, RID, "deposit", [u(2000), NO_UPDATE], rungReceipt("deposit"));
+if (BUY) call("fund fresh B with 2000 sats", A, SBTC, "transfer", [uintCV(2000), standardPrincipalCV(A), standardPrincipalCV(B), noneCV()], "(ok true)");
+else { b.withSender(A).addSTXTransfer({recipient:B, amount:2000*U}); plan.push({kind:"tx",label:"fund fresh B with 2 STX",expect:"(ok true)"}); }
+call("B deposit 2000 -> 6600 pushed", B, RID, "deposit", [u(2000)], rungReceipt("deposit"));
 evalc("state: held 0, resting 6600, shares 6600e12", "(get-state)");
 evalc("B position 2000", `(get-position '${B})`);
 evalc("A before exit", balOf(A), "A0");
@@ -192,7 +194,7 @@ async function main() {
     check(`market order limit is the price u${P}`, ord.includes(`(limit u${P})`), ord);
   }
   check("pool empty at the end (total-shares u0)", (captured.stateEnd || "").includes("(total-shares u0)"), captured.stateEnd);
-  console.log(`\n=== ${pass} passed, ${fail} failed ===\nView: https://stxer.xyz/simulations/mainnet/${sessionId}`);
+  console.log(`\n${pass}/${pass + fail} checks green\nView: https://stxer.xyz/simulations/mainnet/${sessionId}`);
   if (fail > 0) process.exit(1);
 }
 main().catch((e) => { console.error(e); process.exit(1); });

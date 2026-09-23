@@ -1,0 +1,11 @@
+{
+  "contracts/jing-sell-stx-core-spread.clar": "d24d4e28d9166c7f2259803c80d6762f60c5287da273e75ecfd055fb55fc5986",
+  "contracts/jing-buy-stx-market-spread.clar": "16d2259ef21c63d9f26d792107ab50a750c5c43371688f850f3e9a01d1addf6b",
+  "contracts/jing-buy-stx.clar": "8dc412e0ee4576ea1bd8f19974f289d624826e48e85d83c836e93774e4a0a697",
+  "contracts/jing-sell-stx-market-spread.clar": "446abbd88c72275ec0a6202f2b9fde236675c2aadf32dec02cca7162838c6455",
+  "contracts/jing-sell-stx.clar": "9daa9ec619929215d3d77bf9989214a80ea31138679876275fd8fd4393326478",
+  "contracts/jing-buy-stx-core-spread.clar": "9c8d22538192724ab32386d932431a6a94e01fd5af2739ec193d6a40deb2a03f",
+  "contracts/markets-sbtc-stx-jing-v6-3.clar": "04b0a7df781aec46124d40d3c73c68169aeed919fed155ec5bf12153bb0bfb85",
+  "contracts/jing-ladder-v1.clar": "99a6e9f6db9305ebb29d938e69439c720e497bd38c53ec8b447c8c34c528a902",
+  "contracts/swap-router-sbtc-stx-jing-v5-3.clar": "c28a1d6398eb54555293355916deb198f049bd8c057f67edfffd99fbcf156aca"
+}

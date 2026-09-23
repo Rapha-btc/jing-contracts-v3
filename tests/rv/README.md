@@ -1,5 +1,11 @@
 # Rendezvous (RV) property fuzzing
 
+For the current **v6-3 submit/settle/cancel recovery** target, see the
+[v6-3 property suite](v6-3/README.md). The full-book extension records
+120 successful readmit placements per side, 123 batch clears, 120 swaps per
+direction, and 3,000 native RV trials (988 passed, 2012 discarded,
+zero failures). Its results are separate from the historical v6 runs below.
+
 For the September 21 **v6-2 band-rung, ladder, and dispatcher** runs, see the
 [ladder README](../../contracts/README-jing-ladder-dispatch.md#historical-rendezvous-fuzz-results--before-receipt-responses).
 Run `npm run rv:ladder-suite` to build the isolated targets and reproduce all

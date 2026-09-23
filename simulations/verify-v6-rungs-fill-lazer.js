@@ -1,6 +1,6 @@
 import { rungReceipt } from "./_rung-receipt.js";
 // verify-v6-rungs-fill-lazer.js
-// The FIXED rungs on markets-sbtc-stx-jing-v6 with a real fill (PYTH_API_KEY):
+// The FIXED rungs on markets-sbtc-stx-jing-v6-3 with a real fill (keyless signed Lazer):
 // the keyless harness never fills. Deploys the v6 stack + ladder + one fixed
 // rung per side priced just outside mid (buy rung asks 1% over, sell rung
 // bids 1% under), a taker walks each, the rung's sync folds the fill in,
@@ -12,19 +12,20 @@ import { rungReceipt } from "./_rung-receipt.js";
 // bid, one sBTC seller clears the three whole in the batch at the mid (a
 // walked y maker keeps rounding dust, a batch-cleared one does not); each
 // rung's sync closes its epoch, the member claims from the closed epoch.
-// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-fill-lazer.js
+// Run: node simulations/verify-v6-rungs-fill-lazer.js
+import { runCurrentPlan, FRESH_UPDATE } from "./_v6-submit-settle.js";
 import fs from "node:fs";
-import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, trueCV, falseCV, noneCV, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
-import { SimulationBuilder, getSimulationResult } from "stxer";
-import { fetchLazerUpdate } from "./_lazer.js";
+import { ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, trueCV, falseCV, noneCV, standardPrincipalCV, getAddressFromPrivateKey, deserializeCV, cvToString, hexToCV } from "@stacks/transactions";
+import { SimulationBuilder } from "stxer";
+import { fetchLazerUpdateAny as fetchLazerUpdate } from "./_lazer.js";
 
 const DEP = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
-const CORE = "jing-core-v5", MKT = "markets-sbtc-stx-jing-v6";
-const CORE_ID = `${DEP}.${CORE}`, MARKET = `${DEP}.${MKT}`, LADDER = `${DEP}.jing-ladder`;
+const CORE = "jing-core-v6", MKT = "markets-sbtc-stx-jing-v6-3";
+const CORE_ID = `${DEP}.${CORE}`, MARKET = `${DEP}.${MKT}`, LADDER = `${DEP}.jing-ladder-v1`;
 const sbtcT = contractPrincipalCV("SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4", "sbtc-token"), wstxT = contractPrincipalCV("SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR", "token-stx-v-1-2");
 const sbtcA = stringAsciiCV("sbtc-token"), wstxA = stringAsciiCV("wstx");
 const SBTC = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token";
-const A = "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2", S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51", B = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q";
+const A = "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2", S = "SP9BP4PN74CNR5XT7CMAMBPA0GWC9HMB69HVVV51", B = getAddressFromPrivateKey("782".repeat(22).slice(0,64)+"01", "mainnet");
 const PP = 100_000_000n, SCALE = 1_000_000_000_000n;
 // comment-only lines stripped before deploying: the v6 market crossed the
 // 100,000-byte deploy limit with its comments (2026-09-15); the deploy form
@@ -50,24 +51,28 @@ async function main() {
   const BUY = `jing-buy-stx-${centsName(BUY_C)}`, SELL = `jing-sell-stx-${centsName(SELL_C)}`;
   const rid = (n) => `${DEP}.${n}`;
   console.log(`mid ${MID} (1 STX ~ ${(10n ** 16n) / MID} sats); ${BUY} asks p ${BUY_P}; ${SELL} bids p ${SELL_P}`);
-  const steps = []; let b = SimulationBuilder.new();
-  const call = (sender, fn, args, cid = MARKET) => (bb) => bb.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
+  const steps = []; let b = SimulationBuilder.new({ stacksNodeAPI: "http://77.42.3.101/stacks-api" });
+  const call = (sender, fn, args, cid = MARKET) => (bb) => bb.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: fn === "withdraw" ? [...args, noneCV()] : args });
   const tx = (label, fn, want) => { b = fn(b); steps.push({ label, kind: "tx", want }); return steps[steps.length - 1]; };
   const ev = (label, code, want, cid = MARKET) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); return steps[steps.length - 1]; };
   const deploy = (name, code) => tx(`deploy ${name}`, (bb) => bb.withSender(DEP).addContractDeploy({ contract_name: name, source_code: code, clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
   const swap = (sender, amount, limit, depX) => call(sender, "swap", [uintCV(amount), uintCV(limit), UPD, sbtcT, sbtcA, wstxT, wstxA, depX ? trueCV() : falseCV()]);
 
-  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
-  tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
+  deploy(CORE, src(CORE)); deploy("jing-ladder-v1", src("jing-ladder-v1")); deploy(MKT, src(MKT));
+  tx("core-v6 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)"); deploy(BUY, src("jing-buy-stx")); deploy(SELL, src("jing-sell-stx"));
   tx("canonical buy-stx", call(DEP, "set-canonical", [stringAsciiCV("buy-stx"), contractPrincipalCV(DEP, BUY)], LADDER), "(ok true)");
   tx("canonical sell-stx", call(DEP, "set-canonical", [stringAsciiCV("sell-stx"), contractPrincipalCV(DEP, SELL)], LADDER), "(ok true)");
   tx(`init ${BUY}`, call(DEP, "initialize", [uintCV(BUY_C)], rid(BUY)), "(ok true)");
   tx(`init ${SELL}`, call(DEP, "initialize", [uintCV(SELL_C)], rid(SELL)), "(ok true)");
 
+  tx("fund fresh taker sBTC", call(A, "transfer", [uintCV(100000), standardPrincipalCV(A), standardPrincipalCV(B), noneCV()], SBTC), "(ok true)");
+  tx("fund fresh taker STX", bb=>bb.withSender(S).addSTXTransfer({recipient:B,amount:100000000}), "(ok true)");
   // F1 both rungs rest: fixed orders on v6 carry spread-bps none
-  tx("F1 A deposits 20000 sats into the buy rung", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), rungReceipt("deposit"));
-  tx("F1 S deposits 60 STX into the sell rung (x side rests: price read)", call(S, "deposit", [uintCV(60_000_000), UPD], rid(SELL)), rungReceipt("deposit"));
+  tx("F1 A deposits 20000 sats into the buy rung", call(A, "deposit", [uintCV(20000)], rid(BUY)), rungReceipt("deposit"));
+  tx("F1 S deposits 60 STX into the sell rung (x side rests: price read)", call(S, "deposit", [uintCV(60_000_000)], rid(SELL)), rungReceipt("deposit"));
+  tx("F1 settle sell rung escrow with a newer signed print", call(B, "settle-token-y-deposit", [contractPrincipalCV(DEP, SELL), FRESH_UPDATE, wstxT, wstxA]), "(ok u60000000)");
+  ev("F1 sell pending cleared", `(get-token-y-pending-deposit '${rid(SELL)})`, "none");
   ev("F1 buy rung order: fixed at its price", `(get-token-x-order '${rid(BUY)})`, (v) => field(v, "limit") === `u${BUY_P}` && field(v, "spread-bps") === "none");
   ev("F1 sell rung order: fixed at its price", `(get-token-y-order '${rid(SELL)})`, (v) => field(v, "limit") === `u${SELL_P}` && field(v, "spread-bps") === "none");
 
@@ -112,11 +117,11 @@ async function main() {
   tx(`init ${SELLP} (spread 0: pegged at the mid)`, call(DEP, "initialize", [uintCV(0), uintCV(SELLP_C)], rid(SELLP)), "(ok true)");
   tx(`init ${SELLB} (spread 0, seated)`, call(DEP, "initialize", [uintCV(0), trueCV()], rid(SELLB)), "(ok true)");
   const STX5 = 5_000_000;
-  tx("F5 S deposits 5 STX into the in-range fixed sell rung (x side empty: no crossing)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLF)), rungReceipt("deposit"));
-  tx("F5 S deposits 5 STX into the zero-spread sell peg rung", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLP)), rungReceipt("deposit"));
-  tx("F5 S deposits 5 STX into the zero-spread sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5), UPD], rid(SELLB)), rungReceipt("deposit"));
+  tx("F5 S deposits 5 STX into the in-range fixed sell rung (x side empty: no crossing)", call(S, "deposit", [uintCV(STX5)], rid(SELLF)), rungReceipt("deposit"));
+  tx("F5 S deposits 5 STX into the zero-spread sell peg rung", call(S, "deposit", [uintCV(STX5)], rid(SELLP)), rungReceipt("deposit"));
+  tx("F5 S deposits 5 STX into the zero-spread sell band rung (cap from the miner band)", call(S, "deposit", [uintCV(STX5)], rid(SELLB)), rungReceipt("deposit"));
   for (const r of [SELLF, SELLP, SELLB]) ev(`F5 ${r} resting 5 STX`, "(get-state)", (v) => field(v, "resting") === `u${STX5}` && field(v, "held-ustx") === "u0", rid(r));
-  tx("F5 S rests a deep direct bid: 100 STX at -2%", call(S, "deposit-token-y", [uintCV(100_000_000), uintCV((MID * 98n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u100000000)");
+  tx("F5 S rests a deep direct bid: 100 STX at -2%", call(S, "deposit-token-y", [uintCV(100_000_000), uintCV((MID * 98n) / 100n), noneCV(), wstxT, wstxA]), "(ok u100000000)");
   const SATS_25_STX = (25n * 10n ** 16n) / MID; // ~25 STX worth of sats: the three rungs (15 STX) cleared whole at the mid, the rest walks the deep bid
   const fill5 = tx(`F5 B sells ${SATS_25_STX} sats (~25 STX) at -3%: the batch clears the three rungs at the mid, the walk takes part of the deep bid`, swap(B, Number(SATS_25_STX), (MID * 97n) / 100n, true), (v) => String(v).startsWith("(ok"));
   for (const r of [SELLF, SELLP, SELLB]) ev(`F5 ${r} market position u0`, `(get-token-y-deposit (get-current-cycle) '${rid(r)})`, "u0");
@@ -131,9 +136,9 @@ async function main() {
   }
   tx("F5 S cancels the rest of the deep bid", call(S, "cancel-token-y-deposit", [wstxT, wstxA]), (v) => String(v).startsWith("(ok u"));
 
-  const sid = await b.run();
+  const {sid, result:res} = await runCurrentPlan(b);
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
-  const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
+  const s = res.steps; let i = 0;
   for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); st.idx = i; i += 1; check(st.label, st.raw, st.want); }
   const mx = logsOf(s[fillX.idx]).filter((r) => r.includes('(event "match")')).map((r) => (r.match(/\(price u(\d+)\)/) || [])[1]);
   const my = logsOf(s[fillY.idx]).filter((r) => r.includes('(event "match")')).map((r) => (r.match(/\(price u(\d+)\)/) || [])[1]);

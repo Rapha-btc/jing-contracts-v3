@@ -1,0 +1,6 @@
+settings/
+deployments/
+.cache/
+.rendezvous-regressions/
+
+__pycache__/

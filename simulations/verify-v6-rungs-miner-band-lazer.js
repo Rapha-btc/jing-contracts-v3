@@ -13,15 +13,16 @@ import { rungReceipt } from "./_rung-receipt.js";
 //      (some u20); the effective price at mid is mid + 20 bps (in band)
 //   M3 refresh-guard by a stranger re-sets the market's limit from the band
 //   M4/M5 the sell rung mirror (cap = 2x, bid at mid - 20 bps, refresh-guard)
-// Run: PYTH_API_KEY=<key> npx tsx simulations/verify-v6-rungs-miner-band-lazer.js
+// Run: node simulations/verify-v6-rungs-miner-band-lazer.js
+import { runCurrentPlan, FRESH_UPDATE } from "./_v6-submit-settle.js";
 import fs from "node:fs";
 import { ClarityVersion, uintCV, trueCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV, deserializeCV, cvToString, getAddressFromPrivateKey } from "@stacks/transactions";
-import { SimulationBuilder, getSimulationResult } from "stxer";
-import { fetchLazerUpdate } from "./_lazer.js";
+import { SimulationBuilder } from "stxer";
+import { fetchLazerUpdateAny as fetchLazerUpdate } from "./_lazer.js";
 
 const DEP = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22";
-const CORE = "jing-core-v5", MKT = "markets-sbtc-stx-jing-v6";
-const CORE_ID = `${DEP}.${CORE}`, MARKET = `${DEP}.${MKT}`, LADDER = `${DEP}.jing-ladder`;
+const CORE = "jing-core-v6", MKT = "markets-sbtc-stx-jing-v6-3";
+const CORE_ID = `${DEP}.${CORE}`, MARKET = `${DEP}.${MKT}`, LADDER = `${DEP}.jing-ladder-v1`;
 const sbtcT = contractPrincipalCV("SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4", "sbtc-token"), wstxT = contractPrincipalCV("SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR", "token-stx-v-1-2");
 const wstxA = stringAsciiCV("wstx"), sbtcA = stringAsciiCV("sbtc-token");
 const A = "SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2"; // sBTC holder: buy-rung member
@@ -58,9 +59,12 @@ async function main() {
   const ev = (label, code, want, cid = MARKET) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); return steps[steps.length - 1]; };
   const deploy = (name, code) => tx(`deploy ${name}`, (bb) => bb.withSender(DEP).addContractDeploy({ contract_name: name, source_code: code, clarity_version: ClarityVersion.Clarity5 }), (v) => !String(v).includes("ERR"));
   const state = (label, cid, want) => ev(label, "(get-state)", want, cid);
+  const settle = (label, side, who, amount) => tx(label, call(KEEPER, `settle-token-${side}-deposit`,
+    [who.includes('.') ? contractPrincipalCV(...who.split('.')) : standardPrincipalCV(who), FRESH_UPDATE,
+     side==='x'?sbtcT:wstxT, side==='x'?sbtcA:wstxA]), `(ok u${amount})`);
 
-  deploy(CORE, src(CORE)); deploy("jing-ladder", src("jing-ladder")); deploy(MKT, src(MKT));
-  tx("core-v5 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
+  deploy(CORE, src(CORE)); deploy("jing-ladder-v1", src("jing-ladder-v1")); deploy(MKT, src(MKT));
+  tx("core-v6 verifies v6", call(DEP, "set-verified-contract", [contractPrincipalCV(DEP, MKT)], CORE_ID), "(ok true)");
   tx("v6 initialize", call(DEP, "initialize", [contractPrincipalCV(DEP, MKT), sbtcT, wstxT, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)]), "(ok true)"); deploy(BUY, src("jing-buy-stx-core-spread")); deploy(SELL, src("jing-sell-stx-core-spread"));
   tx("canonical buy-band", call(DEP, "set-canonical", [stringAsciiCV("buy-band"), contractPrincipalCV(DEP, BUY)], LADDER), "(ok true)");
   tx("canonical sel-band", call(DEP, "set-canonical", [stringAsciiCV("sel-band"), contractPrincipalCV(DEP, SELL)], LADDER), "(ok true)");
@@ -77,8 +81,9 @@ async function main() {
   tx("M1 init again -> u7002", call(DEP, "initialize", [uintCV(BPS), trueCV()], rid(BUY)), "(err u7002)");
 
   // =============== M2: a push rests with the band as its floor ===============
-  tx("M2 S rests a bid at -5% (the y side is not empty: x deposits need a price)", call(S, "deposit-token-y", [uintCV(5_000_000), uintCV((MID * 95n) / 100n), noneCV(), UPD, wstxT, wstxA]), "(ok u5000000)");
-  tx("M2 A deposits 20000 sats with a fresh update: pushed with floor = miner-mid / 2", call(A, "deposit", [uintCV(20000), UPD], rid(BUY)), rungReceipt("deposit"));
+  tx("M2 S rests a bid at -5% (the y side is not empty: x deposits need a price)", call(S, "deposit-token-y", [uintCV(5_000_000), uintCV((MID * 95n) / 100n), noneCV(), wstxT, wstxA]), "(ok u5000000)");
+  tx("M2 A deposits 20000 sats with a fresh update: pushed with floor = miner-mid / 2", call(A, "deposit", [uintCV(20000)], rid(BUY)), rungReceipt("deposit"));
+  settle("M2 admit buy escrow with newer price", "x", rid(BUY), 20000);
   state("M2 held 0, resting 20000", rid(BUY), (v) => field(v, "held-sats") === "u0" && field(v, "resting") === "u20000");
   const lim = ev("M2 the market's stored limit for the rung", `(get-token-x-limit '${rid(BUY)})`, (v) => uintOf(v) > 0n);
   ev("M2 the rung's stored floor after the first push", "(get-floor)", (v) => uintOf(v) > 0n, rid(BUY));
@@ -86,15 +91,18 @@ async function main() {
   ev("M2 effective ask at mid = mid + 20 bps (in band: the floor is far under)", `(token-x-limit-at '${rid(BUY)} u${MID})`, `u${(MID * (10000n + BPS)) / 10000n}`);
 
   // =============== M3: refresh-guard by a stranger ===============
-  tx("M3 keeper refresh-guard (buy) -> ok", call(KEEPER, "refresh-guard", [UPD], rid(BUY)), (v) => String(v).startsWith("(ok"));
+  tx("M3 keeper refresh-guard (buy) -> ok", call(KEEPER, "refresh-guard", [], rid(BUY)), (v) => String(v).startsWith("(ok"));
+  tx("M3 settle refreshed buy limit", call(KEEPER,"settle-token-x-limit",[contractPrincipalCV(DEP,BUY),FRESH_UPDATE]), "(ok true)");
   const lim2 = ev("M3 limit after refresh (same block: unchanged)", `(get-token-x-limit '${rid(BUY)})`, (v) => uintOf(v) > 0n);
 
   // =============== M4/M5: the sell rung ===============
-  tx("M4 S deposits 5 STX into the sell rung with a fresh update: pushed with cap = miner-mid * 2", call(S, "deposit", [uintCV(5_000_000), UPD], rid(SELL)), rungReceipt("deposit"));
+  tx("M4 S deposits 5 STX into the sell rung with a fresh update: pushed with cap = miner-mid * 2", call(S, "deposit", [uintCV(5_000_000)], rid(SELL)), rungReceipt("deposit"));
+  settle("M4 admit sell escrow with newer price", "y", rid(SELL), 5000000);
   state("M4 held 0, resting 5 STX", rid(SELL), (v) => field(v, "held-ustx") === "u0" && field(v, "resting") === "u5000000");
   const limS = ev("M4 the market's stored cap for the sell rung", `(get-token-y-limit '${rid(SELL)})`, (v) => uintOf(v) > 0n);
   ev("M4 effective bid at mid = mid - 20 bps (in band: the cap is far over)", `(token-y-limit-at '${rid(SELL)} u${MID})`, `u${(MID * (10000n - BPS)) / 10000n}`);
-  tx("M5 keeper refresh-guard (sell) -> ok", call(KEEPER, "refresh-guard", [UPD], rid(SELL)), (v) => String(v).startsWith("(ok"));
+  tx("M5 keeper refresh-guard (sell) -> ok", call(KEEPER, "refresh-guard", [], rid(SELL)), (v) => String(v).startsWith("(ok"));
+  tx("M5 settle refreshed sell limit", call(KEEPER,"settle-token-y-limit",[contractPrincipalCV(DEP,SELL),FRESH_UPDATE]), "(ok true)");
 
   // =============== S: protected seats ===============
   // The rung's initialize claimed a seat; the market skips it in every
@@ -120,15 +128,22 @@ async function main() {
   // although only 41 orders rest: the 9 empty seats are not theirs to take
   FILLERS.forEach((f, i) => {
     tx(`S2 fund filler ${i + 1}`, call(A, "transfer", [uintCV(FILL), standardPrincipalCV(A), standardPrincipalCV(f), noneCV()], SBTC), "(ok true)");
-    if (i < 40) tx(`S2 filler ${i + 1} rests ${FILL} at +5%`, call(f, "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), UPD, sbtcT, sbtcA]), `(ok u${FILL})`);
+    if (i < 40) tx(`S2 filler ${i + 1} rests ${FILL} at +5%`, call(f, "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), sbtcT, sbtcA]), `(ok u${FILL})`);
+    if (i < 40) settle(`S2 admit filler ${i+1}`, "x", f, FILL);
   });
   ev("S2 x side: 40 fillers + the rung = 41", "(len (get-token-x-depositors u0))", "u41");
-  tx("S3 filler 41 at +5%: the open region is full (40) although 41 rest -> u1010", call(FILLERS[40], "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), UPD, sbtcT, sbtcA]), "(err u1010)");
+  tx("S3 filler 41 at +5%: full open region: submit escrows pending refusal", call(FILLERS[40], "deposit-token-x", [uintCV(FILL), uintCV(ASK_NEAR), noneCV(), sbtcT, sbtcA]), `(ok u${FILL})`);
+  const refused = settle("S3 queue-full settle refunds entrant", "x", FILLERS[40], FILL);
+  ev("S3 refund clears pending", `(get-token-x-pending-deposit '${FILLERS[40]})`, "none");
+  ev("S3 refused entrant never live", `(get-token-x-deposit u0 '${FILLERS[40]})`, "u0");
+  ev("S3 exact refund", `(contract-call? '${SBTC} get-balance '${FILLERS[40]})`, `(ok u${FILL})`);
   ev("S3 still 41", "(len (get-token-x-depositors u0))", "u41");
-  tx("S4 A tops the rung up by 1000: a protected maker only sees the hard cap -> pushed", call(A, "deposit", [uintCV(1000), UPD], rid(BUY)), rungReceipt("deposit"));
+  tx("S4 A tops the rung up by 1000: a protected maker only sees the hard cap -> pushed", call(A, "deposit", [uintCV(1000)], rid(BUY)), rungReceipt("deposit"));
+  settle("S4 admit protected top-up", "x", rid(BUY), 1000);
   state("S4 rung resting 21000", rid(BUY), (v) => field(v, "resting") === "u21000" && field(v, "held-sats") === "u0");
   tx("S5 fund the parker", call(A, "transfer", [uintCV(3000), standardPrincipalCV(A), standardPrincipalCV(KEEPER), noneCV()], SBTC), "(ok true)");
-  tx("S5 an in-range ask (3000 at 1) on the full open region: parks the 10th best filler, never the rung", call(KEEPER, "deposit-token-x", [uintCV(3000), uintCV(1), noneCV(), UPD, sbtcT, sbtcA]), "(ok u3000)");
+  tx("S5 an in-range ask (3000 at 1) on the full open region: parks the 10th best filler, never the rung", call(KEEPER, "deposit-token-x", [uintCV(3000), uintCV(1), noneCV(), sbtcT, sbtcA]), "(ok u3000)");
+  settle("S5 admit parker with newer price", "x", KEEPER, 3000);
   ev("S5 the rung is still live with 21000", `(get-token-x-deposit u0 '${rid(BUY)})`, "u21000");
   ev("S5 the rung is not parked", `(get-token-x-parked '${rid(BUY)})`, "u0");
   ev("S5 still 41 on the side (one filler parked, the parker in)", "(len (get-token-x-depositors u0))", "u41");
@@ -167,10 +182,12 @@ async function main() {
   ev("S9 spread 30 is free", '(get-rung "buy-band" u30)', "none", LADDER);
   ev("S9 the spread-20 rung still holds its seat", `(is-protected-x '${rid(BUY)})`, "true");
 
-  const sid = await b.run();
+  const {sid, result:res} = await runCurrentPlan(b);
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
-  const res = await getSimulationResult(sid); const s = res.steps; let i = 0;
+  const s = res.steps; let i = 0;
   for (const st of steps) { while (i < s.length && !s[i]?.Result?.Transaction && !s[i]?.Result?.Eval) i += 1; st.raw = st.kind === "tx" ? decodeTx(s[i]) : decodeEval(s[i]); st.idx = i; i += 1; check(st.label, st.raw, st.want); }
+  const refundLogs=(s[refused.idx].Result.Transaction.Ok.events||[]).map(e=>typeof e==='string'?JSON.parse(e):e).filter(e=>e.committed && e.contract_event).map(e=>cvToString(deserializeCV(e.contract_event.raw_value)));
+  check("S3 committed queue-full event", refundLogs.join('|'), v=>v.includes('(event "pending-refund-x")') && v.includes('(reason "queue-full")'));
   const m = uintOf(mm.raw);
   check("M1 miner-mid within 1/2 .. 2x of the Pyth mid (same unit, the RFQ band itself)", m, (v) => v > MID / 2n && v < MID * 2n);
   check("M1 both rungs read the same miner-mid", uintOf(mmS.raw), (v) => v === m);

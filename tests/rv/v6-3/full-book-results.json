@@ -1,0 +1,106 @@
+{
+  "results": [
+    {
+      "seed": 230930,
+      "episodesPerPath": 40,
+      "successfulCalls": {
+        "deposit-x": 174,
+        "settle-deposit-x": 44,
+        "set-limit-x": 1,
+        "readmit-x": 40,
+        "deposit-y": 174,
+        "settle-deposit-y": 174,
+        "set-limit-y": 1,
+        "readmit-y": 40,
+        "cancel-y": 115,
+        "settle-readmit-y": 40,
+        "cancel-x": 88,
+        "settle-readmit-x": 40,
+        "withdraw-y": 5,
+        "withdraw-x": 6,
+        "settle-with-refresh": 41,
+        "swap-x": 40,
+        "swap-y": 40
+      },
+      "invariantChecks": 2768,
+      "calls": 1365,
+      "nativeRV": {
+        "seed": 231030,
+        "runs": 1000,
+        "passed": 330,
+        "discarded": 670,
+        "failed": 0
+      }
+    },
+    {
+      "seed": 230931,
+      "episodesPerPath": 40,
+      "successfulCalls": {
+        "deposit-x": 174,
+        "settle-deposit-x": 44,
+        "set-limit-x": 1,
+        "readmit-x": 40,
+        "deposit-y": 174,
+        "settle-deposit-y": 174,
+        "set-limit-y": 1,
+        "readmit-y": 40,
+        "cancel-y": 115,
+        "settle-readmit-y": 40,
+        "cancel-x": 88,
+        "settle-readmit-x": 40,
+        "withdraw-x": 3,
+        "withdraw-y": 8,
+        "settle-with-refresh": 41,
+        "swap-x": 40,
+        "swap-y": 40
+      },
+      "invariantChecks": 2775,
+      "calls": 1372,
+      "nativeRV": {
+        "seed": 231031,
+        "runs": 1000,
+        "passed": 304,
+        "discarded": 696,
+        "failed": 0
+      }
+    },
+    {
+      "seed": 230932,
+      "episodesPerPath": 40,
+      "successfulCalls": {
+        "deposit-x": 174,
+        "settle-deposit-x": 44,
+        "set-limit-x": 1,
+        "readmit-x": 40,
+        "deposit-y": 174,
+        "settle-deposit-y": 174,
+        "set-limit-y": 1,
+        "readmit-y": 40,
+        "cancel-y": 116,
+        "settle-readmit-y": 40,
+        "cancel-x": 86,
+        "settle-readmit-x": 40,
+        "withdraw-x": 7,
+        "withdraw-y": 4,
+        "settle-with-refresh": 41,
+        "swap-y": 40,
+        "swap-x": 40
+      },
+      "invariantChecks": 2770,
+      "calls": 1367,
+      "nativeRV": {
+        "seed": 231032,
+        "runs": 1000,
+        "passed": 354,
+        "discarded": 646,
+        "failed": 0
+      }
+    }
+  ],
+  "hashes": {
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "04b0a7df781aec46124d40d3c73c68169aeed919fed155ec5bf12153bb0bfb85",
+    "tests/rv/v6-3/properties.clar": "4f4d55c9f523476155546367e4535513eef44e34cea646f2bcd628209cd0d794",
+    "tests/rv/v6-3/build.py": "8af6251d404b3bc493b55934708eb643d287edd9aacf0cd91f47edc458710eca",
+    "tests/rv/v6-3/run-full-book.mjs": "6183ca315a4fca2559716a6a20c882fa4947c9779b619f69f0f1d5049cdc15eb"
+  }
+}

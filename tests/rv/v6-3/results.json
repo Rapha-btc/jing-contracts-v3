@@ -1,0 +1,112 @@
+{
+  "generatedAt": "2026-09-23T19:47:08.012Z",
+  "hashes": {
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "04b0a7df781aec46124d40d3c73c68169aeed919fed155ec5bf12153bb0bfb85",
+    "tests/rv/v6-3/properties.clar": "777989af4efb715047bd508e9faf952200cc8ff5c9e1989a21dc5c1e22435944",
+    "tests/rv/v6-3/build.py": "2aaf1e4280e43cee82a793e75a0c883d7ba5077a1d1a3d6e251c5192fff583ad",
+    "tests/rv/v6-3/run-seeded.mjs": "e65d971c313fd87bd0608f9702472577961c109f54cd55c56538d4f5f2dd3b85",
+    "tests/rv/.build/v6-3/market.clar": "52fb016c6039b87309e7e06f43377ed5c424d2231ac14f75a5d139b8bcb8de6c"
+  },
+  "results": [
+    {
+      "mode": "invariant",
+      "runs": 1000,
+      "seed": 230927,
+      "passed": 1000,
+      "discarded": 0,
+      "failed": 0,
+      "actualSuccessfulWrapperCalls": {
+        "test-deposit-y": 27,
+        "test-deposit-x": 35,
+        "test-cancel-y": 12,
+        "test-cancel-x": 29,
+        "test-withdraw-y": 5,
+        "test-reprice-y": 5,
+        "test-settle-x": 5,
+        "test-limit-y": 6,
+        "test-limit-x": 16,
+        "test-settle-limit-y": 1,
+        "test-reprice-x": 10,
+        "test-settle-y": 3,
+        "test-withdraw-x": 12,
+        "test-settle-limit-x": 3,
+        "test-batch": 1,
+        "test-swap": 3,
+        "test-readmit-x": 1
+      },
+      "settleOutcomes": {
+        "placed": 5,
+        "crossing": 1,
+        "queue-full": 2
+      },
+      "invalidAssetRuntimeErrors": 37,
+      "log": "simulations/results/rv-v6-3/invariant-230927.log"
+    },
+    {
+      "mode": "test",
+      "runs": 5000,
+      "seed": 230926,
+      "passed": 1634,
+      "discarded": 3366,
+      "failed": 0,
+      "actualSuccessfulWrapperCalls": {
+        "test-deposit-y": 60,
+        "test-deposit-x": 53,
+        "test-settle-x": 12,
+        "test-limit-x": 23,
+        "test-withdraw-y": 13,
+        "test-cancel-x": 41,
+        "test-cancel-y": 55,
+        "test-settle-y": 8,
+        "test-readmit-x": 1,
+        "test-swap": 7,
+        "test-settle-limit-x": 4,
+        "test-withdraw-x": 10,
+        "test-reprice-y": 13,
+        "test-reprice-x": 7,
+        "test-readmit-y": 1,
+        "test-limit-y": 17
+      },
+      "settleOutcomes": {
+        "placed": 17,
+        "queue-full": 3
+      },
+      "invalidAssetRuntimeErrors": 0,
+      "log": "simulations/results/rv-v6-3/test-230926.log"
+    },
+    {
+      "mode": "seeded",
+      "runs": 3000,
+      "seed": 230929,
+      "passed": 1038,
+      "discarded": 1962,
+      "failed": 0,
+      "actualSuccessfulWrapperCalls": {
+        "test-deposit-x": 34,
+        "test-reprice-x": 16,
+        "test-cancel-y": 31,
+        "test-limit-x": 15,
+        "test-withdraw-x": 6,
+        "test-settle-limit-y": 3,
+        "test-settle-limit-x": 5,
+        "test-deposit-y": 35,
+        "test-limit-y": 11,
+        "test-cancel-x": 31,
+        "test-settle-x": 12,
+        "test-swap": 4,
+        "test-readmit-x": 2,
+        "test-settle-y": 13,
+        "test-withdraw-y": 7,
+        "test-reprice-y": 6,
+        "test-readmit-y": 1,
+        "test-settle-readmit-y": 1
+      },
+      "settleOutcomes": {
+        "placed": 22,
+        "queue-full": 3
+      },
+      "invalidAssetRuntimeErrors": 0,
+      "log": "simulations/results/rv-v6-3/seeded-230929.log"
+    }
+  ]
+}

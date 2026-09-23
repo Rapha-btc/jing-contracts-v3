@@ -71,6 +71,40 @@ Pyth VAA sims (`settle-refresh`, `swap`) fetch live VAAs from
 `https://hermes.pyth.network/v2/updates/price/<timestamp>` so they need
 internet access at run time.
 
+## Current dispatch and paired router checks (2026-09-23)
+
+| Harness | Source | N/M | Evidence |
+| --- | --- | --- | --- |
+| `verify-v6-3-dispatch.js` | v6-3, rung templates `5735a97`, real band seats | 176/176 | [run](https://stxer.xyz/simulations/mainnet/75d643f4d54059113cfd1b9e431f8784) |
+| `verify-v6-3-router-impact.js` | exact `f6a6d3a` versus current market; current v5-3 router | 398/398 | [four runs and comparison](README-v6-3-dispatch-router.md#router-398398) |
+
+See the [dispatch/router README](README-v6-3-dispatch-router.md) for exact
+coverage, the band-only dispatch restriction, and reproducible commands.
+
+## Current v6-3 caller harness migration (2026-09-23)
+
+The older rung scenarios were updated for submit + settle rather than retired:
+registration, filled epochs, keeper push, miner guards/seats, and replacement
+coverage is not fully duplicated by the four newer focused suites. All ten
+updated runs are green (**1,148/1,148**). The router boundary bug found during
+migration has a minimal working-tree fix and a separate **22/22** regression.
+[Coverage comparison, individual run links, and the failure reproduction](README-v6-3-caller-impact.md#harness-migration-against-current-v6-3).
+
+| Harness | Status | N/M | Run |
+| --- | --- | --- | --- |
+| `verify-v6-rungs-keyless.js` / buy | Updated | 39/39 | [run](https://stxer.xyz/simulations/mainnet/cedba5219d81cee3ea0af157b490c295) |
+| same / sell | Updated | 39/39 | [run](https://stxer.xyz/simulations/mainnet/789c380805b1de1e3c4f2dce3b2bfc66) |
+| same / buy-peg | Updated | 42/42 | [run](https://stxer.xyz/simulations/mainnet/1e73fd85e27292201afb2a3bca2db66c) |
+| same / sell-peg | Updated | 42/42 | [run](https://stxer.xyz/simulations/mainnet/367ee49acec5a9a74c4786457801cc2a) |
+| `verify-v6-rungs-fill-lazer.js` | Updated | 85/85 | [run](https://stxer.xyz/simulations/mainnet/ca16a46ecd593cfdc25a5abc3d079d02) |
+| `verify-v6-rungs-push-lazer.js` | Updated | 124/124 | [run](https://stxer.xyz/simulations/mainnet/763818aadbd1467e3537697efe83fd76) |
+| `verify-v6-rungs-miner-band-lazer.js` | Updated | 225/225 | [run](https://stxer.xyz/simulations/mainnet/759ed5c78152fefcf6a068834c5aae69) |
+| `verify-v6-rungs-replace-keyless.js` | Updated | 250/250 | [run](https://stxer.xyz/simulations/mainnet/a9a3e8f7d411df8900b238e01e9ff23f) |
+| `verify-v6-3-deploy-bytes.js` | Updated; current repository bytes | 17/17 | [run](https://stxer.xyz/simulations/mainnet/071e552bc759e3b108713fe9a2ca8341) |
+| `verify-swap-router-v3-lazer.js` / V6=1 | Updated; v5-3 router edge fix | 285/285 | [run](https://stxer.xyz/simulations/mainnet/1b87a78280e83a84dbaa6af79e31b203) |
+| `verify-v6-3-router-bin-boundary.js` | New; exact failure replay and both edges | 22/22 | [run](https://stxer.xyz/simulations/mainnet/22825ead524c41102000f6d7e87661b1) |
+| `retired/verify-v6-3-callers-legacy.mjs` | Retired adapter; scenarios covered by updated scripts above | — | [retirement note](retired/README.md) |
+
 ## Coverage matrix
 
 All 37 sims green as of 2026-05-07. ✓ = clean run, expected errors
