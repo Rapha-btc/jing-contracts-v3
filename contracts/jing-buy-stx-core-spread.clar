@@ -54,7 +54,11 @@
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_SPREAD (err u7010))
 (define-constant ERR_BAD_NAME (err u7009))
-(define-constant ERR_INDEX_COLLAPSED (err u7011))
+(define-constant ERR_POOL_TAIL (err u7013))
+;; No shares are minted while the index is under 1e-3 of SCALE. A close at
+;; SOLD_OUT_INDEX (1e-6 of SCALE) then forfeits under 0.1% of any deposit to the
+;; next epoch; minting deeper in the tail made that loss unbounded.
+(define-constant MINT_FLOOR u1000000000)
 (define-constant ERR_UPDATE_REQUIRED (err u7012))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
@@ -355,16 +359,10 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
-    ;; Belt and braces on the share mint below, which divides by this index.
-    ;; `sync` just closed the epoch and reset the index to SCALE if it had
-    ;; fallen under SOLD_OUT_INDEX, so this holds by construction. It is
-    ;; written down because the one thing that can go wrong at that mint is
-    ;; UNRECOVERABLE rather than merely wrong - a zero index means deposit
-    ;; divides by zero, every withdraw is ERR_INSUFFICIENT and nothing can
-    ;; reset it - and because this whole class began with a guarantee in
-    ;; `sync` quietly losing its enforcement. A named refusal beats a
-    ;; DivisionByZero, and this assert fails loudly if that ever happens again.
-    (asserts! (>= (var-get unfilled-index) SOLD_OUT_INDEX) ERR_INDEX_COLLAPSED)
+    ;; No mint in the tail of an epoch (index under 1e-3 of SCALE). A later close
+    ;; at SOLD_OUT_INDEX then costs a depositor under 0.1% of the deposit, and the
+    ;; share mint below never divides by a collapsed (zero) index.
+    (asserts! (>= (var-get unfilled-index) MINT_FLOOR) ERR_POOL_TAIL)
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? SBTC transfer amount member current-contract none))
       (let (
@@ -446,42 +444,57 @@
     (try! (settle-escrow update))
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
-      ;; an old-epoch member was paid out and deleted by settle-proceeds
-      (asserts! (is-some (map-get? positions member)) ERR_NO_POSITION)
-      (let (
-          (fi (var-get unfilled-index))
-          (mine (/ (* (get shares pos) fi) SCALE))
-          ;; round the burn UP: a floor here paid `amount` for fewer shares than
-          ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
-          (shares-out (if (>= amount mine)
-            (get shares pos)
-            (/ (+ (* amount SCALE) (- fi u1)) fi)
+      ;; an old-epoch member was paid out and deleted by settle-proceeds:
+      ;; return that payout instead of failing, so a dispatch batch with one
+      ;; closed rung still goes through
+      (if (is-none (map-get? positions member))
+        (ok { stx: paid, sbtc: u0 })
+        (let (
+            (fi (var-get unfilled-index))
+            (mine (/ (* (get shares pos) fi) SCALE))
+            ;; round the burn UP: a floor here paid `amount` for fewer shares than
+            ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
+            (shares-out (if (>= amount mine)
+              (get shares pos)
+              (/ (+ (* amount SCALE) (- fi u1)) fi)
+            ))
+            (take (if (>= amount mine)
+              mine
+              amount
+            ))
+            (epo (var-get epoch))
+          )
+          (asserts! (> take u0) ERR_INSUFFICIENT)
+          (try! (pull-to-held-sats take))
+          (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
+            (try! (contract-call? SBTC transfer take current-contract member none))
           ))
-          (take (if (>= amount mine)
-            mine
-            amount
+          (var-set held-sats (- (var-get held-sats) take))
+          (if (is-eq shares-out (get shares pos))
+            (map-delete positions member)
+            (map-set positions member {
+              epoch: epo,
+              shares: (- (get shares pos) shares-out),
+              paid-index: (var-get proceeds-index),
+            })
+          )
+          (var-set total-shares (- (var-get total-shares) shares-out))
+          ;; the last member left: close the epoch and restart the index, so a pool
+          ;; that ended in the tail takes deposits again at a fresh index
+          (and
+            (is-eq (var-get total-shares) u0)
+            (begin
+              (map-set epoch-final-proceeds epo (var-get proceeds-index))
+              (is-ok (contract-call? LADDER log-epoch-closed epo (var-get proceeds-index)))
+              (var-set epoch (+ epo u1))
+              (var-set unfilled-index SCALE)
+            )
+          )
+          (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
+            (var-get held-sats)
           ))
-          (epo (var-get epoch))
+          (ok { stx: paid, sbtc: take })
         )
-        (asserts! (> take u0) ERR_INSUFFICIENT)
-        (try! (pull-to-held-sats take))
-        (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
-          (try! (contract-call? SBTC transfer take current-contract member none))
-        ))
-        (var-set held-sats (- (var-get held-sats) take))
-        (if (is-eq shares-out (get shares pos))
-          (map-delete positions member)
-          (map-set positions member {
-            epoch: epo,
-            shares: (- (get shares pos) shares-out),
-            paid-index: (var-get proceeds-index),
-          })
-        )
-        (var-set total-shares (- (var-get total-shares) shares-out))
-        (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
-          (var-get held-sats)
-        ))
-        (ok { stx: paid, sbtc: take })
       )
     )
   )

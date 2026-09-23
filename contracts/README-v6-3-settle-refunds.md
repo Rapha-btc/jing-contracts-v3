@@ -93,3 +93,15 @@ Why cancel is written this way:
 | Parked funds | Live = parked + amount. Parked is deleted. The pending limit/spread becomes the order's. |
 | Live order | Top-up. Live = existing + amount. The pending limit/spread replaces the old one. No seat check. |
 | Neither (new maker) | If the side is full, may park the tenth seat. Then live = amount. |
+
+## Keeper settles and rung numbers
+
+A keeper calls `settle-token-*-deposit` on behalf of depositors, including
+rungs. When that settle refunds a rung's escrow (queue-full), the funds go
+back to the rung's wallet, but the rung's counters do not know yet:
+`held-*` reads 0 and `resting` still counts the escrow.
+
+This is display only. Every rung action (`deposit`, `push`, `withdraw`,
+`claim`) runs `sync` first, and `sync` re-reads the real wallet balance.
+Front ends and keepers that read a rung should treat its numbers as stale
+until the next `sync`, or call `sync` after a settle that refunded it.
