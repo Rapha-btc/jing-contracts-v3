@@ -1179,9 +1179,6 @@ found: false,
 (depositors (get-token-y-depositors cycle))
 (tok-y (var-get token-y))
 )
-(asserts! (>= (+ existing carry amount) (var-get min-token-y-deposit))
-ERR_DEPOSIT_TOO_SMALL
-)
 (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (if (and
 (is-eq existing u0)
@@ -1368,20 +1365,12 @@ bumped t asset-name
 deposited (ok deposited)
 deposit-error
 (begin
-(asserts! (or
-(is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
-(is-eq (err deposit-error) ERR_QUEUE_FULL)
-)
-(err deposit-error)
-)
+(asserts! (is-eq (err deposit-error) ERR_QUEUE_FULL) (err deposit-error))
 (try! (as-contract? ((with-stx amount))
 (try! (stx-transfer? amount current-contract who))
 ))
 (try! (contract-call? .jing-core-v6 log-pending-refund-y who amount price
-(if (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
-"too-small"
 "queue-full"
-)
 (var-get token-x) (var-get token-y)
 ))
 (ok amount)
@@ -1420,9 +1409,6 @@ park-error
 (totals (get-cycle-totals cycle))
 (depositors (get-token-x-depositors cycle))
 (tok-x (var-get token-x))
-)
-(asserts! (>= (+ existing carry amount) (var-get min-token-x-deposit))
-ERR_DEPOSIT_TOO_SMALL
 )
 (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (if (and
@@ -1610,20 +1596,12 @@ bumped t asset-name
 deposited (ok deposited)
 deposit-error
 (begin
-(asserts! (or
-(is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
-(is-eq (err deposit-error) ERR_QUEUE_FULL)
-)
-(err deposit-error)
-)
+(asserts! (is-eq (err deposit-error) ERR_QUEUE_FULL) (err deposit-error))
 (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
 (try! (contract-call? t transfer amount current-contract who none))
 ))
 (try! (contract-call? .jing-core-v6 log-pending-refund-x who amount price
-(if (is-eq (err deposit-error) ERR_DEPOSIT_TOO_SMALL)
-"too-small"
 "queue-full"
-)
 (var-get token-x) (var-get token-y)
 ))
 (ok amount)
@@ -2602,6 +2580,12 @@ ERR_HAS_RESTING_POSITION
 u0
 )
 ERR_HAS_RESTING_POSITION
+)
+(asserts! (>= net (if deposit-x
+(var-get min-token-x-deposit)
+(var-get min-token-y-deposit)
+))
+ERR_DEPOSIT_TOO_SMALL
 )
 (let ((bumped (and
 full

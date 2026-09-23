@@ -190,6 +190,7 @@ async function main() {
   await queueFallbackCoverage(cases, { stamp, mid });
   await minimumCoverage(cases, { stamp, mid });
   await raisedMinimumAfterParkingCoverage(cases, { stamp, mid });
+  await swapMinimumCoverage(cases, { stamp });
   console.log(`${passed}/${checks} checks green`);
   console.log('Covered phases: queue refusal, deposit admission/guards, readmit lifecycle, limits/reprice, moving book.');
 }
@@ -620,7 +621,7 @@ async function queueFallbackCoverage(cases, { stamp, mid }) {
 }
 
 async function minimumCoverage(cases, { stamp, mid }) {
-  console.log('PHASE: submit minimum, raised minimum, and preserved live/parked funds');
+  console.log('PHASE: entry minimum, queue refusals, and submit-time admission');
   for (const [i, c] of cases.entries()) {
     const { side, cid, big, small } = c;
     const opp = other(side), min = side === 'x' ? 1000 : 1_000_000, tiny = min - 1;
@@ -631,7 +632,7 @@ async function minimumCoverage(cases, { stamp, mid }) {
     const oppAmount = opp === 'x' ? 6000 : 12_000_000;
     const setMin = (value) => tx(`${side}: set minimum ${value}`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(value)], '(ok true)');
     const settle = (who, u, amount, label) => tx(`${side}: ${label}`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, who, u), `(ok u${amount})`);
-    const minimumEvent = (r, who, amount) => event(`${side}: minimum refusal reason/owner/amount`, r.receipt, side, 'pending-refund', { reason: '"too-small"', depositor: who, amount: `u${amount}` });
+    const queueEvent = (r, who, amount) => event(`${side}: queue refusal reason/owner/amount`, r.receipt, side, 'pending-refund', { reason: '"queue-full"', depositor: who, amount: `u${amount}` });
 
     await fund(side, undersized, tiny);
     await tx(`${side}: undersized submit rejected before escrow`, undersized, cid, `deposit-token-${side}`, depArgs(side, tiny, willing), '(err u1001)');
@@ -643,24 +644,24 @@ async function minimumCoverage(cases, { stamp, mid }) {
     await tx(`${side}: valid new owner submits before min raise`, newOwner, cid, `deposit-token-${side}`, depArgs(side, small, willing), `(ok u${small})`);
     await setMin(small + 1);
     let fresh = await freshAfter(stamp);
-    const newRefund = await settle(newOwner, fresh, small, 'raised minimum refunds new owner');
-    minimumEvent(newRefund, newOwner, small);
+    const newRefund = await settle(newOwner, fresh, small, 'full queue refunds smaller new owner despite minimum change');
+    queueEvent(newRefund, newOwner, small);
     await ev(`${side}: raised minimum clears pending`, cid, pending(side, newOwner), 'none');
     await ev(`${side}: raised minimum exact refund`, cid, balance(side, newOwner), `u${small}`);
     await ev(`${side}: raised minimum did not park live owner`, cid, live(side, liveOwner), `u${2 * big}`);
     await setMin(min);
 
     // The parked owner's wallet contains the earlier queue refund. The
-    // minimum is raised above parked+new, so only the new escrow returns.
+    // minimum is raised above parked+new; the independent queue refusal refunds new escrow.
     await tx(`${side}: parked owner valid submit before min raise`, parkedOwner, cid, `deposit-token-${side}`, depArgs(side, small, willing), `(ok u${small})`);
     await setMin(big + small + 1);
     fresh = await freshAfter(stamp);
-    const parkedRefund = await settle(parkedOwner, fresh, small, 'raised minimum preserves parked carry');
-    minimumEvent(parkedRefund, parkedOwner, small);
-    await ev(`${side}: minimum refusal keeps parked amount`, cid, parked(side, parkedOwner), `u${big}`);
-    await ev(`${side}: minimum refusal refunds only new amount`, cid, balance(side, parkedOwner), `u${small}`);
-    await ev(`${side}: parked minimum refusal clears pending`, cid, pending(side, parkedOwner), 'none');
-    await ev(`${side}: minimum refusal custody exact`, cid, balance(side, cid), `u${3 * big}`);
+    const parkedRefund = await settle(parkedOwner, fresh, small, 'full queue preserves parked carry despite minimum change');
+    queueEvent(parkedRefund, parkedOwner, small);
+    await ev(`${side}: queue refusal keeps parked amount`, cid, parked(side, parkedOwner), `u${big}`);
+    await ev(`${side}: queue refusal refunds only new amount`, cid, balance(side, parkedOwner), `u${small}`);
+    await ev(`${side}: parked queue refusal clears pending`, cid, pending(side, parkedOwner), 'none');
+    await ev(`${side}: queue refusal custody exact`, cid, balance(side, cid), `u${3 * big}`);
     await setMin(min);
     finishPhase();
 
@@ -669,38 +670,38 @@ async function minimumCoverage(cases, { stamp, mid }) {
     await tx(`${side}: opposite submit for live top-up test`, opposing, cid, `deposit-token-${opp}`, depArgs(opp, oppAmount, oppSafe), `(ok u${oppAmount})`);
     fresh = await freshAfter(stamp);
     await tx(`${side}: opposite admit for live top-up test`, keeper, cid, `settle-token-${opp}-deposit`, settleArgs(opp, opposing, fresh), `(ok u${oppAmount})`);
-    await fund(side, liveOwner, tiny);
+    await fund(side, liveOwner, 2 * tiny);
     await tx(`${side}: sub-minimum top-up accepted with sufficient live total`, liveOwner, cid, `deposit-token-${side}`, depArgs(side, tiny, willing), `(ok u${tiny})`);
     await ev(`${side}: top-up is pending`, cid, `(get amount (unwrap-panic ${pending(side, liveOwner)}))`, `u${tiny}`);
     await setMin(2 * big + tiny + 1);
     fresh = await freshAfter(stamp);
-    const liveRefund = await settle(liveOwner, fresh, tiny, 'raised minimum preserves live position');
-    minimumEvent(liveRefund, liveOwner, tiny);
-    await ev(`${side}: minimum refusal keeps live amount`, cid, live(side, liveOwner), `u${2 * big}`);
-    await ev(`${side}: minimum refusal keeps live quote`, cid, `(get-token-${side}-limit '${liveOwner})`, `u${willing}`);
-    await ev(`${side}: minimum refusal returns exact top-up`, cid, balance(side, liveOwner), `u${tiny}`);
-    await ev(`${side}: live minimum refusal clears pending`, cid, pending(side, liveOwner), 'none');
+    const liveAdmission = await settle(liveOwner, fresh, tiny, 'raised minimum honours submitted top-up');
+    event(`${side}: raised-minimum top-up logs deposit`, liveAdmission.receipt, side, 'deposit', { depositor: liveOwner, amount: `u${2 * big + tiny}`, delta: `u${tiny}` });
+    await ev(`${side}: raised minimum admits pending top-up`, cid, live(side, liveOwner), `u${2 * big + tiny}`);
+    await ev(`${side}: admitted top-up keeps quote`, cid, `(get-token-${side}-limit '${liveOwner})`, `u${willing}`);
+    await ev(`${side}: only reserved next top-up remains in wallet`, cid, balance(side, liveOwner), `u${tiny}`);
+    await ev(`${side}: admitted top-up clears pending`, cid, pending(side, liveOwner), 'none');
     // Equality with the minimum succeeds, counting the existing live amount.
-    await setMin(2 * big + tiny);
+    await setMin(2 * big + 2 * tiny);
     await tx(`${side}: exact-minimum aggregate top-up submits`, liveOwner, cid, `deposit-token-${side}`, depArgs(side, tiny, willing), `(ok u${tiny})`);
     fresh = await freshAfter(stamp);
     await settle(liveOwner, fresh, tiny, 'exact-minimum aggregate top-up settles');
-    await ev(`${side}: successful aggregate top-up amount`, cid, live(side, liveOwner), `u${2 * big + tiny}`);
+    await ev(`${side}: successful aggregate top-up amount`, cid, live(side, liveOwner), `u${2 * big + 2 * tiny}`);
     await ev(`${side}: successful aggregate top-up clears pending`, cid, pending(side, liveOwner), 'none');
     await ev(`${side}: successful top-up charged once`, cid, balance(side, liveOwner), 'u0');
-    await ev(`${side}: successful top-up custody exact`, cid, balance(side, cid), `u${3 * big + tiny}`);
+    await ev(`${side}: successful top-up custody exact`, cid, balance(side, cid), `u${3 * big + 2 * tiny}`);
     await setMin(min);
     finishPhase();
   }
 }
 
 async function raisedMinimumAfterParkingCoverage(cases, { stamp, mid }) {
-  console.log('PHASE: a minimum refund must not displace another live maker');
+  console.log('PHASE: queue refusals preserve incumbents; raised minimum does not block admission');
   for (const [i, c] of cases.entries()) {
-    const { side, cid, big } = c;
+    const { side, cid, big, small } = c;
     const min = side === 'x' ? 1000 : 1_000_000;
     const incumbent = mk(961 + i * 2), entrant = mk(995 + i);
-    const incumbentAmount = 2 * big + min - 1, amount = 4 * big;
+    const incumbentAmount = 2 * big + 2 * (min - 1), amount = small, larger = 4 * big;
     const nonWilling = side === 'x' ? mid * 2n : mid / 2n;
     await tx(`${side}: incumbent submits non-willing quote`, incumbent, cid, `set-token-${side}-limit`, [uintCV(nonWilling), noneCV()], '(ok false)');
     let fresh = await freshAfter(stamp);
@@ -708,18 +709,117 @@ async function raisedMinimumAfterParkingCoverage(cases, { stamp, mid }) {
     await ev(`${side}: incumbent live before rejected admission`, cid, live(side, incumbent), `u${incumbentAmount}`);
     await ev(`${side}: incumbent not parked before rejected admission`, cid, parked(side, incumbent), 'u0');
     await fund(side, entrant, amount);
-    await tx(`${side}: larger entrant submits before minimum raise`, entrant, cid, `deposit-token-${side}`, depArgs(side, amount, nonWilling), `(ok u${amount})`);
-    await tx(`${side}: raise minimum above larger entrant`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(amount + 1)], '(ok true)');
+    await tx(`${side}: small entrant submits before minimum raise`, entrant, cid, `deposit-token-${side}`, depArgs(side, amount, nonWilling), `(ok u${amount})`);
+    await tx(`${side}: raise minimum above small entrant`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(amount + 1)], '(ok true)');
     fresh = await freshAfter(stamp);
-    const refund = await tx(`${side}: larger entrant receives minimum refund`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, entrant, fresh), `(ok u${amount})`);
-    event(`${side}: larger entrant minimum refund event`, refund.receipt, side, 'pending-refund', { depositor: entrant, amount: `u${amount}`, reason: '"too-small"' });
-    await ev(`${side}: larger entrant pending cleared`, cid, pending(side, entrant), 'none');
-    await ev(`${side}: larger entrant refunded exactly`, cid, balance(side, entrant), `u${amount}`);
+    const refund = await tx(`${side}: small entrant receives queue refund`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, entrant, fresh), `(ok u${amount})`);
+    event(`${side}: small entrant queue refund event`, refund.receipt, side, 'pending-refund', { depositor: entrant, amount: `u${amount}`, reason: '"queue-full"' });
+    await ev(`${side}: small entrant pending cleared`, cid, pending(side, entrant), 'none');
+    await ev(`${side}: small entrant refunded exactly`, cid, balance(side, entrant), `u${amount}`);
     await ev(`${side}: rejected entrant leaves incumbent live`, cid, live(side, incumbent), `u${incumbentAmount}`);
     await ev(`${side}: rejected entrant leaves incumbent unparked`, cid, parked(side, incumbent), 'u0');
-    await ev(`${side}: rejected entrant leaves custody unchanged`, cid, balance(side, cid), `u${3 * big + min - 1}`);
-    if (failures) console.log(`CONTRACT FAILURE: park-tenth-token-${side} parks the incumbent before deposit-token-${side}-core returns u1001; catching that error commits the earlier parking despite refunding the entrant.`);
+    await ev(`${side}: rejected entrant leaves custody unchanged`, cid, balance(side, cid), `u${3 * big + 2 * (min - 1)}`);
+    if (failures) console.log(`CONTRACT FAILURE: a smaller entrant should be refunded for queue-full without parking the incumbent.`);
+    finishPhase();
+    const committedPrints = refund.receipt.events.map((e) => typeof e === 'string' ? JSON.parse(e) : e)
+      .filter((e) => e.committed && e.contract_event?.contract_identifier === CORE)
+      .map((e) => cv(e.contract_event.raw_value));
+    check(`${side}: queue refund emits no park event`, committedPrints.join(' | '), (v) => !v.includes(`(event "park-${side}")`));
+    await ev(`${side}: queue refund keeps incumbent quote`, cid, `(get-token-${side}-limit '${incumbent})`, `u${nonWilling}`);
+    await ev(`${side}: queue refund keeps book totals`, cid, `(get total-token-${side} (get-cycle-totals (var-get current-cycle)))`, `u${incumbentAmount}`);
     finishPhase();
     await tx(`${side}: restore minimum after parking regression`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(min)], '(ok true)');
+
+    // A larger resubmission still earns a seat even if the minimum rises.
+    // Parking is now justified because core admits the accepted escrow.
+    await fund(side, entrant, larger - amount);
+    await tx(`${side}: refunded entrant resubmits`, entrant, cid, `deposit-token-${side}`, depArgs(side, larger, nonWilling), `(ok u${larger})`);
+    await tx(`${side}: raise minimum after larger resubmission`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(larger + 1)], '(ok true)');
+    fresh = await freshAfter(stamp);
+    const admitted = await tx(`${side}: raised minimum still admits and parks for accepted entrant`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, entrant, fresh), `(ok u${larger})`);
+    event(`${side}: successful retry logs incumbent parking`, admitted.receipt, side, 'park', { who: incumbent, amount: `u${incumbentAmount}` });
+    await ev(`${side}: successful retry clears pending`, cid, pending(side, entrant), 'none');
+    await ev(`${side}: successful retry has exact live amount`, cid, live(side, entrant), `u${larger}`);
+    await ev(`${side}: successful retry consumes escrow once`, cid, balance(side, entrant), 'u0');
+    await ev(`${side}: successful retry parks incumbent exactly`, cid, parked(side, incumbent), `u${incumbentAmount}`);
+    await ev(`${side}: successful retry removes incumbent from book`, cid, live(side, incumbent), 'u0');
+    await ev(`${side}: successful retry uses post-parking totals`, cid, `(get total-token-${side} (get-cycle-totals (var-get current-cycle)))`, `u${larger}`);
+    await ev(`${side}: successful retry uses post-parking list`, cid, `(get-token-${side}-depositors (var-get current-cycle))`, `(list ${entrant})`);
+    await ev(`${side}: successful retry custody equals book plus parked`, cid, balance(side, cid), `u${3 * big + 2 * (min - 1) + larger}`);
+    finishPhase();
+
+    await tx(`${side}: restore minimum before carry top-up`, DEP, cid, `set-min-token-${side}-deposit`, [uintCV(min)], '(ok true)');
+
+    // A parked owner can combine its retained carry with a new pending
+    // top-up, bumping the entrant while consuming only its own parked funds.
+    const topUp = 2 * big, withCarry = incumbentAmount + topUp;
+    await fund(side, incumbent, topUp);
+    await tx(`${side}: parked owner submits qualifying top-up`, incumbent, cid, `deposit-token-${side}`, depArgs(side, topUp, nonWilling), `(ok u${topUp})`);
+    fresh = await freshAfter(stamp);
+    await tx(`${side}: pending top-up admits with parked carry`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, incumbent, fresh), `(ok u${topUp})`);
+    await ev(`${side}: admitted carry plus top-up exact`, cid, live(side, incumbent), `u${withCarry}`);
+    await ev(`${side}: admitted carry clears parked owner`, cid, parked(side, incumbent), 'u0');
+    await ev(`${side}: admitted carry clears pending`, cid, pending(side, incumbent), 'none');
+    await ev(`${side}: admitted carry charges only new escrow`, cid, balance(side, incumbent), 'u0');
+    await ev(`${side}: admitted carry parks previous entrant`, cid, parked(side, entrant), `u${larger}`);
+    await ev(`${side}: admitted carry uses current book totals`, cid, `(get total-token-${side} (get-cycle-totals (var-get current-cycle)))`, `u${withCarry}`);
+    await ev(`${side}: admitted carry custody exact`, cid, balance(side, cid), `u${big + larger + withCarry}`);
+    finishPhase();
+  }
+}
+
+async function swapMinimumCoverage(cases, { stamp }) {
+  console.log('PHASE: direct-entry minimum, swap entry minimum, and refunded sub-minimum swap remainder');
+  await tx('reserve 48 seats for swap minimum fixtures', DEP, `${DEP}.jing-ladder-v1`, 'set-max-band-per-side', [uintCV(48)], '(ok true)');
+  for (const [i, c] of cases.entries()) {
+    const { side, cid } = c, opp = other(side);
+    const min = side === 'x' ? 1000n : 1_000_000n;
+    const tiny = min - 1n, undersized = mk(1001 + i), maker = mk(1011 + i), taker = mk(1021 + i);
+    await tx(`${side}: sync two public seats`, DEP, cid, 'sync-seat-count', [], '(ok u48)');
+    await cancel(opp, cid, mk(990 + i), opp === 'x' ? 6000 : 12_000_000);
+    await ev(`${side}: direct minimum fixture opposite book empty`, cid, `(len (get-token-${opp}-depositors (var-get current-cycle)))`, 'u0');
+    await ev(`${side}: direct minimum fixture has free seat`, cid, `(side-full-${side} (get-token-${side}-depositors (var-get current-cycle)) '${undersized})`, 'false');
+    let fresh = await freshAfter(stamp);
+    const mid = fresh.px * 100_000_000n / fresh.py;
+    const safe = side === 'x' ? mid * 2n : mid / 2n;
+    const aggressive = side === 'x' ? mid / 2n : mid * 2n;
+    const custody = await readUint(`${side}: custody before undersized entries`, cid, balance(side, cid));
+    await fund(side, undersized, tiny);
+    await tx(`${side}: under-minimum direct deposit refused`, undersized, cid, `deposit-token-${side}`, depArgs(side, tiny, safe), '(err u1001)');
+    await ev(`${side}: undersized direct submit has no pending`, cid, pending(side, undersized), 'none');
+    await ev(`${side}: undersized direct submit has no live order`, cid, live(side, undersized), 'u0');
+    await ev(`${side}: undersized direct submit does not escrow`, cid, balance(side, undersized), `u${tiny}`);
+    await tx(`${side}: swap under-minimum net refused before escrow`, undersized, cid, 'swap', [uintCV(tiny), uintCV(aggressive), update(fresh), ...pairArgs(), boolCV(side === 'x')], '(err u1001)');
+    await ev(`${side}: rejected swap preserves entire wallet`, cid, balance(side, undersized), `u${tiny}`);
+    await ev(`${side}: rejected swap creates no order`, cid, live(side, undersized), 'u0');
+    await ev(`${side}: rejected swap leaves custody unchanged`, cid, balance(side, cid), `u${custody}`);
+    finishPhase();
+
+    // The input meets the minimum; a deliberately smaller counterpart
+    // leaves a positive, sub-minimum remainder after clearing. The existing
+    // cross-remainder path refunds it rather than leaving it on the book.
+    const input = side === 'x' ? 2000n : 4_000_000n;
+    const counterpart = side === 'x' ? 1500n * mid / 10_000_000_000n : 3_500_000n * 10_000_000_000n / mid;
+    const oppMin = opp === 'x' ? 1000n : 1_000_000n;
+    if (counterpart < oppMin) throw new Error('Swap remainder fixture counterpart fell below its own entry minimum');
+    const willing = opp === 'x' ? mid / 2n : mid * 2n;
+    await fund(opp, maker, counterpart);
+    await tx(`${side}: remainder fixture counterpart submits`, maker, cid, `deposit-token-${opp}`, depArgs(opp, counterpart, willing), `(ok u${counterpart})`);
+    await tx(`${side}: remainder fixture counterpart settles`, keeper, cid, `settle-token-${opp}-deposit`, settleArgs(opp, maker, fresh), `(ok u${counterpart})`);
+    await fund(side, taker, input);
+    const swapped = await tx(`${side}: swap refunds sub-minimum unfilled remainder`, taker, cid, 'swap', [uintCV(input), uintCV(aggressive), update(fresh), ...pairArgs(), boolCV(side === 'x')], ok);
+    finishPhase();
+    const value = (key) => {
+      const found = swapped.result.match(new RegExp(`\\(${key} u([0-9]+)\\)`));
+      if (!found) throw new Error(`Missing ${key} in swap receipt: ${swapped.result}`);
+      return BigInt(found[1]);
+    };
+    const remainder = value(`token-${side}-rolled`), rebate = value('rebate-refunded');
+    check(`${side}: returned remainder is positive and below minimum`, remainder.toString(), () => remainder > 0n && remainder < min);
+    await ev(`${side}: swap returns remainder plus unused rebate exactly`, cid, balance(side, taker), `u${remainder + rebate}`);
+    await ev(`${side}: swap pays exact output`, cid, balance(opp, taker), `u${value(`token-${opp}-received`)}`);
+    await ev(`${side}: sub-minimum remainder does not rest`, cid, live(side, taker), 'u0');
+    await ev(`${side}: sub-minimum remainder is not pending`, cid, pending(side, taker), 'none');
+    finishPhase();
   }
 }

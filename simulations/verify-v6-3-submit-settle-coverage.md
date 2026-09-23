@@ -3,17 +3,30 @@
 Run `node simulations/verify-v6-3-submit-settle-lazer.js` from the repository root.
 The harness deploys the unmodified deploy copy on stxer, after core-v6 and
 ladder-v1, and initializes/registers fresh market instances. It never broadcasts
-a mainnet transaction. Contract version under test: `19ef603` plus the uncommitted queue/minimum refund fixes.
+a mainnet transaction. Contract version under test: `72ffffd` plus the uncommitted entry-only minimum policy.
 
-Latest run: **598/600 checks green**, exit 1, on the requested core/catch revision.
-[stxer run](https://stxer.xyz/simulations/mainnet/fed442065c5b484b541f624fe427c816).
-All first 586 checks passed, including both sides' queue/minimum refunds.
-The additional regression failed at checks 598–599; no further transactions
-were submitted after the failure. The y mirror of this new case was not run.
+Latest run: **719/719 checks green**, exit 0, on the uncommitted entry-only minimum policy.
+[stxer run](https://stxer.xyz/simulations/mainnet/37585a22f95c0cc4dbd7261cf9b43ca5).
+Check 455 refunds exactly 3,000 sats, clears pending, and logs `queue-full`.
+Checks 598–599 preserve the incumbent on queue refusal. Both sides reject
+under-minimum direct/pending submits before escrow, admit accepted pending
+orders despite later minimum increases, and preserve exact book/custody totals.
+Both sides also reject under-minimum swap net inputs before transfers, while
+qualifying swaps refund their later sub-minimum remainders (497 sats on x;
+493,957 micro-STX on y in this run), plus unused rebate, with no resting order.
+
+The superseded parking-inside-core approach passed **664/664** under the old
+minimum-refund policy:
+[historical run](https://stxer.xyz/simulations/mainnet/ada8ec8982221956431253b29a63f891).
+It is not the policy implemented or tested by the current revision.
+
+The reviewed core/catch revision (`72ffffd`) reproduced the caller-side bug:
+**598/600 checks green**, exit 1, stopping at checks 598–599.
+[pre-fix stxer run](https://stxer.xyz/simulations/mainnet/fed442065c5b484b541f624fe427c816).
 
 The preceding settle-precheck revision passed **586/586**, exit 0:
 [previous stxer run](https://stxer.xyz/simulations/mainnet/0ed2e67ec9a9727a147524e104ecc131).
-That green result does not apply to the current core/catch revision.
+That result is historical; the current revision is validated by the 719-check run above.
 
 This is an explicit scenario inventory, not an instrumented line-coverage claim.
 Pre-fix reproduction: **454/459 checks green**, exit 1; stopped on a contract failure at
@@ -44,28 +57,49 @@ entered. This is distinct from the park-tenth error fixed in `19ef603`.
 
 Contract lines refer to `contracts/markets-sbtc-stx-jing-v6-3.clar` at
 `19ef603`. That run stopped before the y mirror, after read-only diagnostics.
-The current working-tree revision keeps minimum and fallback-size admission
-inside `deposit-token-{x,y}-core`. Its minimum assertion runs before either
-branch. In the full-side branch, the smallest-incumbent size assertion now
-precedes deletion of parked carry; in the other branch that deletion is the
-first write. Thus the minimum and smallest-size assertions themselves have
-made no writes when they return `u1001` or `u1010`. The existing list-length
-unwraps remain after writes and rely on the queue invariant: replacing a live
-incumbent removes one entry before appending, and a new non-full entry has a
-free slot. The harness does not exhaustively prove the 50-seat boundary.
+## Current minimum policy and every core caller
 
-Submit checks existing + parked + amount before escrow. Settle catches only
-core `u1001`/`u1010`, refunds the newly escrowed amount, and logs `too-small` or
-`queue-full`; other errors propagate. Parked carry is retained on refusal.
-The extra settle minimum flag, smallest-size fold, and inner park match are
-removed. Direct-deposit and swap core callers still use `try!`.
+Minimum admission is checked at entry. `deposit-token-{x,y}` validates
+existing + parked + amount before either direct admission or pending escrow.
+A pending deposit retains that admission if the owner later raises the
+minimum. It still faces settle-time crossing and queue checks.
 
-This only establishes the order of writes **inside core**. The caller still
-runs `park-tenth` first. A separate regression raises the minimum after a
-larger entrant submits against a non-willing incumbent, then checks whether
-the incumbent remains live when the entrant receives a minimum refund.
+The minimum check has been removed from both cores. Settle again calls
+`park-tenth` before core, catches only `u1010`, refunds only the new escrow,
+and logs `queue-full`. Other errors propagate. Core's parked-delete remains
+after its fallback queue-size assertion; that fallback is skipped if
+`park-tenth` already parked an incumbent. The existing list-length unwraps
+retain their queue-invariant assumptions; the harness does not exhaustively
+prove the 50-seat boundary.
 
-## Current failure: parking commits before a caught minimum refusal
+All six call sites, with line numbers in the current deploy copy:
+
+| Core caller | Core call | Minimum check |
+| --- | --- | --- |
+| `deposit-token-y` | 1296 | 1288: existing + parked + amount, before either path transfers. |
+| `deposit-token-x` | 1527 | 1519: same sum and ordering. |
+| `settle-token-y-deposit` | 1362 | Admission inherited from submit at 1288; no recheck. |
+| `settle-token-x-deposit` | 1593 | Admission inherited from submit at 1519; no recheck. |
+| `swap`, x input | 2607 | 2584: net >= the x minimum, before parking, rebate transfer, or core. |
+| `swap`, y input | 2615 | 2584: net >= the y minimum at the same point. |
+
+Swap's preceding guards require the caller's live and parked balances to be
+zero, and its core calls pass carry=u0. Thus core's former admission sum
+(existing + carry + net) equals net. Before this revision, swap only checked
+net>0 itself and relied on core for the configured minimum.
+
+This initial net input differs from the unfilled remainder **after** matching.
+`cross-remainder-as-y` at 3156 and `cross-remainder-as-x` at 3223 require that
+remainder to be below the minimum (`ERR_PARTIAL_FILL` otherwise), refund it,
+and remove its order. Those rules are unchanged.
+
+Readmit is not a core caller. Contrary to the earlier line-reference premise,
+`readmit-token-y` (1825) and `readmit-token-x` (1894) check only that the parked
+amount is positive (1830/1899), not that it meets the configured minimum.
+They and their settlers remain unchanged. The cited configured-minimum checks
+are in **withdraw**, now at 1751/1801.
+
+## Reproduced failure at `72ffffd`: parking before a caught minimum refusal
 
 In the x fixture, a live 12,999-sat incumbent has a non-willing quote on a
 full side. A larger 24,000-sat entrant submits, then the owner raises the
@@ -83,13 +117,17 @@ Both `park-x` and `pending-refund-x` (`too-small`) appear in the receipt.
 | 599 incumbent parked | `u0` | `u12999` |
 | 600 market custody | `u18999` | `u18999` |
 
-Current deploy-copy locations: `settle-token-x-deposit` invokes park-tenth
+Deploy-copy locations at `72ffffd`: `settle-token-x-deposit` invokes park-tenth
 at line 1603 and core at line 1607; `park-token-x` writes at lines 937–949;
 core's minimum refusal is line 1424; settle catches and refunds at lines
 1613–1629. The y source mirrors this call order. This is a book mutation on
 refused admission, not a missing entrant refund or a custody leak.
-The requested revision remains uncommitted for review; no corrective redesign
-was applied after this failure.
+The reviewed revision was committed and pushed as `72ffffd`. The current
+entry-only policy supersedes minimum refunds: a qualifying larger entrant is
+placed even after a minimum increase, so parking its incumbent is legitimate.
+Checks 598–599 now use a smaller entrant to assert the other outcome: a full
+queue refunds the entrant and preserves the incumbent. The new larger-entry
+case separately asserts placement, parking, and exact custody after a raise.
 
 ## Local validation
 
@@ -98,8 +136,7 @@ on `-formatted.clar` both succeed with warnings. The project-wide command
 cannot compute its plan because `contracts/markets-sbtc-stx-jing-v7.clar` is
 missing; it falls back to an unrelated eight-contract plan, which is not
 accepted as validation of this change. Stxer deployed and executed both
-market instances using the actual deploy copy. A later whitespace-only
-cleanup preserved its normalized tokens exactly. The two local copies also
+market instances using the actual deploy copy. The two local copies also
 match after stripping comments and whitespace; `git diff --check` passes.
 
 ## Verified scenarios (x and y)
@@ -110,7 +147,9 @@ match after stripping comments and whitespace; `git diff --check` passes.
 | Deposit guards | Nothing pending `u1030`; duplicate submit `u1031`; old/equal feed `u1032`; paused submit/settle `u1007`; wrong trait on submit/settle `u1013`. |
 | Deposit refusals | The original park-tenth queue error refunds in full, clears pending, logs `queue-full`; crossing refunds in full, clears pending, logs `crossing`. |
 | Core fallback | Both sides refund smaller entrants when park-tenth returns `(ok false)`; larger entrants still succeed; rejected parked owners retain all parked carry and receive exactly the newly escrowed amount. |
-| Minimum | Below-minimum submit rejects with `u1001` before escrow; raised minimum refunds new, parked, and live owners at settle with `too-small`; live/parked funds and quotes survive; top-ups below the minimum individually succeed when their aggregate reaches it exactly. |
+| Minimum | Below-minimum submits reject with `u1001` before escrow on both direct and pending paths. A raised minimum does not prevent a pending live top-up or qualifying new entrant from being placed. Small entrants still receive queue-full refunds, preserving incumbent and parked balances. Exact-minimum aggregate top-ups succeed. |
+| Parking and admission | A larger resubmission is placed despite a later minimum raise, with legitimate incumbent parking and exact book totals. A parked owner combines retained carry with a pending top-up, clears its own parked balance, parks the previous entrant, and preserves exact custody. |
+| Swap minimum | Initial net below the minimum rejects before transfers or book changes. A qualifying swap with a positive sub-minimum remainder refunds that remainder plus unused rebate exactly, pays the reported output, and leaves no resting/pending taker order. |
 | Live/pending escapes | Pending-only cancel and withdraw return `u1005`; with live + pending, partial withdrawal and cancel affect live funds only; pending persists and can then settle without a second transfer. |
 | Readmit | Always submits, including with opposite empty; permissionless submit/settle; pending timestamp; nothing pending, duplicate, old price and pause guards; full, crossing, and gone refusals clear pending and log their reason; parked balance survives refusals; freeing a seat after submit permits readmission; canceling parked funds after submit produces `gone`. |
 | Limits | Empty-opposite direct change; pending map exact; old quote remains until settle; third-party success; nothing pending/old-price guards; crossing keeps the previous quote; cancel-before-settle gives `gone`; refusal clears pending and logs action/reason. |
@@ -158,7 +197,6 @@ the ~200-step limit and `_chunked-submit.js` is unnecessary.
 
 ## Still outside the demonstrated coverage
 
-- Successful parked carry folded into a pending deposit.
 - Enabled/disabled peg admission, changed peg caps/spreads, and the x disabled
   peg sentinel; price-priority parking, off-quote parking, ties, protected seats,
   and the default 40-public-seat queue (the queue fixture reserves 49 seats and
@@ -166,15 +204,14 @@ the ~200-step limit and `_chunked-submit.js` is unnecessary.
 - A pending owner using `swap` on its own account; simultaneous pending deposit,
   readmit and limit records for the same owner; mutation of pending limits via
   the empty-opposite direct shortcut.
-- Minimum failure caused by intervening withdrawal/cancel rather than an
-  operator minimum change; wrong asset names, malformed/missing/stale/
+- Pending admission after intervening withdrawal/cancel reduces its aggregate
+  below the submit-time minimum; wrong asset names, malformed/missing/stale/
   confidence-invalid feeds, invalid spreads/zero limits, core-v6 pause/retry,
   and other logging failures after park writes.
 - Other boundary combinations for the full-side fallback (equal-size entrants
-  and protected seats). Changed-minimum admission that would park another
-  maker now fails on x; its y mirror is present but unreached after the stop.
-  The passing cases cover larger entrants, smaller entrants, and preservation
-  of the rejected owner's parked carry.
+  and protected seats). The passing cases cover larger entrants, smaller
+  entrants, preservation of a refused owner's parked carry, and successful
+  admission combining carry with new escrow.
 - Broader swap walk, dust, fee/rebate aging, multi-maker pro-rata settlement,
   admin authorization, ladder seat management, core equity, and rung contracts.
   Rung/ladder reruns remain a separate follow-up requiring confirmation.
