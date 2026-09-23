@@ -1,12 +1,14 @@
 // Fork only. Run: node simulations/verify-v6-3-submit-settle-lazer.js
 // Mainnet-fork submit/settle regression. Stops at the first failing scenario.
 // Coverage is recorded in verify-v6-3-submit-settle-coverage.md.
-// No source substitution, storage writes, fake oracle, or mainnet broadcasts.
+// No source substitution, fake oracle, or mainnet broadcasts. One explicitly
+// labelled, fully funded cancel fixture splits live/parked storage via Eval.
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV,
   standardPrincipalCV, noneCV, someCV, boolCV, makeUnsignedSTXTokenTransfer,
-  deserializeCV, cvToString, getAddressFromPrivateKey,
+  deserializeCV, cvToString, getAddressFromPrivateKey, makeUnsignedContractDeploy, PostConditionMode,
 } from '@stacks/transactions';
 import {
   SimulationBuilder, getSimulationResult, getSimulationTip,
@@ -145,7 +147,7 @@ async function main() {
   for (const c of cases) {
     const { side, cid, entrant, small, big, limit } = c;
     await tx(`${side}: double deposit refused`, entrant, cid, `deposit-token-${side}`, depArgs(side, small, limit), '(err u1031)');
-    await tx(`${side}: cancel cannot withdraw pending-only escrow`, entrant, cid, `cancel-token-${side}-deposit`, [traits[side], assets[side]], '(err u1005)');
+    await tx(`${side}: wrong-trait cancel preserves pending escrow`, entrant, cid, `cancel-token-${side}-deposit`, [traits[other(side)], assets[side]], '(err u1013)');
     await tx(`${side}: withdraw cannot withdraw pending-only escrow`, entrant, cid, `withdraw-token-${side}`, [uintCV(1), traits[side], assets[side]], '(err u1005)');
     await ev(`${side}: escrow exact`, cid, balance(side, entrant), 'u0');
     await ev(`${side}: book plus pending equals market balance`, cid, balance(side, cid), `u${big + small}`);
@@ -191,6 +193,8 @@ async function main() {
   await minimumCoverage(cases, { stamp, mid });
   await raisedMinimumAfterParkingCoverage(cases, { stamp, mid });
   await swapMinimumCoverage(cases, { stamp });
+  await swapZeroLimitCoverage({ stamp });
+  await cancelRecoveryCoverage({ stamp });
   console.log(`${passed}/${checks} checks green`);
   console.log('Covered phases: queue refusal, deposit admission/guards, readmit lifecycle, limits/reprice, moving book.');
 }
@@ -215,8 +219,8 @@ function event(label, receipt, side, name, fields = {}) {
   const prints = receipt.events.map((e) => typeof e === 'string' ? JSON.parse(e) : e)
     .filter((e) => e.committed && e.contract_event?.contract_identifier === CORE)
     .map((e) => cv(e.contract_event.raw_value));
-  check(label, prints.join(' | '), (value) => value.includes(`(event "${name}${side ? `-${side}` : ''}")`) &&
-    Object.entries(fields).every(([key, val]) => value.includes(`(${key} ${val})`)));
+  check(label, prints.join(' | '), () => prints.some((value) => value.includes(`(event "${name}${side ? `-${side}` : ''}")`) &&
+    Object.entries(fields).every(([key, val]) => value.includes(`(${key} ${val})`))));
 }
 async function fund(side, who, amount) {
   if (side === 'x') {
@@ -330,9 +334,9 @@ async function depositAndReadmitCoverage(cases, { u1, stamp }) {
     await submitReadmit();
     await cancel(side, cid, maker, big);
     fresh = await freshAfter(stamp);
-    const gone = await settleReadmit('cancel parked after submit: gone refusal', fresh, '(ok u0)');
-    event(`${side}: gone readmit logs reason`, gone.receipt, side, 'settle-refused', { action: '"readmit"', reason: '"gone"' });
-    await ev(`${side}: gone readmit cleared`, cid, pendingKind(side, 'readmit', maker), 'none');
+    await settleReadmit('cancel clears readmit before settlement', fresh, '(err u1030)');
+    await ev(`${side}: cancel clears parked readmit state`, cid, parked(side, maker), 'u0');
+    await ev(`${side}: canceled readmit cleared`, cid, pendingKind(side, 'readmit', maker), 'none');
     await ev(`${side}: canceled parked funds exact`, cid, balance(side, maker), `u${big}`);
     await tx(`${side}: readmit requires parked funds`, keeper, cid, `readmit-token-${side}`, [principal(maker)], '(err u1022)');
     finishPhase();
@@ -434,9 +438,9 @@ async function limitAndRepriceCoverage(cases, { u1, stamp, mid }) {
     await tx(`${side}: limit submit before cancel`, maker, cid, `set-token-${side}-limit`, [uintCV(safe2), noneCV()], '(ok false)');
     await cancel(side, cid, maker, big);
     fresh = await freshAfter(stamp);
-    const gone = await settleLimit(maker, fresh, '(ok false)', 'limit refuses gone owner');
-    event(`${side}: gone limit reason`, gone.receipt, side, 'settle-refused', { action: '"limit"', reason: '"gone"' });
-    await ev(`${side}: gone limit cleared`, cid, pendingKind(side, 'limit', maker), 'none');
+    await settleLimit(maker, fresh, '(err u1030)', 'cancel clears limit before settlement');
+    await ev(`${side}: cancel clears active limit too`, cid, `(get-token-${side}-limit '${maker})`, 'u0');
+    await ev(`${side}: canceled pending limit cleared`, cid, pendingKind(side, 'limit', maker), 'none');
     await ev(`${side}: canceled live funds restored`, cid, balance(side, maker), `u${big}`);
     finishPhase();
   }
@@ -460,15 +464,15 @@ async function pendingAndTakerCoverage(cases, { stamp, mid }) {
     await tx(`${side}: withdraw touches live funds only`, entrant, cid, `withdraw-token-${side}`, [uintCV(withdraw), traits[side], assets[side]], `(ok u${totalLive - withdraw})`);
     await ev(`${side}: pending survives partial withdrawal`, cid, `(get amount (unwrap-panic ${pending(side, entrant)}))`, `u${small}`);
     await ev(`${side}: withdrawal balance exact`, cid, balance(side, entrant), `u${withdraw}`);
-    await cancel(side, cid, entrant, totalLive - withdraw);
-    await ev(`${side}: cancel returns live funds only`, cid, balance(side, entrant), `u${totalLive}`);
-    await ev(`${side}: pending survives live cancel`, cid, `(get amount (unwrap-panic ${pending(side, entrant)}))`, `u${small}`);
-    await custodyEqualsBook(side, cid, small);
+    await cancel(side, cid, entrant, totalLive - withdraw + small);
+    await ev(`${side}: cancel returns live plus pending funds`, cid, balance(side, entrant), `u${totalLive + small}`);
+    await ev(`${side}: cancel clears pending too`, cid, pending(side, entrant), 'none');
+    await custodyEqualsBook(side, cid);
     let fresh = await freshAfter(stamp);
-    await tx(`${side}: canceled live owner can settle pending top-up`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, entrant, fresh), `(ok u${small})`);
-    await ev(`${side}: settlement does not touch returned live funds`, cid, balance(side, entrant), `u${totalLive}`);
-    await ev(`${side}: former top-up becomes sole live amount`, cid, live(side, entrant), `u${small}`);
-    await cancel(side, cid, entrant, small);
+    await tx(`${side}: canceled pending top-up cannot settle`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, entrant, fresh), '(err u1030)');
+    await ev(`${side}: failed settle leaves all returned funds intact`, cid, balance(side, entrant), `u${totalLive + small}`);
+    await ev(`${side}: canceled top-up cannot recreate an order`, cid, live(side, entrant), 'u0');
+    await tx(`${side}: repeat empty cancel refuses`, entrant, cid, `cancel-token-${side}-deposit`, [traits[side], assets[side]], '(err u1005)');
     finishPhase();
 
     // Only the opposite, non-willing book rests now. The willing maker's
@@ -820,6 +824,192 @@ async function swapMinimumCoverage(cases, { stamp }) {
     await ev(`${side}: swap pays exact output`, cid, balance(opp, taker), `u${value(`token-${opp}-received`)}`);
     await ev(`${side}: sub-minimum remainder does not rest`, cid, live(side, taker), 'u0');
     await ev(`${side}: sub-minimum remainder is not pending`, cid, pending(side, taker), 'none');
+    finishPhase();
+  }
+}
+
+async function swapZeroLimitCoverage({ stamp }) {
+  console.log('PHASE: zero-limit behavior against reviewed baseline 08a9ef8');
+  // These are verbatim sources, not rewritten test contracts. Current swap
+  // admits its whole net input through core BEFORE matching, so baseline
+  // zero-limit swaps reject even when a positive-limit control fills fully.
+  const before = execFileSync('git', ['show', '08a9ef8:contracts/markets-sbtc-stx-jing-v6-3.clar'], {
+    cwd: new URL('..', import.meta.url), encoding: 'utf8',
+  });
+  const versions = [['before', before], ['after', source('markets-sbtc-stx-jing-v6-3')]];
+  for (const [i, side] of ['x', 'y'].entries()) {
+    const opp = other(side), fresh = await freshAfter(stamp);
+    const mid = fresh.px * 100_000_000n / fresh.py;
+    const limit = side === 'x' ? mid / 2n : mid * 2n;
+    const makerLimit = opp === 'x' ? mid / 2n : mid * 2n;
+    const ample = opp === 'x' ? 12000n : 30_000_000n;
+    const fullInput = side === 'x' ? 3000n : 6_000_000n;
+    const partialInput = side === 'x' ? 2000n : 4_000_000n;
+    const small = side === 'x' ? 1500n * mid / 10_000_000_000n : 3_500_000n * 10_000_000_000n / mid;
+    const outcomes = {};
+    for (const [j, [version, codeBody]] of versions.entries()) {
+      const name = `zero-limit-${version}-${side}`, cid = `${DEP}.${name}`;
+      const maker = mk(1200 + i * 10 + j * 2), taker = mk(1201 + i * 10 + j * 2);
+      const raw = await makeUnsignedContractDeploy({
+        contractName: name, codeBody, nonce: await getNonce(sid, DEP), fee: 0,
+        publicKey: '', network: 'mainnet', clarityVersion: ClarityVersion.Clarity5,
+        postConditionMode: PostConditionMode.Allow,
+      });
+      setSender(raw, DEP);
+      const deployed = await submitSimulationSteps(sid, { steps: [{ Transaction: raw.serialize() }] });
+      check(`${side}/${version}: deploy actual source`, decode({ Result: deployed.steps[0] }), (v) => !v.includes('ERR') && !v.startsWith('(err'));
+      finishPhase();
+      await tx(`${side}/${version}: sync seats`, DEP, cid, 'sync-seat-count', [], '(ok u48)');
+      await tx(`${side}/${version}: verify`, DEP, CORE, 'set-verified-contract', [principal(cid)], '(ok true)');
+      await tx(`${side}/${version}: initialize`, DEP, cid, 'initialize', [principal(cid), traits.x, traits.y, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], '(ok true)');
+      const state = `(tuple
+        (input-wallet ${balance(side, taker)}) (output-wallet ${balance(opp, taker)})
+        (maker-input ${balance(side, maker)}) (maker-output ${balance(opp, maker)})
+        (market-input ${balance(side, cid)}) (market-output ${balance(opp, cid)})
+        (cycle (var-get current-cycle)) (totals (get-cycle-totals (var-get current-cycle)))
+        (input-order ${live(side, taker)}) (maker-order ${live(opp, maker)})
+        (pending ${pending(side, taker)}) (parked ${parked(side, taker)})
+        (rebate (var-get pending-rebate-${side})) (crossing (var-get crossing)))`;
+      const zero = async (label, amount) => {
+        const snapshot = await ev(`${side}/${version}: snapshot ${label}`, cid, state, (v) => v.startsWith('(tuple'));
+        const r = await tx(`${side}/${version}: zero limit ${label} preserves existing refusal`, taker, cid, 'swap', [uintCV(amount), uintCV(0), update(fresh), ...pairArgs(), boolCV(side === 'x')], '(err u1011)');
+        await ev(`${side}/${version}: zero limit ${label} changes nothing`, cid, state, snapshot);
+        const events = r.receipt.events.map((e) => typeof e === 'string' ? JSON.parse(e) : e);
+        check(`${side}/${version}: zero limit ${label} commits no events`, String(events.filter((e) => e.committed).length), '0');
+        finishPhase();
+        return r.result;
+      };
+      await fund(opp, maker, ample);
+      await tx(`${side}/${version}: enough liquidity for complete fill`, maker, cid, `deposit-token-${opp}`, depArgs(opp, ample, makerLimit), `(ok u${ample})`);
+      await fund(side, taker, fullInput);
+      const fullZero = await zero('with ample liquidity', fullInput);
+      const full = await tx(`${side}/${version}: positive-limit control fills completely`, taker, cid, 'swap', [uintCV(fullInput), uintCV(limit), update(fresh), ...pairArgs(), boolCV(side === 'x')], ok);
+      check(`${side}/${version}: complete-fill control has zero remainder`, full.result, (v) => v.includes(`(token-${side}-rolled u0)`));
+      await ev(`${side}/${version}: complete-fill control leaves no order`, cid, live(side, taker), 'u0');
+      finishPhase();
+      const left = await readUint(`${side}/${version}: unused opposite liquidity`, cid, live(opp, maker));
+      await cancel(opp, cid, maker, left);
+      await fund(opp, maker, small);
+      await tx(`${side}/${version}: insufficient liquidity fixture`, maker, cid, `deposit-token-${opp}`, depArgs(opp, small, makerLimit), `(ok u${small})`);
+      await fund(side, taker, partialInput);
+      const partialZero = await zero('with insufficient liquidity', partialInput);
+      const partial = await tx(`${side}/${version}: positive-limit control leaves refunded dust`, taker, cid, 'swap', [uintCV(partialInput), uintCV(limit), update(fresh), ...pairArgs(), boolCV(side === 'x')], ok);
+      check(`${side}/${version}: partial-fill control has positive remainder`, partial.result, (v) => new RegExp(`\\(token-${side}-rolled u[1-9][0-9]*\\)`).test(v));
+      finishPhase();
+      outcomes[version] = { fullZero, full: full.result, partialZero, partial: partial.result };
+    }
+    check(`${side}: before/after results match for both zero-limit cases and positive controls`, JSON.stringify(outcomes.after), JSON.stringify(outcomes.before));
+    finishPhase();
+  }
+}
+
+async function cancelRecoveryCoverage({ stamp }) {
+  console.log('PHASE: pending cancellation, stale metadata, and recovery during both pauses');
+  const fixtures = [];
+  for (const [i, side] of ['x', 'y'].entries()) {
+    const opp = other(side), name = `cancel-exit-${side}`, cid = `${DEP}.${name}`;
+    const amount = side === 'x' ? 3000 : 6_000_000, liveAmount = 2 * amount, parkedAmount = amount;
+    const oppositeAmount = opp === 'x' ? 6000 : 12_000_000;
+    const oppositeOwner = mk(1300 + i * 10), normal = mk(1301 + i * 10);
+    const marketPaused = mk(1302 + i * 10), corePaused = mk(1303 + i * 10), triple = mk(1304 + i * 10);
+    const raw = await makeUnsignedContractDeploy({
+      contractName: name, codeBody: source('markets-sbtc-stx-jing-v6-3'), nonce: await getNonce(sid, DEP), fee: 0,
+      publicKey: '', network: 'mainnet', clarityVersion: ClarityVersion.Clarity5, postConditionMode: PostConditionMode.Allow,
+    });
+    setSender(raw, DEP);
+    const deployed = await submitSimulationSteps(sid, { steps: [{ Transaction: raw.serialize() }] });
+    check(`${side}: deploy cancellation fixture`, decode({ Result: deployed.steps[0] }), (v) => !v.includes('ERR') && !v.startsWith('(err'));
+    finishPhase();
+    await tx(`${side}: cancellation fixture sync seats`, DEP, cid, 'sync-seat-count', [], '(ok u48)');
+    await tx(`${side}: cancellation fixture verify`, DEP, CORE, 'set-verified-contract', [principal(cid)], '(ok true)');
+    await tx(`${side}: cancellation fixture initialize`, DEP, cid, 'initialize', [principal(cid), traits.x, traits.y, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], '(ok true)');
+    let fresh = await freshAfter(stamp);
+    const mid = fresh.px * 100_000_000n / fresh.py;
+    const safe = side === 'x' ? mid * 2n : mid / 2n;
+    const oppositeSafe = opp === 'x' ? mid * 2n : mid / 2n;
+    await fund(opp, oppositeOwner, oppositeAmount);
+    await tx(`${side}: cancellation fixture opposite book`, oppositeOwner, cid, `deposit-token-${opp}`, depArgs(opp, oppositeAmount, oppositeSafe), `(ok u${oppositeAmount})`);
+    for (const [label, who] of [['normal', normal], ['market-paused', marketPaused]]) {
+      await fund(side, who, amount);
+      await tx(`${side}/${label}: submit pending-only deposit`, who, cid, `deposit-token-${side}`, depArgs(side, amount, safe), `(ok u${amount})`);
+      await ev(`${side}/${label}: all submitted funds escrowed`, cid, balance(side, who), 'u0');
+      if (label === 'market-paused') await paused(cid, true);
+      const canceled = await tx(`${side}/${label}: cancel pending-only deposit`, who, cid, `cancel-token-${side}-deposit`, [traits[side], assets[side]], `(ok u${amount})`);
+      event(`${side}/${label}: pending cancel event`, canceled.receipt, side, 'pending-refund', { depositor: who, amount: `u${amount}`, reason: '"cancel"', price: 'u0' });
+      await ev(`${side}/${label}: exact pending refund`, cid, balance(side, who), `u${amount}`);
+      await ev(`${side}/${label}: pending cleared`, cid, pending(side, who), 'none');
+      await ev(`${side}/${label}: market retains no refunded escrow`, cid, balance(side, cid), 'u0');
+      await tx(`${side}/${label}: canceled deposit cannot settle`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, who, fresh), '(err u1030)');
+      if (label === 'market-paused') {
+        await ev(`${side}: cancel leaves market paused`, cid, '(var-get paused)', 'true');
+        await paused(cid, false);
+      }
+      finishPhase();
+    }
+
+    // All balances are funded by real fork transfers. Ordinary admission
+    // consumes parked carry, so this synthetic split tests the defensive
+    // live+parked combination without claiming a public path creates it.
+    await fund(side, triple, liveAmount + parkedAmount);
+    await tx(`${side}: fund triple fixture through ordinary submit`, triple, cid, `deposit-token-${side}`, depArgs(side, liveAmount + parkedAmount, safe), `(ok u${liveAmount + parkedAmount})`);
+    fresh = await freshAfter(stamp);
+    await tx(`${side}: admit fully backed fixture funds`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, triple, fresh), `(ok u${liveAmount + parkedAmount})`);
+    await ev(`${side}: SYNTHETIC FIXTURE split funded live order into live and parked`, cid, `(begin
+      (map-set token-${side}-parked '${triple} u${parkedAmount})
+      (map-set token-${side}-deposits {cycle: (var-get current-cycle), depositor: '${triple}} u${liveAmount})
+      (map-set cycle-totals (var-get current-cycle)
+        (merge (get-cycle-totals (var-get current-cycle)) {total-token-${side}: u${liveAmount}})))`, 'true');
+    finishPhase();
+    await ev(`${side}: fixture split preserves full custody`, cid, balance(side, cid), `u${liveAmount + parkedAmount}`);
+    await ev(`${side}: fixture equity remains fully backed`, CORE, `(get-token-equity '${side === 'x' ? SBTC : STX} '${triple})`, `u${liveAmount + parkedAmount}`);
+    await fund(side, triple, amount);
+    await tx(`${side}: triple owner submits new pending escrow`, triple, cid, `deposit-token-${side}`, depArgs(side, amount, safe), `(ok u${amount})`);
+    await tx(`${side}: triple owner submits pending quote`, triple, cid, `set-token-${side}-limit`, [uintCV(safe), noneCV()], '(ok false)');
+    await tx(`${side}: triple owner submits pending readmit`, keeper, cid, `readmit-token-${side}`, [principal(triple)], `(ok u${parkedAmount})`);
+    await ev(`${side}: triple fixture has every balance and pending record`, cid, `(and
+      (is-eq ${live(side, triple)} u${liveAmount}) (is-eq ${parked(side, triple)} u${parkedAmount})
+      (is-eq (get amount (unwrap-panic ${pending(side, triple)})) u${amount})
+      (is-some ${pendingKind(side, 'limit', triple)}) (is-some ${pendingKind(side, 'readmit', triple)}))`, 'true');
+    await fund(side, corePaused, amount);
+    await tx(`${side}: prepare pending-only core-pause recovery`, corePaused, cid, `deposit-token-${side}`, depArgs(side, amount, safe), `(ok u${amount})`);
+    await paused(cid, true);
+    fixtures.push({ side, opp, cid, triple, corePaused, amount, liveAmount, parkedAmount, oppositeOwner, oppositeAmount, fresh });
+    finishPhase();
+  }
+
+  // Pause last: unpause has a burn-block timelock, and cancellation must not
+  // need the owner or an unpause. Both markets are already paused too.
+  await tx('core-v6 pause before recovery', DEP, CORE, 'pause', [], '(ok true)');
+  for (const f of fixtures) {
+    const { side, opp, cid, triple, corePaused, amount, liveAmount, parkedAmount, oppositeOwner, oppositeAmount, fresh } = f;
+    await paused(cid, false);
+    const pendingCancel = await tx(`${side}: pending-only cancel while core paused`, corePaused, cid, `cancel-token-${side}-deposit`, [traits[side], assets[side]], `(ok u${amount})`);
+    event(`${side}: core-paused pending refund event`, pendingCancel.receipt, side, 'pending-refund', { depositor: corePaused, amount: `u${amount}`, reason: '"cancel"' });
+    await ev(`${side}: core-paused pending refund exact`, cid, balance(side, corePaused), `u${amount}`);
+    await ev(`${side}: core-paused pending cleared`, cid, pending(side, corePaused), 'none');
+    await tx(`${side}: core-paused canceled deposit cannot settle`, keeper, cid, `settle-token-${side}-deposit`, settleArgs(side, corePaused, fresh), '(err u1030)');
+    const total = amount + liveAmount + parkedAmount;
+    await paused(cid, true);
+    await ev(`${side}: triple owner wallet empty before cancel`, cid, balance(side, triple), 'u0');
+    const all = await tx(`${side}: one paused cancel returns pending plus live plus parked`, triple, cid, `cancel-token-${side}-deposit`, [traits[side], assets[side]], `(ok u${total})`);
+    event(`${side}: triple pending refund logs cancel`, all.receipt, side, 'pending-refund', { depositor: triple, amount: `u${amount}`, reason: '"cancel"', price: 'u0' });
+    event(`${side}: triple parked refund logs while core paused`, all.receipt, side, 'refund', { depositor: triple, amount: `u${parkedAmount}` });
+    event(`${side}: triple live refund logs while core paused`, all.receipt, side, 'refund', { depositor: triple, amount: `u${liveAmount}` });
+    await ev(`${side}: combined cancel wallet exact`, cid, balance(side, triple), `u${total}`);
+    await ev(`${side}: combined cancel clears all balances and pending metadata`, cid, `(and
+      (is-eq ${live(side, triple)} u0) (is-eq ${parked(side, triple)} u0)
+      (is-none ${pending(side, triple)}) (is-none ${pendingKind(side, 'limit', triple)})
+      (is-none ${pendingKind(side, 'readmit', triple)})
+      (is-none (map-get? token-${side}-deposit-limits '${triple})))`, 'true');
+    await ev(`${side}: combined cancel clears book list and totals`, cid, `(and
+      (is-eq (get-token-${side}-depositors (var-get current-cycle)) (list))
+      (is-eq (get total-token-${side} (get-cycle-totals (var-get current-cycle))) u0))`, 'true');
+    await ev(`${side}: combined cancel leaves no escrow or parked custody`, cid, balance(side, cid), 'u0');
+    await ev(`${side}: combined cancel debits only live and parked equity`, CORE, `(get-token-equity '${side === 'x' ? SBTC : STX} '${triple})`, 'u0');
+    await ev(`${side}: opposite maker unaffected by combined cancel`, cid, live(opp, oppositeOwner), `u${oppositeAmount}`);
+    for (const kind of ['deposit', 'limit', 'readmit']) await noPending(side, cid, triple, kind, fresh);
+    await ev(`${side}: cancel did not unpause market`, cid, '(var-get paused)', 'true');
+    await ev(`${side}: cancel did not unpause core`, CORE, '(var-get paused)', 'true');
     finishPhase();
   }
 }

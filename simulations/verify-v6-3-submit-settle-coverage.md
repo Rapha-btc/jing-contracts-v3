@@ -3,17 +3,29 @@
 Run `node simulations/verify-v6-3-submit-settle-lazer.js` from the repository root.
 The harness deploys the unmodified deploy copy on stxer, after core-v6 and
 ladder-v1, and initializes/registers fresh market instances. It never broadcasts
-a mainnet transaction. Contract version under test: `72ffffd` plus the uncommitted entry-only minimum policy.
+a mainnet transaction. Contract version under test: `321699e` plus the uncommitted cancellation recovery changes.
 
-Latest run: **719/719 checks green**, exit 0, on the uncommitted entry-only minimum policy.
-[stxer run](https://stxer.xyz/simulations/mainnet/37585a22f95c0cc4dbd7261cf9b43ca5).
-Check 455 refunds exactly 3,000 sats, clears pending, and logs `queue-full`.
-Checks 598–599 preserve the incumbent on queue refusal. Both sides reject
-under-minimum direct/pending submits before escrow, admit accepted pending
-orders despite later minimum increases, and preserve exact book/custody totals.
-Both sides also reject under-minimum swap net inputs before transfers, while
-qualifying swaps refund their later sub-minimum remainders (497 sats on x;
-493,957 micro-STX on y in this run), plus unused rebate, with no resting order.
+Latest run: **950/950 checks green**, exit 0.
+[stxer run](https://stxer.xyz/simulations/mainnet/ec3b1f35d30a51b6106573b591c86703).
+Cancellation coverage checks exact pending refunds, cancellation events, cleared
+pending metadata, and subsequent `u1030` on both sides, including market-only,
+core-only, and combined pauses. The combined pending/live/parked case uses the
+explicitly labelled, fully funded storage fixture described below.
+
+The previous 821-check suite also remains green with its cancellation expectations
+updated. Its 102 swap comparison checks compare the
+reviewed `08a9ef8` source and amended deploy copy on both sides: zero-limit
+calls return `u1011` with ample or insufficient liquidity, change no balances
+or captured state, and commit no events. Positive-limit controls prove the
+fixtures produce complete fills or refunded partial-fill dust. All four
+before/after result tuples match exactly for each side. This preserves the
+actual baseline; it does not demonstrate successful zero-limit fills.
+
+The entry-only minimum-policy revision (`08a9ef8`) passed **719/719**:
+[previous run](https://stxer.xyz/simulations/mainnet/37585a22f95c0cc4dbd7261cf9b43ca5).
+Check 455 still refunds exactly 3,000 sats; checks 598–599 preserve the
+incumbent on queue refusal. Raised-minimum pending admission, parked carry,
+swap entry minimums, and post-match remainder refunds remain covered.
 
 The superseded parking-inside-core approach passed **664/664** under the old
 minimum-refund policy:
@@ -26,7 +38,7 @@ The reviewed core/catch revision (`72ffffd`) reproduced the caller-side bug:
 
 The preceding settle-precheck revision passed **586/586**, exit 0:
 [previous stxer run](https://stxer.xyz/simulations/mainnet/0ed2e67ec9a9727a147524e104ecc131).
-That result is historical; the current revision is validated by the 719-check run above.
+That result is historical; the current revision is validated by the 821-check run above.
 
 This is an explicit scenario inventory, not an instrumented line-coverage claim.
 Pre-fix reproduction: **454/459 checks green**, exit 1; stopped on a contract failure at
@@ -57,6 +69,7 @@ entered. This is distinct from the park-tenth error fixed in `19ef603`.
 
 Contract lines refer to `contracts/markets-sbtc-stx-jing-v6-3.clar` at
 `19ef603`. That run stopped before the y mirror, after read-only diagnostics.
+
 ## Current minimum policy and every core caller
 
 Minimum admission is checked at entry. `deposit-token-{x,y}` validates
@@ -74,30 +87,58 @@ prove the 50-seat boundary.
 
 All six call sites, with line numbers in the current deploy copy:
 
-| Core caller | Core call | Minimum check |
-| --- | --- | --- |
-| `deposit-token-y` | 1296 | 1288: existing + parked + amount, before either path transfers. |
-| `deposit-token-x` | 1527 | 1519: same sum and ordering. |
-| `settle-token-y-deposit` | 1362 | Admission inherited from submit at 1288; no recheck. |
-| `settle-token-x-deposit` | 1593 | Admission inherited from submit at 1519; no recheck. |
-| `swap`, x input | 2607 | 2584: net >= the x minimum, before parking, rebate transfer, or core. |
-| `swap`, y input | 2615 | 2584: net >= the y minimum at the same point. |
+| Core caller | Core call | Minimum check | Positive-limit check |
+| --- | --- | --- | --- |
+| `deposit-token-y` | 1295 | 1287: existing + parked + amount before either transfer path. | 1285, before direct core call or pending write at 1300. |
+| `deposit-token-x` | 1525 | 1517: same sum and ordering. | 1515, before direct core call or pending write at 1530. |
+| `settle-token-y-deposit` | 1361 | Inherits submit admission at 1287. | Inherits pending limit validated at 1285. |
+| `settle-token-x-deposit` | 1591 | Inherits submit admission at 1517. | Inherits pending limit validated at 1515. |
+| `swap`, x input | 2648 | 2625: net >= x minimum before parking/transfers. | Shared assertion at 2604, immediately after net>0. |
+| `swap`, y input | 2656 | 2625: net >= y minimum at the same point. | Same shared assertion at 2604. |
 
 Swap's preceding guards require the caller's live and parked balances to be
 zero, and its core calls pass carry=u0. Thus core's former admission sum
-(existing + carry + net) equals net. Before this revision, swap only checked
+(existing + carry + net) equals net. Before `08a9ef8`, swap only checked
 net>0 itself and relied on core for the configured minimum.
 
 This initial net input differs from the unfilled remainder **after** matching.
-`cross-remainder-as-y` at 3156 and `cross-remainder-as-x` at 3223 require that
+`cross-remainder-as-y` at 3197 and `cross-remainder-as-x` at 3264 require that
 remainder to be below the minimum (`ERR_PARTIAL_FILL` otherwise), refund it,
 and remove its order. Those rules are unchanged.
 
 Readmit is not a core caller. Contrary to the earlier line-reference premise,
-`readmit-token-y` (1825) and `readmit-token-x` (1894) check only that the parked
-amount is positive (1830/1899), not that it meets the configured minimum.
+`readmit-token-y` (1865) and `readmit-token-x` (1934) check only that the parked
+amount is positive (1870/1939), not that it meets the configured minimum.
 They and their settlers remain unchanged. The cited configured-minimum checks
-are in **withdraw**, now at 1751/1801.
+are in **withdraw**, now at 1791/1841.
+
+## Positive-limit admission and the zero-limit premise
+
+Each core has exactly three callers: direct deposit, pending-deposit settle,
+and swap. The only pending-deposit map writers are the respective public
+`deposit-token-*` functions, after their positive-limit assertion. No other
+function can store a zero pending limit through the contract's APIs.
+
+The current amendment removes the two positive-limit assertions in core
+and uses one shared assertion in swap, immediately after net>0. Neither swap
+branch repeats the check. Invalid limits now return `u1011` before the
+live/parked-position guards, configured-minimum guard, queue operations, or
+rebate transfers; oracle validation and net>0 still precede it. This changes
+error precedence for inputs violating several guards, as requested.
+
+The requested premise that fully filled zero-limit swaps already succeed
+does not match this implementation: swap first deposits its **entire net
+input** through core, then calls `settle-with-refresh`, then handles its
+remainder. Core was therefore reached before any matching at `08a9ef8` and
+rejected limit 0 even with ample liquidity. The amendment preserves this
+behavior; it does not add a zero-limit market-order path.
+
+The harness deploys verbatim `08a9ef8` source and the current deploy copy into
+separate fork markets for both sides. It compares zero-limit calls with ample
+and insufficient liquidity, snapshots balances/orders/totals/rebate state,
+and asserts no committed events on refusal. Positive-limit controls establish
+that the first fixture fills completely and the second leaves refunded dust.
+Before/after return values for all four cases are compared exactly.
 
 ## Reproduced failure at `72ffffd`: parking before a caught minimum refusal
 
@@ -150,9 +191,10 @@ match after stripping comments and whitespace; `git diff --check` passes.
 | Minimum | Below-minimum submits reject with `u1001` before escrow on both direct and pending paths. A raised minimum does not prevent a pending live top-up or qualifying new entrant from being placed. Small entrants still receive queue-full refunds, preserving incumbent and parked balances. Exact-minimum aggregate top-ups succeed. |
 | Parking and admission | A larger resubmission is placed despite a later minimum raise, with legitimate incumbent parking and exact book totals. A parked owner combines retained carry with a pending top-up, clears its own parked balance, parks the previous entrant, and preserves exact custody. |
 | Swap minimum | Initial net below the minimum rejects before transfers or book changes. A qualifying swap with a positive sub-minimum remainder refunds that remainder plus unused rebate exactly, pays the reported output, and leaves no resting/pending taker order. |
-| Live/pending escapes | Pending-only cancel and withdraw return `u1005`; with live + pending, partial withdrawal and cancel affect live funds only; pending persists and can then settle without a second transfer. |
-| Readmit | Always submits, including with opposite empty; permissionless submit/settle; pending timestamp; nothing pending, duplicate, old price and pause guards; full, crossing, and gone refusals clear pending and log their reason; parked balance survives refusals; freeing a seat after submit permits readmission; canceling parked funds after submit produces `gone`. |
-| Limits | Empty-opposite direct change; pending map exact; old quote remains until settle; third-party success; nothing pending/old-price guards; crossing keeps the previous quote; cancel-before-settle gives `gone`; refusal clears pending and logs action/reason. |
+| Swap zero limit | Verbatim reviewed/amended sources reject with `u1011` under both ample and insufficient liquidity; snapshots and committed-event counts prove no state or balance changes. Positive-limit controls prove full-fill/remainder fixtures and match before/after exactly. Zero-limit full fills are not supported at this HEAD. |
+| Live/pending escapes | Withdraw still ignores pending-only escrow (`u1005`) and leaves pending intact when withdrawing live funds. Cancel returns pending + live + parked, clears all three pending maps and the quote, and subsequent settle calls return `u1030`. |
+| Readmit | Always submits, including with opposite empty; permissionless submit/settle; pending timestamp; nothing pending, duplicate, old price and pause guards; full and crossing refusals clear pending and log their reason; parked balance survives refusals; freeing a seat after submit permits readmission; canceling parked funds also deletes the pending readmit; later settle returns `u1030`. |
+| Limits | Empty-opposite direct change; pending map exact; old quote remains until settle; third-party success; nothing pending/old-price guards; crossing keeps the previous quote; cancel-before-settle clears the pending limit and later settle returns `u1030`; refusal clears pending and logs action/reason. |
 | Reprice maker | Empty-opposite direct quote; non-crossing pending limit; settles through settle-limit; old-price guard; wrong x/y traits; pending replacement; maker quoting while paused. |
 | Reprice taker | Crossing quote immediately fills the remaining position, pays its owner, creates no pending limit, and leaves custody equal to the book. |
 | Moving book | Deposit/limit submitted against a non-willing opposite are refused after it becomes willing; a deposit submitted against a willing opposite is admitted after that opposite leaves; readmit classification also uses the changed book. |
@@ -173,8 +215,8 @@ match after stripping comments and whitespace; `git diff --check` passes.
   applicable. Reprice validates both token traits; deposit validates its side.
 - Readmit has no direct shortcut and no new escrow. Refusal keeps funds parked;
   it does not send them to the wallet. A limit refusal preserves the old quote.
-- Cancel/withdraw cannot release pending-only escrow; they operate on live or
-  parked balances. This is the contract behavior asserted by the harness.
+- Withdraw does not release pending-only escrow. Cancel does, and clears
+  pending limit/readmit metadata as part of the same atomic recovery.
 
 ## Time and submission mechanics
 
@@ -204,14 +246,49 @@ the ~200-step limit and `_chunked-submit.js` is unnecessary.
 - A pending owner using `swap` on its own account; simultaneous pending deposit,
   readmit and limit records for the same owner; mutation of pending limits via
   the empty-opposite direct shortcut.
-- Pending admission after intervening withdrawal/cancel reduces its aggregate
+- Pending admission after an intervening withdrawal reduces its aggregate
   below the submit-time minimum; wrong asset names, malformed/missing/stale/
-  confidence-invalid feeds, invalid spreads/zero limits, core-v6 pause/retry,
+  confidence-invalid feeds, invalid spreads/zero limits on deposit and reprice,
+  core-v6 settlement pause/retry,
   and other logging failures after park writes.
 - Other boundary combinations for the full-side fallback (equal-size entrants
   and protected seats). The passing cases cover larger entrants, smaller
   entrants, preservation of a refused owner's parked carry, and successful
   admission combining carry with new escrow.
+- Readmit/limit `gone` refusals through paths other than cancel (cancel now
+  clears those pending records); a public-call path creating simultaneous live
+  and parked funds in one account. The combined-cancel test uses the funded
+  synthetic split described below.
 - Broader swap walk, dust, fee/rebate aging, multi-maker pro-rata settlement,
   admin authorization, ladder seat management, core equity, and rung contracts.
   Rung/ladder reruns remain a separate follow-up requiring confirmation.
+
+## Cancellation recovery and fixture scope
+
+Cancellation at deploy-copy lines 1623 (y) and 1694 (x) has no pause check.
+It refunds pending escrow with reason `cancel` and price `u0`, without needing
+an oracle, then returns parked and live funds. Its result is their sum.
+The resting quote and pending deposits/limits/readmits are cleared. Pending
+limits contain only quote/time metadata; pending readmits contain a timestamp,
+so clearing them moves no additional funds and prevents stale requests acting
+on a later deposit.
+
+Core-v6 calls used by cancel are `log-pending-refund-y` (749),
+`log-pending-refund-x` (799), `log-refund-y` (499), and `log-refund-x` (475).
+None calls `check-not-paused`. The regular refund helper chain
+`debit-if-not-registered` -> `is-registered` / `debit` has no pause gate either.
+Registration is still required. The harness tests normal and market-paused
+pending-only cancellation, core-paused pending-only cancellation, and combined
+recovery while both market and core are paused. Core is paused only after all
+fixtures have been prepared; recovery never uses its timelocked unpause.
+
+All ordinary scenarios use public transactions on verbatim contract source.
+One **explicit synthetic fixture per side** covers pending + live + parked
+in one account. It deposits and admits fully funded tokens normally, then uses
+an Eval to split that same live amount between live and parked maps and adjust
+book totals. Contract custody and core equity are unchanged and checked. It
+then creates pending deposit, limit, and readmit records through public calls.
+The final cancel is a real transaction against the unmodified source, with
+exact wallet/custody/equity and log assertions. This proves combined recovery
+from that funded state, not that the state is reachable through ordinary
+public calls. No source replacement, minted balances, or fake oracle is used.
