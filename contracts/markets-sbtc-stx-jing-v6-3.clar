@@ -1179,7 +1179,6 @@ found: false,
 (depositors (get-token-y-depositors cycle))
 (tok-y (var-get token-y))
 )
-(asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (if (and
 (is-eq existing u0)
 (not parked-already)
@@ -1410,7 +1409,6 @@ park-error
 (depositors (get-token-x-depositors cycle))
 (tok-x (var-get token-x))
 )
-(asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (if (and
 (is-eq existing u0)
 (not parked-already)
@@ -2561,6 +2559,7 @@ u0
 ))
 )
 (asserts! (> net u0) ERR_DEPOSIT_TOO_SMALL)
+(asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (asserts!
 (is-eq
 (if deposit-x
