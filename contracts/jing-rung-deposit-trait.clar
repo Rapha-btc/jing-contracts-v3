@@ -3,7 +3,7 @@
 ;; amount uses the rung's input asset; held balances remain in logs/get-state.
 (define-trait rung-trait
   (
-    (deposit (uint (buff 8192)) (response {
+    (deposit (uint) (response {
       amount: uint, shares: uint, epoch: uint,
       stx-paid: uint, sbtc-paid: uint,
     } uint))

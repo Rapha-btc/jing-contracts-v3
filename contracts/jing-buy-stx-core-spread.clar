@@ -232,6 +232,13 @@
     (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3
       get-token-x-parked current-contract
     )
+    (default-to u0
+      (get amount
+        (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3
+          get-token-x-pending-deposit current-contract
+        )
+      )
+    )
   )
 )
 
@@ -340,10 +347,7 @@
 
 ;; Join the rung with `amount` sats. Goes to the market when the pool is at
 ;; or above the market minimum (pushing along anything held), else waits here.
-(define-public (deposit
-    (amount uint)
-    (update (buff 8192))
-  )
+(define-public (deposit (amount uint))
   (let (
       (member tx-sender)
     )
@@ -375,7 +379,7 @@
         ;; funds are held here instead of aborting for every member
         (if (and
             (>= (+ to-push (market-size)) (min-market))
-            (is-ok (push-to-market to-push update))
+            (is-ok (push-to-market to-push))
           )
           (var-set held-sats u0)
           (var-set held-sats to-push)
@@ -407,7 +411,7 @@
 ;; any keeper pushes them later with a fresh update. (ok true) when pushed,
 ;; (ok false) when there is nothing to push, the pool is under the market
 ;; minimum, or the market refuses (the funds stay held).
-(define-public (push (update (buff 8192)))
+(define-public (push)
   (begin
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (try! (sync))
@@ -416,7 +420,7 @@
         (pushed (and
           (> to-push u0)
           (>= (+ to-push (market-size)) (min-market))
-          (is-ok (push-to-market to-push update))
+          (is-ok (push-to-market to-push))
         ))
       )
       (if pushed
@@ -553,17 +557,14 @@
 ;; can read (is-ok) and answer by holding, while the market's own state rolls
 ;; back with the failed call. A parked position is taken back by the market
 ;; inside this same deposit (free slot, else bump on the combined size).
-(define-private (push-to-market
-    (to-push uint)
-    (update (buff 8192))
-  )
+(define-private (push-to-market (to-push uint))
   ;; a miner-band rung re-derives its floor on every push; with no miner data
   ;; (u0) it does not push at all, the funds stay held
   (let ((g (current-floor)))
     (asserts! (> g u0) ERR_ZERO_PRICE)
     (var-set floor g)
     (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-      (try! (contract-call? MARKET deposit-token-x to-push g (some (var-get spread-bps)) update SBTC SBTC_NAME))
+      (try! (contract-call? MARKET deposit-token-x to-push g (some (var-get spread-bps)) SBTC SBTC_NAME))
     )
   )
 )
@@ -571,13 +572,13 @@
 ;; Any keeper: move the market's stored floor to the current miner band
 ;; without depositing (a miner-band rung with a resting or parked position
 ;; whose floor would otherwise stay where the last push left it).
-(define-public (refresh-guard (update (buff 8192)))
+(define-public (refresh-guard)
   (let ((g (current-floor)))
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (> g u0) ERR_ZERO_PRICE)
     (var-set floor g)
     (as-contract? ()
-      (try! (contract-call? MARKET set-token-x-limit g (some (var-get spread-bps)) update))
+      (try! (contract-call? MARKET set-token-x-limit g (some (var-get spread-bps))))
     )
   )
 )

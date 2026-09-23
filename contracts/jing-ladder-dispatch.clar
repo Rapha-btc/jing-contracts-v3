@@ -59,7 +59,7 @@
 (define-private (deposit-one
     (entry { rung: <rung>, amount: uint })
     (acc (response {
-      update: (buff 8192), count: uint, stx-paid: uint, sbtc-paid: uint,
+      count: uint, stx-paid: uint, sbtc-paid: uint,
       positions: (list 10 { rung: principal, amount: uint, shares: uint,
         epoch: uint, stx-paid: uint, sbtc-paid: uint }),
     } uint))
@@ -67,10 +67,10 @@
   (let (
       (state (try! acc))
       (target (get rung entry))
-      (result (try! (contract-call? target deposit (get amount entry) (get update state))))
+      (result (try! (contract-call? target deposit (get amount entry))))
     )
     (ok {
-      update: (get update state), count: (+ (get count state) u1),
+      count: (+ (get count state) u1),
       stx-paid: (+ (get stx-paid state) (get stx-paid result)),
       sbtc-paid: (+ (get sbtc-paid state) (get sbtc-paid result)),
       positions: (unwrap! (as-max-len? (append (get positions state)
@@ -82,7 +82,6 @@
 (define-private (dispatch
     (total uint)
     (allocations (list 10 { rung: <rung>, amount: uint }))
-    (update (buff 8192))
     (buy bool)
   )
   (begin
@@ -96,7 +95,7 @@
       (asserts! (is-eq (get remaining validated) u0) ERR_TOTAL)
     )
     (let ((done (try! (fold deposit-one allocations (ok {
-          update: update, count: u0, stx-paid: u0, sbtc-paid: u0, positions: (list),
+          count: u0, stx-paid: u0, sbtc-paid: u0, positions: (list),
         })))))
       (print {
         event: "ladder-dispatched",
@@ -116,17 +115,15 @@
 (define-public (deposit-buy
     (total uint)
     (allocations (list 10 { rung: <rung>, amount: uint }))
-    (update (buff 8192))
   )
-  (dispatch total allocations update true)
+  (dispatch total allocations true)
 )
 
 (define-public (deposit-sell
     (total uint)
     (allocations (list 10 { rung: <rung>, amount: uint }))
-    (update (buff 8192))
   )
-  (dispatch total allocations update false)
+  (dispatch total allocations false)
 )
 
 ;; Exits intentionally accept historical registrations: replacement/retirement
