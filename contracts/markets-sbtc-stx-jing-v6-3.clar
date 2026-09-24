@@ -1195,12 +1195,6 @@ smallest-principal: who,
 (smallest-who (get smallest-principal smallest-info))
 )
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-(and (> carry u0) (map-delete token-y-parked who))
-(map-set token-y-parked smallest-who smallest-amount)
-(try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount
-cycle price (var-get token-x) tok-y
-))
-(and (not escrowed) (try! (stx-transfer? amount who current-contract)))
 (var-set bumped-token-y-principal smallest-who)
 (map-set token-y-depositor-list cycle
 (unwrap!
@@ -1209,6 +1203,12 @@ cycle price (var-get token-x) tok-y
 )
 ERR_QUEUE_FULL
 ))
+(and (> carry u0) (map-delete token-y-parked who))
+(map-set token-y-parked smallest-who smallest-amount)
+(try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount
+cycle price (var-get token-x) tok-y
+))
+(and (not escrowed) (try! (stx-transfer? amount who current-contract)))
 (map-delete token-y-deposits {
 cycle: cycle,
 depositor: smallest-who,
@@ -1233,6 +1233,13 @@ amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount
 (ok amount)
 )
 (begin
+(if (is-eq existing u0)
+(map-set token-y-depositor-list cycle
+(unwrap! (as-max-len? (append depositors who) u50)
+ERR_QUEUE_FULL
+))
+true
+)
 (and (> carry u0) (map-delete token-y-parked who))
 (and (not escrowed) (try! (stx-transfer? amount who current-contract)))
 (map-set token-y-deposits {
@@ -1247,13 +1254,6 @@ spread-bps: spread-bps,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
-)
-(if (is-eq existing u0)
-(map-set token-y-depositor-list cycle
-(unwrap! (as-max-len? (append depositors who) u50)
-ERR_QUEUE_FULL
-))
-true
 )
 (try! (contract-call? .jing-core-v6 log-deposit-y who
 (+ existing carry amount) amount limit-price cycle spread-bps carry none u0
@@ -1425,12 +1425,6 @@ smallest-principal: who,
 (smallest-who (get smallest-principal smallest-info))
 )
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-(and (> carry u0) (map-delete token-x-parked who))
-(map-set token-x-parked smallest-who smallest-amount)
-(try! (contract-call? .jing-core-v6 log-park-x smallest-who smallest-amount
-cycle price tok-x (var-get token-y)
-))
-(and (not escrowed) (try! (contract-call? t transfer amount who current-contract none)))
 (var-set bumped-token-x-principal smallest-who)
 (map-set token-x-depositor-list cycle
 (unwrap!
@@ -1439,6 +1433,12 @@ cycle price tok-x (var-get token-y)
 )
 ERR_QUEUE_FULL
 ))
+(and (> carry u0) (map-delete token-x-parked who))
+(map-set token-x-parked smallest-who smallest-amount)
+(try! (contract-call? .jing-core-v6 log-park-x smallest-who smallest-amount
+cycle price tok-x (var-get token-y)
+))
+(and (not escrowed) (try! (contract-call? t transfer amount who current-contract none)))
 (map-delete token-x-deposits {
 cycle: cycle,
 depositor: smallest-who,
@@ -1463,6 +1463,13 @@ amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount to
 (ok amount)
 )
 (begin
+(if (is-eq existing u0)
+(map-set token-x-depositor-list cycle
+(unwrap! (as-max-len? (append depositors who) u50)
+ERR_QUEUE_FULL
+))
+true
+)
 (and (> carry u0) (map-delete token-x-parked who))
 (and (not escrowed) (try! (contract-call? t transfer amount who current-contract none)))
 (map-set token-x-deposits {
@@ -1477,13 +1484,6 @@ spread-bps: spread-bps,
 })
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
-)
-(if (is-eq existing u0)
-(map-set token-x-depositor-list cycle
-(unwrap! (as-max-len? (append depositors who) u50)
-ERR_QUEUE_FULL
-))
-true
 )
 (try! (contract-call? .jing-core-v6 log-deposit-x who
 (+ existing carry amount) amount limit-price cycle spread-bps carry none u0 tok-x
