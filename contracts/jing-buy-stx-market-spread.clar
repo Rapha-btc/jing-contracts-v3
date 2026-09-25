@@ -54,7 +54,6 @@
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_SPREAD (err u7010))
 (define-constant ERR_BAD_NAME (err u7009))
-(define-constant ERR_POOL_TAIL (err u7013))
 ;; No shares are minted while the index is under 1e-3 of SCALE. A close at
 ;; SOLD_OUT_INDEX (1e-6 of SCALE) then forfeits under 0.1% of any deposit to the
 ;; next epoch; minting deeper in the tail made that loss unbounded.
@@ -137,6 +136,13 @@
 (define-data-var proceeds-index uint u0)
 ;; sats kept in this contract, off the market (under the market minimum, or refunds)
 (define-data-var held-sats uint u0)
+;; sats owed to members of epochs closed by a tail roll, kept off the pool
+(define-data-var reserved-sats uint u0)
+;; the unfilled-index an epoch closed with at a tail roll (absent: nothing owed)
+(define-map epoch-final-unfilled
+  uint
+  uint
+)
 ;; micro-STX balance already folded into proceeds-index
 (define-data-var stx-accounted uint u0)
 
@@ -187,10 +193,11 @@
         sbtc: (/ (* (get shares p) (var-get unfilled-index)) SCALE),
         stx: (/ (* (get shares p) (- (var-get proceeds-index) (get paid-index p))) SCALE),
       }
-      ;; an earlier epoch: sold out, only the proceeds against its final index remain
+      ;; an earlier epoch: its proceeds against the final index, plus its unsold
+      ;; share when it closed by a tail roll
       {
         shares: (get shares p),
-        sbtc: u0,
+        sbtc: (/ (* (get shares p) (final-unfilled (get epoch p))) SCALE),
         stx: (/ (* (get shares p) (- (final-index (get epoch p)) (get paid-index p))) SCALE),
       }
     )
@@ -200,6 +207,10 @@
       stx: u0,
     }
   )
+)
+
+(define-read-only (final-unfilled (e uint))
+  (default-to u0 (map-get? epoch-final-unfilled e))
 )
 
 (define-read-only (final-index (e uint))
@@ -271,7 +282,7 @@
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (unwrap-panic (contract-call? SBTC get-balance current-contract)))
+      (local (- (unwrap-panic (contract-call? SBTC get-balance current-contract)) (var-get reserved-sats)))
       (actual (+ (market-size) local))
       (recorded (pooled-sbtc))
       (stx-now (stx-get-balance current-contract))
@@ -328,10 +339,10 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
-    ;; No mint in the tail of an epoch (index under 1e-3 of SCALE). A later close
-    ;; at SOLD_OUT_INDEX then costs a depositor under 0.1% of the deposit, and the
-    ;; share mint below never divides by a collapsed (zero) index.
-    (asserts! (>= (var-get unfilled-index) MINT_FLOOR) ERR_POOL_TAIL)
+    ;; No mint in the tail of an epoch (index under 1e-3 of SCALE): the deposit
+    ;; rolls the epoch instead, so the share mint below never divides by a
+    ;; collapsed (zero) index and nobody joins a pool that is nearly sold out.
+    (and (< (var-get unfilled-index) MINT_FLOOR) (try! (roll-tail)))
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? SBTC transfer amount member current-contract none))
       (let (
@@ -363,7 +374,7 @@
           (is-eq (var-get held-sats) u0) (var-get held-sats)
         ))
         (ok { amount: amount, shares: shares, epoch: epo,
-          stx-paid: paid, sbtc-paid: u0 })
+          stx-paid: (get stx paid), sbtc-paid: (get sbtc paid) })
       )
     )
   )
@@ -417,7 +428,7 @@
       ;; return that payout instead of failing, so a dispatch batch with one
       ;; closed rung still goes through
       (if (is-none (map-get? positions member))
-        (ok { stx: paid, sbtc: u0 })
+        (ok paid)
         (let (
             (fi (var-get unfilled-index))
             (mine (/ (* (get shares pos) fi) SCALE))
@@ -462,7 +473,7 @@
           (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
             (var-get held-sats)
           ))
-          (ok { stx: paid, sbtc: take })
+          (ok { stx: (get stx paid), sbtc: take })
         )
       )
     )
@@ -475,8 +486,8 @@
     (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
     (try! (sync))
     (let ((paid (try! (settle-proceeds tx-sender))))
-      (is-ok (contract-call? LADDER log-claim tx-sender paid (var-get epoch)))
-      (ok { stx: paid, sbtc: u0 })
+      (is-ok (contract-call? LADDER log-claim tx-sender (get stx paid) (var-get epoch)))
+      (ok paid)
     )
   )
 )
@@ -521,6 +532,48 @@
 
 ;; Pay `who` the STX their shares earned since their paid-index, then move
 ;; the mark. Called after sync by every member action.
+;; RAPHA NEEDS TO DOUBLE REVIEW this tail roll before any deploy (bounty
+;; muerdzoc805a745ecc99, Nilo's tail freeze). Not fork-tested yet. Also still
+;; open for this rung: ARION F-7 (proceeds absorbed while no members), F-8
+;; (a position that rounds to 0 can never withdraw), F-9 (settle-escrow wants
+;; a Lazer update even for exits that do not need one).
+;; Tail roll: a deposit that finds the epoch in its tail closes it without
+;; loss. The order comes back from the market (cancel returns pending, live
+;; and parked with no oracle or pause check), the closing epoch's unsold
+;; share is reserved at its final unfilled-index for its members to take on
+;; their next withdraw, claim or deposit, and the deposit opens a fresh epoch.
+(define-private (roll-tail)
+  (let ((epo (var-get epoch)))
+    (if (> (market-size) u0)
+      (begin
+        (try! (as-contract? ()
+          (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+        ))
+        true
+      )
+      true
+    )
+    (let (
+        (free (- (unwrap-panic (contract-call? SBTC get-balance current-contract)) (var-get reserved-sats)))
+        (owed (pooled-sbtc))
+        (reserve (if (< owed free)
+          owed
+          free
+        ))
+      )
+      (map-set epoch-final-proceeds epo (var-get proceeds-index))
+      (map-set epoch-final-unfilled epo (var-get unfilled-index))
+      (var-set reserved-sats (+ (var-get reserved-sats) reserve))
+      (var-set held-sats (- free reserve))
+      (is-ok (contract-call? LADDER log-epoch-closed epo (var-get proceeds-index)))
+      (var-set epoch (+ epo u1))
+      (var-set total-shares u0)
+      (var-set unfilled-index SCALE)
+      (ok true)
+    )
+  )
+)
+
 (define-private (settle-proceeds (who principal))
   (match (map-get? positions who)
     pos (let (
@@ -530,6 +583,10 @@
           (final-index (get epoch pos))
         ))
         (owed (/ (* (get shares pos) (- upto (get paid-index pos))) SCALE))
+        (back (if current
+          u0
+          (/ (* (get shares pos) (final-unfilled (get epoch pos))) SCALE)
+        ))
       )
       (and
         (> owed u0)
@@ -538,14 +595,22 @@
         ))
       )
       (var-set stx-accounted (- (var-get stx-accounted) owed))
-      ;; an old-epoch position has no unsold size left: paid in full, gone
+      ;; an old epoch closed by a tail roll: its unsold share comes out of the reserve
+      (and
+        (> back u0)
+        (try! (as-contract? ((with-ft SBTC SBTC_NAME back))
+          (try! (contract-call? SBTC transfer back current-contract who none))
+        ))
+      )
+      (var-set reserved-sats (- (var-get reserved-sats) back))
+      ;; an old-epoch position has nothing left: paid in full, gone
       (if current
         (map-set positions who (merge pos { paid-index: upto }))
         (map-delete positions who)
       )
-      (ok owed)
+      (ok { stx: owed, sbtc: back })
     )
-    (ok u0)
+    (ok { stx: u0, sbtc: u0 })
   )
 )
 
@@ -569,7 +634,7 @@
 ;; Add the refund to held funds; withdraw synchronizes before paying the member.
 (define-private (settle-escrow (update (optional (buff 8192))))
   (match (contract-call? MARKET get-token-x-pending-deposit current-contract)
-    pending (if (>= (- stacks-block-time (get submitted-at pending)) u86400)
+    pending (if (>= stacks-block-time (+ (get submitted-at pending) u86400))
       (let ((refunded (try! (as-contract? ()
           (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
         ))))

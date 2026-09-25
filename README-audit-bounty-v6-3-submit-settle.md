@@ -9,12 +9,36 @@ what we decided, and what changed in the repo.
 
 Review is in progress. Rows marked "open" are not decided yet.
 
+## Likely winner
+
+ARION (Eternal Harp) is the clear winner. He found the only HIGH (the ghost
+double-pay), proved it on a fork, and we fixed it. His cancel guard was also
+adopted (F-4).
+
+Runners-up, if we tip like last round:
+- Nilo (Diamond Lance): the rung tail freeze, fork-proven on all 6 rungs,
+  which led to the tail roll.
+- Fluid Briar: the switched-off ask MEDIUM (fixed) and the `router-swap`
+  sliver LOW (fixed in 3 vaults).
+
+## Still to review (rungs)
+
+- Nilo's tail freeze: the lossless tail roll in the six rungs (also carries
+  the F-6 hardening). Rapha needs to double review it; not fork-tested.
+- ARION F-7: proceeds absorbed while a rung has no members. After a tail roll
+  the leftover is off the book, so only the older sold-out closes can still
+  leave a crumb resting that fills with zero members.
+- ARION F-8: a member whose position rounds to 0 can never withdraw, which
+  could block the last-member reset.
+- ARION F-9: `settle-escrow` asks for a Lazer update even for exits that do
+  not need one.
+
 ## Submissions and verdicts
 
 | Submitter | Finding | Holds | Rating | Decision |
 |---|---|---|---|---|
 | Eternal Harp (ARION) | F-1: a caught queue-full in settle leaves a ghost deposit that cancel pays twice | yes | HIGH | **Fixed** in `cbf96c4`, see below. Fork-proven by the submitter. |
-| Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | open | MEDIUM | open |
+| Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | yes | MEDIUM | Lossless tail roll in all six rungs, **pending Rapha's double review**, not fork-tested. |
 | Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | yes | MEDIUM | **Fixed**, see below. Source-only in the submission; fork-proven here. |
 | Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | yes | - | **Rejected, by design**, see below. |
 | Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
