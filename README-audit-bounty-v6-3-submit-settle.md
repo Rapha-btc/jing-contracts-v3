@@ -21,6 +21,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | no | - | **Rejected**, see below. |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
 | Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | - | **Rejected**, see below. |
+| Eternal Harp (ARION) | F-2: a swap vault's `jing-refloor` / `refresh-guard` only submits a pending limit that nothing settles | yes | - | **Rejected**, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
@@ -314,3 +315,26 @@ logged at submit, and our keeper settles pending items, so a leftover is
 normally cleared long before a new order exists. If it is not, it is the
 maker's own old instruction: Alice can settle it herself (which deletes it)
 before depositing again. No change.
+
+## ARION F-2: vault refloor only submits a pending limit (rejected)
+
+**The claim.** In the swap vaults, `jing-refloor` / `refresh-guard` call the
+v6-3 market's `set-token-x-limit`. While the other side's list is non-empty,
+that only records a pending limit (`token-x-pending-limits`, `(ok false)`); the
+new floor takes effect when `settle-token-x-limit` runs with a Lazer update
+newer than the submit. No vault, pool, signer-manager or rung contract calls
+`settle-token-x-limit`, so a refloor looks done while the floor on the book is
+unchanged, and any third party can pick the print it settles on. Suggested
+fixes: have the refloor call `settle-token-x-limit current-contract update`
+right after submitting, or leave the settle to keepers and document it.
+
+**Why we reject it.** The first fix cannot work: settle requires a price newer
+than the submit (`ERR_PRICE_BEFORE_ORDER`), and an update signed before the
+transaction is always older than that block's `stacks-block-time`. Submit then
+settle in a later block is the whole design of v6-3, for every maker action.
+The pending limit is logged at submit (`log-pending-limit-x`) and readable
+(`get-token-x-pending-limit`), and our keeper settles it with the next fresh
+update. Letting anyone settle is also by design: the limit value is the
+vault's own oracle-checked number, so a third party only chooses the moment
+within the freshness window, and a crossing print refuses the change instead
+of applying it. No change.
