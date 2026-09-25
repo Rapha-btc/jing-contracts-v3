@@ -20,6 +20,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
 | Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | no | - | **Rejected**, see below. |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
+| Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | - | **Rejected**, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
@@ -289,3 +290,27 @@ cycle in a separate transaction with a fresh Lazer update, whatever any
 swapper does. A failing swap blocks nobody else. `swap` being all-or-nothing
 (fill within the limit, or revert and keep your funds) is the intended taker
 contract. No change.
+
+## Light Brio L-2 / ARION F-4: leftover pending limits and readmits (rejected)
+
+**The claim.** `settle-token-*-deposit` only deletes the pending deposit it
+settles. A maker's separate pending limit (`set-token-*-limit`) or pending
+readmit stays until someone settles it. Example: Alice submits a new limit
+for her live order, the order fills completely before anyone settles the
+limit, and the pending limit now points at nothing. ARION adds that cancel
+cannot clear it (live + parked are zero, `ERR_NOTHING_TO_WITHDRAW`), and that
+if Alice later places a new order, anyone can settle the old limit onto it.
+Suggested fixes: delete both pending maps in settle as cancel does (Light
+Brio), or let cancel run when only a pending limit exists (ARION).
+
+**Why we reject it.** No funds are at stake: a pending limit or readmit holds
+a price or a flag, never escrow. Nothing can be replayed: every settle deletes
+its own pending entry before acting (`settle-token-*-limit`,
+`settle-token-*-readmit`, `settle-token-*-deposit`). A leftover limit settled
+while the maker holds nothing is deleted and refused as "gone"
+(`settle-refused-*`, `(ok false)`). Every pending item is readable
+(`get-token-*-pending-limit`, `-pending-readmit`, `-pending-deposit`) and
+logged at submit, and our keeper settles pending items, so a leftover is
+normally cleared long before a new order exists. If it is not, it is the
+maker's own old instruction: Alice can settle it herself (which deletes it)
+before depositing again. No change.
