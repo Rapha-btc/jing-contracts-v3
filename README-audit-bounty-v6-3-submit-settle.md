@@ -23,6 +23,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | LOW | Light Brio's fix rejected; **ARION's cancel guard adopted**, see below. |
 | Eternal Harp (ARION) | F-2: a swap vault's `jing-refloor` / `refresh-guard` only submits a pending limit that nothing settles | yes | - | **Rejected**, see below. |
 | Eternal Harp (ARION) | F-5: `readmit-token-*` is permissionless, so anyone can queue and settle a victim's readmit | yes | - | **Rejected**, by design, see below. |
+| Eternal Harp (ARION) | F-6: rung `settle-escrow` underflows if `stacks-block-time` goes below `submitted-at` | no | - | Not reachable; **hardened anyway**, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
@@ -401,3 +402,27 @@ putting it back is service, not an attack. The order goes back at the price
 and size the maker set; nothing else changes and no funds move to anyone but
 the book. A maker who does not want to be readmitted cancels, which returns
 parked funds (and now also clears a leftover pending readmit). No change.
+
+## ARION F-6: settle-escrow underflow (not reachable, hardened)
+
+**The claim.** Every rung's `settle-escrow` tests the 24-hour cancel rule as
+`(>= (- stacks-block-time (get submitted-at pending)) u86400)`. If
+`stacks-block-time` were ever below the pending order's `submitted-at`, the
+subtraction would underflow and panic the whole withdraw instead of returning
+a clean error. The submission calls `stacks-block-time` a median-time-past
+value that can go backwards.
+
+**Why it is not reachable.** Median-time-past is a Bitcoin rule. A Nakamoto
+Stacks block's timestamp must be later than its parent's, and signers reject
+blocks that break that, so `stacks-block-time` cannot drop below a
+`submitted-at` recorded in an earlier block.
+
+**Hardened anyway.** The same rule is now written without a subtraction, in
+all six rungs:
+
+```clarity
+(>= stacks-block-time (+ (get submitted-at pending) u86400))
+```
+
+Same 24-hour rule, no underflow possible. This lands with the next rung
+commit (the rung sources carry other changes still under review).
