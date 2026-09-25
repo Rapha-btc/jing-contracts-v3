@@ -18,7 +18,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | yes | MEDIUM | **Fixed**, see below. Source-only in the submission; fork-proven here. |
 | Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | yes | - | **Rejected, by design**, see below. |
 | Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
-| Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | open | MEDIUM | open |
+| Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | no | - | **Rejected**, see below. |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 
@@ -270,3 +270,22 @@ Trade-offs, accepted: the keeper can no longer pick a smaller router chunk;
 remainders between 3 and 499 sats were not exercised through the router.
 The local clarinet-sdk vault suites do not run yet: their fixture market is
 v6, not v6-3 (no `get-token-x-pending-deposit`), so they need a v6-3 mock.
+
+## Celestial Shark: failed cross-remainder reverts the settlement (rejected)
+
+**The claim.** `swap` (and the swap leg of `reprice-or-swap-token-*`)
+deposits, settles the cycle through `settle-with-refresh`, then walks the book
+with the rolled remainder (`cross-remainder-as-x/y`). If more than the market
+minimum is still unfilled, it fails with `ERR_PARTIAL_FILL` (u1017,
+`asserts! (< rem (var-get min-token-*-deposit))`), and that revert also undoes
+the cycle settlement done in the same call. The submission calls this a DoS
+that ties cycle N's settlement to one swapper's crossing in N+1. Source
+analysis only, no fork run.
+
+**Why we reject it.** The revert only undoes the swapper's own transaction.
+Settlement is not owned by `swap`: `settle-with-refresh` is public and
+permissionless, so anyone (a keeper, a maker, the next taker) settles the
+cycle in a separate transaction with a fresh Lazer update, whatever any
+swapper does. A failing swap blocks nobody else. `swap` being all-or-nothing
+(fill within the limit, or revert and keep your funds) is the intended taker
+contract. No change.
