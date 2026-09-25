@@ -15,7 +15,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 |---|---|---|---|---|
 | Eternal Harp (ARION) | F-1: a caught queue-full in settle leaves a ghost deposit that cancel pays twice | yes | HIGH | **Fixed** in `cbf96c4`, see below. Fork-proven by the submitter. |
 | Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | open | MEDIUM | open |
-| Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | open | MEDIUM | open |
+| Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | yes | MEDIUM | **Fixed**, see below. Source-only in the submission; fork-proven here. |
 | Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | open | MEDIUM | open |
 | Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | open | MEDIUM | open |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
@@ -102,3 +102,42 @@ state, though, its settle keeps failing and its cancel does not refund
 pending escrow, so V's 5 and P's 3 stay stuck in pending. Not deployed; it
 needs its own fix before it ever is. It is also over the 100 KB deploy limit,
 so the harness strips comment lines and indentation before deploying it.
+
+## Fluid Briar: switched-off ask on a full X side
+
+**What broke.** `settle-token-x-deposit` refunds a new maker on a full X side
+as "queue-full" when its order is switched off. v6-3 tested
+`(and new-maker full (is-eq ask u0))`, but `ask` comes from `order-x-price`:
+a switched-off pegged ask is `MAX_UINT` (`pegged-ask`), and a fixed ask is its
+limit, which the entry check keeps above 0. So the test never fired. The dead
+order fell through to `park-tenth-token-x` with ask `MAX_UINT`, could park a
+live resident, and then sat on the book at a price that never fills. v6-2
+tested `MAX_UINT` here (`markets-sbtc-stx-jing-v6-2.clar:1349`); the regression
+came in with `c28fc77`. The Y side was right: a switched-off pegged bid is `u0`.
+
+**When it bites.** With ask `MAX_UINT`, `park-tenth-token-x` can only park the
+smallest live maker outside the 10 closest asks, and only when the newcomer is
+bigger. A resting order that is already switched off is parked first when
+there is one. When every resident is inside the 10 closest asks it refunds.
+
+**Fix.** `(is-eq ask MAX_UINT)` in all three copies
+(`markets-sbtc-stx-jing-v6-3.clar`, `-formatted`, `-followAll`).
+
+**Fork runs.** Harness `simulations/verify-v6-3-switched-off-ask.js`
+(`node simulations/verify-v6-3-switched-off-ask.js [prefix] [patched]`). Real
+`jing-core-v6`, `jing-ladder-v1` and market source, no rungs. A fresh market
+keeps 10 protected seats, so a side is full for a new unseated maker at 40.
+The X side holds 38 fillers at 2,000 sats (fixed asks mid x1.50 to x1.87) and
+two small makers, O1 (1,000 sats at x1.96) and O2 (1,500 sats at x1.95). The
+newcomer submits 3,000 sats as a pegged ask, 100 bps over mid with a floor at
+mid x3, so its price at settle is `MAX_UINT`.
+
+| Run | Source | Checks | Simulation | Look at |
+|---|---|---|---|---|
+| Pre-fix | `bb1535d:contracts/markets-sbtc-stx-jing-v6-3.clar` | 222/222, bug reproduced as asserted | [f08e4ebe](https://stxer.xyz/simulations/mainnet/f08e4ebefc97f37fb427bb0226e6e1e9) | step 197 submit, step 199 settle prints `park-x` + `deposit-x`, step 200 O2 parked 1,500, step 204 newcomer on the list |
+| Patched | working tree at this commit | 221/221 | [d1ea2618](https://stxer.xyz/simulations/mainnet/d1ea2618022db5399f650d1aafb9d8ee) | step 197 submit, step 199 settle prints `pending-refund-x` "queue-full", step 200 newcomer has its 3,000 sats back, step 204 O2 not parked |
+
+Regressions pass on both sources: a switched-on pegged ask (floor mid x1.005)
+still goes through the normal park path and parks O1, and a switched-off
+pegged bid on a full Y side (cap mid/4, bid `u0`) refunds "queue-full" with
+nothing parked.

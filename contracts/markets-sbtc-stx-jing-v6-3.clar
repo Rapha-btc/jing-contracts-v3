@@ -1568,7 +1568,7 @@ limit-price spread-bps stacks-block-time (var-get token-x) (var-get token-y)
 (map-delete token-x-pending-deposits who)
 (if (or
 crosses
-(and new-maker full (is-eq ask u0))
+(and new-maker full (is-eq ask MAX_UINT))
 )
 (begin
 (try! (as-contract? ((with-ft (contract-of t) asset-name amount))

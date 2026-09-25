@@ -1561,7 +1561,7 @@
         (and
           new-maker
           full
-          (is-eq ask u0)
+          (is-eq ask MAX_UINT)
         )
       )
       (begin
