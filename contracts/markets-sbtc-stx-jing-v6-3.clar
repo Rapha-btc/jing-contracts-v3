@@ -1635,7 +1635,10 @@ park-error
 (tok-y (var-get token-y))
 )
 (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)) ERR_NOTHING_TO_WITHDRAW)
+(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)
+      (is-some (map-get? token-y-pending-limits caller))
+      (is-some (map-get? token-y-pending-readmits caller)))
+      ERR_NOTHING_TO_WITHDRAW)
 (if (> pending-amount u0)
 (begin
 (try! (as-contract? ((with-stx pending-amount))
@@ -1706,7 +1709,10 @@ true
 (tok-x (var-get token-x))
 )
 (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)) ERR_NOTHING_TO_WITHDRAW)
+(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)
+      (is-some (map-get? token-x-pending-limits caller))
+      (is-some (map-get? token-x-pending-readmits caller)))
+      ERR_NOTHING_TO_WITHDRAW)
 (if (> pending-amount u0)
 (begin
 (try! (as-contract? ((with-ft (contract-of t) asset-name pending-amount))

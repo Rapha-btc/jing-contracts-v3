@@ -20,7 +20,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
 | Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | no | - | **Rejected**, see below. |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
-| Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | - | **Rejected**, see below. |
+| Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | LOW | Light Brio's fix rejected; **ARION's cancel guard adopted**, see below. |
 | Eternal Harp (ARION) | F-2: a swap vault's `jing-refloor` / `refresh-guard` only submits a pending limit that nothing settles | yes | - | **Rejected**, see below. |
 | Eternal Harp (ARION) | F-5: `readmit-token-*` is permissionless, so anyone can queue and settle a victim's readmit | yes | - | **Rejected**, by design, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
@@ -293,7 +293,7 @@ swapper does. A failing swap blocks nobody else. `swap` being all-or-nothing
 (fill within the limit, or revert and keep your funds) is the intended taker
 contract. No change.
 
-## Light Brio L-2 / ARION F-4: leftover pending limits and readmits (rejected)
+## Light Brio L-2 / ARION F-4: leftover pending limits and readmits
 
 **The claim.** `settle-token-*-deposit` only deletes the pending deposit it
 settles. A maker's separate pending limit (`set-token-*-limit`) or pending
@@ -315,7 +315,53 @@ while the maker holds nothing is deleted and refused as "gone"
 logged at submit, and our keeper settles pending items, so a leftover is
 normally cleared long before a new order exists. If it is not, it is the
 maker's own old instruction: Alice can settle it herself (which deletes it)
-before depositing again. No change.
+before depositing again. So we do not delete pending entries inside settle
+(Light Brio's fix): that would also drop a newer pending limit on a live order.
+
+**What we adopted: ARION's cancel guard.** Before, cancel refused with u1005
+unless the caller had live, parked or pending-deposit funds, so a maker whose
+order had filled could not clear their own orphan. Cancel now also runs when
+only a pending limit or pending readmit is left:
+
+```clarity
+(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)
+  (is-some (map-get? token-y-pending-limits caller))
+  (is-some (map-get? token-y-pending-readmits caller)))
+  ERR_NOTHING_TO_WITHDRAW)
+```
+
+In that case cancel deletes the pending limit, pending readmit and stored
+limit, moves no funds and returns `(ok u0)`. Every maker now has one call that
+wipes all of their state. `-followAll` keeps its older cancel.
+
+**Why it helps the swap vaults (ARION F-3).** A vault's `jing-refloor` leaves a
+pending limit on the market; if the vault's position fills before a keeper
+settles it, that limit is an orphan the next batch could inherit (a stale high
+floor switches the next peg off). The vault's `jing-reclaim` / recovery reach
+the market's cancel through `reclaim-core`: before, that call failed u1005 in
+this state; now it succeeds with 0 and clears the orphan, so a reclaim leaves
+the vault's market state clean for the next batch.
+
+**Fork runs.** Harness `simulations/verify-v6-3-cancel-orphan-pending.js`
+(`node simulations/verify-v6-3-cancel-orphan-pending.js [prefix] [patched]`).
+Y side, X mirror on its own market, and an orphan-readmit case on a full third
+market. Every market's balances equal its book totals after each scenario.
+
+| Run | Source | Checks | Simulation |
+|---|---|---|---|
+| Pre-fix | `7c6172b:contracts/markets-sbtc-stx-jing-v6-3.clar` | 227/227, bug reproduced as asserted | [3fbe8566](https://stxer.xyz/simulations/mainnet/3fbe85661a8834d568e023cd286694b0) |
+| Patched | this commit | 225/225 | [5f4f26ee](https://stxer.xyz/simulations/mainnet/5f4f26ee01aa752b9ea79793359d62a7) |
+
+| Step (Y / X) | Call | Pre-fix | Patched |
+|---|---|---|---|
+| 126 / 175 | A cancels with only an orphan pending limit | `(err u1005)`, limit kept | `(ok u0)`, limit, readmit and stored limit cleared |
+| 139 / 188 | third party settles the old limit after A's new order | `(ok true)`: stale limit replaces A's new one | `(err u1030)`, A's limit unchanged |
+| 142 / 191 | cancel with nothing at all | `(err u1005)` | `(err u1005)` |
+| 145 / 194 | A cancels a live order | exact refund | exact refund |
+| 225 | Q cancels with only an orphan pending readmit | `(err u1005)` | `(ok u0)`, readmit cleared |
+
+The pre-fix run shows the stale limit is not cosmetic: A's new passive bid at
+mid/3 became mid x1.5 on Y, and the ask at mid x3 became mid x2/3 on X.
 
 ## ARION F-2: vault refloor only submits a pending limit (rejected)
 
