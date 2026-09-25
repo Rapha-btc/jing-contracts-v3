@@ -16,7 +16,8 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Eternal Harp (ARION) | F-1: a caught queue-full in settle leaves a ghost deposit that cancel pays twice | yes | HIGH | **Fixed** in `cbf96c4`, see below. Fork-proven by the submitter. |
 | Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | open | MEDIUM | open |
 | Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | yes | MEDIUM | **Fixed**, see below. Source-only in the submission; fork-proven here. |
-| Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | open | MEDIUM | open |
+| Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | yes | - | **Rejected, by design**, see below. |
+| Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
 | Celestial Shark | A failed cross-remainder in swap / reprice-or-swap reverts cycle settlement | open | MEDIUM | open |
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
@@ -156,3 +157,90 @@ Regressions pass on both sources: a switched-on pegged ask (floor mid x1.005)
 still goes through the normal park path and parks O1, and a switched-off
 pegged bid on a full Y side (cap mid/4, bid `u0`) refunds "queue-full" with
 nothing parked.
+
+## Fluid Briar: recovered sBTC is never swapped again (rejected)
+
+Scope: `fastpool-pox-5` branch `rapha/fastpool-swap-vault` at `f3ae8ef`,
+`contracts/signer-manager-vault-stx-rewards.clar` and
+`contracts/fastpool-swap-vault.clar`.
+
+**The claim.** After a permissionless `recover-swap-vault`, a second
+`fund-swap-vault` for the same cycle returns u1051 (`ERR_ZERO_VAULT_FUNDING`),
+so a cycle meant to pay STX rewards pays the recovered part in sBTC. Their fork:
+25k of 75k sats came back as sBTC, 0 STX for that part.
+
+**Why it holds, mechanically.** `fund-swap-vault` books the whole funded
+amount as swapped at funding time
+(`swapped-sats: (+ (get swapped-sats settlement) unfunded-sats)`).
+`recover-swap-vault` never takes the recovered sats back out of
+`swapped-sats`, so for that cycle `pot - swapped = 0` and the next fund is
+u1051.
+
+**Why we reject it.** That is the recovery path working as designed. The vault
+only lets the pool recover 432 burn blocks after funding
+(`RECOVERY_DELAY_BLOCKS`, `emergency-recover`), once the swap has had its
+window and failed. Recovery cancels whatever rests on Jing (pending, live,
+parked) and returns the unsold sBTC and any STX to the pool. The pool books the
+sBTC in `recovered-sbtc-by-cycle`, and the distribute step
+(`get-unswapped-for-cycle`) pays each stacker their share of it as sBTC next to
+their STX. Sats are recovered because they could not be swapped; paying them
+as sBTC is the intended fallback, not a loss. No change.
+
+The related real risk is Fluid Briar's `router-swap` finding: a griefer could
+force that recovery on purpose. It is fixed, see the next section.
+
+## Fluid Briar: router-swap sliver burns the cooldown
+
+**What broke.** In the swap vaults, `router-swap` is permissionless and sold
+`(sweep-amount requested)`: the whole balance when it is at or under
+`max-chunk-sats`, otherwise whatever the caller asked for. Router sales share a
+one-burn-block cooldown. Once a vault held more than one chunk, anyone could
+sell a tiny sliver first in each burn block, so the keeper's real chunk failed
+with u16044. Kept up for the 432-block recovery delay, that forces the
+recovery path and stakers get sBTC instead of STX.
+
+**Rating.** LOW, not LOW-MED as submitted. The griefer gains nothing, pays a
+fee every burn block for about 3 days, sells the vault's sBTC at the vault's
+own protected floor, and loses the whole attack the first time the keeper wins
+a race.
+
+**Fix.** `router-swap` takes no amount any more: `(router-swap (update (buff 8192)))`
+sells `(chunk-amount)` = min(sBTC balance, `max-chunk-sats`), so every
+permissionless sale is the whole balance or one full chunk. The now
+unreachable chunk-size assert is removed from `router-swap`. `jing-take` and
+`router-swap-split*` are pool-only (DAO-only for ccd016) and keep caller
+sizing. `max-chunk-sats` now defaults to 1,000,000 sats (0.01 BTC, was 5M).
+
+| Repo | Vault | Commit |
+|---|---|---|
+| `fastpool-pox-5` (`rapha/fastpool-swap-vault`) | `contracts/fastpool-swap-vault.clar` | `97712fb` |
+| `juicestx` (`main`) | `contracts/pox-5/juice-pool-swap-vault.clar` | `20fb4f1` |
+| `citycoins-protocol` (`feat/ccd015-redemption-book`) | `contracts/extensions/ccd016-swap-vault-mia-v2.clar` | `b6206f1` |
+
+**Fork runs** (all green, 14 runs). The fix check: with more than one chunk in
+the vault, a stranger's `router-swap` returns `(amount u<cap>)` and the vault
+drops by exactly the cap; a second call in the same burn block is `(err u16044)`
+and moves nothing.
+
+| Vault | Run | Checks | Simulation |
+|---|---|---|---|
+| fastpool | lifecycle (fix check) | 41/41 | [0adbc215](https://stxer.xyz/simulations/mainnet/0adbc215c819850feda159662756aaf4) |
+| fastpool | guards | 22/22 | [295eb259](https://stxer.xyz/simulations/mainnet/295eb2590799217f140aacc922e6873c) |
+| fastpool | maker | 35/35 | [fb330f38](https://stxer.xyz/simulations/mainnet/fb330f38497cc25bd554fcd7e6010757) |
+| all three | dust vaults | 68/68 | [1720443f](https://stxer.xyz/simulations/mainnet/1720443fe44fecb01421e89412335374) |
+| juice | lifecycle (fix check) | 40/40 | [875f822c](https://stxer.xyz/simulations/mainnet/875f822ca07867b215823863c6a19ae1) |
+| juice | guards | 21/21 | [7aee2d88](https://stxer.xyz/simulations/mainnet/7aee2d8803af3f83e080a6c287bac57d) |
+| juice | maker | 34/34 | [8563e966](https://stxer.xyz/simulations/mainnet/8563e9663ba71c8105f68c01212b56bd) |
+| juice | jing-router | 45/45 | [c9a12c66](https://stxer.xyz/simulations/mainnet/c9a12c6668057a16eb521087262da447) |
+| juice | jing-take | 40/40 | [44518355](https://stxer.xyz/simulations/mainnet/44518355cda55a4e47ae74b61b346bcc) |
+| juice | split-pyth | 41/41 | [4a4b99c8](https://stxer.xyz/simulations/mainnet/4a4b99c880aff85302dff7477d442b6d) |
+| juice | recovery | 189/189 | [3518587d](https://stxer.xyz/simulations/mainnet/3518587d0dc97bf3b24872634df86a85) |
+| ccd016 v2 | coverage (fix check) | 101/101 | [3c08babe](https://stxer.xyz/simulations/mainnet/3c08babeb990d72481fa968405016641) |
+| ccd016 v2 | happy-path | 53/53 | [b50cdf63](https://stxer.xyz/simulations/mainnet/b50cdf63e9753e773e41b2d3205330ef) |
+| ccd016 v2 | parked | 136/136 | [6d1f1880](https://stxer.xyz/simulations/mainnet/6d1f188055c71bbd6a6f093902b1368a) |
+
+Trade-offs, accepted: the keeper can no longer pick a smaller router chunk;
+`set-max-chunk-sats` is the lever (a DAO proposal for ccd016). Final
+remainders between 3 and 499 sats were not exercised through the router.
+The local clarinet-sdk vault suites do not run yet: their fixture market is
+v6, not v6-3 (no `get-token-x-pending-deposit`), so they need a v6-3 mock.
