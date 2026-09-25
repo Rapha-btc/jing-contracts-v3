@@ -137,6 +137,21 @@ mid x3, so its price at settle is `MAX_UINT`.
 | Pre-fix | `bb1535d:contracts/markets-sbtc-stx-jing-v6-3.clar` | 222/222, bug reproduced as asserted | [f08e4ebe](https://stxer.xyz/simulations/mainnet/f08e4ebefc97f37fb427bb0226e6e1e9) | step 197 submit, step 199 settle prints `park-x` + `deposit-x`, step 200 O2 parked 1,500, step 204 newcomer on the list |
 | Patched | working tree at this commit | 221/221 | [d1ea2618](https://stxer.xyz/simulations/mainnet/d1ea2618022db5399f650d1aafb9d8ee) | step 197 submit, step 199 settle prints `pending-refund-x` "queue-full", step 200 newcomer has its 3,000 sats back, step 204 O2 not parked |
 
+**Reading step 199.** The newcomer `SP1HP2MDJ4TXVA1N5WDARSGNG4K8T201048S1HFW0`
+submitted at step 197: sell 3,000 sats pegged 100 bps over the mid, never
+below `u80745223039773` (8,075 uSTX per sat, about 124 sats per STX). The mid
+was `u26918235626539` (2,692 uSTX per sat, about 372 sats per STX), so mid + 1%
+is far under the floor and the order is switched off. The 3,000 sats were
+already escrowed by the submit, so the settle moves no tokens and only prints.
+
+- Pre-fix, step 199: `park-x` takes O2 (`SP534X06YZ64WWJ87ENZX0RY2CSPF0MZ87257ZX9`,
+  1,500 sats, live, smaller than the newcomer) off the book, then `deposit-x`
+  puts the switched-off 3,000 sats on it. A live maker is bumped for an order
+  that can never trade.
+- Patched, step 199 ([page 10](https://stxer.xyz/simulations/mainnet/d1ea2618022db5399f650d1aafb9d8ee?page=10)):
+  `pending-refund-x` with reason "queue-full". The side is full and the order
+  is switched off, so the 3,000 sats go back to the newcomer and O2 stays.
+
 Regressions pass on both sources: a switched-on pegged ask (floor mid x1.005)
 still goes through the normal park path and parks O1, and a switched-off
 pegged bid on a full Y side (cap mid/4, bid `u0`) refunds "queue-full" with
