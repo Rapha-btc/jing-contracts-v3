@@ -217,7 +217,7 @@ sizing. `max-chunk-sats` now defaults to 1,000,000 sats (0.01 BTC, was 5M).
 | `juicestx` (`main`) | `contracts/pox-5/juice-pool-swap-vault.clar` | `20fb4f1` |
 | `citycoins-protocol` (`feat/ccd015-redemption-book`) | `contracts/extensions/ccd016-swap-vault-mia-v2.clar` | `b6206f1` |
 
-**Fork runs** (all green, 14 runs). The fix check: with more than one chunk in
+**Fork runs** (14 runs, all green on the 5M default; see the 1M rerun note below). The fix check: with more than one chunk in
 the vault, a stranger's `router-swap` returns `(amount u<cap>)` and the vault
 drops by exactly the cap; a second call in the same burn block is `(err u16044)`
 and moves nothing.
@@ -238,6 +238,32 @@ and moves nothing.
 | ccd016 v2 | coverage (fix check) | 101/101 | [3c08babe](https://stxer.xyz/simulations/mainnet/3c08babeb990d72481fa968405016641) |
 | ccd016 v2 | happy-path | 53/53 | [b50cdf63](https://stxer.xyz/simulations/mainnet/b50cdf63e9753e773e41b2d3205330ef) |
 | ccd016 v2 | parked | 136/136 | [6d1f1880](https://stxer.xyz/simulations/mainnet/6d1f188055c71bbd6a6f093902b1368a) |
+
+**Rerun on the 1M default: three sims hit u3002, as intended.** The table
+above ran before `max-chunk-sats` moved from 5M to 1M. On the rerun, fastpool
+lifecycle ([da0534f5](https://stxer.xyz/simulations/mainnet/da0534f57690429cb4251f0ec1545c24)),
+ccd016 v2 coverage (86/101, [739f2591](https://stxer.xyz/simulations/mainnet/739f25913d9b030f5e40c02e9fb33d3e))
+and happy-path (44/53, [a5a898c8](https://stxer.xyz/simulations/mainnet/a5a898c86808eea0641f58ef636592b6))
+fail at the router sale with u3002, `ERR_MIN_OUT` in
+`swap-router-sbtc-stx-jing-v5-3.clar`. Every other sim stays green.
+
+This is the vault's 1% floor refusing a bad price, not a regression. The
+vault takes the mid from the v6-3 market's `refresh-mid` on the fresh Lazer
+update and sets `min-out` at mid x (1 - `slippage-bps`), 100 bps by default.
+At 02:02 UTC on 2026-09-25 the Lazer mid was 269,792 STX per BTC (BTC
+$84,611.47, STX $0.31362), so the floor was 267,094. Bitflow paid 266,815
+for 1k sats (-1.10%), 266,640 for 50k (-1.17%) and 263,159 for 1M (-2.46%).
+The AMMs sat about 1.1% under Pyth, so a router sale of any size misses the
+floor. A control run of the pre-change fastpool code (`f3ae8ef`, old
+`router-swap` with an amount) fails the same way at the same tip. Earlier the
+same day the pools were closer to Pyth and the same sims passed. When the
+pools sit under the floor the vault waits (or the maker / Jing book path
+fills); the admin lever is `set-slippage-bps`. The sims that sell through the
+router should either expect u3002 in that market or raise `slippage-bps`
+before the sale.
+
+The commits above include result JSONs from those red reruns (fastpool
+`fastpool-liquidation.json`, citycoins `coverage.json` and `happy-path.json`).
 
 Trade-offs, accepted: the keeper can no longer pick a smaller router chunk;
 `set-max-chunk-sats` is the lever (a DAO proposal for ccd016). Final
