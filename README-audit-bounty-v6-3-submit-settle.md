@@ -22,6 +22,7 @@ Review is in progress. Rows marked "open" are not decided yet.
 | Light Brio | L-1: caught u1010 drops the entrant's parked carry | no | - | Not reachable in the full branch: its filtered append cannot fail. The carry loss it describes does happen in the non-full branch; ARION's fix covers it (victim P in the harness below). |
 | Light Brio, Eternal Harp (ARION) | L-2 / F-4: settle leaves pending limits and readmits behind; a leftover limit can later be settled onto a new order | yes | - | **Rejected**, see below. |
 | Eternal Harp (ARION) | F-2: a swap vault's `jing-refloor` / `refresh-guard` only submits a pending limit that nothing settles | yes | - | **Rejected**, see below. |
+| Eternal Harp (ARION) | F-5: `readmit-token-*` is permissionless, so anyone can queue and settle a victim's readmit | yes | - | **Rejected**, by design, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
@@ -338,3 +339,19 @@ update. Letting anyone settle is also by design: the limit value is the
 vault's own oracle-checked number, so a third party only chooses the moment
 within the freshness window, and a crossing print refuses the change instead
 of applying it. No change.
+
+## ARION F-5: permissionless readmit (rejected, by design)
+
+**The claim.** Anyone can call `readmit-token-*` for any parked maker. That
+queues a pending readmit, so the maker's own readmit fails
+`ERR_ALREADY_PENDING` until it settles, and the permissionless
+`settle-token-*-readmit` lets a third party put the parked order back on the
+book at the maker's stored limit on a print of their choosing. Suggested fix:
+only `who` may submit their own readmit.
+
+**Why we reject it.** Readmitting parked makers is meant to be done by anyone,
+keepers first: a parked order sits off the book only until there is room, and
+putting it back is service, not an attack. The order goes back at the price
+and size the maker set; nothing else changes and no funds move to anyone but
+the book. A maker who does not want to be readmitted cancels, which returns
+parked funds (and now also clears a leftover pending readmit). No change.
