@@ -45,9 +45,15 @@
 (define-constant ERR_INSUFFICIENT (err u7007))
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_NAME (err u7009))
-;; No shares are minted while the index is under 1e-3 of SCALE. A close at
-;; SOLD_OUT_INDEX (1e-6 of SCALE) then forfeits under 0.1% of any deposit to the
-;; next epoch; minting deeper in the tail made that loss unbounded.
+;; The floor under the index: sync closes the epoch (a tail roll) as soon as
+;; unfilled-index drops under 1e-3 of SCALE. The dust test (SOLD_OUT_DUST) is
+;; on an AMOUNT, which leaves the index unbounded from below: new-index reduces
+;; to actual * SCALE / total-shares, and shares are minted as amount * SCALE /
+;; unfilled-index, so every sell-down and top-up cycle mints more of them until
+;; the index truncates to 0 with `actual` still above the dust floor. At index 0
+;; a deposit divides by zero, every withdraw is u7007 and sync freezes the zero.
+;; Every action syncs first, so an open epoch never has an index under this
+;; floor: shares are minted at most 1000 per sat, and 0 is out of reach.
 (define-constant MINT_FLOOR u1000000000)
 (define-constant ERR_UPDATE_REQUIRED (err u7012))
 
@@ -56,21 +62,9 @@
 ;; pool can keep a rounding remainder, and the market refunds a remainder under
 ;; its minimum back here. An absolute floor, not a fraction of the pool: the
 ;; remainder is a fixed size whatever the pool was (a fraction closed a small
-;; pool late and a big one early). The pool is sold out, the next deposit starts
-;; a fresh epoch; what is left rides into it.
+;; pool late and a big one early). The pool is sold out: the close is a tail
+;; roll, so what is left is reserved for the closing epoch's members.
 (define-constant SOLD_OUT_DUST u10)
-
-;; and the floor under the index itself. The dust test above is on an AMOUNT,
-;; which leaves `unfilled-index` unbounded from below: new-index reduces to
-;; actual * SCALE / total-shares, so once total-shares passes actual * SCALE the
-;; index truncates to 0 while `actual` is still above the dust floor and the
-;; epoch stays open. It gets there on its own, because shares are minted as
-;; amount * SCALE / unfilled-index, so every sell-down and top-up cycle mints
-;; more of them. At index 0 a deposit divides by zero, every withdraw is u7007
-;; and sync freezes the zero, with no way back. Closing on EITHER test keeps the
-;; absolute dust behaviour and restores the guarantee the index never reaches 0
-;; while an epoch is open.
-(define-constant SOLD_OUT_INDEX u1000000)
 
 (define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1)
@@ -261,11 +255,10 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (var-set held-sats local)
     (if (is-eq shares u0)
-      (begin
-        ;; nobody in: nothing to attribute, just keep the STX watermark
-        (var-set stx-accounted stx-now)
-        (ok true)
-      )
+      ;; nobody in: nothing to attribute. The watermark stays put, so proceeds
+      ;; that arrive with no members (a fill of ownerless dust) are credited
+      ;; to the next epoch's members at their first sync, never stranded.
+      (ok true)
       (let (
           (new-index (if (and (< actual recorded) (> recorded u0))
             (/ (* (var-get unfilled-index) actual) recorded)
@@ -275,22 +268,17 @@
             (+ (var-get proceeds-index) (/ (* gained SCALE) shares))
             (var-get proceeds-index)
           ))
-          (current-epoch (var-get epoch))
         )
         (var-set unfilled-index new-index)
         (var-set proceeds-index new-proceeds)
         (var-set stx-accounted stx-now)
-        ;; sold out (down to sub-sat dust): close the epoch, restart the pool.
-        ;; Dust still resting rides into the next epoch as a gift.
+        ;; sold out (under the dust floor or the index floor): close the epoch
+        ;; the lossless way, a tail roll. What still rests comes off the market
+        ;; and the closing epoch's unsold share is reserved for its members, so
+        ;; nothing of theirs rides into the next epoch or fills with no members.
         (and
-          (or (< actual SOLD_OUT_DUST) (< new-index SOLD_OUT_INDEX))
-          (begin
-            (map-set epoch-final-proceeds current-epoch new-proceeds)
-            (is-ok (contract-call? LADDER log-epoch-closed current-epoch new-proceeds))
-            (var-set epoch (+ current-epoch u1))
-            (var-set total-shares u0)
-            (var-set unfilled-index SCALE)
-          )
+          (or (< actual SOLD_OUT_DUST) (< new-index MINT_FLOOR))
+          (try! (roll-tail))
         )
         (ok true)
       )
@@ -308,16 +296,21 @@
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
+    ;; sync rolls an epoch in its tail (index under MINT_FLOOR), so the mint
+    ;; below never divides by a collapsed index
     (try! (sync))
-    ;; No mint in the tail of an epoch (index under 1e-3 of SCALE): the deposit
-    ;; rolls the epoch instead, so the share mint below never divides by a
-    ;; collapsed (zero) index and nobody joins a pool that is nearly sold out.
-    (and (< (var-get unfilled-index) MINT_FLOOR) (try! (roll-tail)))
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? SBTC transfer amount member current-contract none))
       (let (
           (to-push (+ amount (var-get held-sats)))
-          (shares (/ (* amount SCALE) (var-get unfilled-index)))
+          ;; an empty pool may still hold units nobody owns (rounding dust left
+          ;; by the last exits or a roll): the first depositor takes them in
+          ;; with their own, so the books match what is really there
+          (orphan (if (is-eq (var-get total-shares) u0)
+            (+ (market-size) (var-get held-sats))
+            u0
+          ))
+          (shares (/ (* (+ amount orphan) SCALE) (var-get unfilled-index)))
           (pos (position-of member))
           (epo (var-get epoch))
         )
@@ -401,30 +394,47 @@
         (ok paid)
         (let (
             (fi (var-get unfilled-index))
-            (mine (/ (* (get shares pos) fi) SCALE))
+            (member-shares (get shares pos))
+            (mine (/ (* member-shares fi) SCALE))
             ;; round the burn UP: a floor here paid `amount` for fewer shares than
             ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
-            (shares-out (if (>= amount mine)
-              (get shares pos)
-              (/ (+ (* amount SCALE) (- fi u1)) fi)
+            (partial (/ (+ (* amount SCALE) (- fi u1)) fi))
+            ;; a full exit when asked for all, or when the partial would leave
+            ;; shares worth under 1 unit (ARION F-8: such a rest could never be
+            ;; withdrawn). `or` stops at the first test, so the subtraction only
+            ;; runs for amount < mine, where partial <= shares - 1.
+            (full (or
+              (>= amount mine)
+              (is-eq (/ (* (- member-shares partial) fi) SCALE) u0)
             ))
-            (take (if (>= amount mine)
+            (shares-out (if full
+              member-shares
+              partial
+            ))
+            (take (if full
               mine
               amount
             ))
             (epo (var-get epoch))
           )
-          (asserts! (> take u0) ERR_INSUFFICIENT)
-          (try! (pull-to-held-sats take))
-          (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
-            (try! (contract-call? SBTC transfer take current-contract member none))
-          ))
-          (var-set held-sats (- (var-get held-sats) take))
-          (if (is-eq shares-out (get shares pos))
+          ;; a position already worth 0 units still exits: it burns its shares
+          ;; and moves nothing (a zero transfer fails)
+          (and
+            (> take u0)
+            (begin
+              (try! (pull-to-held-sats take))
+              (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
+                (try! (contract-call? SBTC transfer take current-contract member none))
+              ))
+              (var-set held-sats (- (var-get held-sats) take))
+              true
+            )
+          )
+          (if full
             (map-delete positions member)
             (map-set positions member {
               epoch: epo,
-              shares: (- (get shares pos) shares-out),
+              shares: (- member-shares shares-out),
               paid-index: (var-get proceeds-index),
             })
           )
@@ -455,10 +465,9 @@
   (begin
     (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
     (try! (sync))
-    (let ((paid (try! (settle-proceeds tx-sender))))
-      (is-ok (contract-call? LADDER log-claim tx-sender (get stx paid) (var-get epoch)))
-      (ok paid)
-    )
+    ;; settle-proceeds logs the payout (and an old-epoch position also gets
+    ;; its reserved unsold share)
+    (settle-proceeds tx-sender)
   )
 )
 
@@ -497,14 +506,14 @@
 ;; the mark. Called after sync by every member action.
 ;; RAPHA NEEDS TO DOUBLE REVIEW this tail roll before any deploy (bounty
 ;; muerdzoc805a745ecc99, Nilo's tail freeze). Not fork-tested yet. Also still
-;; open for this rung: ARION F-7 (proceeds absorbed while no members), F-8
-;; (a position that rounds to 0 can never withdraw), F-9 (settle-escrow wants
+;; open for this rung: ARION F-7 (proceeds absorbed while no members), F-9 (settle-escrow wants
 ;; a Lazer update even for exits that do not need one).
-;; Tail roll: a deposit that finds the epoch in its tail closes it without
-;; loss. The order comes back from the market (cancel returns pending, live
-;; and parked with no oracle or pause check), the closing epoch's unsold
-;; share is reserved at its final unfilled-index for its members to take on
-;; their next withdraw, claim or deposit, and the deposit opens a fresh epoch.
+;; Tail roll: every sold-out close in sync (dust or index floor) closes the
+;; epoch without loss. The order comes back from the market
+;; (cancel returns pending, live and parked with no oracle or pause check),
+;; the closing epoch's unsold share is reserved at its final unfilled-index
+;; for its members to take on their next withdraw, claim or deposit, and the
+;; next deposit opens a fresh epoch.
 (define-private (roll-tail)
   (let ((epo (var-get epoch)))
     (if (> (market-size) u0)
@@ -523,12 +532,13 @@
           owed
           free
         ))
+        (final-proceeds (var-get proceeds-index))
       )
-      (map-set epoch-final-proceeds epo (var-get proceeds-index))
+      (map-set epoch-final-proceeds epo final-proceeds)
       (map-set epoch-final-unfilled epo (var-get unfilled-index))
       (var-set reserved-sats (+ (var-get reserved-sats) reserve))
       (var-set held-sats (- free reserve))
-      (is-ok (contract-call? LADDER log-epoch-closed epo (var-get proceeds-index)))
+      (is-ok (contract-call? LADDER log-epoch-closed epo final-proceeds))
       (var-set epoch (+ epo u1))
       (var-set total-shares u0)
       (var-set unfilled-index SCALE)
@@ -540,15 +550,16 @@
 (define-private (settle-proceeds (who principal))
   (match (map-get? positions who)
     pos (let (
-        (current (is-eq (get epoch pos) (var-get epoch)))
+        (pos-epoch (get epoch pos))
+        (current (is-eq pos-epoch (var-get epoch)))
         (upto (if current
           (var-get proceeds-index)
-          (final-index (get epoch pos))
+          (final-index pos-epoch)
         ))
         (owed (/ (* (get shares pos) (- upto (get paid-index pos))) SCALE))
         (back (if current
           u0
-          (/ (* (get shares pos) (final-unfilled (get epoch pos))) SCALE)
+          (/ (* (get shares pos) (final-unfilled pos-epoch)) SCALE)
         ))
       )
       (and
@@ -570,6 +581,12 @@
       (if current
         (map-set positions who (merge pos { paid-index: upto }))
         (map-delete positions who)
+      )
+      ;; one log for every payout, whichever action ran it (claim, withdraw,
+      ;; deposit); best effort like every other print
+      (and
+        (or (> owed u0) (> back u0))
+        (is-ok (contract-call? LADDER log-payout who owed back pos-epoch))
       )
       (ok { stx: owed, sbtc: back })
     )

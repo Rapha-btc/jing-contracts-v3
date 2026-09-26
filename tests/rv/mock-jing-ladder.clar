@@ -132,13 +132,6 @@
   )
   (begin (count-action) (asserts! true (err u0)) (ok true))
 )
-(define-public (log-claim
-    (member principal)
-    (amount uint)
-    (epoch uint)
-  )
-  (begin (count-action) (asserts! true (err u0)) (ok true))
-)
 (define-public (log-payout
     (member principal)
     (proceeds uint)
