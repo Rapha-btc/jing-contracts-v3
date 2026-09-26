@@ -483,6 +483,32 @@
   )
 )
 
+;; Every payout of a member's claim, from the one place a rung pays it
+;; (settle-proceeds), whatever action ran it: `proceeds` is the fill output
+;; (STX on a buy rung, sBTC on a sell rung), `back` the unsold input returned
+;; from an epoch closed by a tail roll, `epoch` the position's own epoch.
+(define-public (log-payout
+    (member principal)
+    (proceeds uint)
+    (back uint)
+    (epoch uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-payout",
+      rung: contract-caller,
+      current: (is-current contract-caller rung),
+      side: (get side rung),
+      price: (get price rung),
+      member: member,
+      proceeds: proceeds,
+      back: back,
+      epoch: epoch,
+    })
+    (ok true)
+  )
+)
+
 (define-public (log-epoch-closed
     (epoch uint)
     (final-proceeds-index uint)

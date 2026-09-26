@@ -139,6 +139,14 @@
   )
   (begin (count-action) (asserts! true (err u0)) (ok true))
 )
+(define-public (log-payout
+    (member principal)
+    (proceeds uint)
+    (back uint)
+    (epoch uint)
+  )
+  (begin (count-action) (asserts! true (err u0)) (ok true))
+)
 (define-public (log-epoch-closed
     (epoch uint)
     (final-proceeds-index uint)
