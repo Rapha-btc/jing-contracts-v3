@@ -507,6 +507,34 @@
   )
 )
 
+;; A rung changed its share unit (index rescale): from here on 1 share is
+;; 1000 shares of the previous scale. Every later rung event of this rung is in
+;; the new unit, until the next rescale; an epoch closes at the scale in force.
+;; `proceeds-index` is where the new scale's STX segment starts (the marker).
+(define-public (log-rescale
+    (epoch uint)
+    (scale uint)
+    (proceeds-index uint)
+    (unfilled-index uint)
+    (total-shares uint)
+  )
+  (let ((rung (try! (rung-of contract-caller))))
+    (print {
+      event: "rung-rescale",
+      rung: contract-caller,
+      current: (is-current contract-caller rung),
+      side: (get side rung),
+      price: (get price rung),
+      epoch: epoch,
+      scale: scale,
+      proceeds-index: proceeds-index,
+      unfilled-index: unfilled-index,
+      total-shares: total-shares,
+    })
+    (ok true)
+  )
+)
+
 ;; Two-step handover with a cooldown: the owner proposes (none cancels), the
 ;; proposed owner accepts, and only after TIMELOCK_BURN_BLOCKS.
 (define-public (propose-owner (new-owner (optional principal)))
