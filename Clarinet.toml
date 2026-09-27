@@ -1,330 +1,38 @@
 [project]
 name = "jing-contracts-v3"
-description = "Jing v3 protocol: core registry + per-pair markets + per-user vaults + reserve/snpl credit lines"
+description = "Jing next deploy set: v6-3 submit + settle market, core-v6, ladder-v1"
 authors = []
 telemetry = false
 cache_dir = "./.cache"
 
-# Mainnet contracts the project depends on.
+# Only the contracts we intend to deploy next. Everything already live or
+# retired is in Clarinet-legacy.toml (the vitest unit tests use that one).
+#
+# Also in the next deploy set but not declared here, because they name the
+# market or ladder by full SPV9K21... principal, which does not resolve in
+# simnet until those are on mainnet: swap-router-sbtc-stx-jing-v5-3,
+# jing-ladder-dispatch, and the six rung templates (jing-{buy,sell}-stx,
+# -market-spread, -core-spread). Check those with their own Clarinet-*.toml
+# or on a stxer fork.
+#
+# Deploy order: jing-core-v6, jing-ladder-v1, jing-rung-deposit-trait,
+# markets-sbtc-stx-jing-v6-3, swap-router-sbtc-stx-jing-v5-3,
+# jing-ladder-dispatch, then rungs per price.
+
 [[project.requirements]]
 contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
 
 [[project.requirements]]
-contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
-
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-storage-v4"
-
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-oracle-v4"
-
-# Named explicitly now that the markets hard-code the execution plan instead of
-# accepting it as trait arguments.
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-pnau-decoder-v3"
-
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-core-v4"
-
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.pyth-traits-v2"
-
-[[project.requirements]]
-contract_id = "SP1CGXWEAMG6P6FT04W66NVGJ7PQWMDAC19R7PJ0Y.wormhole-traits-v2"
-
-# Bitflow's wstx SIP-010 facade -- vault-sbtc-stx and sbtc-stx-jing-v3
-# pass this principal as the canonical token-y trait. Internally it
-# delegates to native-STX operations.
-[[project.requirements]]
-contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
-
-# v2 sBTC/STX Jing market -- still hardcoded by sbtc-stx-jing-snpl.clar
-# (snpl migration to sbtc-stx-jing-v3 is pending).
-[[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.sbtc-stx-0-jing-v2"
-
-# Deployed creator escrow the bonus contract reads deliveries from.
-[[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.creator-escrow-v2-jing"
-
-# Bitflow xyk pool (vault-sbtc-stx execute-bitflow-swap path).
-[[project.requirements]]
-contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2"
-
-[[project.requirements]]
-contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1"
-
-# Bitflow DLMM (both vaults execute-dlmm-swap path).
-[[project.requirements]]
-contract_id = "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1"
-
-[[project.requirements]]
-contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-1"
-
-[[project.requirements]]
-contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15"
-
-[[project.requirements]]
-contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10"
-[[project.requirements]]
-contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2"
-
-[[project.requirements]]
-contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15"
-
-[[project.requirements]]
-contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-swap-helper-v-1-3"
-[[project.requirements]]
-contract_id = "SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070"
-
-[[project.requirements]]
-contract_id = "SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-fees-v1_0_0-0070"
-
-[[project.requirements]]
-contract_id = "SP1Y5YSTAHZ88XYK1VPDH24GY0HPX5J4JECTMY4A1.wstx"
-
-# Pyth Lazer on Stacks (markets v4 price source)
-[[project.requirements]]
-contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-traits"
-
-[[project.requirements]]
-contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
+contract_id = "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard"
 
 [[project.requirements]]
 contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle"
 
-# Live Jing stack the v3 vault talks to by fully qualified principal (deployed
-# from chavita): the Lazer market, the retail router v1, the core registry
-# and the SIP-018 intent hash builder.
 [[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v3"
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
 
-[[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth"
-
-[[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jingswap"
-
-[[project.requirements]]
-contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jingswap-v1"
-
-
-
-[repl.remote_data]
-enabled = true
-api_url = 'https://api.hiro.so'
-
-[repl.analysis]
-passes = []
-check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
-
-# ----- Local contracts -----
-# Order matters for the simnet deploy plan: dependencies before dependents.
-
-[contracts.jing-core]
-path = "contracts/jing-core.clar"
-clarity_version = 4
-epoch = "3.4"
-
-[contracts.jing-vault-auth]
-path = "contracts/jing-vault-auth.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.reserve-trait]
-path = "contracts/reserve-trait.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.snpl-trait]
-path = "contracts/snpl-trait.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing]
-path = "contracts/markets-sbtc-stx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v2]
-path = "contracts/markets-sbtc-stx-jing-v2.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v3]
-path = "contracts/markets-sbtc-stx-jing-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v4]
-path = "contracts/markets-sbtc-stx-jing-v4.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.swap-router-sbtc-stx-jing-v3]
-path = "contracts/swap-router-sbtc-stx-jing-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.vault-sbtc-stx-v3]
-path = "contracts/vault-sbtc-stx-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.vault-sbtc-stx-v4]
-path = "contracts/vault-sbtc-stx-v4.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.swap-router-sbtc-stx-jing]
-path = "contracts/swap-router-sbtc-stx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-usdcx-jing]
-path = "contracts/markets-sbtc-usdcx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-usdcx-jing-v2]
-path = "contracts/markets-sbtc-usdcx-jing-v2.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.vault-sbtc-stx]
-path = "contracts/vault-sbtc-stx.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.vault-sbtc-usdcx]
-path = "contracts/vault-sbtc-usdcx.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.reserve-sbtc-stx-jing]
-path = "contracts/reserve-sbtc-stx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.snpl-sbtc-stx-jing]
-path = "contracts/snpl-sbtc-stx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-escrow]
-path = "contracts/creator-escrow.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-escrow-stxer]
-path = "contracts/creator-escrow-stxer.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-escrow-v2]
-path = "contracts/creator-v2/creator-escrow-v2.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-escrow-v3]
-path = "contracts/creator-v3/creator-escrow-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-escrow-v2-stxer]
-path = "contracts/creator-escrow-v2-stxer.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.rfq-sbtc-usdcx-jing]
-path = "contracts/rfq/rfq-sbtc-usdcx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.rfq-sbtc-stx-jing]
-path = "contracts/rfq/rfq-sbtc-stx-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-core-v2]
-path = "contracts/jing-core-v2.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-core-v3]
-path = "contracts/jing-core-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-core-v4]
-path = "contracts/jing-core-v4.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-core-v5]
-path = "contracts/jing-core-v5.clar"
-clarity_version = 5
-epoch = "3.4"
-
-# Coverage-instrumented copy of vault-sbtc-stx-v2: identical source with the
-# SPV9K21 principal prefix rewritten to relative refs and the Bitflow venues
-# rewritten to the RV mocks (the wstx facade's is-standard rejects simnet's
-# mixed ST/SM principals), so the manifest deploys it against the local jing
-# stack and lcov can measure it. The unit suite drives THIS copy; a sync-guard
-# test fails if it drifts from the canonical.
-[contracts.vault-sbtc-stx-v2-testable]
-path = "contracts/test/vault-sbtc-stx-v2-testable.clar"
-clarity_version = 5
-epoch = "3.4"
-
-# RV mock venues, promoted into the manifest for the testable vault above.
-[contracts.sip-010-trait]
-path = "tests/rv/sip-010-trait.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.mock-xyk-core]
-path = "tests/rv/mock-xyk-core.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.mock-xyk-pool]
-path = "tests/rv/mock-xyk-pool.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.mock-dlmm-router]
-path = "tests/rv/mock-dlmm-router.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.mock-dlmm-pool]
-path = "tests/rv/mock-dlmm-pool.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.rfq-sbtc-stx-jing-v2]
-path = "contracts/rfq/rfq-sbtc-stx-jing-v2.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.rfq-sbtc-stx-jing-v3]
-path = "contracts/rfq/rfq-sbtc-stx-jing-v3.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.rfq-mm-vault-jing]
-path = "contracts/rfq/rfq-mm-vault-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.creator-bonus-jing]
-path = "contracts/deploying/creator-bonus-jing.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-ladder]
-path = "contracts/jing-ladder.clar"
+[contracts.jing-core-v6]
+path = "contracts/jing-core-v6.clar"
 clarity_version = 5
 epoch = "3.4"
 
@@ -338,52 +46,15 @@ path = "contracts/jing-rung-deposit-trait.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-ladder-dispatch]
-path = "contracts/jing-ladder-dispatch.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-buy-stx]
-path = "contracts/jing-buy-stx.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.jing-sell-stx]
-path = "contracts/jing-sell-stx.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v5]
-path = "contracts/markets-sbtc-stx-jing-v5.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v6]
-path = "contracts/markets-sbtc-stx-jing-v6.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.markets-sbtc-stx-jing-v6-2]
-path = "contracts/markets-sbtc-stx-jing-v6-2.clar"
-clarity_version = 5
-epoch = "3.4"
-
 [contracts.markets-sbtc-stx-jing-v6-3]
 path = "contracts/markets-sbtc-stx-jing-v6-3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.markets-sbtc-stx-jing-v7]
-path = "contracts/markets-sbtc-stx-jing-v7.clar"
-clarity_version = 5
-epoch = "3.4"
+[repl.remote_data]
+enabled = true
+api_url = 'https://api.hiro.so'
 
-[contracts.swap-router-sbtc-stx-jing-v4]
-path = "contracts/swap-router-sbtc-stx-jing-v4.clar"
-clarity_version = 5
-epoch = "3.4"
-
-[contracts.vault-sbtc-stx-v5]
-path = "contracts/vault-sbtc-stx-v5.clar"
-clarity_version = 5
-epoch = "3.4"
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }

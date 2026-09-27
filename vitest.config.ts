@@ -18,6 +18,8 @@ export default defineConfig({
     environmentOptions: {
       clarinet: {
         ...getClarinetVitestsArgv(),
+        // unit tests cover live and retired contracts: the legacy manifest
+        manifestPath: "./Clarinet-legacy.toml",
       },
     },
   },
