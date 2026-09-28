@@ -25,11 +25,16 @@ Runners-up, if we tip like last round:
 
 - Nilo's tail freeze: the lossless tail roll in the six rungs (also carries
   the F-6 hardening). Rapha needs to double review it; not fork-tested.
-- ARION F-7: proceeds absorbed while a rung has no members. After a tail roll
-  the leftover is off the book, so only the older sold-out closes can still
-  leave a crumb resting that fills with zero members.
+- ARION F-7: proceeds absorbed while a rung has no members. **Fixed** (`f015382`):
+  with no shares, `sync` leaves the watermark in place, so that STX goes to
+  the next epoch's members at their first sync. Holds on
+  `jing-buy-stx-core-spread-v1`.
 - ARION F-8: a member whose position rounds to 0 can never withdraw, which
-  could block the last-member reset.
+  could block the last-member reset. **Fixed** (`f015382`): a partial that
+  would leave a rest worth 0 becomes a full exit, and a 0-worth position
+  exits by burning its shares. Holds on `jing-buy-stx-core-spread-v1` (the
+  last-member reset now counts `members`, so leftover rescale shares cannot
+  block it either).
 - ARION F-9: `settle-escrow` asks for a Lazer update even for exits that do
   not need one. Fixed with Void Kael #2 (`escrow-for`), see below.
 
@@ -56,7 +61,10 @@ Runners-up, if we tip like last round:
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
-| Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. Started in `jing-buy-stx-market-spread-v1`. |
+| Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. In `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1`. |
+| Regal Anvil | #2: STX from fills while a rung has no members is watermarked away (F-7), and donated sats can keep a memberless order live | yes | INFO | **Already fixed** in `f015382` (ARION F-7): the watermark stays put with no shares, so the STX goes to the next epoch. Donated sats are unowned and taken by the next depositor as orphan. Holds on `jing-buy-stx-core-spread-v1`. |
+| Void Kael | #4: the MINT_FLOOR tail roll cancels a stocked rung off the book (Nested Quinn M-2's root cause, new symptom) | yes | LOW | **Fixed** by the index rescale in `jing-buy-stx-core-spread-v1` (`741de17`): the index drifting under the floor rescales instead of closing. Same root cause as Nested Quinn M-2. |
+| Nested Quinn | M-2: the cumulative `unfilled-index` only goes down, so a healthy, full rung that is filled and topped up again and again hits the floor | yes | MEDIUM | **Fixed** by the index rescale in `jing-buy-stx-core-spread-v1` (`741de17`), see `contracts/README-rung-index-rescale.md`. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -711,4 +719,4 @@ What remains: an exit that really needs the pending funds (most of the pool
 was just pushed into it) waits for a settle or the 24h cancel, and after the
 cooldown the grief can re-push; the owner push pause closes that.
 
-Status: in `jing-buy-stx-market-spread-v1`; the other five `-v1` rungs next.
+Status: in `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1` (the rung under review for now, which also carries the Nested Quinn M-2 rescale). The other `-v1` rungs later.

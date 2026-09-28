@@ -71,6 +71,8 @@
 ;; shares are worth under 1e-9 of what it last held and count as 0
 (define-constant MAX_SCALE_STEPS u3)
 (define-constant ERR_UPDATE_REQUIRED (err u7012))
+(define-constant ERR_PUSH_PAUSED (err u7014))
+(define-constant ERR_ESCROW_COOLDOWN (err u7015))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
 ;; under this many sats: a walk fill is sized in whole sats so a fully taken
@@ -184,6 +186,12 @@
 )
 ;; micro-STX balance already folded into proceeds-index
 (define-data-var stx-accounted uint u0)
+;; the ladder owner can stop every push to the market (deposits then stay
+;; held here), e.g. while an oracle outage lets anyone re-lock exits
+(define-data-var push-paused bool false)
+;; when settle-escrow last took the 24h cancel: no push for 24h after it, so
+;; the returned funds stay here and every member can exit without an oracle
+(define-data-var escrow-cancelled-at uint u0)
 
 (define-map positions
   principal
@@ -409,6 +417,21 @@
   )
 )
 
+;; ladder owner only: stop or resume pushes to the market
+(define-public (set-push-paused (paused bool))
+  (begin
+    (asserts! (is-eq tx-sender (contract-call? LADDER get-owner))
+      ERR_NOT_AUTHORIZED
+    )
+    (var-set push-paused paused)
+    (print {
+      event: "rung-push-paused",
+      paused: paused,
+    })
+    (ok true)
+  )
+)
+
 ;; ---------- sync ----------
 
 ;; Fold the market's state into the indices. Fills shrink the market size and
@@ -579,7 +602,6 @@
   (let ((member tx-sender))
     (asserts! (is-some (map-get? positions member)) ERR_NO_POSITION)
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (try! (settle-escrow update))
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
       ;; an old-epoch member was paid out and deleted by settle-proceeds:
@@ -619,6 +641,7 @@
           (and
             (> take u0)
             (begin
+              (try! (escrow-for take update))
               (try! (pull-to-held-sats take))
               (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
                 (try! (contract-call? SBTC transfer take current-contract member none))
@@ -702,8 +725,7 @@
 ;; the mark. Called after sync by every member action.
 ;; RAPHA NEEDS TO DOUBLE REVIEW this tail roll before any deploy (bounty
 ;; muerdzoc805a745ecc99, Nilo's tail freeze). Not fork-tested yet. Also still
-;; open for this rung: ARION F-7 (proceeds absorbed while no members), F-9 (settle-escrow wants
-;; a Lazer update even for exits that do not need one).
+;; open for this rung: ARION F-7 (proceeds absorbed while no members).
 ;; Tail roll: every sold-out close in sync (dust or index floor) closes the
 ;; epoch without loss. The order comes back from the market
 ;; (cancel returns pending, live and parked with no oracle or pause check),
@@ -816,6 +838,10 @@
   ;; a miner-band rung re-derives its floor on every push; with no miner data
   ;; (u0) it does not push at all, the funds stay held
   (let ((g (current-floor)))
+    (asserts! (not (var-get push-paused)) ERR_PUSH_PAUSED)
+    (asserts! (>= stacks-block-time (+ (var-get escrow-cancelled-at) u86400))
+      ERR_ESCROW_COOLDOWN
+    )
     (asserts! (> g u0) ERR_ZERO_PRICE)
     (var-set floor g)
     (as-contract? ((with-ft SBTC SBTC_NAME to-push))
@@ -838,10 +864,11 @@
   )
 )
 
-;; An exit normally settles pending escrow before pulling funds from the market.
-;; Once pending escrow is at least 24 hours old, cancel instead: cancellation
-;; returns pending + live + parked funds without an oracle or pause check.
-;; Add the refund to held funds; withdraw synchronizes before paying the member.
+;; An exit that needs the pending escrow (escrow-for) settles it before pulling
+;; funds from the market. Once pending escrow is at least 24 hours old, cancel
+;; instead: cancellation returns pending + live + parked funds without an oracle
+;; or pause check, and starts the 24h push cooldown.
+;; Add the refund to held funds; escrow-for synchronizes before paying the member.
 (define-private (settle-escrow (update (optional (buff 8192))))
   (match (contract-call? MARKET get-token-x-pending-deposit current-contract)
     pending (if (>= stacks-block-time (+ (get submitted-at pending) u86400))
@@ -849,6 +876,7 @@
           (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
         ))))
         (var-set held-sats (+ (var-get held-sats) refunded))
+        (var-set escrow-cancelled-at stacks-block-time)
         (ok true)
       )
       (begin
@@ -862,13 +890,45 @@
   )
 )
 
+;; live + parked on the market: what a partial withdraw or a cancel can take
+;; without settling the pending escrow
+(define-private (on-book)
+  (+
+    (contract-call? MARKET get-token-x-deposit
+      (contract-call? MARKET get-current-cycle)
+      current-contract
+    )
+    (contract-call? MARKET get-token-x-parked current-contract)
+  )
+)
+
+;; An exit waits on the pending escrow only when it needs those funds: when
+;; what is held here plus live + parked cannot pay `take`. Otherwise a young
+;; pending (a 1-sat push, an honest top-up) does not ask for an oracle
+;; (Void Kael #2, ARION F-9). A settle can refund the escrow here (crossing,
+;; queue-full), so sync again to count it as held.
+(define-private (escrow-for
+    (take uint)
+    (update (optional (buff 8192)))
+  )
+  (if (<= take (+ (var-get held-sats) (on-book)))
+    (ok true)
+    (begin
+      (try! (settle-escrow update))
+      (sync)
+    )
+  )
+)
+
 (define-private (pull-to-held-sats (amount uint))
   (let ((have (var-get held-sats)))
     (if (>= have amount)
       (ok true)
       (let (
           (gap (- amount have))
-          (on-market (market-size))
+          ;; a pending escrow the exit did not need stays pending: size the
+          ;; partial on live + parked (a cancel returns the pending too)
+          (on-market (on-book))
         )
         (asserts! (>= on-market gap) ERR_INSUFFICIENT)
         (if (>= (- on-market gap) (min-market))
