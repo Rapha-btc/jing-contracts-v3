@@ -63,7 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
-| Void Kael | #8: vault `router-swap` aborts `(err u0)` in a ~120-sat band when the book leg's refund (rest + rebate crumbs) exceeds the allowance `amount + min-x` (first noted, unproven, by Nested Quinn) | yes | INFO | **Closed by the Nested Quinn M-1 fix**, see below. No vault change. |
+| Void Kael | #8: vault `router-swap` aborts `(err u0)` in a ~120-sat band when the book leg's refund (rest + rebate crumbs) exceeds the allowance `amount + min-x` (first noted, unproven, by Nested Quinn) | yes | INFO | **Fixed**: the allowance adds the max rebate on `amount`, which bounds the refund in every case, see below. |
 | Void Kael | #7: after a sell-out, a 1-sat `jing-place` escrows dust on the market, and `is-empty` (market position exactly 0) keeps the batch open until the window ends | yes | LOW | **Fixed**: `close-batch` cancels a market position of at most `DUST_SATS` home first, see below. All three vaults. |
 | Void Kael | #6: a batch funded with <= DUST_SATS closes with 0 STX, and `finish` then fails `(err u3)` on the 0 transfer forever, wedging the juice / fastpool pool | yes | LOW | **Fixed**: `finish` skips the transfer when the balance is 0, see below. ccd016 not affected. |
 | Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
@@ -848,18 +848,28 @@ Rejected alternative (Void's tested one): a minimum on `jing-place`. The
 ccd016 README already rejected it (it would only price the call and strand
 the last chunk).
 
-## Void Kael #8: `router-swap` allowance band (closed by M-1)
+## Void Kael #8: `router-swap` allowance band (fixed)
 
 **The claim.** When the book leg only partly fills, the market refunds the
-vault its rest (under the minimum) plus unused rebate crumbs, and the router
-re-sells both; the vault's gross sBTC outflow `amount + rest + crumbs` can
+vault its rest plus unused rebate crumbs, and the router re-sells both. The
+unsold part never leaves the vault, but refunded sats leave twice (to the
+market, then to the AMMs), so the gross outflow `amount + rest + crumbs` can
 pass the allowance `amount + min-x`, and `as-contract?` aborts `(err u0)`.
 Measured band: book capacities 198,320-198,440 sats on a fresh print.
 
-**Why no change.** The large rest came from the 70-bps gross-up (Nested Quinn
-M-1). With the gross-up at the fresh-print rate, a quote-sized book leg
-fills in full and the rest is about 0; Void Kael's own test on an M-1-fixed
-market copy sells the in-band book with no refunds. Considered and not taken:
-widening the allowance by `min-x x 70 / 10000 + 2` (about 9 sats) for a
-remaining corner where a book leg still leaves close to the minimum unfilled.
+The Nested Quinn M-1 fix removed the known cause (a quote-sized book leg now
+fills in full), but not every possible one.
 
+**Fix** (juice, fastpool, ccd016 v2 `router-swap`). The vault only ever gets
+back two things from the book leg (`cross-remainder-as-x`): the rest, always
+under `min-x` (else u1017), and the unused rebate `pending-rebate-x`, never
+more than the rebate charged, which is at most `TAKER_REBATE_MAX_BPS` (70 bps)
+of `amount`. So the allowance is now
+
+    amount + min-x + amount x JING_REBATE_MAX_BPS / BPS_PRECISION
+
+with `JING_REBATE_MAX_BPS` u70, the market's `TAKER_REBATE_MAX_BPS`, as a
+vault constant (no contract call). That holds for any book, print age and number of fills.
+A tighter `+9` or `+57` does not: per-fill rounding and the rebate crumbs grow
+with the number of makers and the chunk size. Only the vault's own router
+call can use the extra room.
