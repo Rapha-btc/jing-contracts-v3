@@ -32,7 +32,7 @@ Smaller tips:
 - Fluid Briar: the switched-off ask MEDIUM (fixed) and the `router-swap`
   sliver LOW (fixed in 3 vaults).
 
-## Still to review (rungs)
+## Rung items from the earlier rounds (resolved)
 
 - Nilo's tail freeze: the lossless tail roll (also carries the F-6
   hardening). **Reviewed** by Rapha on `jing-buy-stx-core-spread-v1` with the
