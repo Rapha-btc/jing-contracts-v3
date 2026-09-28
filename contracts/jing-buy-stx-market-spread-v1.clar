@@ -65,6 +65,8 @@
 ;; floor: shares are minted at most 1000 per sat, and 0 is out of reach.
 (define-constant MINT_FLOOR u1000000000)
 (define-constant ERR_UPDATE_REQUIRED (err u7012))
+(define-constant ERR_PUSH_PAUSED (err u7014))
+(define-constant ERR_ESCROW_COOLDOWN (err u7015))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
 ;; under this many sats: a walk fill is sized in whole sats so a fully taken
@@ -139,6 +141,12 @@
 )
 ;; micro-STX balance already folded into proceeds-index
 (define-data-var stx-accounted uint u0)
+;; the ladder owner can stop every push to the market (deposits then stay
+;; held here), e.g. while an oracle outage lets anyone re-lock exits
+(define-data-var push-paused bool false)
+;; when settle-escrow last took the 24h cancel: no push for 24h after it, so
+;; the returned funds stay here and every member can exit without an oracle
+(define-data-var escrow-cancelled-at uint u0)
 
 (define-map positions
   principal
@@ -263,6 +271,21 @@
       ;; fixed rung logs its price
       (contract-call? LADDER register SIDE (+ (* cents BPS_PRECISION) bps) p)
     )
+  )
+)
+
+;; ladder owner only: stop or resume pushes to the market
+(define-public (set-push-paused (paused bool))
+  (begin
+    (asserts! (is-eq tx-sender (contract-call? LADDER get-owner))
+      ERR_NOT_AUTHORIZED
+    )
+    (var-set push-paused paused)
+    (print {
+      event: "rung-push-paused",
+      paused: paused,
+    })
+    (ok true)
   )
 )
 
@@ -640,8 +663,14 @@
 ;; back with the failed call. A parked position is taken back by the market
 ;; inside this same deposit (free slot, else bump on the combined size).
 (define-private (push-to-market (to-push uint))
-  (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-    (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) SBTC SBTC_NAME))
+  (begin
+    (asserts! (not (var-get push-paused)) ERR_PUSH_PAUSED)
+    (asserts! (>= stacks-block-time (+ (var-get escrow-cancelled-at) u86400))
+      ERR_ESCROW_COOLDOWN
+    )
+    (as-contract? ((with-ft SBTC SBTC_NAME to-push))
+      (try! (contract-call? MARKET deposit-token-x to-push (var-get floor) (some (var-get spread-bps)) SBTC SBTC_NAME))
+    )
   )
 )
 
@@ -656,6 +685,7 @@
           (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
         ))))
         (var-set held-sats (+ (var-get held-sats) refunded))
+        (var-set escrow-cancelled-at stacks-block-time)
         (ok true)
       )
       (begin

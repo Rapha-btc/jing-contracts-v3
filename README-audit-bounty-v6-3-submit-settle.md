@@ -56,6 +56,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
+| Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. Started in `jing-buy-stx-market-spread-v1`. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -653,3 +654,44 @@ fail anyway: `smallest-who` comes from the same list, so the filter removes
 one entry first (also re-checked at HEAD by Void Kael). Rewriting the filter
 to avoid the var would change working code for no gain.
 
+## Void Kael #2: a permissionless push re-locks rung exits (fixing)
+
+Checked against the `-v1` rungs: `settle-escrow` and `push` are identical
+across the three buy `-v1` rungs and across the three sell `-v1` rungs, and
+the rescale in `jing-buy-stx-core-spread-v1` does not touch them.
+
+**The claim.** A rung's `withdraw` runs `settle-escrow` first: a pending
+younger than 24h must be settled (Lazer update, unpaused core-v6), an older
+one is cancelled with no oracle. `push` is permissionless and needs no oracle.
+During an outage or a core pause:
+1. On a live rung with no pending, anyone sends 1 sat to the rung (a plain
+   transfer, not `deposit`, so the 100-sat minimum does not apply) and calls
+   `push`. The market takes it as a top-up (its minimum is on the whole
+   position). Every withdraw now waits on that pending, so every exit needs
+   the oracle.
+2. After 24h the first withdraw cancels the pending and the funds come back
+   to the rung. Anyone calls `push` again, the funds become a new pending, and
+   the others are locked another 24h. It repeats for the whole outage.
+An honest deposit or keeper push does the same. No funds are lost. A market
+pause stops it (`push` returns `(ok false)`), but only once the operator
+reacts.
+
+**Fix.**
+- 24h cooldown: the 24h cancel branch of `settle-escrow` records
+  `escrow-cancelled-at`, and `push-to-market` refuses (`ERR_ESCROW_COOLDOWN`
+  u7015) for 24h after it. `push` and `deposit` already treat a refused push
+  as "hold here", so the returned funds stay in the rung and every member can
+  exit without an oracle for that day. The lock is at most one 24h window.
+- Owner push pause: `set-push-paused` (ladder owner, `tx-sender`, like `initialize` in core-spread) makes
+  `push-to-market` refuse (`ERR_PUSH_PAUSED` u7014), so the operator can stop
+  the attack for one rung without pausing the whole market. Deposits stay held.
+
+The cooldown also blocks a direct placement (opposite side empty, no pending)
+for that day; members can still exit, so it only delays re-listing.
+
+What remains: the first 24h after a grief push is still locked, and if the
+outage outlasts the cooldown the grief can repeat as 24h locked / 24h open
+for members who did not leave. The owner push pause closes both. Accepted: no
+`withdraw` change (settling only when the exit needs the pending funds).
+
+Status: in `jing-buy-stx-market-spread-v1`; the other five `-v1` rungs next.
