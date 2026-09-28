@@ -71,6 +71,16 @@ run or do:
   see the Fluid Briar section).
 - `ccd016-swap-vault-mia-v3` (work in progress) has none of the vault fixes.
 
+## Found after the review: treasury guard
+
+The v6-3 fork coverage work (`simulations/README-v6-3-coverage.md`) found that
+`set-treasury` accepted the market's own principal. Every fee transfer then
+went to the market itself and failed `(err u2)`, so every swap and
+fee-charging settle aborted until the operator reset it. Operator-only, no
+funds at risk. Fixed in `e338e27`: `set-treasury` refuses it with
+`ERR_BAD_TREASURY` u1033 (all three v6-3 copies); the swap-walk sim asserts the
+refusal ([60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c)).
+
 ## Submissions and verdicts
 
 | Submitter | Finding | Holds | Rating | Decision |
