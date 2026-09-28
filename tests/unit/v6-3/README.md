@@ -7,19 +7,30 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
-On 2026-09-28, all **160 v6-3 tests passed** against the source at `62d032c`.
+On 2026-09-28, all **165 v6-3 tests passed** against the source including
+the `e338e27` treasury guard. The regression refuses the market itself as
+treasury, preserves the funded book and configured recipient, and confirms
+that subsequent batch fees reach the valid treasury. The suite also includes
+the `1a930e3` settlement return-value fix: both sides report zero rolled
+funds for a refunded sub-minimum remainder, and the exact live amount when
+funds really roll into the next cycle. Four additional regression cases cover
+`swap` and `reprice-or-swap-token-*` on both sides when the taker also owns
+an opposite-side maker order: its sub-minimum remainder is refunded to the
+wallet, the opposite `token-*-rolled` field is zero, and both final positions
+and market custody are zero. Existing taker-side walk-remainder assertions
+remain unchanged and pass. No unrelated failures occurred in the full run.
 
 | Market-only metric | Covered / total | Coverage |
 | --- | ---: | ---: |
 | Functions | 137 / 137 | **100%** |
-| Lines | 2344 / 2351 | **99.70%** |
-| Branches | 830 / 831 | **99.88%** |
+| Lines | 2345 / 2352 | **99.70%** |
+| Branches | 832 / 833 | **99.88%** |
 
 Toolchain: Clarinet SDK/WASM 3.21.0, Vitest 2.1.9,
 vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 
 Source SHA-256:
-`65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851`.
+`7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
 These figures include all instrumentation points, including the remaining
 unhit paths described below; they exclude mocked dependencies and older versions.
 
@@ -124,7 +135,7 @@ No lines or branches are excluded to reach these thresholds.
 
 The remaining coverage must not be described as 100% raw line or branch coverage.
 Every function and every branch except the mathematically unreachable
-`gross-up` decrement branch at line 3927 executes. It computes
+`gross-up` decrement branch at line 3929 executes. It computes
 `g = floor(net * 10000 / 9980)`, so the resulting net
 `ceil(g * 9980 / 10000)` cannot exceed the input net. Consequently the `n > net`
 condition cannot be true for non-overflowing inputs; overflowing inputs abort
@@ -136,8 +147,8 @@ Defensive rebate caps, empty distributions, and the already-settled guard are
 covered by the explicitly isolated private-helper cases described above.
 
 Clarinet also reports some tuple-label and continuation lines as unhit although
-the surrounding expression executes (currently 624, 666, 2427, 2475, 3096,
-and 3139). These remain in the denominator rather than being filtered away.
+the surrounding expression executes (currently 625, 667, 2428, 2476, 3097,
+and 3140). These remain in the denominator rather than being filtered away.
 
 Function execution coverage is not exhaustive behavioral coverage. Real Pyth
 signature validation, production sBTC integration, core/ladder authorization,

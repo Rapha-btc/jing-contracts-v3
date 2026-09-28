@@ -47,6 +47,20 @@ describe('initialization and administration', () => {
     err(call('set-paused', [Cl.bool(false)]), 1008);
     ok(call('set-paused', [Cl.bool(false)], alice));
   });
+  it('rejects the market as treasury without changing the configured recipient or funded book', () => {
+    init(); book();
+    ok(call('set-treasury', [Cl.principal(carol)]));
+    const beforeX = snapshot('x'), beforeY = snapshot('y');
+    err(call('set-treasury', [Cl.principal(market)], alice), 1008);
+    err(call('set-treasury', [Cl.principal(market)]), 1033);
+    expect(simnet.getDataVar('market', 'treasury')).toEqual(Cl.principal(carol));
+    expect(snapshot('x')).toEqual(beforeX);
+    expect(snapshot('y')).toEqual(beforeY);
+    const x = balance('x', carol), y = balance('y', carol);
+    ok(batch());
+    expect(balance('x', carol)).toBeGreaterThan(x);
+    expect(balance('y', carol)).toBeGreaterThan(y);
+  });
 });
 
 describe('oracle and peg boundaries', () => {
@@ -297,13 +311,15 @@ describe('batch settlement and history', () => {
   });
   it.each(['x','y'] as const)('rolls the unfilled %s balance into the next cycle', s => {
     book(s==='x'?20000:10000,s==='y'?2000000:1000000);
-    ok(batch()); const who=s==='x'?alice:bob;
+    const who=s==='x'?alice:bob, result=value(ok(batch(who)));
+    expect(result[`token-${s}-rolled`]).toBe(BigInt(amount(s)));
     expect(live(s,who)).toBe(BigInt(amount(s))); expect(live(other(s),s==='x'?bob:alice)).toBe(0n);
     custody('x'); custody('y');
   });
   it.each(['x','y'] as const)('refunds sub-minimum %s remainder', s => {
     book(s==='x'?10001:10000,s==='y'?1000001:1000000);
-    const who=s==='x'?alice:bob, start=balance(s,who); ok(batch());
+    const who=s==='x'?alice:bob, start=balance(s,who), result=value(ok(batch(who)));
+    expect(result[`token-${s}-rolled`]).toBe(0n);
     expect(balance(s,who)-start).toBe(1n); expect(live(s,who)).toBe(0n); custody('x'); custody('y');
   });
   it('rejects empty, paused, stale, and wrong-trait settlement without mutations', () => {
@@ -366,6 +382,27 @@ for (const s of ['x','y'] as const) describe(`${s} swaps and reprice`, () => {
     expect(balance(other(s),alice)-before).toBe(result[`token-${other(s)}-received`]);
     expect(result[`token-${other(s)}-received`]).toBeGreaterThan(0n); expect(live(s)).toBe(0n);
     expect(pending(s,'limit')).toEqual(N); custody('x'); custody('y');
+  });
+  it.each(['swap', 'reprice'] as const)('%s reports zero opposite-side rolled funds when the taker\'s maker remainder is refunded', mode => {
+    const makerSide = other(s), refund = s === 'y' ? 20n : 2000n;
+    // Swap uses input minus the prepaid rebate; reprice crosses the full
+    // existing deposit and pays the rebate separately from the wallet.
+    const makerAmount = amount(makerSide) + (mode === 'reprice' ? Number(refund) : 0);
+    ok(deposit(makerSide, makerAmount, P, alice));
+    if (mode === 'reprice') {
+      ok(deposit(s, amount(s), off(s), alice));
+      ok(settleDeposit(s, alice));
+    }
+    const before = balance(makerSide, alice);
+    const result = value(ok(mode === 'swap' ? swap(s, amount(s), P, alice) : reprice(s, P, alice)));
+    const output = mode === 'swap' ? (s === 'y' ? 9971n : 997002n) : (s === 'y' ? 9990n : 999000n);
+    expect(result[`token-${makerSide}-received`]).toBe(output);
+    expect(result[`token-${makerSide}-rolled`]).toBe(0n);
+    expect(balance(makerSide, alice) - before).toBe(output + refund);
+    expect(result[`token-${s}-rolled`]).toBe(0n);
+    expect(live('x', alice)).toBe(0n); expect(live('y', alice)).toBe(0n);
+    expect(balance('x', market)).toBe(0n); expect(balance('y', market)).toBe(0n);
+    custody('x'); custody('y');
   });
   it('walks out-of-mid quotes in price order with exact custody', () => {
     const quote1=s==='x'?P*0.8:P*1.2, quote2=s==='x'?P*0.9:P*1.1;
