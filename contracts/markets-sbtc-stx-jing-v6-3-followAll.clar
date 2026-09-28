@@ -3488,7 +3488,7 @@
     (if (is-eq depositor tx-sender)
       (begin
         (var-set caller-token-x-received my-token-x-received)
-        (var-set caller-token-y-rolled my-token-y-unfilled)
+        (var-set caller-token-y-rolled my-roll)
         true
       )
       true
@@ -3583,7 +3583,7 @@
     (if (is-eq depositor tx-sender)
       (begin
         (var-set caller-token-y-received my-token-y-received)
-        (var-set caller-token-x-rolled my-token-x-unfilled)
+        (var-set caller-token-x-rolled my-roll)
         true
       )
       true
