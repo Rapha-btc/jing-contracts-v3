@@ -16,6 +16,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { getSimulationResult, parseContract } from "stxer";
 import { deserializeCV, cvToString } from "@stacks/transactions";
+import { classify, sha256 } from "./_sim-source.mjs";
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const md = process.argv.includes("--md");
@@ -23,6 +24,10 @@ const NAME = arg("--contract", "markets-sbtc-stx-jing-v6");
 // every instance of the SAME source deployed under another name (a MAX_DEPOSITORS u3 copy, a
 // real-staleness copy, "markets-b") counts for the contract: same expression ids
 const ALIAS = new RegExp(arg("--alias", "^markets-"));
+// --by-source: ignore --alias; per sim, count only deployments whose code is
+// byte-identical (sha256) to the measured source (see _sim-source.mjs)
+const BY_SOURCE = process.argv.includes("--by-source");
+let SIM_SET = null; // the current sim's matching instance names (by-source mode)
 const TABLE = arg("--table", "Full rerun 2026-09-14");
 const API = "https://api.stxer.xyz";
 const CACHE = process.env.TRACE_CACHE || path.join(process.env.TMPDIR || "/tmp", "stxer-traces");
@@ -92,7 +97,7 @@ function decodeNode(b, o, out, contract) {
   const rlen = u32(b, o); o += 4;
   const resultErr = resOk ? null : td.decode(b.subarray(o, o + rlen)); o += rlen;
   const m = code.match(/^(S[PMTN][0-9A-Z]+\.[0-9a-zA-Z_-]+):/);
-  if (m) { contract = m[1].split(".")[1]; if (contract !== NAME && ALIAS.test(contract)) contract = NAME; }
+  if (m) { contract = m[1].split(".")[1]; if (BY_SOURCE) contract = SIM_SET.has(contract) ? NAME : `~${contract}`; else if (contract !== NAME && ALIAS.test(contract)) contract = NAME; }
   if (contract) { const set = out.get(contract) || out.set(contract, new Set()).get(contract); set.add(String(id)); const cm = out.counts || (out.counts = new Map()); const key = `${contract}:${id}`; cm.set(key, (cm.get(key) || 0) + 1); if (resultErr) (out.errs ||= []).push({ contract, id: String(id), func, err: resultErr.slice(0, 80) }); }
   const n = u32(b, o); o += 4;
   for (let i = 0; i < n; i++) o = decodeNode(b, o, out, contract);
@@ -118,17 +123,27 @@ async function fetchTrace(sim, txid) {
 const executed = new Map(); // contract name -> Set(ids)
 const perSim = {};
 let txs = 0, missing = 0;
+const SRC_HASH = sha256(source);
+const diag = { noTrace: 0, decodeErr: 0, marketCalls: 0, marketNoTrace: 0, marketDecodeErr: 0, excluded: new Map(), instances: new Map() };
 for (const sim of sims) {
   const res = await getSimulationResult(sim);
+  const info = BY_SOURCE ? classify(res, SRC_HASH) : null;
+  if (BY_SOURCE) { SIM_SET = info.match; diag.instances.set(sim, [...info.match]); for (const o of info.others) diag.excluded.set(`${o.name}@${o.hash.slice(0, 12)}`, (diag.excluded.get(`${o.name}@${o.hash.slice(0, 12)}`) || 0) + 1); }
   const ids = res.steps.map((s) => s.TxId).filter(Boolean);
   perSim[sim] = { txs: ids.length, before: (executed.get(NAME) || new Set()).size };
   const batches = []; for (let i = 0; i < ids.length; i += 8) batches.push(ids.slice(i, i + 8));
   for (const batch of batches) {
     const bufs = await Promise.all(batch.map((t) => fetchTrace(sim, t)));
-    for (const buf of bufs) { txs += 1; if (!buf) { missing += 1; continue; } try { decodeTrace(buf, executed); } catch (e) { missing += 1; } }
+    bufs.forEach((buf, k) => {
+      txs += 1;
+      const isMarket = BY_SOURCE && info.match.has(info.target.get(batch[k]));
+      if (isMarket) diag.marketCalls += 1;
+      if (!buf) { missing += 1; diag.noTrace += 1; if (isMarket) diag.marketNoTrace += 1; return; }
+      try { decodeTrace(buf, executed); } catch (e) { missing += 1; diag.decodeErr += 1; if (isMarket) diag.marketDecodeErr += 1; console.error(`decode error ${sim.slice(0, 8)} ${batch[k]}: ${String(e.message).slice(0, 80)}`); }
+    });
   }
   perSim[sim].after = (executed.get(NAME) || new Set()).size;
-  console.error(`${sim.slice(0, 8)}: ${ids.length} txs, ${NAME} ids ${perSim[sim].before} -> ${perSim[sim].after}`);
+  console.error(`${sim.slice(0, 8)}: ${ids.length} txs, ${NAME} ids ${perSim[sim].before} -> ${perSim[sim].after}${BY_SOURCE ? `, instances: ${[...info.match].join(" ") || "NONE"}` : ""}`);
 }
 const hitAll = executed.get(NAME) || new Set();
 const hit = new Set([...hitAll].filter((id) => callIds.has(id)));
@@ -192,4 +207,12 @@ for (const b of unreached.sort((a, c) => a.line - c.line)) L(md ? `| ${b.line} |
 L(md ? `\n## Uncovered code lines by function\n\n| function | lines |\n|---|---|` : `\n== uncovered lines by function`);
 for (const [fn, set] of Object.entries(uncoveredByFn).sort((a, b) => b[1].size - a[1].size)) L(md ? `| ${fn} | ${[...set].sort((a, b) => a - b).join(", ")} |` : `${fn}: ${[...set].sort((a, b) => a - b).join(", ")}`);
 if (md) { L(`\n## Per simulation (cumulative executed expressions of ${NAME})\n\n| sim | txs | before | after |\n|---|---|---|---|`); for (const [s, v] of Object.entries(perSim)) L(`| \`${s.slice(0, 8)}\` | ${v.txs} | ${v.before} | ${v.after} |`); }
+if (BY_SOURCE) {
+  L(md ? `\n## Provenance and trace diagnostics\n\nsource ${SRC_LABEL}, sha256 \`${SRC_HASH}\`. Only deployments with that exact code are counted.\n\n| item | count |\n|---|---|\n| transactions | ${txs} |\n| no trace returned by stxer | ${diag.noTrace} |\n| trace decode errors | ${diag.decodeErr} |\n| calls to a counted market instance | ${diag.marketCalls} |\n| ... of which without a trace | ${diag.marketNoTrace} |\n| ... of which decode errors | ${diag.marketDecodeErr} |`
+    : `\n== provenance: sha256 ${SRC_HASH}; txs ${txs}, no trace ${diag.noTrace}, decode errors ${diag.decodeErr}; market calls ${diag.marketCalls}, market no trace ${diag.marketNoTrace}, market decode errors ${diag.marketDecodeErr}`);
+  L(md ? `\n| sim | counted instances |\n|---|---|` : `== counted instances per sim`);
+  for (const [s, names] of diag.instances) L(md ? `| \`${s.slice(0, 8)}\` | ${names.join(", ") || "none"} |` : `${s.slice(0, 8)}: ${names.join(" ") || "NONE"}`);
+  L(md ? `\n| excluded deployment (name@hash) | sims |\n|---|---|` : `== excluded deployments (other code)`);
+  for (const [k, n] of [...diag.excluded].sort()) L(md ? `| ${k} | ${n} |` : `${k} x${n}`);
+}
 console.log(out.join("\n"));
