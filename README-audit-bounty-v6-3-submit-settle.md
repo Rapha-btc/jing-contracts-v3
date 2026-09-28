@@ -63,6 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Nested Quinn | L-2: juice / fastpool vaults accept `window-blocks` up to 1008, but recovery opens at batch start + 432, so anyone can recover mid-window | yes | LOW | **Fixed**: `MAX_WINDOW_BLOCKS` 288 in both vaults (juicestx `579cf03`, fastpool `1ded288`), see below. ccd016 not affected. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
 | Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. In `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1`. |
 | Regal Anvil | #1: each old member's share of a tail-roll reserve is rounded down, so up to N-1 units per rolled epoch stay in `reserved-sats` forever | yes | LOW | **Fixed** in `jing-buy-stx-core-spread-v1`: the last old member's payout releases the leftover to the pool, see below. |
@@ -749,4 +750,24 @@ a loop over all members). So:
 
 An old member who never comes back keeps its epoch's dust waiting; that is
 still their claim.
+
+## Nested Quinn L-2: patience window longer than the recovery delay (fixed)
+
+**The claim.** The juice and fastpool swap vaults accept `set-window-blocks`
+up to `MAX_WINDOW_BLOCKS` (1008), but recovery is timed from the batch start:
+the vault's `emergency-recover` at `start + RECOVERY_DELAY_BLOCKS` (432),
+the juice pool's recovery (permissionless) and fastpool's `recover-swap-vault`
+deadline (first claim + 432). With any window above 432, anyone can recover
+while the window is still open: the vault's resting order is cancelled and the
+batch ends as a recovery (paid in sBTC).
+
+**Fix.** `MAX_WINDOW_BLOCKS` is 288 (the default) in `juice-pool-swap-vault`
+(juicestx `579cf03`) and `fastpool-swap-vault` (fastpool-pox-5 `1ded288`).
+The window always closes before recovery can open, leaving 144 blocks to
+liquidate. No pool change. The juicestx fastpool fixture and both setter-range
+tests follow. `ccd016-swap-vault-mia-v2/v3` keep 1008: they have no timed
+recovery.
+
+The juicestx `test:vault` harness fails at build on `is-empty` ("expecting
+read-only statements") with or without this change, so it did not run.
 
