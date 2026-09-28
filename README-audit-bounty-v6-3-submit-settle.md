@@ -51,6 +51,7 @@ Runners-up, if we tip like last round:
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
 | Nested Quinn | M-1: `get-taker-capacity` grosses up at the max rebate (70 bps), so a swap of exactly `gross-cap` on a fresh print (20 bps) nets 0.5% over capacity and fails u1017 | yes | MEDIUM | **Fixed**: gross up at the fresh-print rebate (20 bps), see below. |
 | Void Kael | #1: `get-taker-capacity` counts in-range makers under 0.2% of their side, which settlement rolls (`filter-small`), so a swap sized to the quote fails u1017 | yes | MEDIUM | **Fixed**: the capacity skips them, see below. |
+| Regal Anvil | #3: `filter-small-token-*` tests each maker against a side total that shrinks as makers roll, so the 0.2% floor depends on list order | yes | INFO | **Fixed**: one snapshot of the side total before the loop, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -514,7 +515,27 @@ rolls at most the makers under 0.2% of the whole side. The capacity tests
 against the whole side, so it skips everything settlement rolls, plus at most
 a few borderline makers. The quote can only be a little low, never high: it
 still fills, and the router sends the rest to the AMMs. The capacity does not
-need to copy the list order.
+need to copy the list order. (Since Regal Anvil #3 below, settlement also
+tests against the whole side, so the two now match exactly.)
 
 `own` (the taker's side) is left as is: over-counting it only lowers the quote.
+
+## Regal Anvil #3: the small-share floor depends on list order (fixed)
+
+Submission reviewed `afbf33d`, source only.
+
+**The claim.** `filter-small-token-*-depositor` runs over the cycle list in
+order and re-reads the side total on every step, after earlier steps have
+already taken the rolled makers off it. A maker tested later is compared to a
+smaller total, which is an easier bar. Side 10,000, bar 0.2% = 20: A (19)
+first rolls, total 9,981, bar 19.96, so B (19.97) stays. Swap A and B in the
+list and B rolls instead. Borderline makers only, no funds at risk.
+
+**Fix.** `execute-settlement` stores the side totals in two new data-vars,
+`small-share-base-y` / `small-share-base-x`, right before the two
+`map filter-small-*` calls (after the limit-violating rolls). The filters
+compare against that snapshot; the running total is still decremented for the
+books. Every maker now meets the same bar whatever its place in the list, and
+it is the same bar `get-taker-capacity` uses (Void Kael #1). All three v6-3
+copies.
 

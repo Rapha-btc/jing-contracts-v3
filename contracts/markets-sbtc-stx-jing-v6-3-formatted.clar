@@ -180,6 +180,8 @@
 (define-data-var pending-rebate-bps-y uint TAKER_REBATE_BPS)
 (define-data-var crossing bool false)
 (define-data-var taker-too-small bool false)
+(define-data-var small-share-base-y uint u0)
+(define-data-var small-share-base-x uint u0)
 (define-map token-y-deposits
   {
     cycle: uint,
@@ -2391,7 +2393,7 @@
       (next-cycle (+ cycle u1))
       (totals-next (get-cycle-totals next-cycle))
     )
-    (if (< (* amount BPS_PRECISION) (* total-token-y MIN_SHARE_BPS))
+    (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-y) MIN_SHARE_BPS))
       (if (and (var-get crossing) (is-eq depositor tx-sender))
         (ok (var-set taker-too-small true))
         (begin
@@ -2439,7 +2441,7 @@
       (next-cycle (+ cycle u1))
       (totals-next (get-cycle-totals next-cycle))
     )
-    (if (< (* amount BPS_PRECISION) (* total-token-x MIN_SHARE_BPS))
+    (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-x) MIN_SHARE_BPS))
       (if (and (var-get crossing) (is-eq depositor tx-sender))
         (ok (var-set taker-too-small true))
         (begin
@@ -3397,6 +3399,10 @@
         (get-token-x-depositors cycle)
       )
       (var-set taker-too-small false)
+      (let ((base (get-cycle-totals cycle)))
+        (var-set small-share-base-y (get total-token-y base))
+        (var-set small-share-base-x (get total-token-x base))
+      )
       (map filter-small-token-y-depositor (get-token-y-depositors cycle))
       (map filter-small-token-x-depositor (get-token-x-depositors cycle))
       (asserts! (not (var-get taker-too-small)) ERR_TAKER_TOO_SMALL)
