@@ -416,7 +416,7 @@ async function phaseD(cid, P0) {
   await fund('y', T, G);
   const before = await balances(cid, [T, X1, X2, DEP, cid]);
   const r = await tx('d: y swap settles', T, cid, 'swap', swapArgs(G, at(u.P, 1100), u, false),
-    `(ok (tuple (rebate-refunded u0) (token-x-received u${m.xAfter}) (token-x-rolled u${m.x[2].unf}) (token-y-received u${m.x[2].recv}) (token-y-rolled u0)))`);
+    `(ok (tuple (rebate-refunded u0) (token-x-received u${m.xAfter}) (token-x-rolled u${m.x[2].roll}) (token-y-received u${m.x[2].recv}) (token-y-rolled u0)))`);
   for (const [i, tag] of [[0, 'X1'], [1, 'X2'], [2, 'T']]) {
     printed(`d ${tag}`, r, 'refund-x', { depositor: xs[i].who, amount: `u${m.x[i].ref}` });
     printed(`d ${tag}`, r, 'distribute-x-depositor', { depositor: xs[i].who, 'y-received': `u${m.x[i].recv}`, 'x-rolled': 'u0', 'x-cleared': `u${m.x[i].cleared}` });

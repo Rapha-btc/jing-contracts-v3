@@ -145,3 +145,17 @@ amount of the caller's order even when that rest was refunded (seen on the
 taker's own opposite-side order); funds are right. Noted before under Void
 Kael #5.
 
+## Rerun on `1a930e3` (settle result reports what was rolled)
+
+After `1a930e3` (`caller-token-*-rolled` = rolled amount, not unfilled) the
+sims that assert exact swap / settle result tuples were rerun. Only
+settlement-edges scenario d changed its expectation (the taker's refunded
+opposite-side rest now reads its rolled amount, 0).
+
+| Sim | Checks | stxer |
+|---|---|---|
+| settlement-edges | 365/365 | [cb7a40c6](https://stxer.xyz/simulations/mainnet/cb7a40c6feea626a806ca523743f6c32) |
+| swap-walk | 382/382 | [4a6b8a3c](https://stxer.xyz/simulations/mainnet/4a6b8a3c90327f536b08237e6dbe4360) |
+| capacity | 472/472 | [e2783fa2](https://stxer.xyz/simulations/mainnet/e2783fa23aedd2bc5a44f0ebd3e7a5d7) |
+| submit-settle-lazer | 950/950 | [9a92051a](https://stxer.xyz/simulations/mainnet/9a92051af6311a08677bbe3791972d18) |
+
