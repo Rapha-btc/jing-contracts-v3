@@ -52,12 +52,31 @@ Smaller tips:
 - ARION F-9: `settle-escrow` asks for a Lazer update even for exits that do
   not need one. Fixed with Void Kael #2 (`escrow-for`), see below.
 
+## Before deploy
+
+The fixes from this review were checked with `clarinet check` only. Still to
+run or do:
+- Market (`markets-sbtc-stx-jing-v6-3` and its two copies): tests or fork runs
+  for Nested Quinn M-1, Void Kael #1, #3, #5 and Regal Anvil #3. v6-3 is not
+  in the unit-test manifest (`Clarinet-legacy.toml`).
+- Rung `jing-buy-stx-core-spread-v1`: tests for the index rescale, the Void
+  Kael #2 changes and the Regal Anvil #1 reserve release; a fork run of the
+  tail roll. `jing-buy-stx-market-spread-v1` has only the Void Kael #2
+  changes.
+- Port the rung fixes to the other `-v1` rungs (this review targets
+  `jing-buy-stx-core-spread-v1` only).
+- Vaults: rerun the stxer vault sims (juice, fastpool, ccd016 v2 happy-path,
+  liquidation, recovery) for Nested Quinn L-1 / L-2 and Void Kael #6, #7, #8.
+  The juicestx `test:vault` harness fails at build (its fixture market is v6,
+  see the Fluid Briar section).
+- `ccd016-swap-vault-mia-v3` (work in progress) has none of the vault fixes.
+
 ## Submissions and verdicts
 
 | Submitter | Finding | Holds | Rating | Decision |
 |---|---|---|---|---|
 | Eternal Harp (ARION) | F-1: a caught queue-full in settle leaves a ghost deposit that cancel pays twice | yes | HIGH | **Fixed** in `cbf96c4`, see below. Fork-proven by the submitter. |
-| Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | yes | MEDIUM | Lossless tail roll in all six rungs, **pending Rapha's double review**, not fork-tested. |
+| Diamond Lance (Nilo) | Rung tail freeze: a sub-minimum remainder with nothing on the book blocks every close, so one member who never withdraws freezes the rung | yes | MEDIUM | **Fixed**: lossless tail roll (`afbf33d`, all six rungs), reviewed on `jing-buy-stx-core-spread-v1`; not fork-tested. |
 | Fluid Briar | `settle-token-x-deposit` checks `(is-eq ask u0)`, but a switched-off ask is `MAX_UINT` | yes | MEDIUM | **Fixed**, see below. Source-only in the submission; fork-proven here. |
 | Fluid Briar | Recovered sBTC can never be swapped again in the fastpool swap vault | yes | - | **Rejected, by design**, see below. |
 | Fluid Briar | Permissionless `router-swap` sells a caller-chosen sliver and burns the shared cooldown | yes | LOW | **Fixed** in all three swap vaults, see below. |
@@ -80,7 +99,7 @@ Smaller tips:
 | Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
 | Nested Quinn | L-2: juice / fastpool vaults accept `window-blocks` up to 1008, but recovery opens at batch start + 432, so anyone can recover mid-window | yes | LOW | **Fixed**: `MAX_WINDOW_BLOCKS` 288 in both vaults (juicestx `579cf03`, fastpool `1ded288`), see below. ccd016 not affected. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
-| Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. In `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1`. |
+| Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixed** in `jing-buy-stx-core-spread-v1` and `jing-buy-stx-market-spread-v1`: 24h push cooldown after the 24h cancel, an owner push pause, and exits wait on the pending only when they need it (`escrow-for`), see below. |
 | Regal Anvil | #1: each old member's share of a tail-roll reserve is rounded down, so up to N-1 units per rolled epoch stay in `reserved-sats` forever | yes | LOW | **Fixed** in `jing-buy-stx-core-spread-v1`: the last old member's payout releases the leftover to the pool, see below. |
 | Regal Anvil | #2: STX from fills while a rung has no members is watermarked away (F-7), and donated sats can keep a memberless order live | yes | INFO | **Already fixed** in `f015382` (ARION F-7): the watermark stays put with no shares, so the STX goes to the next epoch. Donated sats are unowned and taken by the next depositor as orphan. Holds on `jing-buy-stx-core-spread-v1`. |
 | Void Kael | #4: the MINT_FLOOR tail roll cancels a stocked rung off the book (Nested Quinn M-2's root cause, new symptom) | yes | LOW | **Fixed** by the index rescale in `jing-buy-stx-core-spread-v1` (`741de17`): the index drifting under the floor rescales instead of closing. Same root cause as Nested Quinn M-2. |
@@ -484,10 +503,12 @@ all six rungs:
 (>= stacks-block-time (+ (get submitted-at pending) u86400))
 ```
 
-Same 24-hour rule, no underflow possible. This lands with the next rung
-commit (the rung sources carry other changes still under review).
+Same 24-hour rule, no underflow possible. Landed in `afbf33d`; present in
+all six `-v1` rungs.
 
 ## Nested Quinn M-1: capacity gross-up at the max rebate (fixed)
+
+Commit: `0d6ae85` (with Void Kael #1).
 
 Submission reviewed `bb1535d`, clarinet-sdk tests on the real market, router and vaults.
 
@@ -524,6 +545,8 @@ stale, the smaller net can land under it. Callers already read `min-taker`.
 
 ## Void Kael #1: capacity counts small makers that settlement rolls (fixed)
 
+Commit: `0d6ae85`.
+
 Submission reviewed `0da8978`, clarinet-sdk tests on the real market and router.
 
 **The claim.** At settlement, `filter-small-token-*-depositor` rolls every
@@ -555,6 +578,8 @@ tests against the whole side, so the two now match exactly.)
 
 ## Regal Anvil #3: the small-share floor depends on list order (fixed)
 
+Commit: `ed4ec28`.
+
 Submission reviewed `afbf33d`, source only.
 
 **The claim.** `filter-small-token-*-depositor` runs over the cycle list in
@@ -573,6 +598,8 @@ it is the same bar `get-taker-capacity` uses (Void Kael #1). All three v6-3
 copies.
 
 ## Void Kael #5: taker matched by principal, not by side (fixed)
+
+Commits: `2460613`, `816c507`.
 
 **The claim.** During a swap (`crossing`), `filter-small-token-*` flags
 `taker-too-small` (u1020) when a small depositor is `tx-sender`, and
@@ -613,6 +640,8 @@ sets it; the book walk still excludes the taker by principal on both sides
 (no self-fill), unchanged.
 
 ## Void Kael #3: an older pending instruction overwrites a newer limit (fixed)
+
+Commit: `a84ce43`.
 
 **The claim.** A maker's price can come from three places per side:
 
@@ -682,7 +711,9 @@ fail anyway: `smallest-who` comes from the same list, so the filter removes
 one entry first (also re-checked at HEAD by Void Kael). Rewriting the filter
 to avoid the var would change working code for no gain.
 
-## Void Kael #2: a permissionless push re-locks rung exits (fixing)
+## Void Kael #2: a permissionless push re-locks rung exits (fixed)
+
+Commits: `2ac4e58`, `991635f` (market-spread-v1), `c2fe0cd` (core-spread-v1).
 
 Checked against the `-v1` rungs: `settle-escrow` and `push` are identical
 across the three buy `-v1` rungs and across the three sell `-v1` rungs, and
@@ -742,6 +773,8 @@ cooldown the grief can re-push; the owner push pause closes that.
 Status: in `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1` (the rung under review for now, which also carries the Nested Quinn M-2 rescale). The other `-v1` rungs later.
 
 ## Regal Anvil #1: tail-roll reserve dust (fixed)
+
+Commit: `2814e8b`.
 
 **The claim.** `roll-tail` reserves the closing epoch's unsold total as one
 rounded-down amount; each old member later takes a share that is also rounded
@@ -803,16 +836,17 @@ what actually sold: `sold = amount - unsold`, `sold > ROUTER_SLACK_SATS`, and
 `ROUTER_SLACK_SATS` is 8: the router lets each of its four legs land up to
 `ROUND_SLACK` (2) sats under the limit. The unsold rest never leaves the
 vault and sells on the next call. A call that sells 8 sats or less reverts,
-so it cannot burn the shared cooldown for nothing. The allowance (`amount + min-x`) is
-unchanged. The router is unchanged.
+so it cannot burn the shared cooldown for nothing. The router is unchanged.
+(The allowance was widened later by Void Kael #8.)
 
 `ccd016-swap-vault-mia-v3` is a work in progress and not changed here.
 
-**To do before deploy:** rerun the stxer vault sims (juice, fastpool,
-ccd016 v2 happy-path and liquidation) on this change. Only `clarinet check`
-has run so far.
+Commits: juicestx `94fd310`, fastpool-pox-5 `671a53f`, citycoins-protocol
+`ccd9f01`. Not run yet: see "Before deploy".
 
 ## Void Kael #6: a dust-only batch wedges `finish` (fixed)
+
+Commits: juicestx `cbbba88`, fastpool-pox-5 `3c763b5`.
 
 **The claim.** `is-empty` treats up to `DUST_SATS` (2 sats) as empty, so a
 batch funded with 2 sats or less can be closed at once (`close-batch` is
@@ -838,6 +872,8 @@ donates), which is an outside step again.
 
 ## Void Kael #7: market dust holds a sold-out batch open (fixed)
 
+Commits: juicestx `394242e`, fastpool-pox-5 `8848c9f`, citycoins-protocol `9160743`.
+
 **The claim.** `DUST_SATS` lets `is-empty` ignore up to 2 sats in the vault
 wallet, but it requires the vault's market position (live, parked, pending) to
 be exactly 0. After the vault's order sells out, anyone sends it 1 sat and
@@ -860,6 +896,8 @@ ccd016 README already rejected it (it would only price the call and strand
 the last chunk).
 
 ## Void Kael #8: `router-swap` allowance band (fixed)
+
+Commits: juicestx `45bf3be`, fastpool-pox-5 `7e9847f`, citycoins-protocol `616180e` (then `6c6075f`, `clarinet format` only).
 
 **The claim.** When the book leg only partly fills, the market refunds the
 vault its rest plus unused rebate crumbs, and the router re-sells both. The
