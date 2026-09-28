@@ -24,6 +24,7 @@ not change `contracts/`.
 | `verify-v6-3-swap-walk.js` (new, gap #1) | 382/382 | [60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c) (first run, before the treasury guard: [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd), 388/388) |
 | `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
 | `verify-v6-3-settlement-edges.js` (new, gap #4) | 365/365 | [0f8df262](https://stxer.xyz/simulations/mainnet/0f8df262dd413cab105eb40f6e97a916) |
+| `verify-v6-3-errors-admin.js` (new, gap #5) | 514/514 | [3cf12a3f](https://stxer.xyz/simulations/mainnet/3cf12a3fbbdcc7a078ef394bb01b728d) |
 
 Harness updates in this round:
 - `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
@@ -67,7 +68,7 @@ Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
 | 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | **done**: fully covered but one unreachable `gross-up` arm (472/472) |
 | 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | to do |
 | 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | **done**: covered but 2 unreachable arms (365/365) |
-| 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | to do |
+| 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | **done**: 149/296 failure arms hit, every other one unreachable (514/514) |
 | 6 | `gate-blind-band` on v6-3 submit + settle | **done** (332/332) |
 
 ## Swap walk (gap #1)
@@ -158,4 +159,53 @@ opposite-side rest now reads its rolled amount, 0).
 | swap-walk | 382/382 | [4a6b8a3c](https://stxer.xyz/simulations/mainnet/4a6b8a3c90327f536b08237e6dbe4360) |
 | capacity | 472/472 | [e2783fa2](https://stxer.xyz/simulations/mainnet/e2783fa23aedd2bc5a44f0ebd3e7a5d7) |
 | submit-settle-lazer | 950/950 | [9a92051a](https://stxer.xyz/simulations/mainnet/9a92051af6311a08677bbe3791972d18) |
+
+## Errors and admin (gap #5)
+
+`verify-v6-3-errors-admin.js` deploys ten `err-admin-*` copies; every refused
+call snapshots the market and every actor before and after and fails if
+anything moved. It pins the fork to block 8984873 and reuses the signed but
+malformed Lazer updates saved by the earlier lazer-paths run `c014c741` (no
+Pyth key needed), then moves the clock to exact seconds: update + 12 s
+(`ERR_PRICE_BEFORE_ORDER`), exactly 80 s (market `ERR_STALE_PRICE`), 81 s (the
+oracle's own u1002).
+
+Failure arms are measured with `simulations/failure-arms.mjs` (trace-coverage
+cannot see them: they return plain constants): **149 / 296 hit**.
+
+Covered: WRONG_TRAIT, PAUSED, NOT_AUTHORIZED (both `initialize` checks),
+DEPOSIT_TOO_SMALL, LIMIT_REQUIRED, ALREADY_INITIALIZED, ZERO_MIN_DEPOSIT,
+BAD_SPREAD, BAD_TREASURY, HAS_RESTING_POSITION (live and parked), USE_CANCEL,
+NOTHING_TO_WITHDRAW, NOTHING_TO_READMIT, NOTHING_PENDING (all six settles),
+ALREADY_PENDING, PRICE_BEFORE_ORDER (all six), STALE_PRICE, PRICE_UNCERTAIN
+(no confidence), FEED_TIMESTAMP_MISSING, FEED_MISSING (x and y),
+NOTHING_TO_SETTLE, CYCLE_OPEN, NOT_A_SEAT, PARTIAL_FILL, TAKER_TOO_SMALL,
+QUEUE_FULL (distance slots, swap park, core bump); `try!` arms for empty
+wallets, tampered updates (oracle u2104 / u2105), refusals passed up from
+`settle-with-refresh`, and a paused `jing-core-v6` (u5016). Admin:
+`set-treasury`, `set-operator` (handover, old operator refused), `set-paused`,
+both minimums, `set-distance-slots` (51 refused, 50 ok), `prune-cycles`,
+`sync-seat-count`, `prune-seats`.
+
+Unreachable, by reading:
+- `ERR_SEATS_FULL`: the ladder caps band seats at 49, so 50 seats never fill.
+- `ERR_ALREADY_SETTLED`: the cycle advances in the tx that settles it.
+- `ERR_ZERO_PRICE` (five checks): needs a signed price <= 0.
+- confidence-ratio `PRICE_UNCERTAIN`: real confidence ~0.04% vs a 2% limit.
+- `ERR_EXPO_MISMATCH`: every Lazer feed used is exponent -8.
+- y-feed staleness / shape arms: Lazer stamps both feeds the same second, the
+  x feed fails first.
+- the second price read in reprice (same update, same tx, just succeeded).
+- structural arms: park-error re-raise (park only fails QUEUE_FULL), list
+  length unwraps, readmit's append, transfers out of escrow.
+- core log calls that are not pause-gated (the market cannot be unregistered).
+- the walk's `log-match` / `execute-fill` error arms: `log-settlement` fails
+  first in the same tx, and the treasury can no longer be the market.
+
+`ERR_NOTHING_FILLED` (u1015) is defined and never used.
+
+Notes, not bugs: `swap` / `reprice-or-swap` have no pause or trait check of
+their own; paused or wrong trait, the whole tx reverts at `settle-with-refresh`
+after the taker's tokens were pulled, so nothing is lost. `set-distance-slots`
+above 50 returns `ERR_QUEUE_FULL`, an odd code for a bad argument.
 
