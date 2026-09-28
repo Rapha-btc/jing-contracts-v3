@@ -1,250 +1,159 @@
-# v6-3 Rendezvous recovery properties
+# Current v6-3 Rendezvous fuzzing and recovery scenarios
 
-Production source: `contracts/markets-sbtc-stx-jing-v6-3.clar` at
-`f231e51` (market bytes unchanged from `19c73b5`). Only test files are changed. This target follows the pipeline in
-[the RV README](../README.md), independently of its historical v6 target.
+Verified on 2026-09-28 against `contracts/markets-sbtc-stx-jing-v6-3.clar`.
+Production source SHA-256: `65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851`.
+Production code is unchanged. These runs supersede the earlier RV results
+for source hash `04b0a7df...`; those older results were not used to claim
+that this revision passed.
 
-## Full-book readmit and batch extension
-
-```sh
-node tests/rv/v6-3/run-full-book.mjs
-```
-
-This runner uses the same RV Clarity properties with a **50-live-depositor
-book on each side**. It generates 64 deterministic, funded simnet users and
-includes them plus the historical account universe in every custody/totals
-fold. `MAX_DEPOSITORS` stays 50; the full-book build reserves zero protected
-seats, so all 50 ordinary makers are actual deposits. A public-call prelude
-creates three parked users and pending deposits, limits, and readmits on each
-side. The two resting limits meet at a reachable mock-oracle mid, enabling a
-real batch clear. No book rows or contract balances are patched.
-
-Two complementary phases improve the sparse historical coverage:
-
-1. Seeded, state-aware sequences use RV's `fast-check` dependency to randomize
-   side/order, owners, amounts, and pause state. Replacement admissions park
-   users; cancelling a live user frees a slot; readmit submit and settle place
-   a parked owner into that slot. Both sides remain full throughout this phase.
-   The initial full book then clears. Further randomized batch/swap/cancel
-   episodes retain rolls and parked claims rather than resetting the market.
-2. Rendezvous's native `checkProperties` runs random `test-*` calls on that
-   resulting state. A proxy asserts **all structural invariants after every
-   public call**, including discarded properties. Native RV trial and discard
-   counts are reported separately from successful state-aware calls.
-
-The new `test-batch` property checks each token separately: opening live total
-= payouts + rolled live total + refunds. Payouts include fees and swept dust;
-refunds are the distribution refund counters. Actual custody loss supplies
-the outgoing amount, independently of book totals. Solvency, exact live totals,
-list bounds/uniqueness, and positive pending entries remain checked after the
-batch and every other call. Existing cancel and pending-settlement properties
-also remain in use.
-
-Readmit success counts require a **positive placement**, cleared pending,
-unchanged total owner claim, and parked amount zero; `(ok u0)` refusals are not
-counted as placements. Swap counts require nonzero received output. Cancel
-counts require funds before the call. The reported state-aware counts are
-lower bounds and do not inflate them with setup-free/discarded RV calls.
-
-The Lazer substitution remains the real market verifier call against the mock
-oracle's settable mid and current simnet timestamp. The driver mines another
-block before pending settlement; it does not bypass `u1032`. Core logs and
-ladder seats remain explicit mocks, so core authorization/pause is covered by
-the separate fork suites, not this RV run.
-
-`full-book-results.json` records seeds, source hashes, successful-call counts,
-and native RV outcomes. `RV_EPISODES`, `RV_SEEDS`, and `RV_RANDOM_RUNS` allow
-smaller development probes. A failure writes a public-call trace to
-`full-book-counterexample.json` and stops; probes are not part of final totals.
-State-aware sequences are a companion to native RV, not automatically shrunk
-RV counterexamples. Native RV failure checks still inspect reported failures
-rather than trusting the runner's process status alone.
-
-## Full-book results (2026-09-23)
-
-All three state-aware sweeps passed; native RV completed **3,000 trials**,
-with **988 passed, 2012 discarded, and zero failures**. All **8313** structural
-invariant checks passed. No contract counterexample was found.
-
-| Guided seed | Native RV seed | Trials | Passed | Discarded | Failed |
-| --- | --- | --- | --- | --- | --- |
-| 230930 | 231030 | 1000 | 330 | 670 | 0 |
-| 230931 | 231031 | 1000 | 304 | 696 | 0 |
-| 230932 | 231032 | 1000 | 354 | 646 | 0 |
-
-Meaningful successful state-aware calls, including the public-call preludes
-but excluding additional native RV calls:
-
-| Path | x | y |
-| --- | ---: | ---: |
-| Deposit submit | 522 | 522 |
-| Settle deposit | 132 | 522 |
-| Readmit submit | 120 | 120 |
-| Readmit placement | 120 | 120 |
-| Swap with nonzero output | 120 | 120 |
-| Funded cancel | 262 | 346 |
-| Partial withdraw | 16 | 17 |
-| Set limit (recorded lower bound) | 3 | 3 |
-
-Batch `settle-with-refresh`: **123 successful clears**, including
-the initial full book for each seed and subsequent randomized replenishments.
-All batch calls assert payout/refund/roll conservation and market solvency.
-The original seven structural/recovery invariants remain enabled; the separate
-fork runs cover real Lazer verification and real core behavior.
-
-The complete record is [full-book-results.json](full-book-results.json). Raw
-logs are retained locally at `simulations/results/rv-v6-3/full-book.log`
-(ignored by Git). The old 9,000-trial results below are historical and are not
-added to these current counts.
-
-## Historical recovery-suite reproduction
+## Run
 
 From the repository root:
 
 ```sh
-node tests/rv/v6-3/run.mjs
+npm run rv:v6-3            # all random and full-book scenario campaigns
+npm run rv:v6-3:random     # 9,000 invariant/property trials
+npm run rv:v6-3:scenarios  # three full-book seeds plus 3,000 native trials
 ```
 
-The runner builds an isolated manifest, executes three seeded RV sweeps, and
-checks **log contents as well as process exit status**. Results and source hashes
-are written to [results.json](results.json); raw logs are under the ignored
-`simulations/results/rv-v6-3/` directory. To summarize existing logs without
-rerunning: `node tests/rv/v6-3/run.mjs --summarize`.
+Use Node with the installed dependencies and Python 3. Both profiles write
+the same generated RV target, so run them sequentially, as the combined
+command does. No network or deployment keys are required.
 
-Individual runs:
+## Verified results
 
-```sh
-python3 tests/rv/v6-3/build.py
-node_modules/.bin/rv tests/rv/v6-3 market invariant --runs=1000 --seed=230927 --bail
-node_modules/.bin/rv tests/rv/v6-3 market test --runs=5000 --seed=230926 --bail
-node tests/rv/v6-3/run-seeded.mjs test 3000 230929
-```
+**12,000 native RV trials completed: 4,656 passed, 7,344 discarded,
+and zero property/invariant failures.** In addition, the three full-book seeds
+completed **600 state-aware episodes** and **8,473 explicit structural
+invariant checks**. No market counterexample was found.
 
-The last command uses Rendezvous's own property runner, with a deterministic
-public-call prelude in its reset hook. It creates two live orders, one parked
-owner, one pending deposit, and pending limit/readmit requests on **each side**.
-No live/parked/pending storage rows or token balances are fabricated. This
-avoids waiting for a random run to first discover a parked position. Account
-names in this prelude and its RV sender map are sorted for repeatability.
-The stock RV CLI takes the SDK account-map iteration order; that order can
-vary across fresh processes, so a CLI seed alone may not reproduce the exact
-sender assignment or PASS/WARN counts. The run logs are the recorded evidence. The runner uses installed
-RV 1.0.0-rc.1 internals; an RV upgrade may require updating those imports.
-
-## Properties and model
-
-Seven read-only invariants check property-failure latching and, for both sides:
-
-- Native STX / real-ledger mock FT custody >= all modeled owners' live + parked
-  + pending funds. A separate mint counter ensures the mock never auto-minted
-  to cover a market shortfall.
-- Current-cycle totals equal summed live deposits, both over all modeled owners
-  and over the book. Lists have at most 50 entries and no duplicates.
-- Every pending deposit row has positive amount.
-
-`test-*` wrappers check transitions; generated `rv-*` aliases expose the same
-operations to RV invariant mode. They cover deposit, settle-deposit, cancel,
-withdraw, readmit and its settle, set-limit and its settle, reprice, swap,
-settle-with-refresh, pause, and minimum changes:
-
-- Cancel, with pause randomly true/false, must return the exact pre-call sum
-  and wallet delta; live/parked/pending deposit and pending limit/readmit clear.
-  Empty cancel is checked as u1005 rather than counted as a real refund.
-- With valid trait/asset and a stub price, settle-deposit clears pending and
-  either preserves the user's total market claim by placing it, or moves the
-  escrow amount back to that owner's wallet. Only freshness u1003/u1032 and
-  market pause u1007 are allowed to leave an existing pending deposit behind.
-  No pending requires u1030. This does not claim invalid traits/assets must
-  succeed, nor test real core authorization failures.
-- A queue-full refund must leave the side's full live/parked/order snapshot,
-  depositor list, and cycle totals unchanged, while refunding exactly pending.
-- Successful deposits must have passed **existing + parked + amount >= the
-  submit-time minimum**, and a positive limit. Successful swaps must satisfy
-  the entry net minimum and positive limit. Previously admitted pending orders
-  may settle below a subsequently raised minimum, intentionally.
-- `test-state` also samples all structural invariants in property mode. RV
-  invariant mode samples invariants between random call sequences, not every
-  invariant after every raw transaction. This is sampled testing, not proof.
-
-A printed `rv-success` is emitted only when an underlying market operation
-succeeds; cancellation/settlement guards that pass on an empty position are
-not counted as actual refunds/placements. `results.json` records those counts
-separately from RV PASS/WARN counts. Settlement prints record placed,
-queue-full, or crossing outcomes.
-
-## Explicit substitutions and limits
-
-`build.py` reads the deploy copy; **no production file is edited**. The generated
-copy in `tests/rv/.build/v6-3/` changes dependency references and initial config:
-
-- Lazer signatures cannot be generated by RV. The existing mock answers fresh
-  feeds with confidence zero, timestamp `stacks-block-time`, STX/USD = 1e8,
-  and BTC/USD = a settable mid (initially 3.2e13). Random wrappers move that mid
-  or move it to an existing order, so crossing/batch paths can execute. It does
-  not bypass the market's post-submit timestamp check; another block must pass.
-  Real oracle freshness/signatures are covered by the stxer harness, not RV.
-- SIP-010 uses the existing real-ledger `mock-ft`. It auto-funds a sender that
-  lacks tokens, including a mint counter checked for the market. Native STX
-  uses the simnet's funded accounts. No mainnet tokens are involved.
-- Core-v6 logs/register are generated stubs; pending-refund logs additionally
-  record the reason for assertions. Core pause/auth/equity are out of RV scope;
-  the fork suites cover the real core and pause behavior.
-- The mock ladder reserves 48 of the original 50 seats; MAX_DEPOSITORS and map/
-  list widths remain **50**, leaving two public seats to reach full queues.
-  Distance slots start at zero and vary within 0..2. This does not exhaustively
-  test a book with 50 actual live makers or protected contract seats.
-- Initialization defaults select the mocks/feed IDs, treasury is a nontrading
-  mock contract, and minima start at 100 / 10,000. `test-config` changes pause,
-  minima, and distance slots directly as a fuzz aid; owner authorization is
-  not under test. Raw public owner functions also remain in invariant mode.
-- The account universe includes all nine eligible Devnet senders, plus an
-  unused historical address. Invariant-mode raw calls may supply random asset
-  names and trigger `BadTokenName`; the runner counts these invalid-input
-  runtime errors separately. Other runtime errors/property failures fail the run.
-
-## Historical recovery results (before full-book extension)
-
-Historical suite: **9,000 trials, zero property failures**. RV's 5,328 discarded
-cases are not counted as successful property checks.
-
-| Mode | Seed | Trials | Passed | Discarded | Failed |
+| Campaign | Seed | Trials | Passed | Discarded | Failed |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | invariant | 230927 | 1000 | 1000 | 0 | 0 |
-| test | 230926 | 5000 | 1634 | 3366 | 0 |
+| test | 230926 | 5000 | 1631 | 3369 | 0 |
 | seeded | 230929 | 3000 | 1038 | 1962 | 0 |
+| Native RV after full-book seed 230930 | 231030 | 1000 | 330 | 670 | 0 |
+| Native RV after full-book seed 230931 | 231031 | 1000 | 304 | 696 | 0 |
+| Native RV after full-book seed 230932 | 231032 | 1000 | 353 | 647 | 0 |
 
-Meaningful successful wrapper calls across these sweeps: 244 deposits, 199
-funded cancellations, 53 pending-deposit settlements (44 placed, eight
-queue-full refunds, one crossing refund), 14 swaps, and one batch settlement.
-Readmit submit succeeded four times on x and twice on y; readmit settlement
-succeeded once on y through a wrapper. Successful **x readmit settlement is
-not demonstrated by the final wrapper counts** (an earlier exploratory run
-did reach it). These are lower-bound wrapper counts, separate from raw public
-calls in invariant mode. Batch/readmit coverage is sparse, not exhaustive.
+Successful state-aware calls across the three seeds (including setup and final
+recovery, excluding additional native RV calls):
 
-The 1,000-trial invariant sweep also logged 37 `BadTokenName` runtime errors
-from raw random asset-name strings. The two property sweeps logged none.
-These rejected invalid-input calls are reported separately, not concealed as
-successful mutations or called market solvency counterexamples.
+| Path | x | y |
+| --- | ---: | ---: |
+| Deposit | 522 | 522 |
+| Settle deposit | 132 | 522 |
+| Readmit submission | 120 | 120 |
+| Positive readmit placement | 120 | 120 |
+| Swap with nonzero output | 120 | 120 |
+| Funded cancel, including recovery | 316 | 372 |
+| Partial withdrawal | 16 | 17 |
 
+**123 successful batch clears**, each checking payout/roll/refund conservation.
 
-See [results.json](results.json) for the final run counts, successful-path
-counts, seeds, source hashes, and log paths. `source-hashes.json` preserves
-the earlier caller-audit snapshot; current extension hashes are in
-`full-book-results.json`. Preliminary sweeps while building
-the harness were also run: 100 and 500 invariant trials (seed 230923), 500
-property trials (230924), 3,000 property trials (230925), and a 3,000-trial
-prelude experiment (230928, before sorting prelude accounts). None found a
-property failure, but those earlier versions are **not** counted in the final
-suite. Several early build/import/fixture errors were harness errors and ran
-no complete fuzz sweep.
+Every final recovery sweep returned each owner's exact remaining claim and
+ended with **zero x and zero STX in market custody**:
 
-No market invariant counterexample was found in those historical runs. This
-does not establish universal recoverability for arbitrary tokens, authorization
-states, oracle data, owners, or lists beyond the model above. Readmission and
-batch fills were rare in those historical sweeps; the extension above addresses
-that gap with separately reported runs.
+| Guided seed | x owners recovered | y owners recovered | Final market balances |
+| --- | ---: | ---: | --- |
+| 230930 | 20 | 12 | x = 0; STX = 0 |
+| 230931 | 6 | 8 | x = 0; STX = 0 |
+| 230932 | 27 | 7 | x = 0; STX = 0 |
 
-The separate [caller-impact report](../../../simulations/README-v6-3-caller-impact.md)
-contains the rung exit restrictions and real-source fork evidence; those are
-caller behavior findings, not RV market invariant failures.
+The raw invariant campaign rejected **37 invalid asset-name calls** with
+`BadTokenName`; these are recorded separately from property failures.
+
+## Source and fixtures
+
+`build.py` reads the current production contract on every run. Its complete
+production prefix is preserved except for dependency principal substitutions.
+The real `initialize`, `set-treasury`, `sync-seat-count`, and
+`set-distance-slots` functions configure the test instance; production state
+declarations, guards, and queue constants are not rewritten. The generated
+market appends inspection/property helpers and an explicit setup prelude.
+`tests/rv/.build/v6-3/source.json` records the source hash, substitutions, and
+profile. The random-campaign reporter checks the production prefix again.
+
+`strict-ft.clar` has a real ledger and checked transfer authorization. The
+prelude explicitly funds the known account universe. Transfers never mint;
+the market cannot conceal an insolvency with automatic funding. The y side
+uses native simnet STX. Core logging, ladder membership, and the decoded Lazer
+feed remain explicit fixtures. Oracle signature verification and production
+core registration/authorization are not fuzzed here.
+
+The RV `test-config` and cancellation wrappers deliberately control pause,
+minimums, and distance slots directly so random callers can explore those
+states. This is test instrumentation, not an alternative production entry
+point. Positions, parked balances, pending requests, and transfers are created
+through the actual market functions; no book or balance rows are injected.
+Authorization is covered separately in the v6-3 unit suite.
+
+## Campaigns and scenarios
+
+The random campaigns include seven invariants: the latched property results,
+solvency on both assets, exact live totals/list consistency and uniqueness on
+both sides, and positive pending deposits on both sides. Deposit, cancellation,
+pending settlement, repricing, swap, quote, withdrawal, readmission, and batch
+properties run against the same generated market. The seeded prelude creates
+live, parked, and pending deposit/limit/readmit states on both sides.
+
+The ordinary random profile reserves 48 of the 50 available seats through
+fixture configuration and public synchronization, leaving two public slots
+to exercise parking frequently. The full-book profile reserves zero seats,
+allowing **50 real live depositors per side**, plus parked claims and pending
+requests. `MAX_DEPOSITORS` remains 50 in both profiles. The default 40-public-
+slot configuration is also covered by the separate unit suite.
+
+Each of three full-book seeds performs:
+
+- 40 successful x and 40 successful y replacement/readmission episodes,
+  retaining 50 live makers per side. Readmission must return a positive
+  placement, clear its pending request, and preserve the owner's total claim.
+- An initial full-book batch clear, followed by 40 additional batch episodes,
+  40 x swaps, and 40 y swaps in randomized order. Counted swaps must produce
+  nonzero output. Batch assertions reconcile custody outflows with payouts,
+  fees, dust, rolled funds, and refunds for each asset independently.
+- Partial withdrawals and funded cancellations, with randomized paused exits.
+- 1,000 native RV property trials from the resulting funded state. All seven
+  invariants are checked after every public call, including discarded trials.
+- A final recovery sweep: every remaining funded owner cancels through the
+  public cancellation path while the market is paused. Each cancellation
+  checks the exact wallet credit and clears live + parked + pending claims.
+  Both market custody balances must finish at zero.
+
+Native property discards are shown separately from passes: they are rejected
+or inapplicable generated operations, not successful economic activity.
+Successful scenario counters are separate from native trial counts. Base RV
+invariant mode also generates invalid raw asset names; their `BadTokenName`
+rejections are counted explicitly, not described as successful transfers.
+
+## Reproduction and limits
+
+The full-book seeds are 230930, 230931, and 230932; native RV uses seed + 100.
+`RV_EPISODES`, `RV_SEEDS`, and `RV_RANDOM_RUNS` can shorten local probes.
+Probe results are not interchangeable with a completed default campaign.
+The runner checks report contents as well as exit status because the RV CLI
+can exit successfully despite reported failures. Full-book failures save a
+public-call trace in `full-book-counterexample.json`; state-aware scenario
+traces are not automatically shrunk by native RV.
+
+The random amount/price helpers deliberately bound inputs: x amounts below
+20,000, y amounts scaled by 1,000, quotes in the configured 24–40 trillion
+range plus zero-limit cases, and varying minimums, distance slots, and pause.
+The full-book driver uses larger replenishment amounts and moving prices to
+force fills. This is finite fuzz evidence, not a proof over all uint values
+or all possible users, tokens, dependencies, and transaction limits.
+
+Passing recovery sweeps establish no stranded funds in these tested states.
+They do **not** prove funds can never be stuck: production cancellation still
+depends on successful token transfers and core logging/registration. Stale
+price handling is covered by the unit suite (79 seconds accepted, 80 seconds
+rejected for either feed); the RV oracle intentionally supplies fresh times.
+
+Raw random-campaign logs are in `simulations/results/rv-v6-3/` (ignored).
+Tracked [results.json](results.json) and
+[full-book-results.json](full-book-results.json) record the completed runs,
+counts, seeds, and source/fixture hashes. The older `source-hashes.json` is a
+historical caller-audit snapshot, not the evidence for these current runs.
+Fuzz counts are separate from the [unit coverage report](../../unit/v6-3/README.md).
+Everything runs locally; no on-chain deployment is performed.

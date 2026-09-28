@@ -162,6 +162,7 @@ market-only coverage, fixtures, and remaining gaps.
 ```sh
 npm install
 npm test
+npm run rv:v6-3  # random and full-book scenario fuzzing
 ```
 
 The v6-3 suite runs offline against the current contract, with isolated local

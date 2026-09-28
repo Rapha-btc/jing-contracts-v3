@@ -9,7 +9,8 @@ const jobs=[
  {mode:'seeded',runs:3000,seed:230929},
 ];
 if(!process.argv.includes('--summarize')) {
- const b=spawnSync('python3',['tests/rv/v6-3/build.py'],{stdio:'inherit'});if(b.status)process.exit(b.status);
+ const b=spawnSync('python3',['tests/rv/v6-3/build.py'],{stdio:'inherit'});
+ if(b.error||b.status!==0)throw b.error??Error(`RV build exit ${b.status}`);
  for(const j of jobs){
   console.log(`RV ${j.mode}, runs=${j.runs}, seed=${j.seed}`);
   const path=`${dir}/${j.mode}-${j.seed}.log`,fd=fs.openSync(path,'w');
@@ -30,6 +31,11 @@ const results=jobs.map(j=>{
  const refunds={};for(const m of s.matchAll(/reason: "([^"]*)"/g))refunds[m[1]||'placed']=(refunds[m[1]||'placed']??0)+1;
  return {...j,passed,discarded,failed,actualSuccessfulWrapperCalls:counts,settleOutcomes:refunds,invalidAssetRuntimeErrors:(s.match(/Error: BadTokenName\(/g)||[]).length,log:path};
 });
-const hashes={};for(const f of ['contracts/markets-sbtc-stx-jing-v6-3.clar','tests/rv/v6-3/properties.clar','tests/rv/v6-3/build.py','tests/rv/v6-3/run-seeded.mjs','tests/rv/.build/v6-3/market.clar'])hashes[f]=crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
+const meta=JSON.parse(fs.readFileSync('tests/rv/.build/v6-3/source.json','utf8'));
+let prefix=fs.readFileSync(meta.source,'utf8');
+if(meta.fullBook||crypto.createHash('sha256').update(prefix).digest('hex')!==meta.sha256)throw Error('Wrong or stale RV build for random-campaign report');
+for(const [from,to] of Object.entries(meta.dependencySubstitutions))prefix=prefix.replaceAll(from,to);
+if(!fs.readFileSync('tests/rv/.build/v6-3/market.clar','utf8').startsWith(prefix+'\n'))throw Error('RV production prefix differs beyond dependency substitutions');
+const hashes={};for(const f of ['contracts/markets-sbtc-stx-jing-v6-3.clar','tests/rv/v6-3/properties.clar','tests/rv/v6-3/build.py','tests/rv/v6-3/run-seeded.mjs','tests/rv/v6-3/strict-ft.clar','tests/rv/mock-lazer-oracle.clar','tests/rv/mock-jing-ladder.clar','tests/rv/.build/v6-3/core.clar','tests/rv/.build/v6-3/ladder.clar','tests/rv/.build/v6-3/market.clar'])hashes[f]=crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex');
 fs.writeFileSync('tests/rv/v6-3/results.json',JSON.stringify({generatedAt:new Date().toISOString(),hashes,results},null,2)+'\n');
 console.log(JSON.stringify(results,null,2));

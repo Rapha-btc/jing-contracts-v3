@@ -10,7 +10,7 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.mock-ft]
-path = "../mock-ft.clar"
+path = "strict-ft.clar"
 clarity_version = 5
 epoch = "3.4"
 

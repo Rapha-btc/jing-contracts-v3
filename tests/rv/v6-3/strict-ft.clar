@@ -1,0 +1,22 @@
+;; RV funding is explicit. A transfer cannot mint away a custody deficit.
+(impl-trait .sip-010-trait.sip-010-trait)
+(define-fungible-token mock-ft)
+(define-constant owner tx-sender)
+(define-map minted principal uint)
+(define-read-only (get-minted (who principal)) (default-to u0 (map-get? minted who)))
+(define-public (mint (amount uint) (who principal))
+  (begin
+    (asserts! (is-eq tx-sender owner) (err u401))
+    (try! (ft-mint? mock-ft amount who))
+    (map-set minted who (+ amount (get-minted who)))
+    (ok true)))
+(define-public (transfer (amount uint) (sender principal) (recipient principal) (memo (optional (buff 34))))
+  (begin
+    (asserts! (is-eq tx-sender sender) (err u401))
+    (ft-transfer? mock-ft amount sender recipient)))
+(define-read-only (get-name) (ok "RV token"))
+(define-read-only (get-symbol) (ok "RV"))
+(define-read-only (get-decimals) (ok u8))
+(define-read-only (get-balance (who principal)) (ok (ft-get-balance mock-ft who)))
+(define-read-only (get-total-supply) (ok (ft-get-supply mock-ft)))
+(define-read-only (get-token-uri) (ok none))

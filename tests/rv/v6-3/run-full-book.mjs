@@ -152,14 +152,29 @@ for(const seed of seeds){
   const eligible=new Map(generated.map((address,i)=>[`maker-${i}`,address]));
   await checkProperties(instrumented,async()=>{throw Error('Unexpected RV regression reset');},[target],functions,seed+100,randomRuns,true,false,radio,eligible,generated);
   assert.equal(rv.failed,0,'native RV property failure');assert.equal(rv.passed+rv.discarded,randomRuns,'complete native RV run');
-  invariant();results.push({seed,episodesPerPath:count,successfulCalls:stats,invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv}});
+  // Recovery is a real public cancellation, including after arbitrary minimum,
+  // pause and quote changes. Every funded owner must recover exactly its claim.
+  const recovery={x:{owners:0,amount:0n},y:{owners:0,amount:0n}};
+  for(const side of ['x','y'])for(const row of rows(side)){
+   const claim=owned(side,row.who);
+   if(claim>0n){
+    cancel(side,row.who,true);
+    assert.equal(owned(side,row.who),0n,'cancel must clear all owned funds');
+    recovery[side].owners++;recovery[side].amount+=claim;
+   }
+  }
+  for(const side of ['x','y']){
+   assert.equal(scalar(`rv-balance-${side}`,`${sim.deployer}.market`),0n,'no residual custody after all owners cancel');
+   recovery[side].amount=recovery[side].amount.toString();
+  }
+  invariant();results.push({seed,episodesPerPath:count,successfulCalls:stats,invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv},recovery});
   console.log(`GREEN seed=${seed} ${JSON.stringify(results.at(-1))}`);
  }catch(e){
   fs.writeFileSync('tests/rv/v6-3/full-book-counterexample.json',JSON.stringify({seed,error:String(e),trace},null,2)+'\n');
   throw e;
  }
 }
-const hashes=Object.fromEntries(['contracts/markets-sbtc-stx-jing-v6-3.clar','tests/rv/v6-3/properties.clar','tests/rv/v6-3/build.py','tests/rv/v6-3/run-full-book.mjs'].map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));
-fs.writeFileSync('tests/rv/v6-3/full-book-results.json',JSON.stringify({results,hashes},null,2)+'\n');
+const hashes=Object.fromEntries(['contracts/markets-sbtc-stx-jing-v6-3.clar','tests/rv/v6-3/properties.clar','tests/rv/v6-3/build.py','tests/rv/v6-3/run-full-book.mjs','tests/rv/v6-3/strict-ft.clar','tests/rv/.build/v6-3/market.clar'].map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));
+fs.writeFileSync('tests/rv/v6-3/full-book-results.json',JSON.stringify({generatedAt:new Date().toISOString(),results,hashes},null,2)+'\n');
 fs.rmSync('tests/rv/v6-3/full-book-counterexample.json',{force:true});
 console.log('All seeded full-book checks green.');

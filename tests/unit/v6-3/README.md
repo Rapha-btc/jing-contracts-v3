@@ -143,3 +143,10 @@ Function execution coverage is not exhaustive behavioral coverage. Real Pyth
 signature validation, production sBTC integration, core/ladder authorization,
 and deployment transaction limits still need the separate integration and
 simulation suites.
+
+## Scenario fuzzing
+
+Run `npm run rv:v6-3` for the separate Rendezvous campaigns against the same
+current market. See the [RV scenario README](../../rv/v6-3/README.md) for seeds,
+successful operations, discarded trials, recovery checks, and fixture limits.
+Fuzz trial counts are separate from the unit coverage percentages above.

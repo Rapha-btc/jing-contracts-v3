@@ -1,4 +1,5 @@
 {
+  "generatedAt": "2026-09-28T20:18:48.386Z",
   "results": [
     {
       "seed": 230930,
@@ -12,9 +13,9 @@
         "settle-deposit-y": 174,
         "set-limit-y": 1,
         "readmit-y": 40,
-        "cancel-y": 115,
+        "cancel-y": 127,
         "settle-readmit-y": 40,
-        "cancel-x": 88,
+        "cancel-x": 108,
         "settle-readmit-x": 40,
         "withdraw-y": 5,
         "withdraw-x": 6,
@@ -22,14 +23,24 @@
         "swap-x": 40,
         "swap-y": 40
       },
-      "invariantChecks": 2768,
-      "calls": 1365,
+      "invariantChecks": 2832,
+      "calls": 1429,
       "nativeRV": {
         "seed": 231030,
         "runs": 1000,
         "passed": 330,
         "discarded": 670,
         "failed": 0
+      },
+      "recovery": {
+        "x": {
+          "owners": 20,
+          "amount": "98646"
+        },
+        "y": {
+          "owners": 12,
+          "amount": "121875000"
+        }
       }
     },
     {
@@ -44,9 +55,9 @@
         "settle-deposit-y": 174,
         "set-limit-y": 1,
         "readmit-y": 40,
-        "cancel-y": 115,
+        "cancel-y": 123,
         "settle-readmit-y": 40,
-        "cancel-x": 88,
+        "cancel-x": 94,
         "settle-readmit-x": 40,
         "withdraw-x": 3,
         "withdraw-y": 8,
@@ -54,14 +65,24 @@
         "swap-x": 40,
         "swap-y": 40
       },
-      "invariantChecks": 2775,
-      "calls": 1372,
+      "invariantChecks": 2803,
+      "calls": 1400,
       "nativeRV": {
         "seed": 231031,
         "runs": 1000,
         "passed": 304,
         "discarded": 696,
         "failed": 0
+      },
+      "recovery": {
+        "x": {
+          "owners": 6,
+          "amount": "44112"
+        },
+        "y": {
+          "owners": 8,
+          "amount": "40296000"
+        }
       }
     },
     {
@@ -76,9 +97,9 @@
         "settle-deposit-y": 174,
         "set-limit-y": 1,
         "readmit-y": 40,
-        "cancel-y": 116,
+        "cancel-y": 122,
         "settle-readmit-y": 40,
-        "cancel-x": 86,
+        "cancel-x": 114,
         "settle-readmit-x": 40,
         "withdraw-x": 7,
         "withdraw-y": 4,
@@ -86,21 +107,33 @@
         "swap-y": 40,
         "swap-x": 40
       },
-      "invariantChecks": 2770,
-      "calls": 1367,
+      "invariantChecks": 2838,
+      "calls": 1435,
       "nativeRV": {
         "seed": 231032,
         "runs": 1000,
-        "passed": 354,
-        "discarded": 646,
+        "passed": 353,
+        "discarded": 647,
         "failed": 0
+      },
+      "recovery": {
+        "x": {
+          "owners": 27,
+          "amount": "97585"
+        },
+        "y": {
+          "owners": 7,
+          "amount": "60167000"
+        }
       }
     }
   ],
   "hashes": {
-    "contracts/markets-sbtc-stx-jing-v6-3.clar": "04b0a7df781aec46124d40d3c73c68169aeed919fed155ec5bf12153bb0bfb85",
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851",
     "tests/rv/v6-3/properties.clar": "4f4d55c9f523476155546367e4535513eef44e34cea646f2bcd628209cd0d794",
-    "tests/rv/v6-3/build.py": "8af6251d404b3bc493b55934708eb643d287edd9aacf0cd91f47edc458710eca",
-    "tests/rv/v6-3/run-full-book.mjs": "6183ca315a4fca2559716a6a20c882fa4947c9779b619f69f0f1d5049cdc15eb"
+    "tests/rv/v6-3/build.py": "f38c6641b6b0e563f00952a5ebb27126615bb8c6b2013eb7c747f936f433c481",
+    "tests/rv/v6-3/run-full-book.mjs": "96697071366738916af217fae204970328992ca718c1f3a31279a78f1c0eea50",
+    "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
+    "tests/rv/.build/v6-3/market.clar": "841fdb1b81aee1f80be3bbab1191559f6b4635018729b0db66350b4e0c5348f4"
   }
 }
