@@ -63,6 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Void Kael | #7: after a sell-out, a 1-sat `jing-place` escrows dust on the market, and `is-empty` (market position exactly 0) keeps the batch open until the window ends | yes | LOW | **Fixed**: `close-batch` cancels a market position of at most `DUST_SATS` home first, see below. All three vaults. |
 | Void Kael | #6: a batch funded with <= DUST_SATS closes with 0 STX, and `finish` then fails `(err u3)` on the 0 transfer forever, wedging the juice / fastpool pool | yes | LOW | **Fixed**: `finish` skips the transfer when the balance is 0, see below. ccd016 not affected. |
 | Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
 | Nested Quinn | L-2: juice / fastpool vaults accept `window-blocks` up to 1008, but recovery opens at batch start + 432, so anyone can recover mid-window | yes | LOW | **Fixed**: `MAX_WINDOW_BLOCKS` 288 in both vaults (juicestx `579cf03`, fastpool `1ded288`), see below. ccd016 not affected. |
@@ -822,4 +823,27 @@ holds real sBTC cannot be finished early.
 Rejected alternative: refuse fundings of `DUST_SATS` or less in `fund`. It
 would make a small real claim revert until more rewards accrue (or someone
 donates), which is an outside step again.
+
+## Void Kael #7: market dust holds a sold-out batch open (fixed)
+
+**The claim.** `DUST_SATS` lets `is-empty` ignore up to 2 sats in the vault
+wallet, but it requires the vault's market position (live, parked, pending) to
+be exactly 0. After the vault's order sells out, anyone sends it 1 sat and
+calls the permissionless `jing-place`: the market takes it as a top-up (the
+minimum is on the whole position) and escrows it. `close-batch`, `finalize`,
+reclaim and recovery then refuse until the window ends (288 blocks), so the
+pool's next claim (juice u115) or funding (fastpool u1050) waits. A settle
+only turns it into a 1-sat live ask, just as non-empty. No funds at risk.
+
+**Fix** (juice, fastpool, ccd016 v2). New private `market-total` (live +
+parked + pending). `close-batch` first cancels the vault's market position
+(`reclaim-core`, no oracle, no pause check) when it is above 0 and wallet +
+market is at most `DUST_SATS`; the sats come home as wallet dust and
+`is-empty` holds, so the batch closes at once. The dust rides into the next
+batch, as `DUST_SATS` intends. A real position (more than 2 sats) is never
+cancelled by this. If the cancel fails, `close-batch` refuses as before.
+
+Rejected alternative (Void's tested one): a minimum on `jing-place`. The
+ccd016 README already rejected it (it would only price the call and strand
+the last chunk).
 
