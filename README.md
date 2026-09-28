@@ -169,6 +169,47 @@ The v6-3 suite runs offline against the current contract, with isolated local
 dependencies and strict token balances. Older-version tests are not part of
 this command or its coverage totals.
 
+### Current v6-3 results — 2026-09-28
+
+The completed unit and RV runs used
+`contracts/markets-sbtc-stx-jing-v6-3.clar`, SHA-256
+`65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851`.
+The harnesses load the real market source with local dependency fixtures;
+the linked reports explain the substitutions and instrumentation.
+
+| Check | Verified result |
+| --- | --- |
+| Clarinet unit tests | **160 passing** |
+| Market function coverage | **100%** (137/137) |
+| Market line coverage | **99.70%** (2,344/2,351) |
+| Market branch coverage | **99.88%** (830/831) |
+| Native RV trials | **12,000 completed**: 4,656 passed, 7,344 discarded, zero property/invariant failures |
+| Guided RV scenarios | **600 episodes**, 8,473 explicit invariant checks |
+| Final paused recovery | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
+
+The remaining unit branch is an unreachable gross-up decrement; the other
+unhit line entries are instrumentation points, detailed in the
+[unit report](tests/unit/v6-3/README.md). The
+[RV report](tests/rv/v6-3/README.md) records seeds, source hashes, successful
+operations, rejected inputs, and fixture limits. Neither execution coverage
+nor finite fuzzing proves correctness for every possible state.
+
+The unit tests accept a 79-second-old Lazer feed and reject either feed at
+80 seconds or older. Recovery tests exercise live, parked, and pending
+claims, including cancellation while paused. Production recovery still
+depends on successful token transfers and core logging.
+
+Next, finish the full-side/protected-seat fork scenarios, then settlement
+edge cases and administrative integration paths with the real dependencies.
+See the separate [mainnet-fork coverage report](simulations/README-v6-3-coverage.md);
+its coverage totals are independent of Clarinet's. The new
+[`verify-v6-3-full-side.js`](simulations/verify-v6-3-full-side.js) passed syntax
+and offline model checks (`node simulations/verify-v6-3-full-side.js --dry`);
+that dry run does not establish a passing contract execution on a fork.
+
+These results document local tests and fork simulations. **v6-3 has not been
+deployed on-chain by this testing work.**
+
 ### Historical coverage matrix (clarinet + stxer)
 
 Every public contract in this repo is exercised by **both** local clarinet simnet tests **and** stxer mainnet-fork simulations. The two suites are intentionally redundant: clarinet catches logic bugs at the bytecode level (instant, deterministic, plus property-fuzz via Rendezvous); stxer catches integration bugs against real mainnet state (Pyth freshness, Bitflow xyk + DLMM pool depth, wstx behavior, sBTC token-supply tracker).
