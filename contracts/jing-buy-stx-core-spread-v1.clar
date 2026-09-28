@@ -166,6 +166,16 @@
   uint
   uint
 )
+;; a tail-rolled epoch's reserve and how many of its members have not taken
+;; their share yet. Each share is rounded down, so the reserve can keep a few
+;; units nobody owns; when the last one is paid they go back to the pool.
+(define-map epoch-reserve
+  uint
+  {
+    left: uint,
+    reserve: uint,
+  }
+)
 ;; a sold-out pool closes its epoch: index and shares restart, old members
 ;; keep their claim against the epoch's final proceeds-index
 (define-data-var epoch uint u0)
@@ -757,6 +767,10 @@
       (map-set epoch-final-scale epo (var-get scale))
       (var-set reserved-sats (+ (var-get reserved-sats) reserve))
       (var-set held-sats (- free reserve))
+      (map-set epoch-reserve epo {
+        left: (var-get members),
+        reserve: reserve,
+      })
       (is-ok (contract-call? LADDER log-epoch-closed epo final-proceeds))
       (var-set epoch (+ epo u1))
       (var-set total-shares u0)
@@ -764,6 +778,37 @@
       (var-set unfilled-index SCALE)
       (ok true)
     )
+  )
+)
+
+;; One old member of tail-rolled epoch `e` took `back` from its reserve. The
+;; last one releases what rounding left in the reserve to the pool (held).
+(define-private (count-reserve-claim
+    (e uint)
+    (back uint)
+  )
+  (match (map-get? epoch-reserve e)
+    r (let (
+        (reserve (get reserve r))
+        (rest (if (> back reserve)
+          u0
+          (- reserve back)
+        ))
+      )
+      (if (<= (get left r) u1)
+        (begin
+          (map-delete epoch-reserve e)
+          (var-set reserved-sats (- (var-get reserved-sats) rest))
+          (var-set held-sats (+ (var-get held-sats) rest))
+          true
+        )
+        (map-set epoch-reserve e {
+          left: (- (get left r) u1),
+          reserve: rest,
+        })
+      )
+    )
+    true
   )
 )
 
@@ -805,6 +850,7 @@
         ))
       )
       (var-set reserved-sats (- (var-get reserved-sats) back))
+      (and (not current) (count-reserve-claim pos-epoch back))
       ;; an old-epoch position has nothing left: paid in full, gone
       (if current
         (map-set positions who (merge pos {

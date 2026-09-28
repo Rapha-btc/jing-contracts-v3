@@ -62,6 +62,7 @@ Runners-up, if we tip like last round:
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
 | Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. In `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1`. |
+| Regal Anvil | #1: each old member's share of a tail-roll reserve is rounded down, so up to N-1 units per rolled epoch stay in `reserved-sats` forever | yes | LOW | **Fixed** in `jing-buy-stx-core-spread-v1`: the last old member's payout releases the leftover to the pool, see below. |
 | Regal Anvil | #2: STX from fills while a rung has no members is watermarked away (F-7), and donated sats can keep a memberless order live | yes | INFO | **Already fixed** in `f015382` (ARION F-7): the watermark stays put with no shares, so the STX goes to the next epoch. Donated sats are unowned and taken by the next depositor as orphan. Holds on `jing-buy-stx-core-spread-v1`. |
 | Void Kael | #4: the MINT_FLOOR tail roll cancels a stocked rung off the book (Nested Quinn M-2's root cause, new symptom) | yes | LOW | **Fixed** by the index rescale in `jing-buy-stx-core-spread-v1` (`741de17`): the index drifting under the floor rescales instead of closing. Same root cause as Nested Quinn M-2. |
 | Nested Quinn | M-2: the cumulative `unfilled-index` only goes down, so a healthy, full rung that is filled and topped up again and again hits the floor | yes | MEDIUM | **Fixed** by the index rescale in `jing-buy-stx-core-spread-v1` (`741de17`), see `contracts/README-rung-index-rescale.md`. |
@@ -720,3 +721,29 @@ was just pushed into it) waits for a settle or the 24h cancel, and after the
 cooldown the grief can re-push; the owner push pause closes that.
 
 Status: in `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1` (the rung under review for now, which also carries the Nested Quinn M-2 rescale). The other `-v1` rungs later.
+
+## Regal Anvil #1: tail-roll reserve dust (fixed)
+
+**The claim.** `roll-tail` reserves the closing epoch's unsold total as one
+rounded-down amount; each old member later takes a share that is also rounded
+down. The shares add up to a little less than the reserve, and nothing ever
+released the rest: `sync` keeps `reserved-sats` out of the pool. Under 1 unit
+per member per tail roll. The rescale's leftover shares add the same kind of
+dust.
+
+**Fix** (`jing-buy-stx-core-spread-v1`). The dust is only known once every old
+member has taken its share (summing the rounded shares at the roll would need
+a loop over all members). So:
+- `roll-tail` stores `epoch-reserve[epoch] = {left: members, reserve}`.
+  `reserved-sats` stays one total for the whole rung (the sum of what every
+  rolled epoch still owes); `epoch-reserve` is each epoch's part of it.
+- `settle-proceeds`, for an old-epoch row, calls `count-reserve-claim`: one
+  less `left`, `reserve - back`. When the last one is paid, the rest leaves
+  `reserved-sats` and goes to `held-sats`.
+- In the pool it is unowned, like a donation, and goes to a later depositor
+  as `orphan`; nothing stays locked. The tail roll is the only close that
+  reserves anything (the last-member close reserves nothing).
+
+An old member who never comes back keeps its epoch's dust waiting; that is
+still their claim.
+
