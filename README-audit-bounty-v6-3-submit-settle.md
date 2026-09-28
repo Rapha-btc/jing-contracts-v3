@@ -53,6 +53,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #1: `get-taker-capacity` counts in-range makers under 0.2% of their side, which settlement rolls (`filter-small`), so a swap sized to the quote fails u1017 | yes | MEDIUM | **Fixed**: the capacity skips them, see below. |
 | Regal Anvil | #3: `filter-small-token-*` tests each maker against a side total that shrinks as makers roll, so the 0.2% floor depends on list order | yes | INFO | **Fixed**: one snapshot of the side total before the loop, see below. |
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
+| Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -579,3 +580,50 @@ side-blind "nothing to settle" bypass in `execute-settlement`; `crossing-x` is
 only read while `crossing` is true, and every site that sets `crossing` true
 sets it; the book walk still excludes the taker by principal on both sides
 (no self-fill), unchanged.
+
+## Void Kael #3: an older pending instruction overwrites a newer limit (fixed)
+
+**The claim.** A maker's price can come from three places per side:
+
+| map | holds | time |
+|---|---|---|
+| `token-*-pending-deposits` | a pending top-up with its own limit | `submitted-at` |
+| `token-*-pending-limits` | a pending limit change | `submitted-at` |
+| `token-*-deposit-limits` | the limit the order actually uses | none |
+
+Both pending maps write the stored limit when they settle, and `set-limit` /
+`reprice` write it directly. The stored limit had no time, so the last write
+won, not the newest instruction. Example: Alice submits a top-up at L1 = mid
+(pending), then sets L2 = mid - 5% (stored directly, or its pending limit
+settled first). Anyone then settles the OLDER top-up and the stored limit is
+L1 again; a taker fills her at a price she had withdrawn (+4.2% to +7.7% in
+the tests). The reorder and the swap fit in one block. No escrow is lost; the
+harm is bounded by the gap between her own two limits.
+
+**Fix.** The stored limit remembers when its instruction was made, and a
+settle only writes an instruction at least as new.
+- `token-*-deposit-limits` gains `set-at: uint` (`get-token-*-order` defaults
+  it to `u0`).
+- `deposit-token-*-core` gains `instr-at`: `(get submitted-at pending)` from
+  `settle-token-*-deposit`, `stacks-block-time` from a direct deposit or a
+  swap. Its limit write goes through the new `put-limit-*`, which writes only
+  when there is no record or `instr-at >= set-at`. The amount and carry are
+  always added.
+- `settle-token-*-limit` refuses `"stale"` (the existing refusal log,
+  `(ok false)`, pending limit deleted) when the stored `set-at` is newer than
+  the pending's `submitted-at`, and otherwise writes `set-at` = `submitted-at`.
+- Direct writes (`set-token-*-limit`, the direct branches of
+  `reprice-or-swap-token-*`) write `set-at: stacks-block-time`.
+
+Neither path errors on a stale instruction. A settled top-up still adds its
+amount at the newer price (failing would leave the escrow stuck pending, every
+retry failing the same way, until the maker cancels). A stale pending limit is
+deleted and the settle returns `(ok false)`.
+
+A record exists only while the order is live or parked (every exit deletes
+it), so a top-up that settles after its order was fully filled is a new order
+and writes its own limit. All three v6-3 copies.
+
+Not changed: `log-deposit-*` still prints the pending's limit even when the
+stored one was kept.
+

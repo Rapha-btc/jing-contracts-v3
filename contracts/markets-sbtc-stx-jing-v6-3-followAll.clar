@@ -228,6 +228,7 @@
   {
     limit: uint,
     spread-bps: (optional uint),
+    set-at: uint,
   }
 )
 (define-map token-x-deposit-limits
@@ -235,6 +236,7 @@
   {
     limit: uint,
     spread-bps: (optional uint),
+    set-at: uint,
   }
 )
 (define-map token-y-pending-deposits
@@ -363,6 +365,7 @@
   (default-to {
     limit: u0,
     spread-bps: none,
+    set-at: u0,
   }
     (map-get? token-y-deposit-limits depositor)
   )
@@ -371,6 +374,7 @@
   (default-to {
     limit: u0,
     spread-bps: none,
+    set-at: u0,
   }
     (map-get? token-x-deposit-limits depositor)
   )
@@ -1163,12 +1167,31 @@
     )
   )
 )
+(define-private (put-limit-y
+    (who principal)
+    (limit-price uint)
+    (spread-bps (optional uint))
+    (at uint)
+  )
+  (if (match (map-get? token-y-deposit-limits who)
+      current (>= at (get set-at current))
+      true
+    )
+    (map-set token-y-deposit-limits who {
+      limit: limit-price,
+      spread-bps: spread-bps,
+      set-at: at,
+    })
+    false
+  )
+)
 (define-private (deposit-token-y-core
     (who principal)
     (escrowed bool)
     (amount uint)
     (limit-price uint)
     (spread-bps (optional uint))
+    (instr-at uint)
     (carry uint)
     (price uint)
     (parked-already bool)
@@ -1226,10 +1249,7 @@
         }
           (+ carry amount)
         )
-        (map-set token-y-deposit-limits who {
-          limit: limit-price,
-          spread-bps: spread-bps,
-        })
+        (put-limit-y who limit-price spread-bps instr-at)
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) carry amount) })
         )
@@ -1253,10 +1273,7 @@
         }
           (+ existing carry amount)
         )
-        (map-set token-y-deposit-limits who {
-          limit: limit-price,
-          spread-bps: spread-bps,
-        })
+        (put-limit-y who limit-price spread-bps instr-at)
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
         )
@@ -1295,7 +1312,7 @@
         (not (and new-maker full))
       )
       (begin
-        (try! (deposit-token-y-core tx-sender false amount limit-price spread-bps
+        (try! (deposit-token-y-core tx-sender false amount limit-price spread-bps stacks-block-time
           parked u0 false t asset-name
         ))
         (ok amount)
@@ -1370,12 +1387,30 @@
           full
           (try! (park-tenth-token-y cycle price bid (+ amount parked) depositors))
         )))
-        (try! (deposit-token-y-core who true amount limit-price spread-bps parked price
+        (try! (deposit-token-y-core who true amount limit-price spread-bps (get submitted-at pending) parked price
           bumped t asset-name
         ))
         (ok amount)
       )
     )
+  )
+)
+(define-private (put-limit-x
+    (who principal)
+    (limit-price uint)
+    (spread-bps (optional uint))
+    (at uint)
+  )
+  (if (match (map-get? token-x-deposit-limits who)
+      current (>= at (get set-at current))
+      true
+    )
+    (map-set token-x-deposit-limits who {
+      limit: limit-price,
+      spread-bps: spread-bps,
+      set-at: at,
+    })
+    false
   )
 )
 (define-private (deposit-token-x-core
@@ -1384,6 +1419,7 @@
     (amount uint)
     (limit-price uint)
     (spread-bps (optional uint))
+    (instr-at uint)
     (carry uint)
     (price uint)
     (parked-already bool)
@@ -1441,10 +1477,7 @@
         }
           (+ carry amount)
         )
-        (map-set token-x-deposit-limits who {
-          limit: limit-price,
-          spread-bps: spread-bps,
-        })
+        (put-limit-x who limit-price spread-bps instr-at)
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) carry amount) })
         )
@@ -1468,10 +1501,7 @@
         }
           (+ existing carry amount)
         )
-        (map-set token-x-deposit-limits who {
-          limit: limit-price,
-          spread-bps: spread-bps,
-        })
+        (put-limit-x who limit-price spread-bps instr-at)
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
         )
@@ -1510,7 +1540,7 @@
         (not (and new-maker full))
       )
       (begin
-        (try! (deposit-token-x-core tx-sender false amount limit-price spread-bps
+        (try! (deposit-token-x-core tx-sender false amount limit-price spread-bps stacks-block-time
           parked u0 false t asset-name
         ))
         (ok amount)
@@ -1585,7 +1615,7 @@
           full
           (try! (park-tenth-token-x cycle price ask (+ amount parked) depositors))
         )))
-        (try! (deposit-token-x-core who true amount limit-price spread-bps parked price
+        (try! (deposit-token-x-core who true amount limit-price spread-bps (get submitted-at pending) parked price
           bumped t asset-name
         ))
         (ok amount)
@@ -1960,6 +1990,7 @@
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: stacks-block-time,
         })
         (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price
           spread-bps (var-get current-cycle) (var-get token-x)
@@ -1992,6 +2023,10 @@
       (limit-price (get limit pending))
       (spread-bps (get spread-bps pending))
       (crosses (would-take-as-y price (order-y-price limit-price spread-bps price)))
+      (stale (match (map-get? token-y-deposit-limits who)
+        current (> (get set-at current) (get submitted-at pending))
+        false
+      ))
     )
     (asserts! (> (get at fresh) (get submitted-at pending))
       ERR_PRICE_BEFORE_ORDER
@@ -1999,6 +2034,7 @@
     (map-delete token-y-pending-limits who)
     (if (or
         crosses
+        stale
         (and
           (is-eq (get-token-y-deposit (var-get current-cycle) who) u0)
           (is-eq (get-token-y-parked who) u0)
@@ -2008,7 +2044,10 @@
         (try! (contract-call? .jing-core-v6 log-settle-refused-y who "limit"
           (if crosses
             "crossing"
-            "gone"
+            (if stale
+              "stale"
+              "gone"
+            )
           ) u0 price
           (var-get token-x) (var-get token-y)
         ))
@@ -2018,6 +2057,7 @@
         (map-set token-y-deposit-limits who {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: (get submitted-at pending),
         })
         (try! (contract-call? .jing-core-v6 log-limit-y who limit-price spread-bps
           (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2046,6 +2086,7 @@
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: stacks-block-time,
         })
         (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price
           spread-bps (var-get current-cycle) (var-get token-x)
@@ -2078,6 +2119,10 @@
       (limit-price (get limit pending))
       (spread-bps (get spread-bps pending))
       (crosses (would-take-as-x price (order-x-price limit-price spread-bps price)))
+      (stale (match (map-get? token-x-deposit-limits who)
+        current (> (get set-at current) (get submitted-at pending))
+        false
+      ))
     )
     (asserts! (> (get at fresh) (get submitted-at pending))
       ERR_PRICE_BEFORE_ORDER
@@ -2085,6 +2130,7 @@
     (map-delete token-x-pending-limits who)
     (if (or
         crosses
+        stale
         (and
           (is-eq (get-token-x-deposit (var-get current-cycle) who) u0)
           (is-eq (get-token-x-parked who) u0)
@@ -2094,7 +2140,10 @@
         (try! (contract-call? .jing-core-v6 log-settle-refused-x who "limit"
           (if crosses
             "crossing"
-            "gone"
+            (if stale
+              "stale"
+              "gone"
+            )
           ) u0 price
           (var-get token-x) (var-get token-y)
         ))
@@ -2104,6 +2153,7 @@
         (map-set token-x-deposit-limits who {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: (get submitted-at pending),
         })
         (try! (contract-call? .jing-core-v6 log-limit-x who limit-price spread-bps
           (var-get current-cycle) (var-get token-x) (var-get token-y)
@@ -2144,6 +2194,7 @@
         (map-set token-y-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: stacks-block-time,
         })
         (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price
           spread-bps (var-get current-cycle) (var-get token-x)
@@ -2171,6 +2222,7 @@
             (map-set token-y-deposit-limits tx-sender {
               limit: limit-price,
               spread-bps: spread-bps,
+              set-at: stacks-block-time,
             })
             (try! (contract-call? .jing-core-v6 log-limit-y tx-sender limit-price
               spread-bps (var-get current-cycle) (var-get token-x)
@@ -2231,6 +2283,7 @@
         (map-set token-x-deposit-limits tx-sender {
           limit: limit-price,
           spread-bps: spread-bps,
+          set-at: stacks-block-time,
         })
         (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price
           spread-bps (var-get current-cycle) (var-get token-x)
@@ -2260,6 +2313,7 @@
             (map-set token-x-deposit-limits tx-sender {
               limit: limit-price,
               spread-bps: spread-bps,
+              set-at: stacks-block-time,
             })
             (try! (contract-call? .jing-core-v6 log-limit-x tx-sender limit-price
               spread-bps (var-get current-cycle) (var-get token-x)
@@ -2589,7 +2643,7 @@
           )
           (var-set pending-rebate-x rebate)
           (var-set pending-rebate-bps-x (rebate-bps-for-age (get age aged)))
-          (try! (deposit-token-x-core tx-sender false net limit-price none u0 price
+          (try! (deposit-token-x-core tx-sender false net limit-price none stacks-block-time u0 price
             bumped tx-trait tx-name
           ))
         )
@@ -2597,7 +2651,7 @@
           (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
           (var-set pending-rebate-y rebate)
           (var-set pending-rebate-bps-y (rebate-bps-for-age (get age aged)))
-          (try! (deposit-token-y-core tx-sender false net limit-price none u0 price
+          (try! (deposit-token-y-core tx-sender false net limit-price none stacks-block-time u0 price
             bumped ty-trait ty-name
           ))
         )
