@@ -22,6 +22,7 @@ not change `contracts/`.
 | `verify-v6-3-deploy-bytes.js` | 17/17 | [f062ec74](https://stxer.xyz/simulations/mainnet/f062ec74963f90f748abd24ef46c74a7) |
 | `verify-v6-3-router-bin-boundary.js` | 22/22 | [9566d378](https://stxer.xyz/simulations/mainnet/9566d3784b625f7317464a3fd14af960) |
 | `verify-v6-3-swap-walk.js` (new, gap #1) | 388/388 | [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd) |
+| `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
 
 Harness updates in this round:
 - `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
@@ -62,7 +63,7 @@ Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
 | # | Area | Status |
 |---|---|---|
 | 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | **done**: 0 uncovered lines, no partial branch (388/388) |
-| 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | to do |
+| 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | **done**: fully covered but one unreachable `gross-up` arm (472/472) |
 | 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | to do |
 | 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | to do |
 | 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | to do |
@@ -91,4 +92,25 @@ Observed, not a bug: `set-treasury` accepts the market's own principal. With
 the treasury set to the market, the first fee transfer fails `(err u2)` (a
 transfer to itself) and every swap / fee-charging settle aborts until the
 owner resets it.
+
+## Taker capacity (gap #2)
+
+`verify-v6-3-capacity.js` deploys 16 `capacity-*` copies and a helper,
+`capprobe-v1`, whose public `probe-<market>` calls `get-taker-capacity` inside
+a transaction so the read-only path is traced. Every field (`mid-cap`,
+`walk-cap`, `net-cap`, `gross-cap`, `min-taker`) and every swap is predicted
+with BigInt math and asserted exactly, both taker sides: empty book, limit out
+of range or at the mid, the 0.2% bar (at the bar counts, under it is excluded
+and rolls whole at settlement), the taker's own orders, a raised minimum,
+own-side makers smaller / at least as large as the opposite, and a full side
+(49 seats) with and without a door, `min-taker`, not admitted (u1010 / u1017).
+
+The property the review fixes promised holds on the fork: a swap of exactly
+`gross-cap` on a fresh print fills in every case (Nested Quinn M-1, Void Kael
+#1); `gross-cap` plus several minimums fails u1017 with nothing moving; plus a
+sub-minimum margin fills and refunds exactly the predicted rest.
+
+Unreachable: the `(- g u1)` arm of `gross-up` (line 3927). With
+`g = floor(net x 10000 / 9980)`, `n = g - floor(20 g / 10000) <= net` always, so
+`(> n net)` is never true (also brute-forced in the sim). Harmless dead code.
 
