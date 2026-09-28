@@ -54,6 +54,7 @@ Runners-up, if we tip like last round:
 | Regal Anvil | #3: `filter-small-token-*` tests each maker against a side total that shrinks as makers roll, so the 0.2% floor depends on list order | yes | INFO | **Fixed**: one snapshot of the side total before the loop, see below. |
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
+| Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -626,4 +627,19 @@ and writes its own limit. All three v6-3 copies.
 
 Not changed: `log-deposit-*` still prints the pending's limit even when the
 stored one was kept.
+
+## Regal Anvil #4: readmit skips the minimum (by design)
+
+**The claim.** `settle-token-*-readmit` checks gone / full / crossing but not
+the current deposit minimum, while every entry path checks it.
+
+**Why no change.** Readmit is a restoration, not a new entry. The maker passed
+the minimum when the order first entered; parking only moved it off a full
+side for a while, and readmit puts back the same order (amount and price).
+The minimum is checked at entry and governs the order for its lifetime, the
+same rule as pending deposits since `08a9ef8`. A parked amount can only be
+under the current minimum if the owner raised the minimum after the park.
+Such an order comes back live; the walk already skips makers under the
+minimum and `distribute` refunds a sub-minimum rest after a fill, so nothing
+is lost.
 
