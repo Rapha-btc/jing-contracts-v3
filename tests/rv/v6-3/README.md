@@ -1,10 +1,11 @@
 # Current v6-3 Rendezvous fuzzing and recovery scenarios
 
 Verified on 2026-09-28 against `contracts/markets-sbtc-stx-jing-v6-3.clar`.
-Production source SHA-256: `65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851`.
-Production code is unchanged. These runs supersede the earlier RV results
-for source hash `04b0a7df...`; those older results were not used to claim
-that this revision passed.
+Production source SHA-256: `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
+These runs include the treasury guard (`e338e27`) and exact rolled-result
+fix (`1a930e3`). The harness preserves production market logic. Earlier
+reports for `04b0a7df...`, `65e1ffc1...`, and `ac838c29...` do not establish
+that this source revision passes and are superseded by these completed runs.
 
 ## Run
 
@@ -22,7 +23,7 @@ command does. No network or deployment keys are required.
 
 ## Verified results
 
-**12,000 native RV trials completed: 4,656 passed, 7,344 discarded,
+**12,000 native RV trials completed: 4,644 passed, 7,356 discarded,
 and zero property/invariant failures.** In addition, the three full-book seeds
 completed **600 state-aware episodes** and **8,473 explicit structural
 invariant checks**. No market counterexample was found.
@@ -30,7 +31,7 @@ invariant checks**. No market counterexample was found.
 | Campaign | Seed | Trials | Passed | Discarded | Failed |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | invariant | 230927 | 1000 | 1000 | 0 | 0 |
-| test | 230926 | 5000 | 1631 | 3369 | 0 |
+| test | 230926 | 5000 | 1619 | 3381 | 0 |
 | seeded | 230929 | 3000 | 1038 | 1962 | 0 |
 | Native RV after full-book seed 230930 | 231030 | 1000 | 330 | 670 | 0 |
 | Native RV after full-book seed 230931 | 231031 | 1000 | 304 | 696 | 0 |
@@ -60,7 +61,7 @@ ended with **zero x and zero STX in market custody**:
 | 230931 | 6 | 8 | x = 0; STX = 0 |
 | 230932 | 27 | 7 | x = 0; STX = 0 |
 
-The raw invariant campaign rejected **37 invalid asset-name calls** with
+The raw invariant campaign rejected **31 invalid asset-name calls** with
 `BadTokenName`; these are recorded separately from property failures.
 
 ## Source and fixtures
@@ -72,7 +73,12 @@ The real `initialize`, `set-treasury`, `sync-seat-count`, and
 declarations, guards, and queue constants are not rewritten. The generated
 market appends inspection/property helpers and an explicit setup prelude.
 `tests/rv/.build/v6-3/source.json` records the source hash, substitutions, and
-profile. The random-campaign reporter checks the production prefix again.
+profile. Both reporters verify the production prefix and capture source, harness,
+manifest, and fixture hashes before testing. They reject changed inputs
+between campaigns/seeds and before writing results. The random reporter
+also checks log hashes when summarizing an existing run. A source edit
+during testing therefore requires a fresh run, rather than relabeling old
+results with the new source hash.
 
 `strict-ft.clar` has a real ledger and checked transfer authorization. The
 prelude explicitly funds the known account universe. Transfers never mint;

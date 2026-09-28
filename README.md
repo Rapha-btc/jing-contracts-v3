@@ -171,19 +171,20 @@ this command or its coverage totals.
 
 ### Current v6-3 results — 2026-09-28
 
-The completed unit and RV runs used
+The completed Clarinet unit and RV runs include both `e338e27` (treasury
+guard) and `1a930e3` (exact rolled-result reporting). They used
 `contracts/markets-sbtc-stx-jing-v6-3.clar`, SHA-256
-`65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851`.
+`7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
 The harnesses load the real market source with local dependency fixtures;
 the linked reports explain the substitutions and instrumentation.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **160 passing** |
+| Clarinet unit tests | **165 passing** |
 | Market function coverage | **100%** (137/137) |
-| Market line coverage | **99.70%** (2,344/2,351) |
-| Market branch coverage | **99.88%** (830/831) |
-| Native RV trials | **12,000 completed**: 4,656 passed, 7,344 discarded, zero property/invariant failures |
+| Market line coverage | **99.70%** (2,345/2,352) |
+| Market branch coverage | **99.88%** (832/833) |
+| Native RV trials | **12,000 completed**: 4,644 passed, 7,356 discarded, zero property/invariant failures |
 | Guided RV scenarios | **600 episodes**, 8,473 explicit invariant checks |
 | Final paused recovery | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
 
@@ -199,13 +200,13 @@ The unit tests accept a 79-second-old Lazer feed and reject either feed at
 claims, including cancellation while paused. Production recovery still
 depends on successful token transfers and core logging.
 
-Next, finish the full-side/protected-seat fork scenarios, then settlement
-edge cases and administrative integration paths with the real dependencies.
-See the separate [mainnet-fork coverage report](simulations/README-v6-3-coverage.md);
-its coverage totals are independent of Clarinet's. The new
-[`verify-v6-3-full-side.js`](simulations/verify-v6-3-full-side.js) passed syntax
-and offline model checks (`node simulations/verify-v6-3-full-side.js --dry`);
-that dry run does not establish a passing contract execution on a fork.
+Clarinet tests and RV campaigns run locally; Stxer validates integration
+against mainnet forks and is documented separately in the
+[mainnet-fork coverage report](simulations/README-v6-3-coverage.md).
+Its coverage totals are independent of Clarinet's. The unit suite checks
+both sides of the refunded-remainder result through settlement, swap, and
+repricing. RV reports reject source or harness changes during a campaign,
+so results cannot silently acquire a different source hash after execution.
 
 These results document local tests and fork simulations. **v6-3 has not been
 deployed on-chain by this testing work.**

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-28T20:18:48.386Z",
+  "generatedAt": "2026-09-28T21:35:34.869Z",
   "results": [
     {
       "seed": 230930,
@@ -129,11 +129,20 @@
     }
   ],
   "hashes": {
-    "contracts/markets-sbtc-stx-jing-v6-3.clar": "65e1ffc15da69402f272437b1140d749061dfb74860eb9e56cec66c7514e8851",
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74",
+    "tests/rv/v6-3/Clarinet.toml": "b5b439aba3df6727ed39a94c82fdd5445e5a124d6bb2e81f09e309abca456d44",
     "tests/rv/v6-3/properties.clar": "4f4d55c9f523476155546367e4535513eef44e34cea646f2bcd628209cd0d794",
     "tests/rv/v6-3/build.py": "f38c6641b6b0e563f00952a5ebb27126615bb8c6b2013eb7c747f936f433c481",
-    "tests/rv/v6-3/run-full-book.mjs": "96697071366738916af217fae204970328992ca718c1f3a31279a78f1c0eea50",
     "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
-    "tests/rv/.build/v6-3/market.clar": "841fdb1b81aee1f80be3bbab1191559f6b4635018729b0db66350b4e0c5348f4"
+    "tests/rv/v6-3/source-integrity.mjs": "ef71fb0bc5fe3e91d1d682d8e5fa8b4b51049b334297845d0d20f0cd61182448",
+    "tests/rv/sip-010-trait.clar": "2761036dc8bf48034b7db7e01f6aa80a38d4633e29210ec892a9cceb764e4252",
+    "tests/rv/mock-lazer-oracle.clar": "584629df6874d7db46a83451d65e7ec83eea8942471564be6ed69b619588cc24",
+    "tests/rv/mock-jing-ladder.clar": "60dfd743e0dc37d497acfb85d3eec4b7578a4d61c5197e417537421360241f10",
+    "tests/rv/.build/v6-3/source.json": "4ce5618318df534f186419e2a673c2556d4e706801bae5775c3b9b574cef1c8b",
+    "tests/rv/.build/v6-3/core.clar": "9d8d9fd913311f4b366f619be34452f05fb541073ccf22dc9e21d765ba016042",
+    "tests/rv/.build/v6-3/ladder.clar": "c88d04ddb6298c44b2868d720d77a61518391a3868557b1a529d69677f4534cd",
+    "tests/rv/.build/v6-3/market.clar": "a39c02fd7a77276f1c407d293dc1b6c81ea0243f890e2c2aae93f51f966a247c",
+    "tests/rv/v6-3/run-full-book.mjs": "0c31ab635c976e98dd75c1296f2e80ea958f5911377cdef40ae6e7b6088d0892",
+    "tests/rv/v6-3/full-book-accounts.json": "8ccd2fad81ff7d9daf3ad4ec10988340a205954321388741e517e3be8545a07e"
   }
 }

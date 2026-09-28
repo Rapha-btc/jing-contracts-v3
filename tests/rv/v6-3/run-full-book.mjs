@@ -3,13 +3,13 @@
 // All positions are created by public calls; no market storage is patched.
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {initSimnet} from '@stacks/clarinet-sdk';
 import {Cl,cvToString,getAddressFromPrivateKey} from '@stacks/transactions';
 import fc from 'fast-check';
 import {createRequire} from 'node:module';
 import {EventEmitter} from 'node:events';
+import {hashInputs, assertInputsUnchanged, assertProductionPrefix, sharedInputs} from './source-integrity.mjs';
 const require=createRequire(import.meta.url);
 const {checkProperties}=require('../../../node_modules/@stacks/rendezvous/dist/property.js');
 const {getSimnetDeployerContractsInterfaces,getFunctionsFromContractInterfaces}=require('../../../node_modules/@stacks/rendezvous/dist/shared.js');
@@ -27,7 +27,10 @@ fs.appendFileSync('tests/rv/.build/v6-3/market.clar',`
  {x:(map rv-row-x RV-ACCOUNTS),y:(map rv-row-y RV-ACCOUNTS)})
 `);
 const results=[];
+assertProductionPrefix(true);
+const hashes=hashInputs([...sharedInputs,'tests/rv/v6-3/run-full-book.mjs','tests/rv/v6-3/full-book-accounts.json']);
 for(const seed of seeds){
+ assertInputsUnchanged(hashes);
  const sim=await initSimnet('tests/rv/v6-3/Clarinet.toml');
  for(const who of generated)sim.mintSTX(who,100000000000000n);
  const trait=Cl.contractPrincipal(sim.deployer,'mock-ft'),asset=Cl.stringAscii('mock-ft');
@@ -167,14 +170,16 @@ for(const seed of seeds){
    assert.equal(scalar(`rv-balance-${side}`,`${sim.deployer}.market`),0n,'no residual custody after all owners cancel');
    recovery[side].amount=recovery[side].amount.toString();
   }
-  invariant();results.push({seed,episodesPerPath:count,successfulCalls:stats,invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv},recovery});
+  invariant();assertInputsUnchanged(hashes);
+  results.push({seed,episodesPerPath:count,successfulCalls:stats,invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv},recovery});
   console.log(`GREEN seed=${seed} ${JSON.stringify(results.at(-1))}`);
  }catch(e){
   fs.writeFileSync('tests/rv/v6-3/full-book-counterexample.json',JSON.stringify({seed,error:String(e),trace},null,2)+'\n');
   throw e;
  }
 }
-const hashes=Object.fromEntries(['contracts/markets-sbtc-stx-jing-v6-3.clar','tests/rv/v6-3/properties.clar','tests/rv/v6-3/build.py','tests/rv/v6-3/run-full-book.mjs','tests/rv/v6-3/strict-ft.clar','tests/rv/.build/v6-3/market.clar'].map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));
+assertInputsUnchanged(hashes);
+assertProductionPrefix(true);
 fs.writeFileSync('tests/rv/v6-3/full-book-results.json',JSON.stringify({generatedAt:new Date().toISOString(),results,hashes},null,2)+'\n');
 fs.rmSync('tests/rv/v6-3/full-book-counterexample.json',{force:true});
 console.log('All seeded full-book checks green.');
