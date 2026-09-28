@@ -55,6 +55,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -642,4 +643,13 @@ under the current minimum if the owner raised the minimum after the park.
 Such an order comes back live; the walk already skips makers under the
 minimum and `distribute` refunds a sub-minimum rest after a fill, so nothing
 is lost.
+
+## Nested Quinn I-1: scratch write before the append (no change)
+
+`bumped-token-*-principal` is a helper for the list filters, not state: every
+reader (`not-eq-bumped-*`) sets it right before use in the same function, so a
+value left behind by a caught u1010 is never read. The append after it cannot
+fail anyway: `smallest-who` comes from the same list, so the filter removes
+one entry first (also re-checked at HEAD by Void Kael). Rewriting the filter
+to avoid the var would change working code for no gain.
 
