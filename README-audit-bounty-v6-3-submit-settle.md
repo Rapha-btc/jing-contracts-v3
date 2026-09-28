@@ -569,5 +569,13 @@ small, refunded when left under the minimum. All three v6-3 copies.
 Not changed: the swap tuple can still report that opposite-side order's fill
 in the taker fields (the router does not read them), and
 `get-taker-capacity` still counts the taker's own opposite-side order when it
-is at least 0.2%.
+is at least 0.2%. The `caller-token-*` writes in `distribute-to-token-*`
+(the swap tuple) are still keyed on `tx-sender` alone; nothing spends from the
+opposite side's fields (`cross-remainder-as-*` reads only the taker's own
+side), so it is reporting only.
 
+Other readers checked: `crossing` is read only by these four checks and the
+side-blind "nothing to settle" bypass in `execute-settlement`; `crossing-x` is
+only read while `crossing` is true, and every site that sets `crossing` true
+sets it; the book walk still excludes the taker by principal on both sides
+(no self-fill), unchanged.
