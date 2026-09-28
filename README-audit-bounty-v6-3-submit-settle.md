@@ -31,7 +31,7 @@ Runners-up, if we tip like last round:
 - ARION F-8: a member whose position rounds to 0 can never withdraw, which
   could block the last-member reset.
 - ARION F-9: `settle-escrow` asks for a Lazer update even for exits that do
-  not need one.
+  not need one. Fixed with Void Kael #2 (`escrow-for`), see below.
 
 ## Submissions and verdicts
 
@@ -689,9 +689,26 @@ reacts.
 The cooldown also blocks a direct placement (opposite side empty, no pending)
 for that day; members can still exit, so it only delays re-listing.
 
-What remains: the first 24h after a grief push is still locked, and if the
-outage outlasts the cooldown the grief can repeat as 24h locked / 24h open
-for members who did not leave. The owner push pause closes both. Accepted: no
-`withdraw` change (settling only when the exit needs the pending funds).
+- Exits wait on the pending only when they need it (also ARION F-9):
+  `withdraw` no longer runs `settle-escrow` up front. The new `escrow-for`
+  settles it only when held + live + parked cannot pay the exit, then syncs
+  again (a settle can refund the escrow to the rung). `pull-to-held-sats`
+  sizes its partial withdraw on live + parked (`on-book`), so a pending the
+  exit did not need stays pending; its cancel branch still returns the
+  pending too. A 1-sat grief pending no longer blocks any exit the rung's
+  other funds cover.
+
+Order check: `withdraw` now syncs before a possible settle. That is safe
+because a settle never changes what the rung owns: `sync` counts live +
+parked + pending + held, and a settle only places the pending (it becomes
+live or parked) or refunds it to the rung; it never fills. The second sync in
+`escrow-for` only books a refund as held. `pull-to-held-sats` is private and
+only called by `withdraw`; `on-book` equals `market-size` whenever no pending
+is left. `deposit`, `push`, `sync` and `roll-tail` are unchanged (their only
+difference is the cooldown and pause inside `push-to-market`).
+
+What remains: an exit that really needs the pending funds (most of the pool
+was just pushed into it) waits for a settle or the 24h cancel, and after the
+cooldown the grief can re-push; the owner push pause closes that.
 
 Status: in `jing-buy-stx-market-spread-v1`; the other five `-v1` rungs next.
