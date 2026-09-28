@@ -65,6 +65,7 @@ TAKER_REBATE_BPS
 (define-constant ERR_NOTHING_PENDING (err u1030))
 (define-constant ERR_ALREADY_PENDING (err u1031))
 (define-constant ERR_PRICE_BEFORE_ORDER (err u1032))
+(define-constant ERR_BAD_TREASURY (err u1033))
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
 (define-data-var paused bool false)
@@ -3776,6 +3777,7 @@ ERR_NOT_AUTHORIZED
 (define-public (set-treasury (new-treasury principal))
 (begin
 (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+(asserts! (not (is-eq new-treasury current-contract)) ERR_BAD_TREASURY)
 (ok (var-set treasury new-treasury))
 )
 )
