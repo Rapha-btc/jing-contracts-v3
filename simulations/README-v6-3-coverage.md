@@ -1,235 +1,171 @@
-# v6-3 market: stxer fork coverage
+# v6-3 market: stxer fork tests and coverage
 
-Goal: full stxer mainnet-fork coverage of `contracts/markets-sbtc-stx-jing-v6-3.clar`
-(the submit + settle market). Only v6-3 matters; older versions are out of scope.
-Every sim deploys the unmodified working-tree source.
+Scope: `contracts/markets-sbtc-stx-jing-v6-3.clar` (submit + settle market).
+Older market versions are out of scope. All numbers below come from one rerun
+of the 15 suites on the current source; earlier figures are kept only in the
+History section at the end.
 
-Source: `master` at `62d032c` (all review fixes in). `5b21fb5` (unit tests) does
-not change `contracts/`.
+## 1. Source provenance
 
-## Sims, all green
+| item | value |
+|---|---|
+| market source commit (last change to the file) | `1a930e3` (2026-09-28) |
+| market source sha256 | `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74` |
+| repo HEAD when measured | `f1638a4` (later commits touch tests only; the market file is unchanged) |
 
-| Sim | Checks | stxer |
+Only traces from deployments whose code is **byte-identical** to that source
+are combined. `simulations/_sim-source.mjs` decodes every deploy transaction in
+every stxer result and hashes its code; `--by-source` in
+`trace-coverage.mjs` and `failure-arms.mjs` counts a deployment only on an
+exact sha256 match. Excluded on purpose (other code): router-impact's two
+baseline runs deploy the market from `f6a6d3a` (sha `2213b5b5…`) to compare
+router results; `router-bin-boundary` deploys its own stand-in market (sha
+`04b0a7df…`); `submit-settle-lazer`'s `zero-limit-before-*` markets are the
+pre-fix source. Rungs, core, ladder, router, dispatch and probe contracts are
+not the market and are not counted.
+
+## 2. Test results
+
+Every suite asserts exact outcomes, including negative tests: a call that must
+be refused passes when it returns the expected error and moves nothing. All 15
+suites pass; **5,554 / 5,554 checks, 0 unexpected failures.**
+
+| Suite | Passed / total | Unexpected failures | stxer |
+|---|---|---|---|
+| `verify-v6-3-submit-settle-lazer.js` | 950 / 950 | 0 | [6c4f5124](https://stxer.xyz/simulations/mainnet/6c4f5124a4cd6343efcd9ce1bd922c8f) |
+| `verify-v6-3-ghost-deposit.js patched` | 343 / 343 | 0 | [04bf014e](https://stxer.xyz/simulations/mainnet/04bf014ef68d7494ba580da81aba8d3e) |
+| `verify-v6-3-switched-off-ask.js patched` | 221 / 221 | 0 | [6edc653c](https://stxer.xyz/simulations/mainnet/6edc653ce6cb39b0a1e984a154baeaa4) |
+| `verify-v6-3-cancel-orphan-pending.js patched` | 225 / 225 | 0 | [4f6d741c](https://stxer.xyz/simulations/mainnet/4f6d741c82603b60e8062be232757fd6) |
+| `verify-v6-3-router-impact.js` | 398 / 398 | 0 | [5d875f4f](https://stxer.xyz/simulations/mainnet/5d875f4f6595b123c4b81973da3a5fe6), [7e4f80db](https://stxer.xyz/simulations/mainnet/7e4f80db4c89b5291e87d2ef7d67cc8f), [e1af00bd](https://stxer.xyz/simulations/mainnet/e1af00bdacf448e55ca7e36fdd6ae09a), [f9b6d8fd](https://stxer.xyz/simulations/mainnet/f9b6d8fdb1ebad6a3233b5f4bfa972ae) |
+| `verify-v6-3-caller-impact.js` | 198 / 198 | 0 | [5421ff9e](https://stxer.xyz/simulations/mainnet/5421ff9edac745da49008263b3975214) |
+| `verify-v6-3-dispatch.js` | 194 / 194 | 0 | [c85620c4](https://stxer.xyz/simulations/mainnet/c85620c4772eb253abcd4d1e7ece9755) |
+| `verify-v6-3-gate-blind-band.js` | 332 / 332 | 0 | [b01dd89d](https://stxer.xyz/simulations/mainnet/b01dd89de2b25dd7f92b9d6a9dc7282f) |
+| `verify-v6-3-deploy-bytes.js` | 17 / 17 | 0 | [218fa300](https://stxer.xyz/simulations/mainnet/218fa3002a3d443f90308b713184ebf0) |
+| `verify-v6-3-router-bin-boundary.js` | 22 / 22 | 0 | [4ea07b1d](https://stxer.xyz/simulations/mainnet/4ea07b1d71ce00250f32d45769f2fa15) |
+| `verify-v6-3-swap-walk.js` | 382 / 382 | 0 | [08b628cb](https://stxer.xyz/simulations/mainnet/08b628cbdafa114dac16b71bafd45138) |
+| `verify-v6-3-capacity.js` | 472 / 472 | 0 | [37f35699](https://stxer.xyz/simulations/mainnet/37f35699311ec30e6028e58feb26d38d) |
+| `verify-v6-3-settlement-edges.js` | 365 / 365 | 0 | [aeb76701](https://stxer.xyz/simulations/mainnet/aeb76701adb25b7a1dfb673ead63ac52) |
+| `verify-v6-3-errors-admin.js` | 514 / 514 | 0 | [880c87e0](https://stxer.xyz/simulations/mainnet/880c87e00142dd3910a7d1bbe3099e2b) |
+| `verify-v6-3-full-side.js` | 921 / 921 | 0 | [4da85888](https://stxer.xyz/simulations/mainnet/4da85888899cf282a57ab1657b3b0c18) |
+
+`errors-admin` pins its fork to block 8984873 so that the signed but malformed
+Lazer updates saved by the earlier lazer-paths run `c014c741` are still fresh;
+it deploys the current source like the others.
+
+## 3. Coverage (combined, current source only)
+
+18 simulation runs, 2,865 transactions. 1,654 are calls to a counted market
+instance: **all 1,654 have a trace, 0 decode errors.** The 396 transactions
+without a trace are all outside the market (deploys, STX / sBTC fundings,
+ladder calls).
+
+| metric | covered / total | % |
 |---|---|---|
-| `verify-v6-3-submit-settle-lazer.js` | 950/950 | [8ada08f0](https://stxer.xyz/simulations/mainnet/8ada08f08f76134558c03b84ef336adf) |
-| `verify-v6-3-ghost-deposit.js patched` | 343/343 | [e48fb483](https://stxer.xyz/simulations/mainnet/e48fb48331945e2d5e9842f34a96aeba) |
-| `verify-v6-3-switched-off-ask.js patched` | 221/221 | [4fdaa528](https://stxer.xyz/simulations/mainnet/4fdaa528e0389f45f70f247dab6b11d4) |
-| `verify-v6-3-cancel-orphan-pending.js patched` | 225/225 | [519b42ff](https://stxer.xyz/simulations/mainnet/519b42ff28704f76876e2af7985ec60f) |
-| `verify-v6-3-router-impact.js` | 398/398 | [18639bb8](https://stxer.xyz/simulations/mainnet/18639bb8b982bf36c03bf2b7bdda07d3), [27d5a177](https://stxer.xyz/simulations/mainnet/27d5a17710c3fa15bfd5b53228f22279), [6f1673cb](https://stxer.xyz/simulations/mainnet/6f1673cb4dc221e7664f339ee5b271a7), [df5c8920](https://stxer.xyz/simulations/mainnet/df5c8920c7b34a31dfdd05c0708827d0) |
-| `verify-v6-3-caller-impact.js` | 198/198 | [d1aca826](https://stxer.xyz/simulations/mainnet/d1aca826cd3733d3ceb721fe794d449f) |
-| `verify-v6-3-dispatch.js` | 194/194 | [d835af47](https://stxer.xyz/simulations/mainnet/d835af47f7a7df993f9f5ef8750633d9) |
-| `verify-v6-3-gate-blind-band.js` | 332/332 | [7cb93e79](https://stxer.xyz/simulations/mainnet/7cb93e79a96401bc8956f920f3775093) |
-| `verify-v6-3-deploy-bytes.js` | 17/17 | [f062ec74](https://stxer.xyz/simulations/mainnet/f062ec74963f90f748abd24ef46c74a7) |
-| `verify-v6-3-router-bin-boundary.js` | 22/22 | [9566d378](https://stxer.xyz/simulations/mainnet/9566d3784b625f7317464a3fd14af960) |
-| `verify-v6-3-swap-walk.js` (new, gap #1) | 382/382 | [60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c) (first run, before the treasury guard: [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd), 388/388) |
-| `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
-| `verify-v6-3-settlement-edges.js` (new, gap #4) | 365/365 | [0f8df262](https://stxer.xyz/simulations/mainnet/0f8df262dd413cab105eb40f6e97a916) |
-| `verify-v6-3-errors-admin.js` (new, gap #5) | 514/514 | [3cf12a3f](https://stxer.xyz/simulations/mainnet/3cf12a3fbbdcc7a078ef394bb01b728d) |
-| `verify-v6-3-full-side.js` (new, gap #3) | 921/921 | [dabb4070](https://stxer.xyz/simulations/mainnet/dabb407079ba8c679a84c6400360d2c4) |
+| expressions executed | 3,116 / 4,348 | 71.7% |
+| code lines touched (incl. deploy-time definitions) | 1,706 / 2,585 | 66.0% |
+| function-body lines touched | 1,706 / 2,476 | 68.9% |
+| branch nodes (`if` / `match` / `asserts!`) fully taken | 290 / 298 | 97.3% |
+| branch nodes never reached | 0 / 298 | 0% |
+| error paths (failure arms) hit | 151 / 296 | 51.0% |
 
-Harness updates in this round:
-- `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
-  the check compares `limit`, `spread-bps` and `set-at > 0`.
-- `dispatch`: loads the `-v1` rungs (it pinned rungs at `5735a97`, which call
-  the ladder's removed `log-claim`); reads each rung's epoch before a dispatch
-  (the last-member reset closes epochs); rung 0's 24h escrow: with `escrow-for`
-  (`jing-buy-stx-core-spread-v1`) the member whose exit the pool covers leaves
-  it pending and the next member's exit takes the 24h cancel; the sell `-v1`
-  rungs (no `escrow-for` yet) still cancel on the first exit.
-- `gate-blind-band`: rewritten for v6-3 only (no v6-2, no core-v5), step by
-  step: submit, then settle with a later print. Blind band and raised minimum:
-  refunded "crossing" at settle; 30 / 100 bps controls: placed; overlap 20 bps
-  outside the mid with an entrant at 30 bps: placed (`would-take-as-*` asks who
-  is willing at the settle mid), nothing fills at settle.
+What "error path (failure arm)" means: every `asserts!`, `unwrap!`,
+`unwrap-err!` and `try!` can return early with an error. The arm is **hit**
+when a trace records that node returning `EarlyReturn` in a simulated call,
+i.e. the contract really took that error path. The suites trigger these on
+purpose; each is a passing negative test. `trace-coverage.mjs` cannot see these
+arms (the returned value is a constant, not a traced expression), so
+`failure-arms.mjs` counts them separately.
 
-## Coverage
-
-`simulations/trace-coverage.mjs` over the 13 sims above (1,486 txs, 223 without
-a trace; deploy-time lines such as constants and error codes never trace):
+Reproduce (sim ids as in section 2):
 
 ```
-node simulations/trace-coverage.mjs --contract markets-sbtc-stx-jing-v6-3 \
-  --alias '^(markets-sbtc-stx-jing-v6-3|submit-settle-|zero-limit-after-|cancel-exit-|ghost-m|swoff-m|orphan-m|mkt-.*-v63-)' \
-  --sims <ids>
+node simulations/trace-coverage.mjs --contract markets-sbtc-stx-jing-v6-3 --by-source --sims <ids>
+node simulations/failure-arms.mjs <ids> --by-source
 ```
 
-Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
+## 4. Remaining gaps
 
-| metric | baseline (13 runs) | + gate-blind-band v6-3 + swap-walk |
-|---|---|---|
-| expressions | 2620 / 4343 (60.3%) | 2919 / 4343 (67.2%) |
-| lines | 1398 / 2583 (54.1%) | 1551 / 2583 (60.0%) |
-| branches (297) | 195 full, 43 partial, 59 never | 237 full, 29 partial, 31 never |
+### Expressions and lines not covered (1,232 expressions, 879 lines)
 
-## Gaps, in order
+- **Instrumentation (deploy time):** 109 top-level lines, the 31 `ERR_*`
+  constants and the map / data-var declarations run only at deploy, which
+  stxer does not trace.
+- **Instrumentation (tool quirk):** `(caller tx-sender)` / `(swapper tx-sender)`
+  `let` bindings in `withdraw-token-*`, `cancel-token-*-deposit`,
+  `cross-remainder-as-*` are binding pairs, not calls; the functions run.
+- **Instrumentation (evals are not traced):** `get-settlement`,
+  `get-distance-slots`, `get-token-*-pending-limit` are exercised by the suites
+  through read-only evals, which stxer does not trace.
+- **Reachable, untested:** read-only getters no suite calls:
+  `get-token-x-limit`, `get-token-y-limit`, `get-seated-x`, `get-seated-y`,
+  `is-protected-x`, `is-protected-y`, `get-token-x-pending-readmit`,
+  `get-token-y-pending-readmit`.
+- The eight partial branches below.
 
-| # | Area | Status |
-|---|---|---|
-| 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | **done**: 0 uncovered lines, no partial branch (388/388) |
-| 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | **done**: fully covered but one unreachable `gross-up` arm (472/472) |
-| 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | **done**: fully covered (921/921) |
-| 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | **done**: covered but 2 unreachable arms (365/365) |
-| 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | **done**: 149/296 failure arms hit, every other one unreachable (514/514) |
-| 6 | `gate-blind-band` on v6-3 submit + settle | **done** (332/332) |
+### Partial branches (8 of 298): one arm provably unreachable
 
-## Swap walk (gap #1)
+| line | function | untaken arm | why |
+|---|---|---|---|
+| 13 | `rebate-bps-for-age` | age >= 80 s | callers refuse a print 80 s or older first (`ERR_STALE_PRICE`) |
+| 2936, 2977 | `walk-*-book-step` | `match` error arm | `execute-fill` fails only on a transfer or `log-match`; transfers are covered by the custody argument below (A3), `log-match` by A2, and a treasury equal to the market is refused since `e338e27` |
+| 3526, 3530, 3621, 3625 | `distribute-to-token-*-depositor` | total = 0 | these run only over listed depositors, each holding a positive amount |
+| 3928 | `gross-up` | `(- g u1)` | `g = floor(net x 10000 / 9980)` gives `g - floor(20 g / 10000) <= net`, so `n > net` never holds |
 
-`verify-v6-3-swap-walk.js` deploys 11 `swapwalk-*` copies and predicts every
-transfer with a BigInt copy of the contract math (mid batch, rebate ride, walk
-fills, fees, rebates, refunds, dust), then asserts exact balance deltas for
-taker, every maker and the treasury, escrow == book, book order and totals,
-and the core `match` / refund / park prints. Both taker sides: mid batch then
-walk (skips the taker's own order, switched-off pegs, makers beyond the limit
-or at/inside the mid; takes makers in price order; whole makers and
-sub-minimum rests refunded; zero-size fill; zero fees; taker dust), a partial
-fill that leaves the rest resting, `ERR_PARTIAL_FILL` u1017 with nothing moving,
-`reprice-or-swap-token-*` walks, and a full taker side (49 seats) that parks a
-switched-off peg before walking.
+### Error paths not hit (145 of 296)
 
-Not reachable, by reading: the `r > pending` rebate caps in `execute-fill`
-(2772, 2785) are defensive (each fill's rebate is floored and the pending
-ride covers the sum); `ERR_NOTHING_FILLED` (u1015) is defined and never used;
-a zero-size fill exists only for a y taker.
+| group | arms | lines | classification |
+|---|---|---|---|
+| A1 core-v6 log calls that are not pause-gated | 51 | 930, 958, 1235, 1327, 1368, 1392, 1405, 1478, 1570, 1611, 1635, 1648, 1682, 1698, 1721, 1756, 1772, 1795, 1849, 1899, 1913, 1941, 1966, 1982, 2010, 2035, 2064, 2075, 2112, 2130, 2159, 2170, 2207, 2225, 2266, 2293, 2303, 2352, 2381, 2391, 2445, 2493, 2538, 2582, 2883, 2894, 3592, 3600, 3687, 3695, 3742 | **provably unreachable.** In `jing-core-v6` only `log-deposit-x/-y`, `log-match` and `log-settlement` check the pause; every other log fails only when the caller is not a registered market, and core-v6 has no unregister. Before `initialize`, `token-x` / `token-y` hold a standard principal no trait can match, so the paths that reach these logs are refused earlier. |
+| A2 `log-match` | 1 | 2906 | **provably unreachable.** It is pause-gated, but it only runs inside a swap / reprice walk, after `log-settlement` in the same transaction, which fails first on a paused core. |
+| A3 token transfers out of escrow | 62 | 1365–1366, 1389–1390, 1402–1403, 1608–1609, 1632–1633, 1645–1646, 1678–1679, 1694–1695, 1707–1708, 1752–1753, 1768–1769, 1781–1782, 1832–1833, 1882–1883, 2817–2828, 2880–2881, 2891–2892, 3259–3269, 3326–3336, 3477–3484, 3564–3566, 3589–3590, 3659–3660, 3681–3683, 3729–3736 | **unreachable under the custody invariant, not a formal proof.** A transfer out of escrow fails only on a zero amount (guarded), a recipient equal to the sender (the market cannot call itself; the treasury cannot be the market since `e338e27`), a wrong token (traits are checked against `token-x` / `token-y`), or insufficient escrow. The last is excluded by the invariant "market balance = live + parked + pending per token", which the suites assert after every fund-moving step. |
+| A4 structural | 15 | 1227, 1470 (filtered append in the full branch), 1401, 1644 (park error other than u1010), 2258, 2344 (second read of the same update in one tx), 2618, 2624, 2630, 2954, 2995, 3240, 3307, 3521, 3616 (propagation of errors that A1–A3 exclude) | **provably unreachable.** The full branch filters one entry before appending; `park-tenth-*` only fails with u1010; the rest only re-raise errors from A1–A3. |
+| A5 seat list full (`ERR_SEATS_FULL`) | 2 | 142, 146 | **provably unreachable.** `jing-ladder-v1` caps band seats at 49 (`set-max-band-per-side` refuses 50, `ERR_BAND_FULL`), below the 50-entry seat list. |
+| A6 `ERR_ALREADY_SETTLED` | 1 | 3400 | **provably unreachable.** The cycle advances in the same transaction that writes its settlement. |
+| B signed-oracle fixtures | 11 | 1065 (y-feed shape), 1083 (y-feed stale), 1084, 1085, 3401, 3402, 3413 (zero price), 3404 (y-feed stale in settlement), 3405, 3408 (confidence ratio), 3411 (exponent mismatch) | **unavailable with the signed fixtures used.** Needs a signed Lazer print with price <= 0, a confidence above 2% of price, feeds with different exponents, or feeds stamped at different times (Lazer stamps both feeds the same second, so the x-feed check fails first). Not reachable by crafting input: the updates are signed. |
+| D reachable, untested | 2 | 1960, 2029 (`settle-token-*-readmit` list append, u1010) | **reachable.** In the stale-seat state (list at 50 while `side-full-*` is false) the readmit append fails u1010 and the settle rolls back whole. Reproduced by Void Kael's harness; not exercised by these suites. |
 
-Found and fixed: `set-treasury` accepted the market's own principal. With the
-treasury set to the market, the first fee transfer failed `(err u2)` (a
-transfer to itself) and every swap / fee-charging settle aborted until the
-operator reset it. `e338e27` refuses it (`ERR_BAD_TREASURY` u1033); the
-`tr` / `tx` scenarios now assert that refusal, an unchanged treasury and an
-unchanged book. That misconfiguration was the only trigger found for the
-walk steps' `match` error arm (lines 2960 / 3001), which is now unreachable.
+## 5. Tooling fixes in this round
 
-## Taker capacity (gap #2)
+- `failure-arms.mjs` used to skip traces missing from the local cache and
+  swallow decode errors, and matched market instances by a name pattern. It now
+  fetches missing traces from stxer, reports every trace it cannot fetch or
+  decode (overall and for market calls), and with `--by-source` counts only
+  byte-identical deployments.
+- `trace-coverage.mjs` gains `--by-source` and a provenance / diagnostics
+  section: source sha256, per-sim counted instances, excluded deployments with
+  their hashes, and separate counts for "no trace returned" and "decode error",
+  overall and for market calls. It used to lump both into one "no trace" count.
 
-`verify-v6-3-capacity.js` deploys 16 `capacity-*` copies and a helper,
-`capprobe-v1`, whose public `probe-<market>` calls `get-taker-capacity` inside
-a transaction so the read-only path is traced. Every field (`mid-cap`,
-`walk-cap`, `net-cap`, `gross-cap`, `min-taker`) and every swap is predicted
-with BigInt math and asserted exactly, both taker sides: empty book, limit out
-of range or at the mid, the 0.2% bar (at the bar counts, under it is excluded
-and rolls whole at settlement), the taker's own orders, a raised minimum,
-own-side makers smaller / at least as large as the opposite, and a full side
-(49 seats) with and without a door, `min-taker`, not admitted (u1010 / u1017).
+## 6. Findings from this coverage work
 
-The property the review fixes promised holds on the fork: a swap of exactly
-`gross-cap` on a fresh print fills in every case (Nested Quinn M-1, Void Kael
-#1); `gross-cap` plus several minimums fails u1017 with nothing moving; plus a
-sub-minimum margin fills and refunds exactly the predicted rest.
+- `set-treasury` accepted the market's own principal; every fee transfer then
+  failed `(err u2)` and swaps / fee-charging settles aborted until reset.
+  Fixed in `e338e27` (`ERR_BAD_TREASURY` u1033).
+- The `token-*-rolled` field of a swap / `settle-with-refresh` result reported
+  the caller's unfilled amount even when that rest was refunded (for example
+  the taker's own order on the opposite side). Fixed in `1a930e3`: the field
+  now reports the amount actually rolled (unfilled minus refund). The taker's
+  own side is unchanged (never refunded during a crossing; overwritten with the
+  walk remainder), and the router reads only that side. Core-v6 event prints
+  were always correct.
+- Dead code, harmless: the `r > pending` rebate caps in `execute-fill`, the
+  `(- g u1)` arm of `gross-up`, the unused `ERR_NOTHING_FILLED` (u1015).
+- By design, noted: an overlap just outside the mid is placed at settle
+  (`would-take-as-*` asks who is willing at the settle mid); `cancel-token-*`
+  clears a pending readmit; `set-distance-slots` above 50 returns u1010.
 
-Unreachable: the `(- g u1)` arm of `gross-up` (line 3927). With
-`g = floor(net x 10000 / 9980)`, `n = g - floor(20 g / 10000) <= net` always, so
-`(> n net)` is never true (also brute-forced in the sim). Harmless dead code.
+## History (superseded figures)
 
-## Settlement edges (gap #4)
+These were measured on earlier sources and mixed runs; they are kept only for
+the record and are replaced by sections 2–4.
 
-`verify-v6-3-settlement-edges.js` deploys ten `settle-edge-*` copies and real
-Lazer prints; every scenario asserts exact balances, list order, cycle totals,
-stored orders (with `set-at`), swap results and core prints:
-- small-share rolls: a y taker's own small order on the OPPOSITE side is
-  rolled, not flagged u1020 (Void Kael #5); a taker under 0.2% of its own side
-  gets u1020 with nothing moving, both sides;
-- sub-minimum rests refunded (the taker's exemption only on its own side),
-  payout and roll dust swept on both sides;
-- stored limits: an older pending limit refused "stale" after a newer top-up;
-  an older top-up behind a newer limit keeps the newer limit and `set-at` but
-  adds its amount (Void Kael #3); "crossing" and "gone" limit refusals;
-- parked partial withdraw, readmit "gone", `prune-cycles` (closed cycle ok,
-  open cycle u1027);
-- rebate by print age with a pinned clock: 30 s, 31 s, 79 s give 20, 21, 69
-  bps; 80 s is refused u1003.
-
-Unreachable: the >= 80 s band of `rebate-bps-for-age` (callers refuse a print
-that old first); the `total-token-* > 0` guards in `distribute-*` (every listed
-depositor holds a positive amount).
-
-Reporting only: a swap's result field `token-*-rolled` carries the unfilled
-amount of the caller's order even when that rest was refunded (seen on the
-taker's own opposite-side order); funds are right. Noted before under Void
-Kael #5.
-
-## Rerun on `1a930e3` (settle result reports what was rolled)
-
-After `1a930e3` (`caller-token-*-rolled` = rolled amount, not unfilled) the
-sims that assert exact swap / settle result tuples were rerun. Only
-settlement-edges scenario d changed its expectation (the taker's refunded
-opposite-side rest now reads its rolled amount, 0).
-
-| Sim | Checks | stxer |
-|---|---|---|
-| settlement-edges | 365/365 | [cb7a40c6](https://stxer.xyz/simulations/mainnet/cb7a40c6feea626a806ca523743f6c32) |
-| swap-walk | 382/382 | [4a6b8a3c](https://stxer.xyz/simulations/mainnet/4a6b8a3c90327f536b08237e6dbe4360) |
-| capacity | 472/472 | [e2783fa2](https://stxer.xyz/simulations/mainnet/e2783fa23aedd2bc5a44f0ebd3e7a5d7) |
-| submit-settle-lazer | 950/950 | [9a92051a](https://stxer.xyz/simulations/mainnet/9a92051af6311a08677bbe3791972d18) |
-
-## Errors and admin (gap #5)
-
-`verify-v6-3-errors-admin.js` deploys ten `err-admin-*` copies; every refused
-call snapshots the market and every actor before and after and fails if
-anything moved. It pins the fork to block 8984873 and reuses the signed but
-malformed Lazer updates saved by the earlier lazer-paths run `c014c741` (no
-Pyth key needed), then moves the clock to exact seconds: update + 12 s
-(`ERR_PRICE_BEFORE_ORDER`), exactly 80 s (market `ERR_STALE_PRICE`), 81 s (the
-oracle's own u1002).
-
-Failure arms are measured with `simulations/failure-arms.mjs` (trace-coverage
-cannot see them: they return plain constants): **149 / 296 hit**.
-
-Covered: WRONG_TRAIT, PAUSED, NOT_AUTHORIZED (both `initialize` checks),
-DEPOSIT_TOO_SMALL, LIMIT_REQUIRED, ALREADY_INITIALIZED, ZERO_MIN_DEPOSIT,
-BAD_SPREAD, BAD_TREASURY, HAS_RESTING_POSITION (live and parked), USE_CANCEL,
-NOTHING_TO_WITHDRAW, NOTHING_TO_READMIT, NOTHING_PENDING (all six settles),
-ALREADY_PENDING, PRICE_BEFORE_ORDER (all six), STALE_PRICE, PRICE_UNCERTAIN
-(no confidence), FEED_TIMESTAMP_MISSING, FEED_MISSING (x and y),
-NOTHING_TO_SETTLE, CYCLE_OPEN, NOT_A_SEAT, PARTIAL_FILL, TAKER_TOO_SMALL,
-QUEUE_FULL (distance slots, swap park, core bump); `try!` arms for empty
-wallets, tampered updates (oracle u2104 / u2105), refusals passed up from
-`settle-with-refresh`, and a paused `jing-core-v6` (u5016). Admin:
-`set-treasury`, `set-operator` (handover, old operator refused), `set-paused`,
-both minimums, `set-distance-slots` (51 refused, 50 ok), `prune-cycles`,
-`sync-seat-count`, `prune-seats`.
-
-Unreachable, by reading:
-- `ERR_SEATS_FULL`: the ladder caps band seats at 49, so 50 seats never fill.
-- `ERR_ALREADY_SETTLED`: the cycle advances in the tx that settles it.
-- `ERR_ZERO_PRICE` (five checks): needs a signed price <= 0.
-- confidence-ratio `PRICE_UNCERTAIN`: real confidence ~0.04% vs a 2% limit.
-- `ERR_EXPO_MISMATCH`: every Lazer feed used is exponent -8.
-- y-feed staleness / shape arms: Lazer stamps both feeds the same second, the
-  x feed fails first.
-- the second price read in reprice (same update, same tx, just succeeded).
-- structural arms: park-error re-raise (park only fails QUEUE_FULL), list
-  length unwraps, readmit's append, transfers out of escrow.
-- core log calls that are not pause-gated (the market cannot be unregistered).
-- the walk's `log-match` / `execute-fill` error arms: `log-settlement` fails
-  first in the same tx, and the treasury can no longer be the market.
-
-`ERR_NOTHING_FILLED` (u1015) is defined and never used.
-
-Notes, not bugs: `swap` / `reprice-or-swap` have no pause or trait check of
-their own; paused or wrong trait, the whole tx reverts at `settle-with-refresh`
-after the taker's tokens were pulled, so nothing is lost. `set-distance-slots`
-above 50 returns `ERR_QUEUE_FULL`, an odd code for a bad argument.
-
-## Full side and seats (gap #3)
-
-`verify-v6-3-full-side.js` fills `fullside-y` / `fullside-x` to 50 (two seated
-band rungs, 47 fixed makers with a tied pair, one pegged maker) and two
-45-seat markets, plus a `fullside-probe` that wraps the read-only
-`pegged-bid` / `pegged-ask`. A JS model of `park-tenth`, `side-full` and the
-core bump predicts every outcome; each scenario asserts the branch it targets,
-who is parked, lists, live / parked amounts, totals, balances and prints.
-Both sides: a switched-off newcomer refunded "queue-full"; a switched-off
-resident parked first, then switched back on while parked; parks at the
-`distance-slots` edge (smallest outside vs last inside, equal sizes, slots at
-50, a tied pair on the boundary); "queue-full" refusals; the core bump when
-nobody is parkable (equal-size and near-side newcomers refused); seat sync
-(already seated, plain maker u1028, retired band pruned then parked, seated
-top-up, max-band raise flips `side-full`); parked partial withdraw (ok, u1024,
-u1001); readmit refused queue-full / u1031 / u1022 / gone / crossing, and
-readmitted once slots free.
-
-Unreachable through the market: the spread guard inside `pegged-bid` /
-`pegged-ask` (spread >= 100%); `valid-spread` refuses such a spread at entry,
-so only the probe reaches it. By design: `cancel-token-*-deposit` clears a
-pending readmit, so readmit "gone" needs the parked maker to re-deposit.
-
+- 2026-09-28, first baseline on `62d032c`, 13 runs, alias matched by name:
+  60.3% of expressions (2,620 / 4,343), 54.1% of lines.
+- After gate-blind-band v6-3 and swap-walk, still name-matched: 67.2% of
+  expressions, 60.0% of lines.
+- Error-admin sim alone on `e338e27`: 149 / 296 failure arms (cache-only,
+  missing traces skipped).
+- Per-suite first runs, before the final rerun: swap-walk `a796043f` (388/388)
+  then `60b21233` (382/382, after the treasury guard); capacity `0124df9e`;
+  settlement-edges `0f8df262`; errors-admin `3cf12a3f`; full-side `dabb4070`;
+  gate-blind-band `7cb93e79`.
