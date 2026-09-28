@@ -7,15 +7,26 @@ three swap vaults (juicestx, fastpool-pox-5, citycoins ccd016). The first
 six submissions reviewed master `24f3e23`; later ones name their own commit. This file records what each one found,
 what we decided, and what changed in the repo.
 
-Review is in progress. Rows marked "open" are not decided yet.
+Review is complete: every submission below has a decision.
 
 ## Likely winner
 
-ARION (Eternal Harp) is the clear winner. He found the only HIGH (the ghost
+ARION (Eternal Harp) is the winner. He found the only HIGH (the ghost
 double-pay), proved it on a fork, and we fixed it. His cancel guard was also
 adopted (F-4).
 
-Runners-up, if we tip like last round:
+Main runners-up:
+- Void Kael: 2 MEDIUM and 5 LOW / INFO fixed (#1 capacity small-share, #2
+  push re-lock, #3 older limit overwrites newer, #5 taker side, #6 dust-only
+  finish, #7 market dust close, #8 allowance), all executed on the real bytes.
+  #4 is the same root cause as Nested Quinn M-2.
+- Nested Quinn: 2 MEDIUM (M-1 capacity gross-up, M-2 index drift, which led
+  to the rescale) and 2 LOW (L-1 all-or-nothing router-swap, L-2 window vs
+  recovery), all fixed, with runnable tests.
+
+Smaller tips:
+- Regal Anvil: #1 reserve dust and #3 order-dependent small-share floor
+  fixed, plus the tail-roll solvency review.
 - Nilo (Diamond Lance): the rung tail freeze, fork-proven on all 6 rungs,
   which led to the tail roll.
 - Fluid Briar: the switched-off ask MEDIUM (fixed) and the `router-swap`
