@@ -3742,10 +3742,54 @@
     )
   )
 )
+(define-private (cap-kept-bid-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      total: uint,
+      kept: uint,
+    })
+  )
+  (let (
+      (amt (get-token-y-deposit (get cycle acc) who))
+      (l (token-y-limit-at who (get mid acc)))
+    )
+    (if (and
+        (>= l (get mid acc))
+        (>= (* amt BPS_PRECISION) (* (get total acc) MIN_SHARE_BPS))
+      )
+      (merge acc { kept: (+ (get kept acc) amt) })
+      acc
+    )
+  )
+)
+(define-private (cap-kept-ask-fold
+    (who principal)
+    (acc {
+      cycle: uint,
+      mid: uint,
+      total: uint,
+      kept: uint,
+    })
+  )
+  (let (
+      (amt (get-token-x-deposit (get cycle acc) who))
+      (l (token-x-limit-at who (get mid acc)))
+    )
+    (if (and
+        (<= l (get mid acc))
+        (>= (* amt BPS_PRECISION) (* (get total acc) MIN_SHARE_BPS))
+      )
+      (merge acc { kept: (+ (get kept acc) amt) })
+      acc
+    )
+  )
+)
 (define-private (gross-up (net uint))
   (let (
-      (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_MAX_BPS)))
-      (n (- g (/ (* g TAKER_REBATE_MAX_BPS) BPS_PRECISION)))
+      (g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_BPS)))
+      (n (- g (/ (* g TAKER_REBATE_BPS) BPS_PRECISION)))
     )
     (if (> n net)
       (- g u1)
@@ -3784,8 +3828,18 @@
         walk: u0,
       }))
       (opposite (if deposit-x
-        (/ (* (get in-range bids) (cap-scale)) mid)
-        (/ (* (get in-range asks) mid) (cap-scale))
+        (/ (* (get kept (fold cap-kept-bid-fold (get-token-y-depositors cycle) {
+          cycle: cycle,
+          mid: mid,
+          total: (get in-range bids),
+          kept: u0,
+        })) (cap-scale)) mid)
+        (/ (* (get kept (fold cap-kept-ask-fold (get-token-x-depositors cycle) {
+          cycle: cycle,
+          mid: mid,
+          total: (get in-range asks),
+          kept: u0,
+        })) mid) (cap-scale))
       ))
       (own (if deposit-x
         (get in-range asks)

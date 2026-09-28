@@ -3,8 +3,8 @@
 AIBTC bounty `muerdzoc805a745ecc99`, 21,000 sats, source only, pre-deploy.
 Scope: `markets-sbtc-stx-jing-v6-3`, `jing-core-v6`, `jing-ladder-v1`,
 `swap-router-sbtc-stx-jing-v5-3`, the ladder dispatch, the six rungs, and the
-three swap vaults (juicestx, fastpool-pox-5, citycoins ccd016). All
-submissions reviewed master `24f3e23`. This file records what each one found,
+three swap vaults (juicestx, fastpool-pox-5, citycoins ccd016). The first
+six submissions reviewed master `24f3e23`; later ones name their own commit. This file records what each one found,
 what we decided, and what changed in the repo.
 
 Review is in progress. Rows marked "open" are not decided yet.
@@ -49,6 +49,8 @@ Runners-up, if we tip like last round:
 | Eternal Harp (ARION) | F-5: `readmit-token-*` is permissionless, so anyone can queue and settle a victim's readmit | yes | - | **Rejected**, by design, see below. |
 | Eternal Harp (ARION) | F-6: rung `settle-escrow` underflows if `stacks-block-time` goes below `submitted-at` | no | - | Not reachable; **hardened anyway**, see below. |
 | Ancient Osprey | No new finding; confirms ARION, Nilo, Celestial Shark and Light Brio | - | - | Confirmations only. |
+| Nested Quinn | M-1: `get-taker-capacity` grosses up at the max rebate (70 bps), so a swap of exactly `gross-cap` on a fresh print (20 bps) nets 0.5% over capacity and fails u1017 | yes | MEDIUM | **Fixed**: gross up at the fresh-print rebate (20 bps), see below. |
+| Void Kael | #1: `get-taker-capacity` counts in-range makers under 0.2% of their side, which settlement rolls (`filter-small`), so a swap sized to the quote fails u1017 | yes | MEDIUM | **Fixed**: the capacity skips them, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -450,3 +452,69 @@ all six rungs:
 
 Same 24-hour rule, no underflow possible. This lands with the next rung
 commit (the rung sources carry other changes still under review).
+
+## Nested Quinn M-1: capacity gross-up at the max rebate (fixed)
+
+Submission reviewed `bb1535d`, clarinet-sdk tests on the real market, router and vaults.
+
+**The claim.** `get-taker-capacity` returns `net-cap`, the most the book can
+fill, and `gross-cap`, what a taker sends so that `net-cap` reaches the book
+after the taker rebate. `gross-up` assumed the MAX rebate (70 bps). A swap
+charges its rebate by print age: 20 bps up to 30 s, +1 bp per second after,
+70 bps from 80 s. On a fresh print (the normal case for a keeper or a front
+end) the swap keeps only 20 bps, so `gross-cap x 0.998` = `net-cap x 1.005`
+reaches the book: 0.5% more than it can fill. Swap is fill-or-kill: a rest at
+or above the minimum fails `ERR_PARTIAL_FILL` (u1017). At a 1,000-sat minimum
+that is every binding book of ~199k sats or more. The router catches the error
+and drops the whole book leg (`jing-ok false`), routing everything to the
+AMMs; the vault `router-swap` reverts u3002.
+
+**Why it holds.** The rebate is kept by the market, it never reaches the book.
+The case that must not fail is the one where the MOST reaches the book, which
+is the SMALLEST rebate (20 bps), not the largest. The earlier change "from 20
+to 70" in `simulations/README-v6-3-caller-impact.md` picked the wrong worst
+case.
+
+| gross-up at | fresh print (20 bps kept) | stale print (70 bps kept) |
+|---|---|---|
+| 70 bps (before) | 0.5% over capacity: u1017 | exactly the capacity |
+| 20 bps (now) | exactly the capacity | 0.5% under: fills, the rest goes to the AMMs |
+
+**Fix.** `gross-up` in `markets-sbtc-stx-jing-v6-3.clar` uses
+`TAKER_REBATE_BPS` (20) instead of `TAKER_REBATE_MAX_BPS` (70). A stale print
+leaves at most ~0.5% of the capacity to the AMMs and never fails.
+
+Residual edge: on a full side a taker must exceed the smallest maker
+(`min-taker`). If the capacity is within 0.5% of that bar and the print is
+stale, the smaller net can land under it. Callers already read `min-taker`.
+
+## Void Kael #1: capacity counts small makers that settlement rolls (fixed)
+
+Submission reviewed `0da8978`, clarinet-sdk tests on the real market and router.
+
+**The claim.** At settlement, `filter-small-token-*-depositor` rolls every
+maker holding under `MIN_SHARE_BPS` (0.2%) of its side to the next cycle
+instead of clearing it. `get-taker-capacity` did not mirror that: it counted
+every in-range maker. Example, all bids at the mid: 10,000 STX (99.81%) and
+19 STX (0.19%). Settlement clears only the 10,000; the capacity quoted 10,019.
+A swap sized to the quote keeps a ~6k-sat rest over the minimum and fails
+u1017, and the router drops the whole book leg. One small order at the mid,
+never filled and cancellable any time, keeps it going; a stale small bid above
+the mid does it by accident. Independent of Nested Quinn M-1: the M-1 fix
+alone still fails.
+
+**Fix.** Two new folds, `cap-kept-bid-fold` / `cap-kept-ask-fold`, sum the
+opposite side's in-range makers that hold at least 0.2% of the whole in-range
+side; `opposite` is built from that instead of the raw in-range total (all
+three v6-3 copies).
+
+**Why the whole side and not the shrinking one.** Settlement tests each maker
+against a total that shrinks as it rolls makers out (Regal Anvil #3), so it
+rolls at most the makers under 0.2% of the whole side. The capacity tests
+against the whole side, so it skips everything settlement rolls, plus at most
+a few borderline makers. The quote can only be a little low, never high: it
+still fills, and the router sends the rest to the AMMs. The capacity does not
+need to copy the list order.
+
+`own` (the taker's side) is left as is: over-counting it only lowers the quote.
+
