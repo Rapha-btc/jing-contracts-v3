@@ -23,6 +23,7 @@ not change `contracts/`.
 | `verify-v6-3-router-bin-boundary.js` | 22/22 | [9566d378](https://stxer.xyz/simulations/mainnet/9566d3784b625f7317464a3fd14af960) |
 | `verify-v6-3-swap-walk.js` (new, gap #1) | 382/382 | [60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c) (first run, before the treasury guard: [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd), 388/388) |
 | `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
+| `verify-v6-3-settlement-edges.js` (new, gap #4) | 365/365 | [0f8df262](https://stxer.xyz/simulations/mainnet/0f8df262dd413cab105eb40f6e97a916) |
 
 Harness updates in this round:
 - `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
@@ -65,7 +66,7 @@ Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
 | 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | **done**: 0 uncovered lines, no partial branch (388/388) |
 | 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | **done**: fully covered but one unreachable `gross-up` arm (472/472) |
 | 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | to do |
-| 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | to do |
+| 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | **done**: covered but 2 unreachable arms (365/365) |
 | 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | to do |
 | 6 | `gate-blind-band` on v6-3 submit + settle | **done** (332/332) |
 
@@ -116,4 +117,31 @@ sub-minimum margin fills and refunds exactly the predicted rest.
 Unreachable: the `(- g u1)` arm of `gross-up` (line 3927). With
 `g = floor(net x 10000 / 9980)`, `n = g - floor(20 g / 10000) <= net` always, so
 `(> n net)` is never true (also brute-forced in the sim). Harmless dead code.
+
+## Settlement edges (gap #4)
+
+`verify-v6-3-settlement-edges.js` deploys ten `settle-edge-*` copies and real
+Lazer prints; every scenario asserts exact balances, list order, cycle totals,
+stored orders (with `set-at`), swap results and core prints:
+- small-share rolls: a y taker's own small order on the OPPOSITE side is
+  rolled, not flagged u1020 (Void Kael #5); a taker under 0.2% of its own side
+  gets u1020 with nothing moving, both sides;
+- sub-minimum rests refunded (the taker's exemption only on its own side),
+  payout and roll dust swept on both sides;
+- stored limits: an older pending limit refused "stale" after a newer top-up;
+  an older top-up behind a newer limit keeps the newer limit and `set-at` but
+  adds its amount (Void Kael #3); "crossing" and "gone" limit refusals;
+- parked partial withdraw, readmit "gone", `prune-cycles` (closed cycle ok,
+  open cycle u1027);
+- rebate by print age with a pinned clock: 30 s, 31 s, 79 s give 20, 21, 69
+  bps; 80 s is refused u1003.
+
+Unreachable: the >= 80 s band of `rebate-bps-for-age` (callers refuse a print
+that old first); the `total-token-* > 0` guards in `distribute-*` (every listed
+depositor holds a positive amount).
+
+Reporting only: a swap's result field `token-*-rolled` carries the unfilled
+amount of the caller's order even when that rest was refunded (seen on the
+taker's own opposite-side order); funds are right. Noted before under Void
+Kael #5.
 
