@@ -52,6 +52,7 @@ Runners-up, if we tip like last round:
 | Nested Quinn | M-1: `get-taker-capacity` grosses up at the max rebate (70 bps), so a swap of exactly `gross-cap` on a fresh print (20 bps) nets 0.5% over capacity and fails u1017 | yes | MEDIUM | **Fixed**: gross up at the fresh-print rebate (20 bps), see below. |
 | Void Kael | #1: `get-taker-capacity` counts in-range makers under 0.2% of their side, which settlement rolls (`filter-small`), so a swap sized to the quote fails u1017 | yes | MEDIUM | **Fixed**: the capacity skips them, see below. |
 | Regal Anvil | #3: `filter-small-token-*` tests each maker against a side total that shrinks as makers roll, so the 0.2% floor depends on list order | yes | INFO | **Fixed**: one snapshot of the side total before the loop, see below. |
+| Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 
 Nilo's submission also states that settle's catch-and-refund "writes nothing
 before a caught u1010". That was wrong on `24f3e23`; see ARION's finding.
@@ -538,4 +539,35 @@ compare against that snapshot; the running total is still decremented for the
 books. Every maker now meets the same bar whatever its place in the list, and
 it is the same bar `get-taker-capacity` uses (Void Kael #1). All three v6-3
 copies.
+
+## Void Kael #5: taker matched by principal, not by side (fixed)
+
+**The claim.** During a swap (`crossing`), `filter-small-token-*` flags
+`taker-too-small` (u1020) when a small depositor is `tx-sender`, and
+`distribute-to-token-*` skips the sub-minimum refund for `tx-sender`. Both run
+on BOTH sides. So a user with a small order resting on the opposite side (15
+STX bid at the mid, 0.15%) cannot sell sBTC: the y filter sees the bid, sees
+`tx-sender`, and fails u1020. The router drops the book leg silently. If that
+bid survives the filter but is filled under the minimum, its rest is rolled
+instead of refunded. Self-inflicted only: nobody else can trigger it, and
+cancelling the bid unblocks the swap.
+
+**The rule itself stays.** A taker's own leg must still be at least 0.2% of
+its own side. A small maker can be rolled to the next cycle, but a swap is
+fill-or-revert, so a taker that small would only get a pro-rata share that
+rounds to dust. `swap` deposits the taker and then runs one settlement, so
+in-range makers already resting on the taker's side share that batch and
+count in the 0.2%.
+
+**Fix.** New data-var `crossing-x` (the taker's side), set next to every
+`(var-set crossing true)`: `deposit-x` in `swap`, `false` in
+`reprice-or-swap-token-y`, `true` in `reprice-or-swap-token-x`. The y-side
+checks require `(not crossing-x)`, the x-side checks require `crossing-x`. The
+taker's opposite-side order is then treated like any maker's: rolled when
+small, refunded when left under the minimum. All three v6-3 copies.
+
+Not changed: the swap tuple can still report that opposite-side order's fill
+in the taker fields (the router does not read them), and
+`get-taker-capacity` still counts the taker's own opposite-side order when it
+is at least 0.2%.
 

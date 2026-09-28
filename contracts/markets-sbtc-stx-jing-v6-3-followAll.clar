@@ -179,6 +179,7 @@
 (define-data-var pending-rebate-bps-x uint TAKER_REBATE_BPS)
 (define-data-var pending-rebate-bps-y uint TAKER_REBATE_BPS)
 (define-data-var crossing bool false)
+(define-data-var crossing-x bool false)
 (define-data-var taker-too-small bool false)
 (define-data-var small-share-base-y uint u0)
 (define-data-var small-share-base-x uint u0)
@@ -2155,6 +2156,7 @@
         (var-set pending-rebate-y rebate)
         (var-set pending-rebate-bps-y bps)
         (var-set crossing true)
+        (var-set crossing-x false)
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-y result
             (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
@@ -2243,6 +2245,7 @@
         (var-set pending-rebate-x rebate)
         (var-set pending-rebate-bps-x bps)
         (var-set crossing true)
+        (var-set crossing-x true)
         (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
           (ok (swap-result-x result
             (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
@@ -2296,7 +2299,7 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-y) MIN_SHARE_BPS))
-      (if (and (var-get crossing) (is-eq depositor tx-sender))
+      (if (and (var-get crossing) (not (var-get crossing-x)) (is-eq depositor tx-sender))
         (ok (var-set taker-too-small true))
         (begin
           (map-set token-y-deposits {
@@ -2344,7 +2347,7 @@
       (totals-next (get-cycle-totals next-cycle))
     )
     (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-x) MIN_SHARE_BPS))
-      (if (and (var-get crossing) (is-eq depositor tx-sender))
+      (if (and (var-get crossing) (var-get crossing-x) (is-eq depositor tx-sender))
         (ok (var-set taker-too-small true))
         (begin
           (map-set token-x-deposits {
@@ -2601,6 +2604,7 @@
       )
     )
     (var-set crossing true)
+    (var-set crossing-x deposit-x)
     (let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
       (if deposit-x
         (ok (swap-result-x result
@@ -3411,7 +3415,7 @@
       (my-refund (if (and
           (> my-token-y-unfilled u0)
           (< my-token-y-unfilled (var-get min-token-y-deposit))
-          (not (and (var-get crossing) (is-eq depositor tx-sender)))
+          (not (and (var-get crossing) (not (var-get crossing-x)) (is-eq depositor tx-sender)))
         )
         my-token-y-unfilled
         u0
@@ -3506,7 +3510,7 @@
       (my-refund (if (and
           (> my-token-x-unfilled u0)
           (< my-token-x-unfilled (var-get min-token-x-deposit))
-          (not (and (var-get crossing) (is-eq depositor tx-sender)))
+          (not (and (var-get crossing) (var-get crossing-x) (is-eq depositor tx-sender)))
         )
         my-token-x-unfilled
         u0
