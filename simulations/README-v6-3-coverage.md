@@ -21,6 +21,7 @@ not change `contracts/`.
 | `verify-v6-3-gate-blind-band.js` | 332/332 | [7cb93e79](https://stxer.xyz/simulations/mainnet/7cb93e79a96401bc8956f920f3775093) |
 | `verify-v6-3-deploy-bytes.js` | 17/17 | [f062ec74](https://stxer.xyz/simulations/mainnet/f062ec74963f90f748abd24ef46c74a7) |
 | `verify-v6-3-router-bin-boundary.js` | 22/22 | [9566d378](https://stxer.xyz/simulations/mainnet/9566d3784b625f7317464a3fd14af960) |
+| `verify-v6-3-swap-walk.js` (new, gap #1) | 388/388 | [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd) |
 
 Harness updates in this round:
 - `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
@@ -37,7 +38,7 @@ Harness updates in this round:
   outside the mid with an entrant at 30 bps: placed (`would-take-as-*` asks who
   is willing at the settle mid), nothing fills at settle.
 
-## Coverage baseline
+## Coverage
 
 `simulations/trace-coverage.mjs` over the 13 sims above (1,486 txs, 223 without
 a trace; deploy-time lines such as constants and error codes never trace):
@@ -48,19 +49,46 @@ node simulations/trace-coverage.mjs --contract markets-sbtc-stx-jing-v6-3 \
   --sims <ids>
 ```
 
-| metric | value |
-|---|---|
-| expressions | 2620 / 4343 (60.3%) |
-| lines | 1398 / 2583 (54.1%) |
-| branches | 297: 195 full, 43 partial, 59 never reached |
+Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
+
+| metric | baseline (13 runs) | + gate-blind-band v6-3 + swap-walk |
+|---|---|---|
+| expressions | 2620 / 4343 (60.3%) | 2919 / 4343 (67.2%) |
+| lines | 1398 / 2583 (54.1%) | 1551 / 2583 (60.0%) |
+| branches (297) | 195 full, 43 partial, 59 never | 237 full, 29 partial, 31 never |
 
 ## Gaps, in order
 
 | # | Area | Status |
 |---|---|---|
-| 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | in progress (`verify-v6-3-swap-walk.js`) |
+| 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | **done**: 0 uncovered lines, no partial branch (388/388) |
 | 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | to do |
 | 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | to do |
 | 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | to do |
 | 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | to do |
 | 6 | `gate-blind-band` on v6-3 submit + settle | **done** (332/332) |
+
+## Swap walk (gap #1)
+
+`verify-v6-3-swap-walk.js` deploys 11 `swapwalk-*` copies and predicts every
+transfer with a BigInt copy of the contract math (mid batch, rebate ride, walk
+fills, fees, rebates, refunds, dust), then asserts exact balance deltas for
+taker, every maker and the treasury, escrow == book, book order and totals,
+and the core `match` / refund / park prints. Both taker sides: mid batch then
+walk (skips the taker's own order, switched-off pegs, makers beyond the limit
+or at/inside the mid; takes makers in price order; whole makers and
+sub-minimum rests refunded; zero-size fill; zero fees; taker dust), a partial
+fill that leaves the rest resting, `ERR_PARTIAL_FILL` u1017 with nothing moving,
+`reprice-or-swap-token-*` walks, and a full taker side (49 seats) that parks a
+switched-off peg before walking.
+
+Not reachable, by reading: the `r > pending` rebate caps in `execute-fill`
+(2772, 2785) are defensive (each fill's rebate is floored and the pending
+ride covers the sum); `ERR_NOTHING_FILLED` (u1015) is defined and never used;
+a zero-size fill exists only for a y taker.
+
+Observed, not a bug: `set-treasury` accepts the market's own principal. With
+the treasury set to the market, the first fee transfer fails `(err u2)` (a
+transfer to itself) and every swap / fee-charging settle aborts until the
+owner resets it.
+
