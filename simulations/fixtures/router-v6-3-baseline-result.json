@@ -1,13 +1,13 @@
 {
   "baseline": "f6a6d3a",
-  "head": "f231e51398c2f508d097e3935f826e9b887c3d91",
-  "block": 9050464,
-  "update": "2a22999ad024334801b3f92d09a7c6aecb5237790153699226db9a3300b73f92d928f0f01ed334e6ea4d5fad8aca591862655299205b0d8cbdfc15f9b82292ccc19e0b2200005c93c7d37500065c2e6aa960000402000000010500000007b0dcb1ff9104fff80500000000374ab25d0300190c0100065c2e6aa960000000002d05000000000001d586f304fff80500000000000016350300100c0100065c2e6aa96000",
+  "head": "62d032c9acab019d1db076febef018b6f6721022",
+  "block": 9082832,
+  "update": "2a22999ae4a8a6d9bcf1c42011ec8e421b57102219dd7343c417106d0204e18bb6dbe9b602e9daed89ffe1fb57acafaa5b337c755984da664b5155aea834473dd9e85e4901005c93c7d37500065c8fe186078004020000000105000000079cbf8e9b4504fff8050000000054d6097b0300190c0100065c8fe18607800000002d05000000000001e15fbc04fff805000000000000332b03000e0c0100065c8fe1860780",
   "links": {
-    "x/baseline": "https://stxer.xyz/simulations/mainnet/8ccba97155e2b31ab0b5c05801e49c41",
-    "x/current": "https://stxer.xyz/simulations/mainnet/9ea0d7b5a435a590b7ffd3080c62f2d7",
-    "y/baseline": "https://stxer.xyz/simulations/mainnet/92096ae79d168448ce837a343352618f",
-    "y/current": "https://stxer.xyz/simulations/mainnet/282a03bc3e22ed693b8ddf2ec63eea13"
+    "x/baseline": "https://stxer.xyz/simulations/mainnet/6f1673cb4dc221e7664f339ee5b271a7",
+    "x/current": "https://stxer.xyz/simulations/mainnet/18639bb8b982bf36c03bf2b7bdda07d3",
+    "y/baseline": "https://stxer.xyz/simulations/mainnet/27d5a17710c3fa15bfd5b53228f22279",
+    "y/current": "https://stxer.xyz/simulations/mainnet/df5c8920c7b34a31dfdd05c0708827d0"
   },
   "passed": 398,
   "checks": 398,
@@ -17,288 +17,288 @@
       {
         "label": "full fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u0) (token-x-rolled u0) (token-y-received u8219622) (token-y-rolled u0)))",
+        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u0) (token-x-rolled u0) (token-y-received u7935428) (token-y-rolled u0)))",
         "before": "(tuple (cx u0) (cy u30000000) (mx u0) (my u970000000) (tx u1000000000) (ty u0))",
-        "after": "(tuple (cx u0) (cy u21772151) (mx u2998) (my u970000000) (tx u999997000) (ty u8219622))"
+        "after": "(tuple (cx u0) (cy u22056629) (mx u2998) (my u970000000) (tx u999997000) (ty u7935428))"
       },
       {
         "label": "full fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3000) (jing-ok true) (jing-out u8219622) (out u8219622) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u2998) (my u961772151) (tx u999997000) (ty u8219622))",
-        "after": "(tuple (cx u0) (cy u21772151) (mx u5996) (my u961772151) (tx u999994000) (ty u16439244))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3000) (jing-ok true) (jing-out u7935428) (out u7935428) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u0) (cy u30000000) (mx u2998) (my u962056629) (tx u999997000) (ty u7935428))",
+        "after": "(tuple (cx u0) (cy u22056629) (mx u5996) (my u962056629) (tx u999994000) (ty u15870856))"
       },
       {
         "label": "partial fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u1) (token-x-received u0) (token-x-rolled u497) (token-y-received u4118046) (token-y-rolled u0)))",
-        "before": "(tuple (cx u0) (cy u4122168) (mx u5996) (my u979422134) (tx u999994000) (ty u16439244))",
-        "after": "(tuple (cx u0) (cy u0) (mx u7497) (my u979422134) (tx u999992498) (ty u20557290))"
+        "result": "(ok (tuple (rebate-refunded u1) (token-x-received u0) (token-x-rolled u497) (token-y-received u3975666) (token-y-rolled u0)))",
+        "before": "(tuple (cx u0) (cy u3979645) (mx u5996) (my u980133613) (tx u999994000) (ty u15870856))",
+        "after": "(tuple (cx u0) (cy u0) (mx u7497) (my u980133613) (tx u999992498) (ty u19846522))"
       },
       {
         "label": "partial fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1502) (jing-ok true) (jing-out u4118046) (out u4118046) (unsold u498) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u0) (cy u4122168) (mx u7497) (my u975299966) (tx u999992498) (ty u20557290))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1502) (jing-ok true) (jing-out u3975666) (out u3975666) (unsold u498) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u0) (cy u3979645) (mx u7497) (my u976153968) (tx u999992498) (ty u19846522))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "zero limit",
         "kind": "market",
         "result": "(err u1011)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "zero limit",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "below minimum",
         "kind": "market",
         "result": "(err u1001)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "below minimum",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "empty book",
         "kind": "market",
         "result": "(err u1009)",
-        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "empty book",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       }
     ],
     "x/current": [
       {
         "label": "full fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u0) (token-x-rolled u0) (token-y-received u8219622) (token-y-rolled u0)))",
+        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u0) (token-x-rolled u0) (token-y-received u7935428) (token-y-rolled u0)))",
         "before": "(tuple (cx u0) (cy u30000000) (mx u0) (my u970000000) (tx u1000000000) (ty u0))",
-        "after": "(tuple (cx u0) (cy u21772151) (mx u2998) (my u970000000) (tx u999997000) (ty u8219622))"
+        "after": "(tuple (cx u0) (cy u22056629) (mx u2998) (my u970000000) (tx u999997000) (ty u7935428))"
       },
       {
         "label": "full fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3000) (jing-ok true) (jing-out u8219622) (out u8219622) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u2998) (my u961772151) (tx u999997000) (ty u8219622))",
-        "after": "(tuple (cx u0) (cy u21772151) (mx u5996) (my u961772151) (tx u999994000) (ty u16439244))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3000) (jing-ok true) (jing-out u7935428) (out u7935428) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u0) (cy u30000000) (mx u2998) (my u962056629) (tx u999997000) (ty u7935428))",
+        "after": "(tuple (cx u0) (cy u22056629) (mx u5996) (my u962056629) (tx u999994000) (ty u15870856))"
       },
       {
         "label": "partial fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u1) (token-x-received u0) (token-x-rolled u497) (token-y-received u4118046) (token-y-rolled u0)))",
-        "before": "(tuple (cx u0) (cy u4122168) (mx u5996) (my u979422134) (tx u999994000) (ty u16439244))",
-        "after": "(tuple (cx u0) (cy u0) (mx u7497) (my u979422134) (tx u999992498) (ty u20557290))"
+        "result": "(ok (tuple (rebate-refunded u1) (token-x-received u0) (token-x-rolled u497) (token-y-received u3975666) (token-y-rolled u0)))",
+        "before": "(tuple (cx u0) (cy u3979645) (mx u5996) (my u980133613) (tx u999994000) (ty u15870856))",
+        "after": "(tuple (cx u0) (cy u0) (mx u7497) (my u980133613) (tx u999992498) (ty u19846522))"
       },
       {
         "label": "partial fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1502) (jing-ok true) (jing-out u4118046) (out u4118046) (unsold u498) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u0) (cy u4122168) (mx u7497) (my u975299966) (tx u999992498) (ty u20557290))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1502) (jing-ok true) (jing-out u3975666) (out u3975666) (unsold u498) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u0) (cy u3979645) (mx u7497) (my u976153968) (tx u999992498) (ty u19846522))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "zero limit",
         "kind": "market",
         "result": "(err u1011)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "zero limit",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "below minimum",
         "kind": "market",
         "result": "(err u1001)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "below minimum",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u945299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u30000000) (mx u8998) (my u946153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "empty book",
         "kind": "market",
         "result": "(err u1009)",
-        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       },
       {
         "label": "empty book",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))",
-        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u975299966) (tx u999990996) (ty u24675336))"
+        "before": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))",
+        "after": "(tuple (cx u0) (cy u0) (mx u8998) (my u976153968) (tx u999990996) (ty u23822188))"
       }
     ],
     "y/baseline": [
       {
         "label": "full fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u2176) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u0)))",
+        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u2254) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u0)))",
         "before": "(tuple (cx u12000) (cy u0) (mx u999988000) (my u0) (tx u0) (ty u1000000000))",
-        "after": "(tuple (cx u9822) (cy u0) (mx u999988000) (my u5994012) (tx u2176) (ty u994000000))"
+        "after": "(tuple (cx u9744) (cy u0) (mx u999988000) (my u5994012) (tx u2254) (ty u994000000))"
       },
       {
         "label": "full fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u6000000) (jing-ok true) (jing-out u2176) (out u2176) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999985822) (my u5994012) (tx u2176) (ty u994000000))",
-        "after": "(tuple (cx u9822) (cy u0) (mx u999985822) (my u11988024) (tx u4352) (ty u988000000))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u6000000) (jing-ok true) (jing-out u2254) (out u2254) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u12000) (cy u0) (mx u999985744) (my u5994012) (tx u2254) (ty u994000000))",
+        "after": "(tuple (cx u9744) (cy u0) (mx u999985744) (my u11988024) (tx u4508) (ty u988000000))"
       },
       {
         "label": "partial fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u990) (token-x-received u1272) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u493653)))",
-        "before": "(tuple (cx u1273) (cy u0) (mx u999994371) (my u11988024) (tx u4352) (ty u988000000))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999994371) (my u15489883) (tx u5624) (ty u984494643))"
+        "result": "(ok (tuple (rebate-refunded u988) (token-x-received u1318) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u492566)))",
+        "before": "(tuple (cx u1319) (cy u0) (mx u999994169) (my u11988024) (tx u4508) (ty u988000000))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999994169) (my u15490971) (tx u5826) (ty u984493554))"
       },
       {
         "label": "partial fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3505357) (jing-ok true) (jing-out u1272) (out u1272) (unsold u494643) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u1273) (cy u0) (mx u999993098) (my u15489883) (tx u5624) (ty u984494643))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3506446) (jing-ok true) (jing-out u1318) (out u1318) (unsold u493554) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u1319) (cy u0) (mx u999992850) (my u15490971) (tx u5826) (ty u984493554))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "zero limit",
         "kind": "market",
         "result": "(err u1011)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "zero limit",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "below minimum",
         "kind": "market",
         "result": "(err u1001)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "below minimum",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "empty book",
         "kind": "market",
         "result": "(err u1009)",
-        "before": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "empty book",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       }
     ],
     "y/current": [
       {
         "label": "full fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u2176) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u0)))",
+        "result": "(ok (tuple (rebate-refunded u0) (token-x-received u2254) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u0)))",
         "before": "(tuple (cx u12000) (cy u0) (mx u999988000) (my u0) (tx u0) (ty u1000000000))",
-        "after": "(tuple (cx u9822) (cy u0) (mx u999988000) (my u5994012) (tx u2176) (ty u994000000))"
+        "after": "(tuple (cx u9744) (cy u0) (mx u999988000) (my u5994012) (tx u2254) (ty u994000000))"
       },
       {
         "label": "full fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u6000000) (jing-ok true) (jing-out u2176) (out u2176) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999985822) (my u5994012) (tx u2176) (ty u994000000))",
-        "after": "(tuple (cx u9822) (cy u0) (mx u999985822) (my u11988024) (tx u4352) (ty u988000000))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u6000000) (jing-ok true) (jing-out u2254) (out u2254) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u12000) (cy u0) (mx u999985744) (my u5994012) (tx u2254) (ty u994000000))",
+        "after": "(tuple (cx u9744) (cy u0) (mx u999985744) (my u11988024) (tx u4508) (ty u988000000))"
       },
       {
         "label": "partial fill",
         "kind": "market",
-        "result": "(ok (tuple (rebate-refunded u990) (token-x-received u1272) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u493653)))",
-        "before": "(tuple (cx u1273) (cy u0) (mx u999994371) (my u11988024) (tx u4352) (ty u988000000))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999994371) (my u15489883) (tx u5624) (ty u984494643))"
+        "result": "(ok (tuple (rebate-refunded u988) (token-x-received u1318) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u492566)))",
+        "before": "(tuple (cx u1319) (cy u0) (mx u999994169) (my u11988024) (tx u4508) (ty u988000000))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999994169) (my u15490971) (tx u5826) (ty u984493554))"
       },
       {
         "label": "partial fill",
         "kind": "router",
-        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3505357) (jing-ok true) (jing-out u1272) (out u1272) (unsold u494643) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-        "before": "(tuple (cx u1273) (cy u0) (mx u999993098) (my u15489883) (tx u5624) (ty u984494643))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u3506446) (jing-ok true) (jing-out u1318) (out u1318) (unsold u493554) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+        "before": "(tuple (cx u1319) (cy u0) (mx u999992850) (my u15490971) (tx u5826) (ty u984493554))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "zero limit",
         "kind": "market",
         "result": "(err u1011)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "zero limit",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "below minimum",
         "kind": "market",
         "result": "(err u1001)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "below minimum",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u12000) (cy u0) (mx u999981098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u12000) (cy u0) (mx u999980850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "empty book",
         "kind": "market",
         "result": "(err u1009)",
-        "before": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       },
       {
         "label": "empty book",
         "kind": "router",
         "result": "(err u3002)",
-        "before": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))",
-        "after": "(tuple (cx u0) (cy u0) (mx u999993098) (my u18991742) (tx u6896) (ty u980989286))"
+        "before": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))",
+        "after": "(tuple (cx u0) (cy u0) (mx u999992850) (my u18993918) (tx u7144) (ty u980987108))"
       }
     ]
   }

@@ -271,7 +271,7 @@ async function depositAndReadmitCoverage(cases, { u1, stamp }) {
     event(`${side}: successful deposit log attributes entrant`, admission.receipt, side, 'deposit', { depositor: entrant });
     await ev(`${side}: admitted pending cleared`, cid, pending(side, entrant), 'none');
     await ev(`${side}: entrant is live`, cid, live(side, entrant), `u${admitted}`);
-    await ev(`${side}: admitted order exact`, cid, `(is-eq ${order(side, entrant)} { limit: u${limit}, spread-bps: none })`, 'true');
+    await ev(`${side}: admitted order exact`, cid, `(let ((o ${order(side, entrant)})) (and (is-eq (get limit o) u${limit}) (is-eq (get spread-bps o) none) (> (get set-at o) u0)))`, 'true');
     await ev(`${side}: incumbent parked`, cid, parked(side, maker), `u${big}`);
     await ev(`${side}: incumbent no longer live`, cid, live(side, maker), 'u0');
     await ev(`${side}: no second escrow transfer`, cid, balance(side, entrant), 'u0');

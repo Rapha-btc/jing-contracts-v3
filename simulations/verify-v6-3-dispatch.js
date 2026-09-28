@@ -24,9 +24,8 @@ const traits = { x: principal(SBTC), y: principal(STX) };
 const assets = { x: stringAsciiCV('sbtc-token'), y: stringAsciiCV('wstx') };
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + '01', 'mainnet');
 const keeper = mk(871);
-const source = (name) => /^jing-(buy|sell)-stx/.test(name)
-  ? execFileSync('git',['show',`5735a97:contracts/${name}.clar`],{encoding:'utf8'})
-  : fs.readFileSync(new URL(`../contracts/${name}.clar`, import.meta.url), 'utf8');
+// rungs: the -v1 templates we deploy, against the working-tree ladder
+const source = (name) => fs.readFileSync(new URL(`../contracts/${/^jing-(buy|sell)-stx/.test(name) ? `${name}-v1` : name}.clar`, import.meta.url), 'utf8');
 const cv = (hex) => cvToString(deserializeCV(hex));
 const decode = (step) => {
   const r = step?.Result;
@@ -148,8 +147,11 @@ async function main() {
  }
  async function dispatch(f,who,amounts) {
   const before=BigInt((await ev('wallet before dispatch',MARKET,balance(f.side,who),v=>/^u[0-9]+$/.test(v))).slice(1));
+  // a rung whose last member left has closed that epoch: read each rung's epoch
+  const epochs=[];
+  for(let i=0;i<3;i++)epochs.push(BigInt((await ev('epoch before dispatch '+i,f.rungs[i],'(get epoch (get-state))',v=>/^u[0-9]+$/.test(v))).slice(1)));
   const result=await tx(`${f.dir} weighted dispatch`,who,DISPATCH,`deposit-${f.dir}`,[uintCV(sum(amounts)),entries(f.rungs,amounts)],ok);
-  const expected=cvToString({ ...tupleCV({amount:uintCV(sum(amounts)),rungs:uintCV(3),'stx-paid':uintCV(0),'sbtc-paid':uintCV(0),positions:listCV(f.rungs.map((rung,i)=>tupleCV({rung:principal(rung),amount:uintCV(amounts[i]),shares:uintCV(amounts[i]),epoch:uintCV(0),'stx-paid':uintCV(0),'sbtc-paid':uintCV(0)})))}) });
+  const expected=cvToString({ ...tupleCV({amount:uintCV(sum(amounts)),rungs:uintCV(3),'stx-paid':uintCV(0),'sbtc-paid':uintCV(0),positions:listCV(f.rungs.map((rung,i)=>tupleCV({rung:principal(rung),amount:uintCV(amounts[i]),shares:uintCV(amounts[i]),epoch:uintCV(epochs[i]),'stx-paid':uintCV(0),'sbtc-paid':uintCV(0)})))}) });
   check('exact aggregate and per-rung deposit receipts',result.result,`(ok ${expected})`);
   await ev('exact total spent',MARKET,balance(f.side,who),`u${before-BigInt(sum(amounts))}`);
   for(let i=0;i<3;i++)await ev('exact shares '+i,f.rungs[i],`(get shares (get-position '${who}))`,`u${amounts[i]}`);
@@ -194,11 +196,21 @@ async function main() {
   const out=await withdraw(f,f.a,f.initial,noneCV());
   for(let i=0;i<3;i++) {
    const rung=f.rungs[i];
-   await ev('timeout cancellation or normal live withdrawal exact',MARKET,`(and (is-none ${pending(f.side,rung)}) (is-eq ${live(f.side,rung)} u${i===0?0:f.second[i]}) (is-eq ${parked(f.side,rung)} u0))`,'true');
+   // rung 0: with escrow-for (buy core-spread-v1 only, for now) A's exit is
+   // paid from what the pool holds here, so its 24h-old escrow stays pending;
+   // the sell -v1 rungs still settle-escrow up front and cancel it
+   await ev('rung 0 escrow per rung version, others withdraw live exact',MARKET,i===0
+    ? (f.dir==='buy'
+      ? `(and (is-eq (get amount (unwrap-panic ${pending(f.side,rung)})) u${f.initial[0]}) (is-eq ${live(f.side,rung)} u0) (is-eq ${parked(f.side,rung)} u0))`
+      : `(and (is-none ${pending(f.side,rung)}) (is-eq ${live(f.side,rung)} u0) (is-eq ${parked(f.side,rung)} u0))`)
+    : `(and (is-none ${pending(f.side,rung)}) (is-eq ${live(f.side,rung)} u${f.second[i]}) (is-eq ${parked(f.side,rung)} u0))`,'true');
    await ev('other member exact shares and claim',rung,`(and (is-eq (get shares (get-position '${f.memberB})) u${f.second[i]}) (is-eq (get ${f.side==='x'?'sbtc':'stx'} (get-position '${f.memberB})) u${f.second[i]}))`,'true');
   }
-  event('timeout cancel logged',out.receipt,f.side,'pending-refund',{reason:'"cancel"'});
-  await withdraw(f,f.memberB,f.second,noneCV());
+  // buy (escrow-for): B's exit needs rung 0's escrow and takes the 24h cancel;
+  // sell (old rung): A's exit already took it
+  if(f.dir!=='buy')event('timeout cancel logged',out.receipt,f.side,'pending-refund',{reason:'"cancel"'});
+  const outB=await withdraw(f,f.memberB,f.second,noneCV());
+  if(f.dir==='buy')event('timeout cancel logged',outB.receipt,f.side,'pending-refund',{reason:'"cancel"'});
   await ev('dispatcher has no custody',MARKET,balance(f.side,DISPATCH),'u0');
  }
  console.log(`${passed}/${checks} checks green`);
