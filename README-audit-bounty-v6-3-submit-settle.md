@@ -63,6 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
 | Nested Quinn | L-2: juice / fastpool vaults accept `window-blocks` up to 1008, but recovery opens at batch start + 432, so anyone can recover mid-window | yes | LOW | **Fixed**: `MAX_WINDOW_BLOCKS` 288 in both vaults (juicestx `579cf03`, fastpool `1ded288`), see below. ccd016 not affected. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
 | Void Kael | #2: during an oracle outage or core pause, a permissionless `push` (1 sat is enough) creates a fresh rung pending, and re-pushes after every 24h cancel, so members stay locked | yes | MEDIUM | **Fixing** in the `-v1` rungs: 24h push cooldown after the 24h cancel, plus an owner push pause, see below. In `jing-buy-stx-market-spread-v1` and `jing-buy-stx-core-spread-v1`. |
@@ -770,4 +771,30 @@ recovery.
 
 The juicestx `test:vault` harness fails at build on `is-empty` ("expecting
 read-only statements") with or without this change, so it did not run.
+
+## Nested Quinn L-1: vault `router-swap` is all or nothing (fixed)
+
+**The claim.** `router-swap` (juice, fastpool, ccd016 v2) sells one chunk
+(`chunk-amount`: the balance or `max-chunk-sats`) and passed the router
+`min-out = floor x the whole chunk`. The router sells only what fits inside
+the floor (each leg is bounded by the limit) and returns the rest as
+`unsold`. Any unsold part then made `out < min-out` and the router reverted
+u3002: while the pools inside the 1% floor are thinner than the chunk,
+nothing sells at all, and the batch waits for the 432-block recovery or an
+admin / DAO step. Still true after the `20fb4f1` chunk sizing.
+
+**Fix.** The vault passes `min-out` u0 to the router and checks the floor on
+what actually sold: `sold = amount - unsold`, `sold > ROUTER_SLACK_SATS`, and
+`out >= floor-out(sold - ROUTER_SLACK_SATS)` (`ERR_BELOW_FLOOR` u16047).
+`ROUTER_SLACK_SATS` is 8: the router lets each of its four legs land up to
+`ROUND_SLACK` (2) sats under the limit. The unsold rest never leaves the
+vault and sells on the next call. A call that sells 8 sats or less reverts,
+so it cannot burn the shared cooldown for nothing. The allowance (`amount + min-x`) is
+unchanged. The router is unchanged.
+
+`ccd016-swap-vault-mia-v3` is a work in progress and not changed here.
+
+**To do before deploy:** rerun the stxer vault sims (juice, fastpool,
+ccd016 v2 happy-path and liquidation) on this change. Only `clarinet check`
+has run so far.
 
