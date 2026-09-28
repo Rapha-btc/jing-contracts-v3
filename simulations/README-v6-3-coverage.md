@@ -25,6 +25,7 @@ not change `contracts/`.
 | `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
 | `verify-v6-3-settlement-edges.js` (new, gap #4) | 365/365 | [0f8df262](https://stxer.xyz/simulations/mainnet/0f8df262dd413cab105eb40f6e97a916) |
 | `verify-v6-3-errors-admin.js` (new, gap #5) | 514/514 | [3cf12a3f](https://stxer.xyz/simulations/mainnet/3cf12a3fbbdcc7a078ef394bb01b728d) |
+| `verify-v6-3-full-side.js` (new, gap #3) | 921/921 | [dabb4070](https://stxer.xyz/simulations/mainnet/dabb407079ba8c679a84c6400360d2c4) |
 
 Harness updates in this round:
 - `submit-settle-lazer`: the stored order now carries `set-at` (Void Kael #3);
@@ -66,7 +67,7 @@ Alias for the new sims: add `|gate-|swapwalk-` to the pattern above.
 |---|---|---|
 | 1 | Swap walking the book: `execute-fill`, `walk-*-book-step`, `collect-*-step`, `insert-*-step` | **done**: 0 uncovered lines, no partial branch (388/388) |
 | 2 | Taker capacity: `get-taker-capacity`, `cap-*-fold`, `cap-kept-*-fold`, `gross-up` (traced only inside a tx) | **done**: fully covered but one unreachable `gross-up` arm (472/472) |
-| 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | to do |
+| 3 | Full side and seats: `park-tenth-*`, `top-*-fold`, `top-*-insert`, `with-seat` | **done**: fully covered (921/921) |
 | 4 | Settlement edges: `filter-small-*`, `distribute-*`, `roll-and-sweep-dust`, stale `settle-*-limit` | **done**: covered but 2 unreachable arms (365/365) |
 | 5 | Error codes never returned, admin: `set-treasury`, `set-operator`, `prune-cycles` | **done**: 149/296 failure arms hit, every other one unreachable (514/514) |
 | 6 | `gate-blind-band` on v6-3 submit + settle | **done** (332/332) |
@@ -208,4 +209,27 @@ Notes, not bugs: `swap` / `reprice-or-swap` have no pause or trait check of
 their own; paused or wrong trait, the whole tx reverts at `settle-with-refresh`
 after the taker's tokens were pulled, so nothing is lost. `set-distance-slots`
 above 50 returns `ERR_QUEUE_FULL`, an odd code for a bad argument.
+
+## Full side and seats (gap #3)
+
+`verify-v6-3-full-side.js` fills `fullside-y` / `fullside-x` to 50 (two seated
+band rungs, 47 fixed makers with a tied pair, one pegged maker) and two
+45-seat markets, plus a `fullside-probe` that wraps the read-only
+`pegged-bid` / `pegged-ask`. A JS model of `park-tenth`, `side-full` and the
+core bump predicts every outcome; each scenario asserts the branch it targets,
+who is parked, lists, live / parked amounts, totals, balances and prints.
+Both sides: a switched-off newcomer refunded "queue-full"; a switched-off
+resident parked first, then switched back on while parked; parks at the
+`distance-slots` edge (smallest outside vs last inside, equal sizes, slots at
+50, a tied pair on the boundary); "queue-full" refusals; the core bump when
+nobody is parkable (equal-size and near-side newcomers refused); seat sync
+(already seated, plain maker u1028, retired band pruned then parked, seated
+top-up, max-band raise flips `side-full`); parked partial withdraw (ok, u1024,
+u1001); readmit refused queue-full / u1031 / u1022 / gone / crossing, and
+readmitted once slots free.
+
+Unreachable through the market: the spread guard inside `pegged-bid` /
+`pegged-ask` (spread >= 100%); `valid-spread` refuses such a spread at entry,
+so only the probe reaches it. By design: `cancel-token-*-deposit` clears a
+pending readmit, so readmit "gone" needs the parked maker to re-deposit.
 
