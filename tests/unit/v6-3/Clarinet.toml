@@ -1,0 +1,40 @@
+[project]
+name = "unit-v6-3"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../../rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.token]
+path = "token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.wrong-token]
+path = "token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = "oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = ".build/core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = ".build/ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = ".build/market.clar"
+clarity_version = 5
+epoch = "3.4"

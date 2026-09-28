@@ -154,23 +154,21 @@ Mainnet contracts the project depends on (sBTC, USDCx, Pyth oracles, Bitflow xyk
 
 ## Testing
 
+`npm test` now runs the full current v6-3 market suite and its coverage checks.
+`npm run test:v6-3` is equivalent. See the
+[v6-3 unit-test README](tests/unit/v6-3/README.md) for the verified source revision,
+market-only coverage, fixtures, and remaining gaps.
+
 ```sh
 npm install
-npm test                                                # all files
-npx vitest run tests/jing-core.test.ts                  # registry/admin
-npx vitest run tests/markets-sbtc-usdcx-jing.test.ts    # USDCx market
-npx vitest run tests/markets-sbtc-stx-jing.test.ts      # sBTC/STX market
-npx vitest run tests/vault-sbtc-usdcx.test.ts           # USDCx vault
-npx vitest run tests/vault-sbtc-stx.test.ts             # sBTC/STX vault
-npx vitest run tests/reserve-sbtc-stx-jing.test.ts      # lender reserve
-npx vitest run tests/snpl-sbtc-stx-jing.test.ts         # snpl loan lifecycle
+npm test
 ```
 
-**Total: 149 clarinet tests across 7 files** covering `jing-core`, both markets, both personal vaults, the sBTC reserve, and the per-borrower snpl loan contract (`jing-vault-auth` is exercised indirectly by every signed-intent test).
+The v6-3 suite runs offline against the current contract, with isolated local
+dependencies and strict token balances. Older-version tests are not part of
+this command or its coverage totals.
 
-Tests run against a clarinet simnet with `remote_data` enabled so mainnet sBTC, USDCx, Pyth, Bitflow, and wstx contracts are reachable. The Pyth `settle-with-refresh` paths fetch a fresh VAA from `hermes.pyth.network` over the public internet — no credentials needed.
-
-### Coverage matrix (clarinet + stxer)
+### Historical coverage matrix (clarinet + stxer)
 
 Every public contract in this repo is exercised by **both** local clarinet simnet tests **and** stxer mainnet-fork simulations. The two suites are intentionally redundant: clarinet catches logic bugs at the bytecode level (instant, deterministic, plus property-fuzz via Rendezvous); stxer catches integration bugs against real mainnet state (Pyth freshness, Bitflow xyk + DLMM pool depth, wstx behavior, sBTC token-supply tracker).
 

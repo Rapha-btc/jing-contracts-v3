@@ -7,3 +7,7 @@ tests/rv/.build/
 .rendezvous-regressions/
 simulations/_run-all-results.tsv
 simulations/results/
+
+# Generated isolated Clarinet unit fixture and coverage artifacts
+tests/unit/v6-3/.build/
+tests/unit/v6-3/settings/
