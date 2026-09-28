@@ -63,6 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Void Kael | #6: a batch funded with <= DUST_SATS closes with 0 STX, and `finish` then fails `(err u3)` on the 0 transfer forever, wedging the juice / fastpool pool | yes | LOW | **Fixed**: `finish` skips the transfer when the balance is 0, see below. ccd016 not affected. |
 | Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
 | Nested Quinn | L-2: juice / fastpool vaults accept `window-blocks` up to 1008, but recovery opens at batch start + 432, so anyone can recover mid-window | yes | LOW | **Fixed**: `MAX_WINDOW_BLOCKS` 288 in both vaults (juicestx `579cf03`, fastpool `1ded288`), see below. ccd016 not affected. |
 | Nested Quinn | I-1: in the full branch of `deposit-token-*-core`, `var-set bumped-token-*-principal` runs before the fallible append, so `cbf96c4`'s "no write before a u1010" rule is not literally true | yes | INFO | **No change**: scratch var, see below. |
@@ -797,4 +798,28 @@ unchanged. The router is unchanged.
 **To do before deploy:** rerun the stxer vault sims (juice, fastpool,
 ccd016 v2 happy-path and liquidation) on this change. Only `clarinet check`
 has run so far.
+
+## Void Kael #6: a dust-only batch wedges `finish` (fixed)
+
+**The claim.** `is-empty` treats up to `DUST_SATS` (2 sats) as empty, so a
+batch funded with 2 sats or less can be closed at once (`close-batch` is
+permissionless) with nothing sold and 0 STX in the vault. `finish` then sent
+`stx-transfer? 0`, which fails `(err u3)`, on every call. The pool can never
+finalize: juice `pending-swap` stays set (every claim u115, recovery u16032,
+rotation u115); fastpool `vault-cycle` stays set (every other cycle's funding
+u1050). Only an outside 1 uSTX transfer to the vault unstuck it. The funding
+comes from a real claim only (juice `pox-claim-rewards` -> `fund claimed`;
+fastpool `fund-swap-vault` from a cycle's claimed, unswapped rewards; `fund`
+is pool-only), so the trigger is a 1-2 sat claim.
+
+**Fix.** `finish` (juice and fastpool vaults) moves STX only when the balance
+is above 0, as `emergency-recover` already does; the `try!` stays, so a real
+transfer failure still errors. The pools already accept a 0 finish. The 2
+sats ride into the next batch, as `DUST_SATS` intends. A 0-STX finish is only
+possible after `close-batch`, which needs `is-empty`, so a batch that still
+holds real sBTC cannot be finished early.
+
+Rejected alternative: refuse fundings of `DUST_SATS` or less in `fund`. It
+would make a small real claim revert until more rewards accrue (or someone
+donates), which is an outside step again.
 
