@@ -63,6 +63,7 @@ Runners-up, if we tip like last round:
 | Void Kael | #5: the crossing-taker checks match `tx-sender` on both sides, so a taker's own small order on the OPPOSITE side makes its swap fail u1020 | yes | LOW | **Fixed**: new `crossing-x` flag, the checks only apply on the taker's side, see below. |
 | Void Kael | #3: the stored limit has no time, so settling an OLDER pending deposit (or pending limit) overwrites a NEWER limit, and the order fills at a price the maker's latest instruction excluded | yes | LOW | **Fixed**: the stored limit records `set-at`, and a settle only writes a newer instruction, see below. |
 | Regal Anvil | #4: `settle-token-*-readmit` does not re-check the deposit minimum | yes | INFO | **By design**: readmit restores an order already admitted, see below. |
+| Void Kael | #8: vault `router-swap` aborts `(err u0)` in a ~120-sat band when the book leg's refund (rest + rebate crumbs) exceeds the allowance `amount + min-x` (first noted, unproven, by Nested Quinn) | yes | INFO | **Closed by the Nested Quinn M-1 fix**, see below. No vault change. |
 | Void Kael | #7: after a sell-out, a 1-sat `jing-place` escrows dust on the market, and `is-empty` (market position exactly 0) keeps the batch open until the window ends | yes | LOW | **Fixed**: `close-batch` cancels a market position of at most `DUST_SATS` home first, see below. All three vaults. |
 | Void Kael | #6: a batch funded with <= DUST_SATS closes with 0 STX, and `finish` then fails `(err u3)` on the 0 transfer forever, wedging the juice / fastpool pool | yes | LOW | **Fixed**: `finish` skips the transfer when the balance is 0, see below. ccd016 not affected. |
 | Nested Quinn | L-1: the permissionless vault `router-swap` demands the floor on the whole chunk, so it sells nothing when the pools take only part of it inside the floor | yes | LOW-MEDIUM | **Fixed** in the three vaults: floor checked on what sold, the rest stays, see below. |
@@ -846,4 +847,19 @@ cancelled by this. If the cancel fails, `close-batch` refuses as before.
 Rejected alternative (Void's tested one): a minimum on `jing-place`. The
 ccd016 README already rejected it (it would only price the call and strand
 the last chunk).
+
+## Void Kael #8: `router-swap` allowance band (closed by M-1)
+
+**The claim.** When the book leg only partly fills, the market refunds the
+vault its rest (under the minimum) plus unused rebate crumbs, and the router
+re-sells both; the vault's gross sBTC outflow `amount + rest + crumbs` can
+pass the allowance `amount + min-x`, and `as-contract?` aborts `(err u0)`.
+Measured band: book capacities 198,320-198,440 sats on a fresh print.
+
+**Why no change.** The large rest came from the 70-bps gross-up (Nested Quinn
+M-1). With the gross-up at the fresh-print rate, a quote-sized book leg
+fills in full and the rest is about 0; Void Kael's own test on an M-1-fixed
+market copy sells the in-band book with no refunds. Considered and not taken:
+widening the allowance by `min-x x 70 / 10000 + 2` (about 9 sats) for a
+remaining corner where a book leg still leaves close to the minimum unfilled.
 
