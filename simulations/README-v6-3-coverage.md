@@ -21,7 +21,7 @@ not change `contracts/`.
 | `verify-v6-3-gate-blind-band.js` | 332/332 | [7cb93e79](https://stxer.xyz/simulations/mainnet/7cb93e79a96401bc8956f920f3775093) |
 | `verify-v6-3-deploy-bytes.js` | 17/17 | [f062ec74](https://stxer.xyz/simulations/mainnet/f062ec74963f90f748abd24ef46c74a7) |
 | `verify-v6-3-router-bin-boundary.js` | 22/22 | [9566d378](https://stxer.xyz/simulations/mainnet/9566d3784b625f7317464a3fd14af960) |
-| `verify-v6-3-swap-walk.js` (new, gap #1) | 388/388 | [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd) |
+| `verify-v6-3-swap-walk.js` (new, gap #1) | 382/382 | [60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c) (first run, before the treasury guard: [a796043f](https://stxer.xyz/simulations/mainnet/a796043f446b45f5277407f2266714fd), 388/388) |
 | `verify-v6-3-capacity.js` (new, gap #2) | 472/472 | [0124df9e](https://stxer.xyz/simulations/mainnet/0124df9e8bd5d4816700e9ca215082c3) |
 
 Harness updates in this round:
@@ -88,10 +88,13 @@ Not reachable, by reading: the `r > pending` rebate caps in `execute-fill`
 ride covers the sum); `ERR_NOTHING_FILLED` (u1015) is defined and never used;
 a zero-size fill exists only for a y taker.
 
-Observed, not a bug: `set-treasury` accepts the market's own principal. With
-the treasury set to the market, the first fee transfer fails `(err u2)` (a
-transfer to itself) and every swap / fee-charging settle aborts until the
-owner resets it.
+Found and fixed: `set-treasury` accepted the market's own principal. With the
+treasury set to the market, the first fee transfer failed `(err u2)` (a
+transfer to itself) and every swap / fee-charging settle aborted until the
+operator reset it. `e338e27` refuses it (`ERR_BAD_TREASURY` u1033); the
+`tr` / `tx` scenarios now assert that refusal, an unchanged treasury and an
+unchanged book. That misconfiguration was the only trigger found for the
+walk steps' `match` error arm (lines 2960 / 3001), which is now unreachable.
 
 ## Taker capacity (gap #2)
 

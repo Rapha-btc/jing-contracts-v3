@@ -560,33 +560,22 @@ async function main() {
   }
 
   // ========================================================== tr / tx ==
-  // Treasury pointed at the market itself (operator misconfiguration): the
-  // mid batch clears nothing (no fee, no dust), the first walk fill's fee
-  // transfer to "treasury" is a self-transfer and fails (err u2), and the
-  // next maker's walk step receives the error accumulator (match `e` arm).
-  const ser = (o) => JSON.stringify(o, (_, v) => typeof v === 'bigint' ? String(v) : v);
+  // Treasury pointed at the market itself used to make every fee transfer a
+  // self-transfer (err u2) and abort every swap; set-treasury now refuses it
+  // (ERR_BAD_TREASURY u1033). With it the walk steps' `match` error arm
+  // (2960 / 3001) has no reachable trigger left.
   for (const ts of ['y', 'x']) {
     const label = ts === 'y' ? 'tr' : 'tx', cid = cids[`swapwalk-${label}`], ms = ts === 'y' ? 'x' : 'y';
-    console.log(`PHASE ${label}: ${ts} taker, treasury = market; walk fee transfer fails, next step sees the error`);
+    console.log(`PHASE ${label}: set-treasury refuses the market itself`);
     const taker = fresh();
     const book = ts === 'y'
       ? [{ tag: 'A', who: fresh(), amt: 1500n, limit: at(1010) }, { tag: 'B', who: fresh(), amt: 1500n, limit: at(1020) }]
       : [{ tag: 'H', who: fresh(), amt: 2_000_000n, limit: at(990) }, { tag: 'K', who: fresh(), amt: 2_000_000n, limit: at(980) }];
     for (const m of book) await place(cid, ms, m);
-    await tx(`${label}: operator points treasury at the market`, DEP, cid, 'set-treasury', [principal(cid)], '(ok true)');
+    const treasury = await ev(`${label}: treasury before`, cid, '(var-get treasury)', (v) => /^'?S[PM][0-9A-Z]+/.test(v));
+    await tx(`${label}: set-treasury refuses the market itself`, DEP, cid, 'set-treasury', [principal(cid)], '(err u1033)');
     await tx(`${label}: set-treasury is operator-only`, taker, cid, 'set-treasury', [principal(taker)], '(err u1008)');
-    const limit = ts === 'y' ? at(1050) : at(950);
-    const net = ts === 'y' ? 1500n * book[0].limit / S + 1000n * book[1].limit / S : book[0].amt * S / book[0].limit + 500n;
-    const gross = grossFor(net, bps);
-    const mdl = model({ ts, P, net, rebate: gross - net, bps, limit, taker, book });
-    check(`${label} model: nothing at mid, two walk fills, first fill pays a fee`, `${mdl.yc} ${mdl.xc} ${mdl.fills.length} ${mdl.fills[0].yt * FEE / BPS > 0n}`, '0 0 2 true');
-    await fund(ts, taker, gross);
-    const whos = [taker, ...book.map((m) => m.who), DEP, cid];
-    const before = await balances(cid, whos);
-    await tx(`${label}: swap aborts on the fee transfer to itself`, taker, cid, 'swap', [uintCV(gross), uintCV(limit), U, ...pairArgs(), boolCV(ts === 'x')], '(err u2)');
-    const after = await balances(cid, whos);
-    check(`${label}: no wallet moved`, ser(after), ser(before));
-    await ev(`${label}: cycle not advanced`, cid, '(var-get current-cycle)', 'u0');
+    await ev(`${label}: treasury unchanged`, cid, '(var-get treasury)', treasury);
     await bookState(label, cid, ms, book, []);
   }
 
