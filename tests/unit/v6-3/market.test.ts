@@ -12,6 +12,8 @@ it('instruments the current deploy source with dependency substitutions only', (
   let expected = source;
   for (const [from, to] of Object.entries(meta.substitutions)) expected = expected.replaceAll(from, to as string);
   expect(fs.readFileSync('tests/unit/v6-3/.build/market.clar', 'utf8')).toBe(expected);
+  expect(crypto.createHash('sha256').update(fs.readFileSync(meta.corePath)).digest('hex')).toBe(meta.coreSha256);
+  expect(fs.readFileSync('tests/unit/v6-3/Clarinet.toml','utf8')).toContain('path = "../../../contracts/jing-core-v6.clar"');
 });
 
 describe('initialization and administration', () => {
@@ -22,14 +24,13 @@ describe('initialization and administration', () => {
     ok(call('set-operator', [Cl.principal(alice)]));
     err(call('initialize', args(), alice), 1008);
     ok(call('set-operator', [Cl.principal(owner)], alice));
-    ok(call('initialize', args()));
+    h.verifyMarket(); ok(call('initialize', args()));
     err(call('initialize', args()), 1012);
     expect(value(ro('get-min-deposits'))).toEqual({ 'min-token-x': 100n, 'min-token-y': 10000n });
   });
   it('rolls initialization back when core registration fails', () => {
-    ok(call('set-fail', [Cl.bool(true)], owner, 'jing-core-v6'));
-    err(call('initialize', args()), 9000);
-    ok(call('set-fail', [Cl.bool(false)], owner, 'jing-core-v6'));
+    err(call('initialize', args()), 5005);
+    h.verifyMarket();
     ok(call('initialize', args()));
   });
   it('authorizes setters and enforces their boundaries', () => {
@@ -179,12 +180,11 @@ for (const s of ['x', 'y'] as const) describe(`${s} maker lifecycle`, () => {
     ok(settleLimit(s),Cl.bool(true)); expect(pending(s,'limit')).toEqual(N);
     expect(ro(`get-token-${s}-limit`,[Cl.principal(alice)])).toEqual(U(off(s)+2));
   });
-  it('rolls token transfers and book writes back when core logging fails', () => {
-    const before=snapshot(s); ok(call('set-fail',[Cl.bool(true)],owner,'jing-core-v6'));
-    err(deposit(s),9000); expect(snapshot(s)).toEqual(before);
-    ok(call('set-fail',[Cl.bool(false)],owner,'jing-core-v6')); ok(deposit(s));
-    const funded=snapshot(s); ok(call('set-fail',[Cl.bool(true)],owner,'jing-core-v6'));
-    err(withdraw(s,amount(s)/2),9000); err(cancel(s),9000); expect(snapshot(s)).toEqual(funded);
+  it('rejects funding while the real core is paused but permits withdrawals and cancellation', () => {
+    ok(deposit(s));
+    ok(call('pause',[],owner,'jing-core-v6'));
+    h.rejectUnchanged(()=>deposit(s),5016);
+    ok(withdraw(s,amount(s)/2)); ok(cancel(s)); custody(s);
   });
 });
 
@@ -281,12 +281,12 @@ for (const s of ['x','y'] as const) describe(`${s} queues, parking, and readmiss
     expect(live(s)).toBe(BigInt(amount(s))); expect(parked(s,bob)).toBe(BigInt(amount(s)*2));
     expect(live(s,carol)).toBe(BigInt(amount(s)*3)); custody(s);
   });
-  it('a core error after parking rolls back both incumbent and escrow changes', () => {
+  it('a paused core rejects admission after parking and restores incumbent and escrow', () => {
     queue(); ok(deposit(s,amount(s),P)); ok(deposit(s,amount(s)*2,P,bob));
     const a=snapshot(s), b=snapshot(s,bob);
-    ok(call('set-fail',[Cl.bool(true)],owner,'jing-core-v6'));
-    err(settleDeposit(s,bob),9000); expect(snapshot(s)).toEqual(a); expect(snapshot(s,bob)).toEqual(b);
-    ok(call('set-fail',[Cl.bool(false)],owner,'jing-core-v6')); ok(settleDeposit(s,bob)); custody(s);
+    ok(call('pause',[],owner,'jing-core-v6'));
+    err(settleDeposit(s,bob),5016); expect(snapshot(s)).toEqual(a); expect(snapshot(s,bob)).toEqual(b);
+    simnet.mineEmptyBurnBlocks(144); ok(call('unpause',[],owner,'jing-core-v6')); ok(settleDeposit(s,bob)); custody(s);
   });
 });
 
@@ -567,11 +567,11 @@ describe('rounding and additional oracle boundaries', () => {
 describe('pure private arithmetic boundaries', () => {
   // SDK calls the actual private function; no source wrappers or state injection.
   it.each([[0,20],[30,20],[31,21],[79,69],[80,70],[1000,70]])('rebate age %i gives %i bps', (age,bps) => {
-    expect(simnet.callPrivateFn('market','rebate-bps-for-age',[U(age)],owner).result).toEqual(U(bps));
+    expect(h.privateCall('rebate-bps-for-age',[U(age)],owner).result).toEqual(U(bps));
   });
   it('gross-up respects the net capacity through fee rounding boundaries', () => {
     for (const net of [0,1,99,498,499,500,501,998,999,1000,10000]) {
-      const gross=value(simnet.callPrivateFn('market','gross-up',[U(net)],owner).result);
+      const gross=value(h.privateCall('gross-up',[U(net)],owner).result);
       expect(gross-gross*20n/10000n).toBeLessThanOrEqual(BigInt(net));
       // Returned gross is the maximum input fitting this net capacity.
       expect(gross+1n-(gross+1n)*20n/10000n).toBeGreaterThan(BigInt(net));
@@ -591,10 +591,10 @@ for (const s of ['x','y'] as const) describe(`${s} final guard and walk boundari
     expect(ro(`would-take-as-${s}`,[U(P),U(P)])).toEqual(Cl.bool(true));
     expect(ro(`would-take-as-${s}`,[U(0),U(P)])).toEqual(Cl.bool(false));
   });
-  it('rolls back a log failure inside price-priority parking', () => {
+  it('rolls back price-priority parking when the real core rejects admission', () => {
     queue(); ok(deposit(s,amount(s),off(s),alice,Cl.some(U(0)))); ok(deposit(s,amount(s)*2,P,bob));
-    const a=snapshot(s), b=snapshot(s,bob); ok(call('set-fail',[Cl.bool(true)],owner,'jing-core-v6'));
-    err(settleDeposit(s,bob),9000); expect(snapshot(s)).toEqual(a); expect(snapshot(s,bob)).toEqual(b);
+    const a=snapshot(s), b=snapshot(s,bob); ok(call('pause',[],owner,'jing-core-v6'));
+    err(settleDeposit(s,bob),5016); expect(snapshot(s)).toEqual(a); expect(snapshot(s,bob)).toEqual(b);
   });
   it('a larger full-side swap funds size-only admission and preserves parked custody', () => {
     queue(); ok(deposit(s,amount(s),P,alice)); ok(deposit(other(s),amount(other(s))*4,P,carol));
@@ -655,7 +655,7 @@ describe('walk rounding and error propagation', () => {
   });
   it.each(['walk-x-book-step','walk-y-book-step'])('%s propagates a failed fold accumulator without state changes', fn => {
     const before=snapshot('x');
-    expect(simnet.callPrivateFn('market',fn,[Cl.principal(alice),Cl.error(U(9000))],owner).result).toEqual(Cl.error(U(9000)));
+    expect(h.privateCall(fn,[Cl.principal(alice),Cl.error(U(9000))],owner).result).toEqual(Cl.error(U(9000)));
     expect(snapshot('x')).toEqual(before);
   });
 });
@@ -670,7 +670,7 @@ describe('isolated defensive helper cases', () => {
     const ax=balance('y',alice), by=balance('x',bob);
     // No public swap is in flight: pending rebate budgets are zero. The helper
     // must cap the computed positive rebate instead of overdrawing custody.
-    ok(simnet.callPrivateFn('market','execute-fill',[
+    ok(h.privateCall('execute-fill',[
       U(1),Cl.principal(bob),U(1000000),Cl.principal(alice),U(10000),U(P),U(P),Cl.bool(yIsTaker),token,name,
     ],keeper),Cl.bool(true));
     expect(balance('y',alice)-ax).toBe(999000n); expect(balance('x',bob)-by).toBe(9990n);
@@ -679,14 +679,22 @@ describe('isolated defensive helper cases', () => {
   it.each(['x','y'] as const)('handles an empty %s distribution without division by zero or transfers', s => {
     const before=snapshot(s);
     const acc=Cl.ok(Cl.tuple({t:token,name}));
-    const r=simnet.callPrivateFn('market',`distribute-to-token-${s}-depositor`,[Cl.principal(alice),acc],keeper);
-    expect(r.result).toEqual(acc); expect(r.events).toEqual([]); expect(snapshot(s)).toEqual(before);
+    const r=h.privateCall(`distribute-to-token-${s}-depositor`,[Cl.principal(alice),acc],keeper);
+    expect(r.result).toEqual(acc);
+    expect(r.events).toHaveLength(1);
+    expect(r.events[0].event).toBe('print_event');
+    expect(r.events[0].data.contract_identifier).toBe(`${owner}.jing-core-v6`);
+    expect(value(r.events[0].data.value)).toMatchObject({
+      event: `distribute-${s}-depositor`, [`${s}-cleared`]: 0n,
+      [`${s}-rolled`]: 0n, [`${other(s)}-received`]: 0n,
+    });
+    expect(snapshot(s)).toEqual(before);
   });
   it('rejects an already-settled historical cycle through the settlement helper', () => {
     book(); ok(batch()); const before=snapshot('x');
     const timestamp=simnet.execute('stacks-block-time').result;
     const feed=(price:number)=>Cl.tuple({price:Cl.int(price),conf:U(0),expo:Cl.int(-8),'ema-price':Cl.int(price),'ema-conf':U(0),'publish-time':timestamp,'prev-publish-time':U(0)});
-    err(simnet.callPrivateFn('market','execute-settlement',[U(0),feed(P),feed(100000000),...h.traits],keeper),1002);
+    err(h.privateCall('execute-settlement',[U(0),feed(P),feed(100000000),...h.traits],keeper),1002);
     expect(snapshot('x')).toEqual(before);
   });
 });

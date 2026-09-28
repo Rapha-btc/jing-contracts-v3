@@ -25,7 +25,7 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.jing-core-v6]
-path = ".build/core.clar"
+path = "../../../contracts/jing-core-v6.clar"
 clarity_version = 5
 epoch = "3.4"
 

@@ -171,6 +171,10 @@ this command or its coverage totals.
 
 ### Current v6-3 results — 2026-09-28
 
+The Clarinet suite now runs the real `jing-core-v6.clar` directly, including
+registration, pause guards, event logging and equity accounting. The previous
+selective core-error fixture has been removed.
+
 The completed Clarinet unit and RV runs include both `e338e27` (treasury
 guard) and `1a930e3` (exact rolled-result reporting). They used
 `contracts/markets-sbtc-stx-jing-v6-3.clar`, SHA-256
@@ -180,16 +184,17 @@ the linked reports explain the substitutions and instrumentation.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **165 passing** |
+| Clarinet unit tests | **193 passing** |
 | Market function coverage | **100%** (137/137) |
 | Market line coverage | **99.70%** (2,345/2,352) |
-| Market branch coverage | **99.88%** (832/833) |
+| Market branch coverage | **99.64%** (830/833) |
 | Native RV trials | **12,000 completed**: 4,644 passed, 7,356 discarded, zero property/invariant failures |
 | Guided RV scenarios | **600 episodes**, 8,473 explicit invariant checks |
 | Final paused recovery | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
 
-The remaining unit branch is an unreachable gross-up decrement; the other
-unhit line entries are instrumentation points, detailed in the
+The three unhit branches are the gross-up decrement and two parking-error
+guards previously hit only by artificial core errors. Details and the
+296-site error-exit matrix are in the
 [unit report](tests/unit/v6-3/README.md). The
 [RV report](tests/rv/v6-3/README.md) records seeds, source hashes, successful
 operations, rejected inputs, and fixture limits. Neither execution coverage
