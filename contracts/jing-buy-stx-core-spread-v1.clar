@@ -733,9 +733,6 @@
 
 ;; Pay `who` the STX their shares earned since their paid-index, then move
 ;; the mark. Called after sync by every member action.
-;; RAPHA NEEDS TO DOUBLE REVIEW this tail roll before any deploy (bounty
-;; muerdzoc805a745ecc99, Nilo's tail freeze). Not fork-tested yet. Also still
-;; open for this rung: ARION F-7 (proceeds absorbed while no members).
 ;; Tail roll: every sold-out close in sync (dust or index floor) closes the
 ;; epoch without loss. The order comes back from the market
 ;; (cancel returns pending, live and parked with no oracle or pause check),

@@ -23,8 +23,11 @@ Runners-up, if we tip like last round:
 
 ## Still to review (rungs)
 
-- Nilo's tail freeze: the lossless tail roll in the six rungs (also carries
-  the F-6 hardening). Rapha needs to double review it; not fork-tested.
+- Nilo's tail freeze: the lossless tail roll (also carries the F-6
+  hardening). **Reviewed** by Rapha on `jing-buy-stx-core-spread-v1` with the
+  rescale, reserve release and `members` changes; independently checked by
+  Regal Anvil (reserve solvent by construction) and Void Kael (lossless under
+  fuzz). The review note is removed from the rung. Not fork-tested yet.
 - ARION F-7: proceeds absorbed while a rung has no members. **Fixed** (`f015382`):
   with no shares, `sync` leaves the watermark in place, so that STX goes to
   the next epoch's members at their first sync. Holds on
