@@ -1,7 +1,21 @@
 {
-  "generatedAt": "2026-09-29T03:20:29.513Z",
+  "generatedAt": "2026-09-29T04:10:12.277Z",
+  "realCore": true,
   "results": [
     {
+      "monitor": {
+        "publicCalls": 2832,
+        "invariantChecks": 2834,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "queue-full": 2,
+          "cancel": 16
+        },
+        "refundEvents": {
+          "x": 141,
+          "y": 119
+        }
+      },
       "seed": 230930,
       "episodesPerPath": 40,
       "successfulCalls": {
@@ -23,7 +37,7 @@
         "swap-x": 40,
         "swap-y": 40
       },
-      "invariantChecks": 2832,
+      "invariantChecks": 2834,
       "calls": 1429,
       "nativeRV": {
         "seed": 231030,
@@ -35,15 +49,30 @@
       "recovery": {
         "x": {
           "owners": 20,
-          "amount": "98646"
+          "amount": "98646",
+          "coreEquity": "0"
         },
         "y": {
           "owners": 12,
-          "amount": "121875000"
+          "amount": "121875000",
+          "coreEquity": "0"
         }
       }
     },
     {
+      "monitor": {
+        "publicCalls": 2803,
+        "invariantChecks": 2805,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "queue-full": 2,
+          "cancel": 11
+        },
+        "refundEvents": {
+          "x": 143,
+          "y": 118
+        }
+      },
       "seed": 230931,
       "episodesPerPath": 40,
       "successfulCalls": {
@@ -65,7 +94,7 @@
         "swap-x": 40,
         "swap-y": 40
       },
-      "invariantChecks": 2803,
+      "invariantChecks": 2805,
       "calls": 1400,
       "nativeRV": {
         "seed": 231031,
@@ -77,15 +106,30 @@
       "recovery": {
         "x": {
           "owners": 6,
-          "amount": "44112"
+          "amount": "44112",
+          "coreEquity": "0"
         },
         "y": {
           "owners": 8,
-          "amount": "40296000"
+          "amount": "40296000",
+          "coreEquity": "0"
         }
       }
     },
     {
+      "monitor": {
+        "publicCalls": 2838,
+        "invariantChecks": 2840,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "queue-full": 2,
+          "cancel": 11
+        },
+        "refundEvents": {
+          "x": 132,
+          "y": 119
+        }
+      },
       "seed": 230932,
       "episodesPerPath": 40,
       "successfulCalls": {
@@ -107,7 +151,7 @@
         "swap-y": 40,
         "swap-x": 40
       },
-      "invariantChecks": 2838,
+      "invariantChecks": 2840,
       "calls": 1435,
       "nativeRV": {
         "seed": 231032,
@@ -119,30 +163,33 @@
       "recovery": {
         "x": {
           "owners": 27,
-          "amount": "97585"
+          "amount": "97585",
+          "coreEquity": "0"
         },
         "y": {
           "owners": 7,
-          "amount": "60167000"
+          "amount": "60167000",
+          "coreEquity": "0"
         }
       }
     }
   ],
   "hashes": {
     "contracts/markets-sbtc-stx-jing-v6-3.clar": "43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971",
-    "tests/rv/v6-3/Clarinet.toml": "b5b439aba3df6727ed39a94c82fdd5445e5a124d6bb2e81f09e309abca456d44",
-    "tests/rv/v6-3/properties.clar": "4f4d55c9f523476155546367e4535513eef44e34cea646f2bcd628209cd0d794",
-    "tests/rv/v6-3/build.py": "f38c6641b6b0e563f00952a5ebb27126615bb8c6b2013eb7c747f936f433c481",
+    "tests/rv/v6-3/Clarinet.toml": "1e379bf01bceab77c94aa1539b6c80eb463f044ce972c60e959c21b7e5dc6dfe",
+    "tests/rv/v6-3/properties.clar": "1c964e4961fb3c143479038eec15d3a9c5977bbc7b43325db9fb8b4464c8e526",
+    "tests/rv/v6-3/build.py": "39c685572564e9842be5d0e514c75b8073b35fa6017e0520ab9857332e6ebfce",
     "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
-    "tests/rv/v6-3/source-integrity.mjs": "ef71fb0bc5fe3e91d1d682d8e5fa8b4b51049b334297845d0d20f0cd61182448",
+    "tests/rv/v6-3/source-integrity.mjs": "badbf2d8a81f914d17faf2c05ebaa1d8e99974e62861ebc19595632e47a0d376",
     "tests/rv/sip-010-trait.clar": "2761036dc8bf48034b7db7e01f6aa80a38d4633e29210ec892a9cceb764e4252",
     "tests/rv/mock-lazer-oracle.clar": "584629df6874d7db46a83451d65e7ec83eea8942471564be6ed69b619588cc24",
     "tests/rv/mock-jing-ladder.clar": "60dfd743e0dc37d497acfb85d3eec4b7578a4d61c5197e417537421360241f10",
-    "tests/rv/.build/v6-3/source.json": "dd60e074697bf3ad1dec34ccbfa1f595ec3e16be960e4042661c645f74b98d2b",
-    "tests/rv/.build/v6-3/core.clar": "9d8d9fd913311f4b366f619be34452f05fb541073ccf22dc9e21d765ba016042",
+    "tests/rv/.build/v6-3/source.json": "fd3a13ca3e7381bc5e6ac924332b62d712049980b14930ec5450f743b6f20829",
+    "contracts/jing-core-v6.clar": "53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32",
+    "tests/rv/v6-3/runtime.mjs": "66b7d6b0117defbf25fdde6ffc0e03561b08f94ae9255dcdf8ada7937c0e5bac",
     "tests/rv/.build/v6-3/ladder.clar": "c88d04ddb6298c44b2868d720d77a61518391a3868557b1a529d69677f4534cd",
-    "tests/rv/.build/v6-3/market.clar": "fbce4bc076ea06b625deecf711b5b3a1528136842e509aea6cd816dd337f2fd2",
-    "tests/rv/v6-3/run-full-book.mjs": "0c31ab635c976e98dd75c1296f2e80ea958f5911377cdef40ae6e7b6088d0892",
+    "tests/rv/.build/v6-3/market.clar": "2e91782489838050cf83f10217ecce65d2a50eea0eed569306df654e7475c602",
+    "tests/rv/v6-3/run-full-book.mjs": "63e617cf6382bd1da8913d0791dab98d27bf79df4cd16e642dd09f35ff033193",
     "tests/rv/v6-3/full-book-accounts.json": "8ccd2fad81ff7d9daf3ad4ec10988340a205954321388741e517e3be8545a07e"
   }
 }

@@ -17,6 +17,9 @@ export function assertProductionPrefix(fullBook) {
   if (meta.fullBook !== fullBook || hashInputs([meta.source])[meta.source] !== meta.sha256) {
     throw Error('Wrong profile or stale RV source; rebuild and rerun.');
   }
+  if (hashInputs([meta.coreSource])[meta.coreSource] !== meta.coreSha256) throw Error('Real core changed; rebuild RV.');
+  const manifest = fs.readFileSync('tests/rv/v6-3/Clarinet.toml', 'utf8');
+  if (!manifest.includes('[contracts.jing-core-v6]\npath = "../../../contracts/jing-core-v6.clar"') || manifest.includes('mock-jing-core')) throw Error('RV must load the real core directly.');
   let prefix = fs.readFileSync(meta.source, 'utf8');
   for (const [from, to] of Object.entries(meta.dependencySubstitutions)) prefix = prefix.replaceAll(from, to);
   if (!fs.readFileSync('tests/rv/.build/v6-3/market.clar', 'utf8').startsWith(prefix + '\n')) {
@@ -30,6 +33,6 @@ export const sharedInputs = [
   'tests/rv/v6-3/build.py', 'tests/rv/v6-3/strict-ft.clar',
   'tests/rv/v6-3/source-integrity.mjs', 'tests/rv/sip-010-trait.clar',
   'tests/rv/mock-lazer-oracle.clar', 'tests/rv/mock-jing-ladder.clar',
-  'tests/rv/.build/v6-3/source.json', 'tests/rv/.build/v6-3/core.clar',
+  'tests/rv/.build/v6-3/source.json', 'contracts/jing-core-v6.clar', 'tests/rv/v6-3/runtime.mjs',
   'tests/rv/.build/v6-3/ladder.clar', 'tests/rv/.build/v6-3/market.clar',
 ];

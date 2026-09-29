@@ -14,8 +14,13 @@ path = "strict-ft.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.mock-jing-core]
-path = "../.build/v6-3/core.clar"
+[contracts.mock-stx]
+path = "strict-ft.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = "../../../contracts/jing-core-v6.clar"
 clarity_version = 5
 epoch = "3.4"
 

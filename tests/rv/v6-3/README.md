@@ -1,45 +1,39 @@
-# Current v6-3 Rendezvous fuzzing and recovery scenarios
+# v6-3 Rendezvous fuzzing with the real core
 
-Verified on 2026-09-28 against `contracts/markets-sbtc-stx-jing-v6-3.clar`.
-Production source SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
-These runs include the treasury guard (`e338e27`) and exact rolled-result
-fix (`1a930e3`), plus the taker dust-refund accounting fix (`da19a4f`).
-The harness preserves production market logic. Earlier reports for
-`04b0a7df...`, `65e1ffc1...`, `ac838c29...`, and `7f7bc5cc...` do not establish
-that this source revision passes and are superseded by these completed runs.
+All campaigns below run the current market and the unchanged production
+`contracts/jing-core-v6.clar`. The earlier mock-core results are historical;
+these results supersede them for the real-core harness.
 
-## Run
-
-From the repository root:
-
-```sh
-npm run rv:v6-3            # all random and full-book scenario campaigns
-npm run rv:v6-3:random     # 9,000 invariant/property trials
-npm run rv:v6-3:scenarios  # three full-book seeds plus 3,000 native trials
-```
-
-Use Node with the installed dependencies and Python 3. Both profiles write
-the same generated RV target, so run them sequentially, as the combined
-command does. No network or deployment keys are required.
+- Market SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971` (refund fix `da19a4f`).
+- Core SHA-256: `53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32`.
+- Random report generated: `2026-09-29T03:50:59.784Z`.
+- Full-book report generated: `2026-09-29T04:10:12.277Z`.
 
 ## Verified results
 
-**12,000 native RV trials completed: 4,644 passed, 7,356 discarded,
-and zero property/invariant failures.** In addition, the three full-book seeds
-completed **600 state-aware episodes** and **8,473 explicit structural
-invariant checks**. No market counterexample was found.
+**12,000 native RV trials completed: 4,659 passed,
+7,341 discarded, zero property/invariant failures.** The three
+full-book seeds also completed **600 guided episodes**. Every final recovery
+sweep ended with zero x/STX custody and zero core equity on both assets.
+
+The shared monitor completed **25,999 accounting checks** across the six
+campaigns (8,479 in the full-book campaigns). After initialization,
+every public call is checked, including rejected calls and native VM exceptions.
+These counts include initial/final checks; they are not a source-coverage percentage or individual
+assertion count. Public-call totals include RV wrappers and bookkeeping calls,
+not just economic trades. Two additional public-call refund regressions pass.
 
 | Campaign | Seed | Trials | Passed | Discarded | Failed |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | invariant | 230927 | 1000 | 1000 | 0 | 0 |
-| test | 230926 | 5000 | 1619 | 3381 | 0 |
+| test | 230926 | 5000 | 1634 | 3366 | 0 |
 | seeded | 230929 | 3000 | 1038 | 1962 | 0 |
 | Native RV after full-book seed 230930 | 231030 | 1000 | 330 | 670 | 0 |
 | Native RV after full-book seed 230931 | 231031 | 1000 | 304 | 696 | 0 |
 | Native RV after full-book seed 230932 | 231032 | 1000 | 353 | 647 | 0 |
 
-Successful state-aware calls across the three seeds (including setup and final
-recovery, excluding additional native RV calls):
+Successful guided calls, including setup/recovery and excluding additional
+native RV calls:
 
 | Path | x | y |
 | --- | ---: | ---: |
@@ -51,120 +45,133 @@ recovery, excluding additional native RV calls):
 | Funded cancel, including recovery | 316 | 372 |
 | Partial withdrawal | 16 | 17 |
 
-**123 successful batch clears**, each checking payout/roll/refund conservation.
+**123 successful batch clears** check payout/roll/refund conservation.
+Final cancellation runs with the real core paused and pauses the market for
+each cancellation. Each remaining owner recovers its exact claim:
 
-Every final recovery sweep returned each owner's exact remaining claim and
-ended with **zero x and zero STX in market custody**:
-
-| Guided seed | x owners recovered | y owners recovered | Final market balances |
+| Guided seed | x owners recovered | y owners recovered | Final state |
 | --- | ---: | ---: | --- |
-| 230930 | 20 | 12 | x = 0; STX = 0 |
-| 230931 | 6 | 8 | x = 0; STX = 0 |
-| 230932 | 27 | 7 | x = 0; STX = 0 |
+| 230930 | 20 | 12 | x = 0; STX = 0; both equity totals = 0 |
+| 230931 | 6 | 8 | x = 0; STX = 0; both equity totals = 0 |
+| 230932 | 27 | 7 | x = 0; STX = 0; both equity totals = 0 |
 
-The raw invariant campaign rejected **37 invalid asset-name calls** with
-`BadTokenName`; these are recorded separately from property failures.
+The raw invariant campaign also rejects **13 invalid asset-name calls**
+with `BadTokenName`; those expected native errors are counted separately from
+property failures. Discards are rejected/inapplicable generated inputs, not
+successful economic operations.
 
-## Source and fixtures
+## Run
 
-`build.py` reads the current production contract on every run. Its complete
-production prefix is preserved except for dependency principal substitutions.
-The real `initialize`, `set-treasury`, `sync-seat-count`, and
-`set-distance-slots` functions configure the test instance; production state
-declarations, guards, and queue constants are not rewritten. The generated
-market appends inspection/property helpers and an explicit setup prelude.
-`tests/rv/.build/v6-3/source.json` records the source hash, substitutions, and
-profile. Both reporters verify the production prefix and capture source, harness,
-manifest, and fixture hashes before testing. They reject changed inputs
-between campaigns/seeds and before writing results. The random reporter
-also checks log hashes when summarizing an existing run. A source edit
-during testing therefore requires a fresh run, rather than relabeling old
-results with the new source hash.
+```sh
+npm run rv:v6-3            # complete random + full-book campaigns
+npm run rv:v6-3:random     # 9,000 native trials + two refund regressions
+npm run rv:v6-3:scenarios  # three full-book seeds + 3,000 native trials
+```
 
-`strict-ft.clar` has a real ledger and checked transfer authorization. The
-prelude explicitly funds the known account universe. Transfers never mint;
-the market cannot conceal an insolvency with automatic funding. The y side
-uses native simnet STX. Core logging, ladder membership, and the decoded Lazer
-feed remain explicit fixtures. Oracle signature verification and production
-core registration/authorization are not fuzzed here. In particular, this
-rerun checks the patched market's custody and recovery behavior; it does not
-validate the refund log's effect on real core equity. The [217-test Clarinet
-suite](../../unit/v6-3/README.md) runs the actual core and verifies that effect,
-including swap/reprice refunds, threshold boundaries, rollback and wallet reuse.
+Run the profiles sequentially because they share the generated target. The
+combined command does this. Dependencies, Node and Python 3 are required;
+network access and deployment keys are not.
 
-The RV `test-config` and cancellation wrappers deliberately control pause,
-minimums, and distance slots directly so random callers can explore those
-states. This is test instrumentation, not an alternative production entry
-point. Positions, parked balances, pending requests, and transfers are created
-through the actual market functions; no book or balance rows are injected.
-Authorization is covered separately in the v6-3 unit suite.
+For the focused refund regressions:
 
-## Campaigns and scenarios
+```sh
+python3 tests/rv/v6-3/build.py
+node tests/rv/v6-3/runtime.test.mjs
+```
 
-The random campaigns include seven invariants: the latched property results,
-solvency on both assets, exact live totals/list consistency and uniqueness on
-both sides, and positive pending deposits on both sides. Deposit, cancellation,
-pending settlement, repricing, swap, quote, withdrawal, readmission, and batch
-properties run against the same generated market. The seeded prelude creates
-live, parked, and pending deposit/limit/readmit states on both sides.
+Run the complete campaign again before publishing current results.
+`RV_EPISODES`, `RV_SEEDS` and `RV_RANDOM_RUNS` shorten full-book probes;
+reduced runs are not interchangeable with the default campaign.
 
-The ordinary random profile reserves 48 of the 50 available seats through
-fixture configuration and public synchronization, leaving two public slots
-to exercise parking frequently. The full-book profile reserves zero seats,
-allowing **50 real live depositors per side**, plus parked claims and pending
-requests. `MAX_DEPOSITORS` remains 50 in both profiles. The default 40-public-
-slot configuration is also covered by the separate unit suite.
+## Real code and fixtures
 
-Each of three full-book seeds performs:
+`build.py` preserves the entire production market prefix except for trait,
+oracle/decoder and ladder principal substitutions. It appends inspection and
+property helpers without changing production functions, state declarations,
+queue sizes or guards. The manifest loads the actual `jing-core-v6.clar` file;
+there is no generated core or replacement logger implementation.
 
-- 40 successful x and 40 successful y replacement/readmission episodes,
-  retaining 50 live makers per side. Readmission must return a positive
-  placement, clear its pending request, and preserve the owner's total claim.
-- An initial full-book batch clear, followed by 40 additional batch episodes,
-  40 x swaps, and 40 y swaps in randomized order. Counted swaps must produce
-  nonzero output. Batch assertions reconcile custody outflows with payouts,
-  fees, dust, rolled funds, and refunds for each asset independently.
-- Partial withdrawals and funded cancellations, with randomized paused exits.
-- 1,000 native RV property trials from the resulting funded state. All seven
-  invariants are checked after every public call, including discarded trials.
-- A final recovery sweep: every remaining funded owner cancels through the
-  public cancellation path while the market is paused. Each cancellation
-  checks the exact wallet credit and clears live + parked + pending claims.
-  Both market custody balances must finish at zero.
+`runtime.mjs` first deploys the generated market, verifies its actual contract
+hash through the core owner's `set-verified-contract`, then calls the real
+`initialize`, `set-treasury`, `sync-seat-count` and `set-distance-slots` functions.
+This uses normal core registration. Funding is explicit through the strict
+FT's owner-authorized `mint`; transfers cannot create balances.
 
-Native property discards are shown separately from passes: they are rejected
-or inapplicable generated operations, not successful economic activity.
-Successful scenario counters are separate from native trial counts. Base RV
-invariant mode also generates invalid raw asset names; their `BadTokenName`
-rejections are counted explicitly, not described as successful transfers.
+The x asset is `.mock-ft`. The y trait identity is `.mock-stx`, distinct from x,
+while y transfers use native simnet STX. Keeping the identities distinct makes
+an x/y core-accounting mix-up observable. The oracle supplies configurable,
+decoded fresh feeds and ladder membership remains a fixture. Production Pyth
+signatures, sBTC behavior and ladder authorization are integration concerns.
 
-## Reproduction and limits
+## Accounting checks
 
-The full-book seeds are 230930, 230931, and 230932; native RV uses seed + 100.
-`RV_EPISODES`, `RV_SEEDS`, and `RV_RANDOM_RUNS` can shorten local probes.
-Probe results are not interchangeable with a completed default campaign.
-The runner checks report contents as well as exit status because the RV CLI
-can exit successfully despite reported failures. Full-book failures save a
-public-call trace in `full-book-counterexample.json`; state-aware scenario
-traces are not automatically shrunk by native RV.
+Nine component invariants check the property latch, both asset solvency
+conditions, both live totals/list consistency and uniqueness conditions,
+positive pending deposits on both sides, and core equity on both sides.
 
-The random amount/price helpers deliberately bound inputs: x amounts below
-20,000, y amounts scaled by 1,000, quotes in the configured 24–40 trillion
-range plus zero-limit cases, and varying minimums, distance slots, and pause.
-The full-book driver uses larger replenishment amounts and moving prices to
-force fills. This is finite fuzz evidence, not a proof over all uint values
-or all possible users, tokens, dependencies, and transaction limits.
+After each public call the monitor reads market claims and the real core's
+`token-equity`/`total-token-equity` maps. For each tested owner and each asset:
 
-Passing recovery sweeps establish no stranded funds in these tested states.
-They do **not** prove funds can never be stuck: production cancellation still
-depends on successful token transfers and core logging/registration. Stale
-price handling is covered by the unit suite (79 seconds accepted, 80 seconds
-rejected for either feed); the RV oracle intentionally supplies fresh times.
+- Recorded equity equals live + parked claims.
+- Total asset equity equals the sum of those credited claims.
+- Pending escrow is excluded from equity until admitted, while remaining
+  included in the existing market-solvency check.
 
-Raw random-campaign logs are in `simulations/results/rv-v6-3/` (ignored).
-Tracked [results.json](results.json) and
-[full-book-results.json](full-book-results.json) record the completed runs,
-counts, seeds, and source/fixture hashes. The older `source-hashes.json` is a
-historical caller-audit snapshot, not the evidence for these current runs.
-Fuzz counts are separate from the [unit coverage report](../../unit/v6-3/README.md).
-Everything runs locally; no on-chain deployment is performed.
+These are read-only inspections, not storage injection. The same equity
+invariants also run through the actual core getters in native RV sampling and
+at campaign completion. The two refund regressions cross-check both methods
+on positive positions and after refund/paused exit. A failed monitor records
+the call sequence, block heights, failing invariants and mismatched balances,
+then prevents further public calls in that campaign.
+
+The account universe is finite: ten simnet EOAs, plus 64 generated EOAs for the
+full-book profile. Only this market contributes core equity. Registered
+contract depositors and interacting markets are not covered by that model.
+
+Settlement properties determine admission/refund from exact wallet and claim
+changes. Refund reasons are counted from actual core events, replacing the old
+mock's `get-last-refund` interface. The refund regression cases exercise dust
+of 20 x units and 50 micro-STX, exactly one real refund event, wallet reuse,
+rejected paused deposits, and complete exit while both contracts are paused.
+
+The `test-config` and cancellation wrappers retain their explicit test-only
+control of market pause, minimums and distance slots. They do not alter the
+production entry points or inject positions. Core ownership and registration
+execute normally; core pause is invoked through its owner during final recovery.
+
+## Scenarios and limits
+
+The random profile reserves 48 of 50 seats through the ladder fixture to reach
+queue pressure often. The full-book profile reserves zero and creates **50 live
+makers per side**, parked claims, and pending deposit/limit/readmit requests
+through public transactions. `MAX_DEPOSITORS` stays 50.
+
+Each full-book seed runs 40 x and 40 y replacement/readmission episodes, an
+initial batch plus 40 more batch episodes, 40 x swaps and 40 y swaps in shuffled
+order, partial withdrawals and cancellations, then 1,000 native RV trials.
+Readmissions must place positive amounts; swaps must have nonzero output.
+Finally, the real core is paused and every remaining owner cancels its claim.
+
+Random amount/price helpers retain bounded inputs: x amounts below 20,000,
+y amounts scaled by 1,000, quotes in the 24–40 trillion range plus zero-limit
+cases. Guided replenishments use larger amounts and moving oracle prices.
+This is finite evidence, not a proof over all states, tokens or external callers.
+Recovery still depends on token transfers and core registration. Oracle age
+boundaries are tested separately by the [217-test Clarinet suite](../../unit/v6-3/README.md).
+
+## Evidence and provenance
+
+[results.json](results.json) and [full-book-results.json](full-book-results.json)
+record seeds, counts, monitor statistics and source/harness/fixture hashes.
+The reporters reject changed inputs during campaigns, check the full generated
+production prefix, verify that the manifest loads the real core, and inspect
+RV output as well as exit status. Raw logs are in the ignored
+`simulations/results/rv-v6-3/` directory. Full-book scenario failures also save
+`full-book-counterexample.json`; post-call failures save a campaign-specific
+`*-counterexample.json`. Guided traces are not automatically shrunk by native RV.
+
+Older reports using the mock core, including the prior run on this same market
+hash (4,644 passes / 7,356 discards), do not establish real-core equity correctness.
+Their historical records remain in git. The old `source-hashes.json` is a caller
+audit snapshot, not current campaign evidence. RV counts are separate from
+Clarinet coverage percentages. No on-chain deployment is performed.

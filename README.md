@@ -169,7 +169,7 @@ The v6-3 suite runs offline against the current contract, with isolated local
 dependencies and strict token balances. Older-version tests are not part of
 this command or its coverage totals.
 
-### Current v6-3 results — 2026-09-28
+### Current v6-3 results — 2026-09-29
 
 The market now notifies the core when refunding small taker remainders on either
 side. Four swap/reprice regressions, two long lifecycle scenarios, six refund
@@ -183,10 +183,11 @@ selective core-error fixture has been removed.
 The completed Clarinet run includes the treasury guard, exact rolled-result
 reporting, and taker refund-accounting fix. Market SHA-256:
 `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
-The RV random and full-book campaigns have also been rerun on this hash.
-They use core/oracle/ladder fixtures; actual core equity is checked by the
-Clarinet suite. The Stxer report still records the previous market hash
-(`7f7bc5cc…`) and does not validate the refund fix. Linked reports explain
+The RV random and full-book campaigns have also been rerun on this hash,
+now using the real `jing-core-v6.clar`. After initialization, every public call
+checks actual core equity against live + parked claims. Oracle, ladder and
+strict FT fixtures remain. The Stxer report still records the previous market
+hash (`7f7bc5cc…`) and does not validate the refund fix. Linked reports explain
 their dependency fixtures and instrumentation.
 
 | Check | Verified result |
@@ -195,9 +196,10 @@ their dependency fixtures and instrumentation.
 | Market function coverage | **100%** (137/137) |
 | Market line coverage | **99.70%** (2,349/2,356) |
 | Market branch coverage | **99.64%** (830/833) |
-| Native RV trials | **12,000 completed**: 4,644 passed, 7,356 discarded, zero property/invariant failures |
-| Guided RV scenarios | **600 episodes**, 8,473 explicit invariant checks |
-| RV paused recovery | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
+| Native RV trials | **12,000 completed**: 4,659 passed, 7,341 discarded, zero property/invariant failures |
+| Guided RV scenarios | **600 episodes**, 8,479 accounting checks across the full-book campaigns |
+| Real-core RV accounting | **25,999 checks** across all six campaigns, plus two passing dust-refund regressions |
+| RV paused recovery | All three guided seeds returned every remaining claim with the real core paused; market x/STX balances and both core equity totals ended at zero |
 
 The three unhit branches are the gross-up decrement and two parking-error
 guards previously hit only by artificial core errors. Details and the

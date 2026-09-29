@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {initSimnet} from '@stacks/clarinet-sdk';
+import {createRuntime} from './runtime.mjs';
 import {Cl,cvToString,getAddressFromPrivateKey} from '@stacks/transactions';
 import fc from 'fast-check';
 import {createRequire} from 'node:module';
@@ -31,20 +31,19 @@ assertProductionPrefix(true);
 const hashes=hashInputs([...sharedInputs,'tests/rv/v6-3/run-full-book.mjs','tests/rv/v6-3/full-book-accounts.json']);
 for(const seed of seeds){
  assertInputsUnchanged(hashes);
- const sim=await initSimnet('tests/rv/v6-3/Clarinet.toml');
+ const runtime=await createRuntime(`full-book-${seed}`),sim=runtime.sim;
  for(const who of generated)sim.mintSTX(who,100000000000000n);
- const trait=Cl.contractPrincipal(sim.deployer,'mock-ft'),asset=Cl.stringAscii('mock-ft');
- const stats={},trace=[];let invariantChecks=0,serial=0;
+ const {traits,asset}=runtime;
+ const stats={},trace=[];let serial=0;
  const record=name=>stats[name]=(stats[name]??0)+1;
  const read=(fn,args=[])=>sim.callReadOnlyFn('market',fn,args,sim.deployer).result;
- const invariant=()=>{assert.equal(cvToString(read('invariant-all')),'true',`invariant after ${trace.length}`);invariantChecks++;};
  const call=(who,fn,args=[],required=true)=>{
   trace.push({sender:who,fn,args:args.map(cvToString)});
   const r=sim.callPublicFn('market',fn,args,who),s=cvToString(r.result);
   if(required)assert.ok(s.startsWith('(ok')&&(!fn.startsWith('test-')||s!=='(ok false)'),`${fn}: ${s}`);
-  invariant();return {r,s};
+  return {r,s};
  };
- const mid=n=>{sim.callPublicFn('mock-lazer-oracle','set-mid',[Cl.uint(n)],sim.deployer);invariant();};
+ const mid=n=>{sim.callPublicFn('mock-lazer-oracle','set-mid',[Cl.uint(n)],sim.deployer);};
  const scalar=(fn,who)=>BigInt(cvToString(read(fn,[Cl.principal(who)])).slice(1));
  const pending=(side,who)=>cvToString(read(`get-token-${side}-pending-deposit`,[Cl.principal(who)]))!=='none';
  const rows=side=>read('rv-full-snapshot').value[side].value.map(v=>({who:cvToString(v.value.who),live:BigInt(v.value.live.value),parked:BigInt(v.value.parked.value)}));
@@ -54,7 +53,7 @@ for(const seed of seeds){
  const deposit=(s,w,n,limit=39001000000000n)=>{
   const before=owned(s,w),minimum=s==='x'?100n:109000n;
   assert.ok(before+BigInt(n)>=minimum);
-  call(w,`deposit-token-${s}`,[Cl.uint(n),Cl.uint(limit),Cl.none(),trait,asset]);record(`deposit-${s}`);settle(s,w);
+  call(w,`deposit-token-${s}`,[Cl.uint(n),Cl.uint(limit),Cl.none(),traits[s],asset]);record(`deposit-${s}`);settle(s,w);
  };
  const cfg=()=>call(sim.deployer,'test-config',[Cl.bool(false),Cl.uint(99),Cl.uint(0)]);
  const readmit=(s,w)=>{
@@ -80,7 +79,7 @@ for(const seed of seeds){
    assert.equal(rows(side).filter(r=>r.live>0n).length,50);
    assert.equal(rows(side).filter(r=>r.parked>0n).length,3);
    const live=rows(side).find(r=>r.live>0n).who,parked=rows(side).find(r=>r.parked>0n).who;
-   call(generated[53],`deposit-token-${side}`,[Cl.uint(300*scale),Cl.uint(39001000000000n),Cl.none(),trait,asset]);record(`deposit-${side}`);
+   call(generated[53],`deposit-token-${side}`,[Cl.uint(300*scale),Cl.uint(39001000000000n),Cl.none(),traits[side],asset]);record(`deposit-${side}`);
    call(live,`set-token-${side}-limit`,[Cl.uint(39001000000000n),Cl.none()]);record(`set-limit-${side}`);
    call(sim.deployer,`readmit-token-${side}`,[Cl.principal(parked)]);record(`readmit-${side}`);
   }
@@ -104,7 +103,7 @@ for(const seed of seeds){
    readmit(side,candidate.who);
    assert.equal(rows(side).filter(r=>r.live>0n).length,50);
    if(serial%7===0){const w=choose(rows(side).filter(r=>r.live>500n*BigInt(scale))).who;
-    call(w,`withdraw-token-${side}`,[Cl.uint(100*scale),trait,asset]);record(`withdraw-${side}`);}
+    call(w,`withdraw-token-${side}`,[Cl.uint(100*scale),traits[side],asset]);record(`withdraw-${side}`);}
    console.log(`READMIT seed=${seed} iteration=${serial}`);
   }
   // The prelude's actual full crossing book clears before smaller randomized
@@ -131,7 +130,7 @@ for(const seed of seeds){
     deposit(opp,a,opp==='x'?200000+n:(200000+n)*4000,32000000000000n);
     mid(32000000000000n);
     const amount=side==='x'?2000+n:(2000+n)*3000;
-    const r=call(taker,'swap',[Cl.uint(amount),Cl.uint(side==='x'?16000000000000n:64000000000000n),Cl.bufferFromHex(''),trait,asset,trait,asset,Cl.bool(side==='x')]);
+    const r=call(taker,'swap',[Cl.uint(amount),Cl.uint(side==='x'?16000000000000n:64000000000000n),Cl.bufferFromHex(''),traits.x,asset,traits.y,asset,Cl.bool(side==='x')]);
     assert.ok(new RegExp(`token-${opp}-received u[1-9]`).test(r.s),'swap must fill');record(`swap-${side}`);
    }
    for(const side of ['x','y'])for(const who of [a,b,taker])if(owned(side,who)>0n)cancel(side,who,rng[ri++%rng.length].pause);
@@ -148,15 +147,12 @@ for(const seed of seeds){
   });
   const target=`${sim.deployer}.market`,all=getSimnetDeployerContractsInterfaces(sim);
   const functions=getFunctionsFromContractInterfaces(new Map([...all].filter(([id])=>id===target)));
-  const instrumented=new Proxy(sim,{get(target,key){
-   if(key==='callPublicFn')return (...args)=>{const r=target.callPublicFn(...args);invariant();return r;};
-   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;
-  }});
   const eligible=new Map(generated.map((address,i)=>[`maker-${i}`,address]));
-  await checkProperties(instrumented,async()=>{throw Error('Unexpected RV regression reset');},[target],functions,seed+100,randomRuns,true,false,radio,eligible,generated);
+  await checkProperties(sim,async()=>{throw Error('Unexpected RV regression reset');},[target],functions,seed+100,randomRuns,true,false,radio,eligible,generated);
   assert.equal(rv.failed,0,'native RV property failure');assert.equal(rv.passed+rv.discarded,randomRuns,'complete native RV run');
   // Recovery is a real public cancellation, including after arbitrary minimum,
   // pause and quote changes. Every funded owner must recover exactly its claim.
+  assert.equal(cvToString(sim.callPublicFn('jing-core-v6','pause',[],sim.deployer).result),'(ok true)');
   const recovery={x:{owners:0,amount:0n},y:{owners:0,amount:0n}};
   for(const side of ['x','y'])for(const row of rows(side)){
    const claim=owned(side,row.who);
@@ -169,9 +165,13 @@ for(const seed of seeds){
   for(const side of ['x','y']){
    assert.equal(scalar(`rv-balance-${side}`,`${sim.deployer}.market`),0n,'no residual custody after all owners cancel');
    recovery[side].amount=recovery[side].amount.toString();
+   const total=sim.callReadOnlyFn('jing-core-v6','get-total-token-equity',[traits[side]],sim.deployer).result;
+   assert.equal(cvToString(total),'u0','no residual core equity after recovery');
+   recovery[side].coreEquity='0';
   }
-  invariant();assertInputsUnchanged(hashes);
-  results.push({seed,episodesPerPath:count,successfulCalls:stats,invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv},recovery});
+  runtime.check();assertInputsUnchanged(hashes);
+  runtime.assertHealthy();
+  results.push({monitor:runtime.stats,seed,episodesPerPath:count,successfulCalls:stats,invariantChecks:runtime.stats.invariantChecks,calls:trace.length,nativeRV:{seed:seed+100,...rv},recovery});
   console.log(`GREEN seed=${seed} ${JSON.stringify(results.at(-1))}`);
  }catch(e){
   fs.writeFileSync('tests/rv/v6-3/full-book-counterexample.json',JSON.stringify({seed,error:String(e),trace},null,2)+'\n');
@@ -180,6 +180,6 @@ for(const seed of seeds){
 }
 assertInputsUnchanged(hashes);
 assertProductionPrefix(true);
-fs.writeFileSync('tests/rv/v6-3/full-book-results.json',JSON.stringify({generatedAt:new Date().toISOString(),results,hashes},null,2)+'\n');
+fs.writeFileSync('tests/rv/v6-3/full-book-results.json',JSON.stringify({generatedAt:new Date().toISOString(),realCore:true,results,hashes},null,2)+'\n');
 fs.rmSync('tests/rv/v6-3/full-book-counterexample.json',{force:true});
 console.log('All seeded full-book checks green.');

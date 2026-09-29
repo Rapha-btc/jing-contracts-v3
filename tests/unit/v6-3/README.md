@@ -10,8 +10,9 @@ on 2026-09-28; that revision was also merged into `master`.
 The market now notifies the real core when refunding small taker remainders
 on either side. All four swap/reprice dust regressions and both long lifecycle
 scenarios pass; see [the finding and fix](LIFECYCLE-FINDING.md). The core itself
-is unchanged. The RV campaigns have since passed on this same market hash;
-they use a core fixture, while this unit suite checks actual core equity.
+is unchanged. The RV campaigns have since passed on this same market hash
+using the actual core too, checking equity after every public call after
+initialization.
 The pinned Stxer baseline uses the previous source and does not validate the fix.
 
 On 2026-09-28, all **217 v6-3 tests passed** against the source including
@@ -262,9 +263,13 @@ The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 ## Scenario fuzzing
 
 Run `npm run rv:v6-3` for separate Rendezvous campaigns against the current
-market. All 12,000 native trials and 600 guided episodes have completed on the
-refund-fix source with zero property/invariant failures and zero final custody.
-RV uses a core fixture, so its results do not establish real core equity
-correctness. See the [RV scenario README](../../rv/v6-3/README.md) for seeds,
-successful operations, discarded trials, recovery checks, and fixture limits.
+market and real `jing-core-v6.clar`. All 12,000 native trials and 600 guided
+episodes completed on the refund-fix source with zero property/invariant
+failures. The campaigns performed 25,999 accounting checks; final recovery
+with the core paused left zero custody and zero core equity in all three
+full-book seeds. Two additional RV dust-refund regressions pass, separate from
+the 217 unit tests. Oracle, ladder and strict FT fixtures remain; this is finite
+evidence for the tested account universe. See the
+[RV scenario README](../../rv/v6-3/README.md) for seeds, successful operations,
+discarded trials, recovery checks, and fixture limits.
 Fuzz trial counts are separate from the unit coverage percentages above.

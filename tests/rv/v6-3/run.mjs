@@ -15,13 +15,17 @@ if(!process.argv.includes('--summarize')) {
  const b=spawnSync('python3',['tests/rv/v6-3/build.py'],{stdio:'inherit'});
  if(b.error||b.status!==0)throw b.error??Error(`RV build exit ${b.status}`);
  assertProductionPrefix(false);
- evidence={hashes:hashInputs([...sharedInputs,'tests/rv/v6-3/run.mjs','tests/rv/v6-3/run-seeded.mjs']),logs:{}};
+ evidence={hashes:hashInputs([...sharedInputs,'tests/rv/v6-3/run.mjs','tests/rv/v6-3/run-seeded.mjs','tests/rv/v6-3/runtime.test.mjs']),logs:{}};
+ const regressionLog=`${dir}/runtime-regressions.log`,regressionFd=fs.openSync(regressionLog,'w');
+ const regression=spawnSync(process.execPath,['tests/rv/v6-3/runtime.test.mjs'],{stdio:['ignore',regressionFd,regressionFd]});fs.closeSync(regressionFd);
+ if(regression.error||regression.status!==0)throw regression.error??Error(`Real-core refund regressions failed: ${regressionLog}`);
+ Object.assign(evidence.logs,hashInputs([regressionLog]));
  for(const j of jobs){
   assertInputsUnchanged(evidence.hashes);
   console.log(`RV ${j.mode}, runs=${j.runs}, seed=${j.seed}`);
   const path=`${dir}/${j.mode}-${j.seed}.log`,fd=fs.openSync(path,'w');
-  const cmd=j.mode==='seeded'?process.execPath:'node_modules/.bin/rv';
-  const args=j.mode==='seeded'?['tests/rv/v6-3/run-seeded.mjs','test',String(j.runs),String(j.seed)]:['tests/rv/v6-3','market',j.mode,`--runs=${j.runs}`,`--seed=${j.seed}`,'--bail'];
+  const cmd=process.execPath;
+  const args=['tests/rv/v6-3/run-seeded.mjs',j.mode==='invariant'?'invariant':'test',String(j.runs),String(j.seed),...(j.mode==='seeded'?['--seeded']:[])];
   const r=spawnSync(cmd,args,{stdio:['ignore',fd,fd]});fs.closeSync(fd);
   if(r.error||r.status!==0)throw r.error??Error(`RV exit ${r.status}: ${path}`);
   assertInputsUnchanged(evidence.hashes);
@@ -33,6 +37,8 @@ if(!process.argv.includes('--summarize')) {
 }
 assertInputsUnchanged(evidence.hashes);
 assertInputsUnchanged(evidence.logs);
+const regressionText=fs.readFileSync(`${dir}/runtime-regressions.log`,'utf8');
+if(!/^# pass 2$/m.test(regressionText)||!/^# fail 0$/m.test(regressionText))throw Error('Incomplete real-core refund regressions.');
 const results=jobs.map(j=>{
  const path=`${dir}/${j.mode}-${j.seed}.log`,s=fs.readFileSync(path,'utf8').replace(/\x1b\[[0-9;]*m/g,'');
  const passed=(s.match(/\[PASS\]/g)||[]).length,discarded=(s.match(/\[WARN\]/g)||[]).length;
@@ -41,11 +47,13 @@ const results=jobs.map(j=>{
  const unexpected=[...s.matchAll(/^Error: (.+)$/gm)].map(m=>m[1]).filter(x=>!x.startsWith('Runtime error while interpreting ')&&!x.startsWith('BadTokenName('));
  if(unexpected.length)throw Error(`Unexpected runtime errors in ${path}: ${unexpected.join('; ')}`);
  const counts={};for(const m of s.matchAll(/rv-success: "([^"]+)"/g))counts[m[1]]=(counts[m[1]]??0)+1;
- const refunds={};for(const m of s.matchAll(/reason: "([^"]*)"/g))refunds[m[1]||'placed']=(refunds[m[1]||'placed']??0)+1;
- return {...j,passed,discarded,failed,actualSuccessfulWrapperCalls:counts,settleOutcomes:refunds,invalidAssetRuntimeErrors:(s.match(/Error: BadTokenName\(/g)||[]).length,log:path};
+ const monitor=JSON.parse(s.match(/^RV-MONITOR (.+)$/m)?.[1]??'null');
+ if(!monitor?.getterCrossChecks||monitor.invariantChecks!==monitor.publicCalls+1)throw Error(`Missing post-call equity checks: ${path}`);
+ const refunds=monitor.pendingRefunds;
+ return {...j,passed,discarded,failed,actualSuccessfulWrapperCalls:counts,settleOutcomes:refunds,monitor,invalidAssetRuntimeErrors:(s.match(/Error: BadTokenName\(/g)||[]).length,log:path};
 });
 assertProductionPrefix(false);
 assertInputsUnchanged(evidence.hashes);
 const hashes=evidence.hashes;
-fs.writeFileSync('tests/rv/v6-3/results.json',JSON.stringify({generatedAt:new Date().toISOString(),hashes,results},null,2)+'\n');
+fs.writeFileSync('tests/rv/v6-3/results.json',JSON.stringify({generatedAt:new Date().toISOString(),realCore:true,refundRegressions:2,hashes,results},null,2)+'\n');
 console.log(JSON.stringify(results,null,2));

@@ -1,21 +1,25 @@
 {
-  "generatedAt": "2026-09-29T03:07:46.521Z",
+  "generatedAt": "2026-09-29T03:50:59.784Z",
+  "realCore": true,
+  "refundRegressions": 2,
   "hashes": {
     "contracts/markets-sbtc-stx-jing-v6-3.clar": "43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971",
-    "tests/rv/v6-3/Clarinet.toml": "b5b439aba3df6727ed39a94c82fdd5445e5a124d6bb2e81f09e309abca456d44",
-    "tests/rv/v6-3/properties.clar": "4f4d55c9f523476155546367e4535513eef44e34cea646f2bcd628209cd0d794",
-    "tests/rv/v6-3/build.py": "f38c6641b6b0e563f00952a5ebb27126615bb8c6b2013eb7c747f936f433c481",
+    "tests/rv/v6-3/Clarinet.toml": "1e379bf01bceab77c94aa1539b6c80eb463f044ce972c60e959c21b7e5dc6dfe",
+    "tests/rv/v6-3/properties.clar": "1c964e4961fb3c143479038eec15d3a9c5977bbc7b43325db9fb8b4464c8e526",
+    "tests/rv/v6-3/build.py": "39c685572564e9842be5d0e514c75b8073b35fa6017e0520ab9857332e6ebfce",
     "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
-    "tests/rv/v6-3/source-integrity.mjs": "ef71fb0bc5fe3e91d1d682d8e5fa8b4b51049b334297845d0d20f0cd61182448",
+    "tests/rv/v6-3/source-integrity.mjs": "badbf2d8a81f914d17faf2c05ebaa1d8e99974e62861ebc19595632e47a0d376",
     "tests/rv/sip-010-trait.clar": "2761036dc8bf48034b7db7e01f6aa80a38d4633e29210ec892a9cceb764e4252",
     "tests/rv/mock-lazer-oracle.clar": "584629df6874d7db46a83451d65e7ec83eea8942471564be6ed69b619588cc24",
     "tests/rv/mock-jing-ladder.clar": "60dfd743e0dc37d497acfb85d3eec4b7578a4d61c5197e417537421360241f10",
-    "tests/rv/.build/v6-3/source.json": "59ec71b3682ad871dc08354165314e70238c448e128618462bd343c0e9f5b581",
-    "tests/rv/.build/v6-3/core.clar": "9d8d9fd913311f4b366f619be34452f05fb541073ccf22dc9e21d765ba016042",
+    "tests/rv/.build/v6-3/source.json": "913f15f7418e761833ea09da6371972e04d838732ab717e7f3a802d2118fb9c8",
+    "contracts/jing-core-v6.clar": "53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32",
+    "tests/rv/v6-3/runtime.mjs": "66b7d6b0117defbf25fdde6ffc0e03561b08f94ae9255dcdf8ada7937c0e5bac",
     "tests/rv/.build/v6-3/ladder.clar": "c5e400f00e6d7f079145d85a07e7892b8b4c3c4d0ae73cda480a6b80bff552d6",
-    "tests/rv/.build/v6-3/market.clar": "86c983ba06079a94a885ca0a890b0b5ef7e40cb831d908e846ea63af4e66c650",
-    "tests/rv/v6-3/run.mjs": "2b3da9d05287366354d64582bc16a567b433b590d596348acf3ab59fe8edafdb",
-    "tests/rv/v6-3/run-seeded.mjs": "e65d971c313fd87bd0608f9702472577961c109f54cd55c56538d4f5f2dd3b85"
+    "tests/rv/.build/v6-3/market.clar": "365a5278bd11a02583753f61975c07cc99102399aced4e01d339f4a7f6876509",
+    "tests/rv/v6-3/run.mjs": "27defa25650ee8653d8d900a9c1d1f969e01677cd0e1e3c27f2176fc40fcd213",
+    "tests/rv/v6-3/run-seeded.mjs": "503a8e4611d84c0d9a30b0efb75a7c39e8f358c54b871e91a300eba1bb59b266",
+    "tests/rv/v6-3/runtime.test.mjs": "dcadf526b6999240848b717bf0aa59ef4929333ce8d9a5e7744d362621a3b13b"
   },
   "results": [
     {
@@ -26,58 +30,86 @@
       "discarded": 0,
       "failed": 0,
       "actualSuccessfulWrapperCalls": {
-        "test-deposit-y": 27,
-        "test-deposit-x": 38,
-        "test-cancel-y": 12,
-        "test-cancel-x": 31,
-        "test-withdraw-y": 6,
-        "test-reprice-y": 5,
-        "test-settle-x": 12,
-        "test-reprice-x": 16,
-        "test-withdraw-x": 21,
-        "test-settle-y": 4,
-        "test-limit-x": 20,
-        "test-settle-limit-x": 7,
-        "test-limit-y": 4,
+        "test-deposit-x": 36,
+        "test-deposit-y": 29,
+        "test-settle-y": 5,
+        "test-cancel-y": 17,
+        "test-limit-x": 21,
+        "test-settle-limit-x": 3,
+        "test-withdraw-x": 15,
+        "test-reprice-x": 15,
+        "test-reprice-y": 1,
+        "test-cancel-x": 24,
         "test-settle-limit-y": 1,
-        "test-batch": 1,
-        "test-readmit-x": 2,
-        "test-swap": 2
+        "test-limit-y": 1,
+        "test-settle-x": 6,
+        "test-swap": 4,
+        "test-readmit-x": 3,
+        "test-settle-readmit-x": 2,
+        "test-withdraw-y": 2
       },
       "settleOutcomes": {
-        "placed": 14,
+        "cancel": 28,
         "queue-full": 2
       },
-      "invalidAssetRuntimeErrors": 37,
+      "monitor": {
+        "publicCalls": 9501,
+        "invariantChecks": 9502,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "cancel": 28,
+          "queue-full": 2
+        },
+        "refundEvents": {
+          "x": 20,
+          "y": 8
+        }
+      },
+      "invalidAssetRuntimeErrors": 13,
       "log": "simulations/results/rv-v6-3/invariant-230927.log"
     },
     {
       "mode": "test",
       "runs": 5000,
       "seed": 230926,
-      "passed": 1619,
-      "discarded": 3381,
+      "passed": 1634,
+      "discarded": 3366,
       "failed": 0,
       "actualSuccessfulWrapperCalls": {
         "test-deposit-y": 60,
-        "test-deposit-x": 53,
-        "test-withdraw-y": 7,
-        "test-cancel-x": 40,
-        "test-reprice-y": 10,
-        "test-cancel-y": 55,
-        "test-settle-x": 13,
-        "test-reprice-x": 12,
-        "test-swap": 6,
-        "test-limit-x": 21,
-        "test-settle-y": 9,
-        "test-withdraw-x": 9,
-        "test-settle-limit-x": 2,
-        "test-limit-y": 13,
+        "test-deposit-x": 57,
+        "test-withdraw-y": 10,
+        "test-cancel-x": 41,
+        "test-reprice-y": 9,
+        "test-cancel-y": 54,
+        "test-limit-y": 10,
+        "test-settle-x": 15,
+        "test-limit-x": 23,
+        "test-reprice-x": 15,
+        "test-settle-limit-x": 3,
+        "test-withdraw-x": 13,
+        "test-settle-y": 10,
+        "test-swap": 8,
         "test-settle-limit-y": 1
       },
       "settleOutcomes": {
-        "placed": 16,
-        "queue-full": 6
+        "cancel": 58,
+        "queue-full": 3,
+        "crossing": 1
+      },
+      "monitor": {
+        "publicCalls": 5000,
+        "invariantChecks": 5001,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "cancel": 58,
+          "queue-full": 3,
+          "crossing": 1
+        },
+        "refundEvents": {
+          "x": 24,
+          "y": 18
+        }
       },
       "invalidAssetRuntimeErrors": 0,
       "log": "simulations/results/rv-v6-3/test-230926.log"
@@ -110,8 +142,21 @@
         "test-settle-readmit-y": 1
       },
       "settleOutcomes": {
-        "placed": 22,
+        "cancel": 36,
         "queue-full": 3
+      },
+      "monitor": {
+        "publicCalls": 3016,
+        "invariantChecks": 3017,
+        "getterCrossChecks": 1,
+        "pendingRefunds": {
+          "cancel": 36,
+          "queue-full": 3
+        },
+        "refundEvents": {
+          "x": 17,
+          "y": 16
+        }
       },
       "invalidAssetRuntimeErrors": 0,
       "log": "simulations/results/rv-v6-3/seeded-230929.log"
