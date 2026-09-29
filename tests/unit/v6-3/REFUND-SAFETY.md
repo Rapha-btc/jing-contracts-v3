@@ -52,6 +52,36 @@ handling, or a guarantee against errors in the market, token, or execution
 limits. Swap/batch logging still uses its existing propagation policy. A
 returned logger error can leave equity/events stale while funds are returned.
 
+## Credit overflow assessment (2026-09-29)
+
+No production credit clamp was added. The two additions in `credit` can
+overflow mathematically, but this review found no funded v6-3 scenario that
+reaches that limit. Clarity's [unsigned 128-bit integers](https://docs.stacks.co/reference/clarity/types)
+hold up to `340282366920938463463374607431768211455` base units (about
+`3.4e38`). All 21 million BTC represent `2.1e15` satoshis, about `1.6e23`
+times smaller ([Bitcoin monetary constants](https://github.com/bitcoin/bitcoin/blob/master/src/consensus/amount.h)).
+This is the scale of fully backed sBTC, not a hard-coded mint cap in the
+[sBTC token](https://github.com/stacks-network/sbtc/blob/main/contracts/contracts/sbtc-token.clar).
+STX [has no fixed maximum supply](https://stacks.foundation/stx-token-supply);
+even a hypothetical 10 billion STX would be only `1e16` micro-STX, still
+about `3.4e22` times below the uint limit.
+
+These comparisons assume accurate, asset-backed equity. Core accepts amounts
+from registered contracts rather than independently checking their custody,
+so supply alone is not a proof against every faulty registered caller. A
+temporary fault-injection experiment reproduced overflow only after setting
+ledger values near the uint maximum or supplying a maximum-sized credit;
+it did not establish public reachability with real funds. Saturating those
+credits would conceal an extreme accounting error and would not repair it.
+The recommendation is to retain ordinary credit arithmetic unless a reachable
+case establishes a need for additional protection.
+
+Subtraction is different: even `u1 - u2` underflows. Both subtractions in the
+production core are inside `debit` and already bounded as described above.
+Refund loggers do not invoke `credit`. The remaining additions outside `credit`
+are block-height-plus-144 timelock calculations, far below the uint limit at
+real chain heights.
+
 ## Tests and fault-state provenance
 
 All production function bodies execute unchanged. Separate copies used for
