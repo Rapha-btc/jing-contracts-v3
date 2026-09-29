@@ -1,10 +1,11 @@
 # Current v6-3 Rendezvous fuzzing and recovery scenarios
 
 Verified on 2026-09-28 against `contracts/markets-sbtc-stx-jing-v6-3.clar`.
-Production source SHA-256: `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
+Production source SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
 These runs include the treasury guard (`e338e27`) and exact rolled-result
-fix (`1a930e3`). The harness preserves production market logic. Earlier
-reports for `04b0a7df...`, `65e1ffc1...`, and `ac838c29...` do not establish
+fix (`1a930e3`), plus the taker dust-refund accounting fix (`da19a4f`).
+The harness preserves production market logic. Earlier reports for
+`04b0a7df...`, `65e1ffc1...`, `ac838c29...`, and `7f7bc5cc...` do not establish
 that this source revision passes and are superseded by these completed runs.
 
 ## Run
@@ -61,7 +62,7 @@ ended with **zero x and zero STX in market custody**:
 | 230931 | 6 | 8 | x = 0; STX = 0 |
 | 230932 | 27 | 7 | x = 0; STX = 0 |
 
-The raw invariant campaign rejected **31 invalid asset-name calls** with
+The raw invariant campaign rejected **37 invalid asset-name calls** with
 `BadTokenName`; these are recorded separately from property failures.
 
 ## Source and fixtures
@@ -85,7 +86,11 @@ prelude explicitly funds the known account universe. Transfers never mint;
 the market cannot conceal an insolvency with automatic funding. The y side
 uses native simnet STX. Core logging, ladder membership, and the decoded Lazer
 feed remain explicit fixtures. Oracle signature verification and production
-core registration/authorization are not fuzzed here.
+core registration/authorization are not fuzzed here. In particular, this
+rerun checks the patched market's custody and recovery behavior; it does not
+validate the refund log's effect on real core equity. The [217-test Clarinet
+suite](../../unit/v6-3/README.md) runs the actual core and verifies that effect,
+including swap/reprice refunds, threshold boundaries, rollback and wallet reuse.
 
 The RV `test-config` and cancellation wrappers deliberately control pause,
 minimums, and distance slots directly so random callers can explore those

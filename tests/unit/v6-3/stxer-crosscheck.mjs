@@ -55,7 +55,7 @@ const sourceLink = line => `[${line}](../../../contracts/markets-sbtc-stx-jing-v
 const lines = [
   '# Stxer gaps cross-checked against Clarinet', '',
   `Baseline: [Stxer report at ${stxer.reportCommit}](https://github.com/Rapha-btc/jing-contracts-v3/blob/${stxer.reportCommit}/simulations/README-v6-3-coverage.md). Stxer market SHA-256: \`${stxer.sourceSha256}\`.`, '',
-  `Clarinet market SHA-256: \`${matrix.summary.sha256}\`. The refund-accounting fix changes the source. Historical Stxer runs and RV reports do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations.`, '',
+  `Clarinet market SHA-256: \`${matrix.summary.sha256}\`. The refund-accounting fix changes the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).`, '',
   'This report is generated after the full Clarinet suite and coverage thresholds pass. It checks the source locations listed by Stxer; it does not add or average the two tools’ coverage percentages.', '',
   '## Eleven oracle error paths', '',
   '**All 11 have Clarinet rejection witnesses through public market calls.** The market and core are real code. Decoded oracle fields are controlled by the existing local oracle fixture, so these cases establish market validation, not signed-Pyth reachability or signature verification.', '',

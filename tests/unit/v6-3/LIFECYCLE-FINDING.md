@@ -84,6 +84,9 @@ they check wallet/treasury/market conservation, custody against live + parked +
 pending claims, book totals, and real core equity against live + parked claims.
 Both finish with zero custody and zero core equity.
 
-The saved Stxer/RV reports concern the earlier market hash. They do not establish
-that this patched source passes those campaigns. See the main unit README for
-the complete Clarinet run on the patched source.
+The RV campaigns have now been rerun on the patched source: 12,000 native
+trials with zero failures, plus 600 guided episodes and successful recovery to
+zero custody in all three seeds. RV uses a core fixture, so the real-core equity
+evidence remains the Clarinet suite above. See the [RV report](../../rv/v6-3/README.md).
+The pinned Stxer report concerns the earlier market hash and does not validate
+this patch.
