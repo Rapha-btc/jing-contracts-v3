@@ -1,6 +1,6 @@
 # Core-spread v1 Clarinet tests
 
-**59/59 tests pass: 52 mirrored rung tests plus 7 dispatch scenarios.** Each rung has **100% function coverage,
+**69/69 tests pass: 52 mirrored rung tests plus 17 dispatch scenarios.** Each rung has **100% function coverage,
 99.05% line coverage and 99.28% branch coverage**. See the generated
 [source-matched coverage report](COVERAGE.md) for counts, hashes and unhit points.
 The original 16 scenarios measured 70.92% lines and 60.14% branches once the
@@ -65,7 +65,7 @@ location, counts all deployment names only once per source location, and checks 
 | `rungs.test.ts` | 16 | Registration, exact paused refunds, two-member partial exits, rejected admission with locally held funds, maker proceeds, seat retirement, expired escrow recovery, unrelated young pending top-up isolation |
 | `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
 | `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
-| `dispatch.test.ts` | 7 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, tenth-leg deposit/withdraw rollback |
+| `dispatch.test.ts` | 17 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
 
 The rescale test fills approximately half the book and refills it through real
 transfers until four scale transitions occur. Alice stays inactive while Bob
@@ -77,8 +77,8 @@ proceeds received. Tests exercise both STX and sBTC accounting directions.
 
 ## Twenty-rung dispatch scenarios
 
-**Result: all seven dispatch scenarios pass; no new contract bug was found
-in these scenarios.** The complete 59-test suite passes on the source hashes
+**Result: all 17 dispatch scenarios pass; no new contract bug was found
+in these scenarios.** The complete 69-test suite passes on the source hashes
 in `COVERAGE.md`. No production contract changes were needed. The expected
 no-match and invalid-batch refusals below are passing checks, not test failures.
 
@@ -115,9 +115,32 @@ events are empty, and the valid nine-position exit subsequently succeeds.
 The suite does not claim complete dispatch branch coverage or a mainnet
 execution-cost benchmark. It exercises actual dispatch/rung logic with the
 token and oracle fixture boundaries described above. Dispatch has no batch
-claim function; these scenarios use its proceeds-paying top-ups before batch
-exiting. They do not assume a sold-out rung can be blindly included in a
-withdrawal batch.
+claim function. The initial scenarios use proceeds-paying top-ups before
+batch exits; the additional exit scenarios below require no such top-up.
+
+### Exits without top-ups, historical seats and pending escrow
+
+These ten scenarios are mirrored on **only the two core-spread v1 templates**:
+
+| Scenario per side | Assertions |
+| --- | --- |
+| Sold-out and partially filled positions, no top-up | Alice batch-withdraws all ten positions, including five unclaimed closed epochs, while paused. Bob's claims remain unchanged. Bob directly claims the closed positions; another claim returns `u7006`. A batch with five valid positions followed by an already-removed one rolls back completely. Exiting the five remaining positions succeeds. |
+| Retired and replaced seats after fills | Retire the partially filled 60-bps rung, replace the 70-bps rung with identical code deployed by another account, and verify old claims and funds remain intact. New deposits to historical seats refuse with `u7104`. The old ten-position exit succeeds while paused, and replacement funds remain independently withdrawable. |
+| Another member's young pending top-ups | Alice's half-sized ten-rung exit succeeds with `none` while paused, leaving Bob's pending entries and claims intact. Her full exit also preserves his claims; all members then recover their funds. |
+| Exit actually needs young escrow | Nine funded withdrawals precede a tenth pending-only position. Without an update, `u7012` rolls back every earlier transfer. The same batch succeeds with `some update`, returning the exact input balance. |
+| Timeout recovery | The same ninth/tenth-leg rollback setup, then 145 burn blocks elapse. All ten positions exit with `none` while market and core are paused. The opposite-side member's claims remain unchanged. |
+
+The replacement uses the exact same generated rung bytes as the canonical
+deployment. Fixture dependency principals are absolute so a different deployer
+still references the same real market and ladder. The real canonical hash gate
+and initialization authorization remain in force; no contract body or storage
+is patched. All original manifest deployments remain instrumented; the extra
+replacement is a dynamic deployment used for lifecycle assertions.
+
+For v1, **sold out does not mean already claimed**: an unclaimed closed-epoch
+position pays through either `withdraw` or `claim`; after payout removes it,
+another attempt returns `u7006`. Older dispatcher comments describing every
+sold-out withdrawal as an error do not describe these two v1 implementations.
 
 ## Remaining gaps
 
@@ -155,14 +178,16 @@ production rungs.
 
 ## Validation provenance
 
-`COVERAGE.md` records the 59-test release run against committed market, core,
+`COVERAGE.md` records the 69-test release run against committed market, core,
 ladder, dispatch, trait and rung sources. During development, the shared core
 changed while a focused test was running; the source-stability hook rejected
 that run even though its scenario passed. The release run therefore used an
 isolated checkout of committed contracts with these test files. The temporary
 checkout used a local SDK setup-file path; contract and test bodies were
-unchanged. Native-vault work is not included in this change.
+unchanged. The final run uses the committed core from `ac23d0a` (hash
+`88a689af…0697`), including the other workstream's native-vault integration.
+This change only adds tests and documentation for the two core-spread v1 rungs.
 
-Release log: `/tmp/rungs-dispatch-release.log`. Raw LCOV, test JSON and build
+Release log: `/tmp/rungs-dispatch-exits-release.log`. Raw LCOV, test JSON and build
 substitutions are in the release checkout's `.build/`, separate from
 market-only coverage. A normal rerun regenerates them in this suite's `.build/`.

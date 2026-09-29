@@ -61,9 +61,9 @@ unhit paths described below; they exclude mocked dependencies and older versions
 ## Run
 
 A separate [real core-spread v1 rung integration suite](../integration-v6-3/README.md)
-now passes **59/59**, with **100% functions, 99.05% lines and 99.28% branches**
+now passes **69/69**, with **100% functions, 99.05% lines and 99.28% branches**
 for each rung. It covers the sell exit regression, four successive rescales,
-epoch payouts, reserve dust, push controls and seven real-dispatch scenarios
+epoch payouts, reserve dust, push controls and 17 real-dispatch scenarios
 with ten rungs per side. These results are separate
 from the 273 market unit tests above; this coverage expansion changes no
 production contract.

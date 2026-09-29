@@ -22,8 +22,8 @@ expired escrow retains the no-oracle cancellation path.
 
 ## Clarinet evidence
 
-`npm run test:v6-3:integration`: **59/59 passing**, 26 mirrored scenarios
-per rung plus seven real-dispatch scenarios with ten rungs per side, against
+`npm run test:v6-3:integration`: **69/69 passing**, 26 mirrored scenarios
+per rung plus 17 real-dispatch scenarios with ten rungs per side, against
 actual market/core/ladder/dispatch and both production rung bodies.
 Each rung has **100% function, 99.05% line and 99.28% branch coverage**.
 The original 16-test port regression included the sell exit that failed before
@@ -52,7 +52,7 @@ The separate workstream has now published the
 The [simulation](https://stxer.xyz/simulations/mainnet/02e540f6cdd8456f035ffdc1b7d520e5)
 used core hash `d45f1bff…1bce`, including the other workstream's uncommitted
 reconciliation logger; the Clarinet release report uses committed core
-`67242f19…9b01`. These are separate dependency snapshots. Stxer documents its
+`88a689af…0697`. These are separate dependency snapshots. Stxer documents its
 remaining trace and fork-data limits; Clarinet additionally exercises a
 successful push after the timeout cooldown with restored miner data.
 
@@ -61,5 +61,5 @@ successful push after the timeout cooldown with restored miner data.
 - Buy reference: `9a7b2381728ea1f11b80b1e200f3575e7cc68c1cd4da3d0bd758de5801c666f0`.
 - Sell port: `ef91b6590508db48a859eb0ea66369108ed3d3cb46e63e25cb92b4c2e96964b0`.
 - Market: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
-- Core: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
+- Core: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 - Ladder: `0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786`.

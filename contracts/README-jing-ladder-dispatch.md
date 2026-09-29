@@ -8,12 +8,12 @@ under the same principal first. Both contracts are simulation-verified source; t
 ## Current core-spread v1 Clarinet scenarios
 
 The [v1 Clarinet suite](../tests/unit/integration-v6-3/README.md#twenty-rung-dispatch-scenarios)
-now includes seven dispatch scenarios with ten buy and ten sell core-spread
+now includes 17 dispatch scenarios with ten buy and ten sell core-spread
 v1 rungs, the real v6-3 market, core-v6, ladder-v1 and this dispatcher. It tests
 weighted deposits on one or both sides, two-member ownership, real taker fills,
 proceeds-paying top-ups, paused ten-rung withdrawals, exact receipts and
 atomic rollback when the tenth deposit or withdrawal refuses. The complete
-suite passes **59/59 tests**; these numbers are separate from the historical
+suite passes **69/69 tests**; these numbers are separate from the historical
 Stxer and fixture results below. Source hashes and fixture boundaries are
 recorded in the linked report.
 
@@ -29,9 +29,9 @@ boolean responses. The current response interface is documented next.
 
 ## Current response interface
 
-All six rung templates now return structured receipts. Trading, transfers,
-share mint/burn calculations, held-fund behavior, and sold-out withdrawal
-errors are unchanged. `settle-proceeds` already returned the amount paid;
+The historical receipt update gave the rung templates structured responses.
+The current deploy scope is only buy/sell core-spread v1; their closed-epoch
+withdrawal behavior is described below. `settle-proceeds` already returned the amount paid;
 deposit and withdrawal now retain that value for their receipts.
 
 ```clarity
@@ -47,8 +47,9 @@ The rung's held balance remains available in its deposit log and `get-state`;
 it is not duplicated in the return value.
 `stx-paid`/`sbtc-paid` are gross proceeds paid during a deposit, not net wallet
 changes after deducting its input. STX fields always use micro-STX and sBTC
-fields use satoshis. Buy-rung claims return `sbtc: u0`; sell-rung claims
-return `stx: u0`, because claims pay proceeds without withdrawing unsold input.
+fields use satoshis. Current-epoch claims pay proceeds without withdrawing
+unsold input. A core-spread v1 claim from a closed epoch also returns any
+reserved input, so its receipt can contain both assets.
 
 The helper preserves allocation order in a `positions` list and totals payouts:
 
@@ -179,6 +180,7 @@ The two withdrawal functions accept:
 
 ```clarity
 (requests (list 10 { rung: <rung>, amount: uint }))
+(update (optional (buff 8192)))
 ```
 
 Each positive amount is a per-rung maximum. A request at or above the user's
@@ -187,9 +189,18 @@ part of it. Each rung performs its normal `sync`, pays accrued proceeds, caps
 the request to the user's balance, and sends assets directly to the user.
 Withdrawals accept any correctly sided rung in the ladder's historical
 registration map, including retired and replaced rungs. This preserves exit
-rights after a seat changes. A sold-out position has no unsold inventory and
-returns the rung's normal `ERR_NO_POSITION`; claim it through the rung instead.
+rights after a seat changes. For the two core-spread v1 templates, an unclaimed
+closed-epoch position pays its proceeds and any reserved input through either
+`withdraw` or `claim`. It can therefore remain in a dispatch withdrawal batch.
+Once that position has been paid and removed, another withdrawal or claim
+returns `ERR_NO_POSITION` (`u7006`). This distinction supersedes older comments
+that describe every sold-out position as a refusal.
 If any withdrawal fails, every earlier withdrawal in the same call rolls back.
+
+Pass `none` when held plus live/parked funds cover the withdrawal, even if an
+unrelated young top-up is pending. A withdrawal that needs young pending funds
+requires `some update` (`u7012` without one). After the escrow timeout, it can
+refund with `none`, including while market and core are paused.
 
 The helper does not use `as-contract`, take custody, mint shares, or charge fees.
 Each rung pulls the input directly from the user and credits the user's own
