@@ -184,6 +184,23 @@ around 2.7e13 and cannot round to 0.
   logged to core equity) and `72b60b0` (refund / cancel logs best-effort with
   `is-ok`; `log-match` carries the taker's net received).
 
+## 7. Next target: `jing-core-v6` (baseline from the same runs)
+
+The same 20 runs exercise `jing-core-v6` (sha256 `67242f19…`) on every market
+call. Measured by source hash: **310 / 1,159 expressions (26.7%), 211 / 946
+lines, 81 branch nodes: 45 full, 3 partial, 33 never reached.** The low figure
+is scope, not a gap in the v6-3 work: core-v6 is a shared ledger and most of
+it serves other products that v6-3 never calls:
+- RFQ (`log-rfq-*`), reserve (`log-reserve-*`), SNPL (`log-snpl-*`), Bitflow
+  (`log-bitflow-swap`) and the legacy Jing logs (`log-jing-deposit`,
+  `log-jing-swap`, `log-deposit`, `log-withdraw`, `log-revoke`, `log-cancel`);
+- core-owned admin: `unpause` (with its timelock), `propose-owner`,
+  `accept-owner`.
+
+Every log the v6-3 market calls is exercised. Next step for core coverage: a
+core-focused suite for the owner / unpause timelock and, if in scope, one per
+product that logs through core.
+
 ## History (superseded figures)
 
 Measured on earlier sources; kept only for the record, replaced by sections 2–4.
