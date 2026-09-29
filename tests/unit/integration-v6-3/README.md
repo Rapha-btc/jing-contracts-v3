@@ -7,7 +7,7 @@ separate integration suite; it does not replace or change the existing
 
 Only `jing-buy-stx-core-spread-v1.clar` and
 `jing-sell-stx-core-spread-v1.clar` are in scope. The buy rung is the
-reference for the sell port now present in the local working tree. The other four v1 rungs and all older
+reference for the sell port. The other four v1 rungs and all older
 rungs are excluded. The selected router is
 `swap-router-sbtc-stx-jing-v5-3.clar`, whose market dependency is v6-3;
 router tests have not been added to this suite yet. The contract workstream
@@ -74,7 +74,7 @@ JSON are separate under `.build/`; the market-only coverage report is untouched.
 
 The initial run had 15 passes and one failure on sell source
 `f2eaa44c6464d901d36f701f8f3e36b4788f3afdd7ed8531b709525cf0981983`.
-The subsequent local port (`ef91b659…`) passes all 16 tests. The following
+The subsequent port (`ef91b659…`) passes all 16 tests. The following
 records the original failure and its recovery evidence.
 
 Reproducer in `rungs.test.ts`, using real public calls:
@@ -127,3 +127,9 @@ the result file is `.build/results.json`. Local full log:
 `/tmp/v6-3-rung-integration-updated.log` (the original failing run is
 `/tmp/v6-3-rung-integration.log`). This evidence is tied to these files, not
 to another agent's subsequent port or an older deployed rung.
+
+Before committing the port, the 16 tests also passed in an isolated export of
+the staged sources, with the published core hash above rather than concurrent
+vault/core edits. Log: `/tmp/v6-3-rung-staged-validation.log`. The temporary
+checkout used a local SDK setup-file path to resolve its copied dependencies;
+contract and test sources were unchanged.
