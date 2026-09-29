@@ -37,3 +37,4 @@ for (const [kind, minimum] of Object.entries(thresholds)) {
 }
 
 await import('./path-matrix.mjs');
+await import('./stxer-crosscheck.mjs');

@@ -4,6 +4,10 @@
 (define-data-var age-x uint u0)
 (define-data-var age-y uint u0)
 (define-data-var frozen (optional uint) none)
+(define-data-var confidence-x (optional uint) none)
+(define-data-var confidence-y (optional uint) none)
+(define-public (configure-confidence (x (optional uint)) (y (optional uint)))
+  (begin (var-set confidence-x x) (var-set confidence-y y) (ok true)))
 (define-public (configure (m uint) (ax uint) (ay uint))
   (begin (var-set mode m) (var-set age-x ax) (var-set age-y ay) (ok true)))
 (define-public (freeze) (ok (var-set frozen (some stacks-block-time))))
@@ -38,7 +42,7 @@
     price: (if (is-eq (var-get mode) id) 0 (if (is-eq (var-get mode) u12) -1 (if (and (is-eq id u45) (is-eq (var-get mode) u11)) 10000000000 p))),
     exponent: (if (and (is-eq id u45) (is-eq (var-get mode) u5)) -6 -8),
     publisher-count: u1,
-    confidence: (if (or (is-eq (var-get mode) u2) (and (is-eq id u45) (is-eq (var-get mode) u14))) none (some (if (and (is-eq id u1) (is-eq (var-get mode) u9)) (/ (var-get mid) u50) (if (is-eq (var-get mode) u3) u2000000 u0)))),
+    confidence: (if (or (is-eq (var-get mode) u2) (and (is-eq id u45) (is-eq (var-get mode) u14))) none (some (default-to (if (and (is-eq id u1) (is-eq (var-get mode) u9)) (/ (var-get mid) u50) (if (is-eq (var-get mode) u3) u2000000 u0)) (if (is-eq id u1) (var-get confidence-x) (var-get confidence-y))))),
     best-bid: (none-int),
     best-ask: (none-int),
     funding-rate: (none-int),

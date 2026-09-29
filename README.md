@@ -184,7 +184,7 @@ the linked reports explain the substitutions and instrumentation.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **193 passing** |
+| Clarinet unit tests | **205 passing** |
 | Market function coverage | **100%** (137/137) |
 | Market line coverage | **99.70%** (2,345/2,352) |
 | Market branch coverage | **99.64%** (830/833) |
@@ -199,6 +199,12 @@ guards previously hit only by artificial core errors. Details and the
 [RV report](tests/rv/v6-3/README.md) records seeds, source hashes, successful
 operations, rejected inputs, and fixture limits. Neither execution coverage
 nor finite fuzzing proves correctness for every possible state.
+
+The [Clarinet/Stxer cross-check](tests/unit/v6-3/STXER-CROSSCHECK.md) maps all
+11 signed-fixture oracle gaps to existing Clarinet rejection tests, seven
+partial branches to isolated private-helper tests, and the eighth to the
+gross-up arithmetic proof. Twelve added cases check exact confidence/freshness
+boundaries, rollback, and successful settlement after a corrected feed.
 
 The unit tests accept a 79-second-old Lazer feed and reject either feed at
 80 seconds or older. Recovery tests exercise live, parked, and pending

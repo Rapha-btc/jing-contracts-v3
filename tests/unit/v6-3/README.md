@@ -7,7 +7,7 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
-On 2026-09-28, all **193 v6-3 tests passed** against the source including
+On 2026-09-28, all **205 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
 treasury, preserves the funded book and configured recipient, and confirms
 that subsequent batch fees reach the valid treasury. The suite also includes
@@ -202,6 +202,34 @@ The inventory/trace parser has a separate check:
 ```sh
 node --test tests/unit/v6-3/path-inventory.test.mjs
 ```
+
+## Cross-check with Stxer
+
+[STXER-CROSSCHECK.md](STXER-CROSSCHECK.md) compares the gaps published in the
+Stxer report at `f2386cf` against Clarinet evidence on the same market source:
+
+- All **11 oracle error paths** already have checked rejections through public
+  market calls using controlled decoded feeds. Signature verification remains
+  an integration concern.
+- **Seven of the eight partial branches** execute in isolated tests of the real
+  private helpers. These do not claim the boundary states are publicly reachable.
+  The remaining gross-up decrement is excluded by the arithmetic proof above
+  and remains in the coverage denominator.
+- All **eight getters** listed as untested in that Stxer report execute and have
+  value assertions in the existing Clarinet lifecycle/seat/readmission tests.
+
+The new `oracle-boundaries.test.ts` adds **12 cases**: independent x/y confidence
+one unit below, at, and above 2% of price, and independent feed ages of 79, 80,
+and 81 seconds during funded settlement. Rejected calls preserve market storage,
+core equity and both asset ledgers; correcting the feed then settles the same
+book with exact payouts and zero custody. These tests strengthen boundary and
+recovery assertions; they do not increase the already-covered source branches.
+
+The cross-check is regenerated and validated by the full test command. Its
+machine-readable counterpart is `.build/stxer-crosscheck.json`. It fails if any
+of the 11 rejection witnesses, seven private branch hits, or eight getter hits
+is missing, or if the market source no longer matches the pinned Stxer baseline.
+The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
