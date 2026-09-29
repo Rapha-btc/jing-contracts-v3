@@ -66,8 +66,11 @@ run or do:
   Kael #2 changes and the Regal Anvil #1 reserve release; a fork run of the
   tail roll. `jing-buy-stx-market-spread-v1` has only the Void Kael #2
   changes.
-- Port the rung fixes to the other `-v1` rungs (this review targets
-  `jing-buy-stx-core-spread-v1` only).
+- Rungs in deploy scope: only `jing-buy-stx-core-spread-v1` and
+  `jing-sell-stx-core-spread-v1`. Both carry the rung fixes (rescale, escrow-for,
+  push cooldown / pause, reserve-dust release); the sell rung got them in
+  `702a545`, mirrored from the buy rung. The other four `-v1` rungs are out of
+  deploy scope. Fork suite for the two core-spread v1 rungs: next.
 - Vaults: rerun the stxer vault sims (juice, fastpool, ccd016 v2 happy-path,
   liquidation, recovery) for Nested Quinn L-1 / L-2 and Void Kael #6, #7, #8.
   The juicestx `test:vault` harness fails at build (its fixture market is v6,
