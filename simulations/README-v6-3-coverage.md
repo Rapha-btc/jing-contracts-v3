@@ -197,9 +197,34 @@ it serves other products that v6-3 never calls:
 - core-owned admin: `unpause` (with its timelock), `propose-owner`,
   `accept-owner`.
 
-Every log the v6-3 market calls is exercised. Next step for core coverage: a
-core-focused suite for the owner / unpause timelock and, if in scope, one per
-product that logs through core.
+Every log the v6-3 market calls is exercised.
+
+**Core admin suite:** `verify-core-v6-admin.js`, **149 / 149** checks
+([9581ea76](https://stxer.xyz/simulations/mainnet/9581ea76408083fef64e1232d96fc477),
+core-v6 sha `67242f19…`, unchanged at start and end). It covers pause /
+unpause and the 144-block timelock, `propose-owner` / `accept-owner`,
+`set-verified-contract`, `register` and the admin getters (through probe
+contracts inside transactions); every refusal is asserted to move nothing.
+Admin functions: 90 / 119 expressions (the rest are tuple keys and `let`
+binding lists the tracer does not record), 11 / 11 branch nodes reached,
+**14 / 14 failure arms hit**. Whole core-v6 with the v6-3 runs: 362 / 1,159
+expressions (31.2%); the remainder is RFQ / reserve / SNPL / Bitflow / legacy
+logs, out of scope. `failure-arms.mjs` gains `--contract` (default: the
+market).
+
+Behaviour recorded by the suite:
+- `accept-owner` has no cooldown; the nominee can accept in the same block.
+- `pause` while paused restarts the timelock (`paused-at` resets), so the owner
+  can extend a pause; `unpause` checks owner, then paused (u5017), then the
+  timelock (u5008).
+- `set-verified-contract` is one-shot per canonical (u5003) and reads the hash
+  before the owner check (a non-owner on a missing contract gets u5002).
+- **`register` has no owner check**: any contract byte-identical to a verified
+  one can register under that canonical. v6-3 is not exposed, because its
+  `initialize` (the only path to `register`) requires `tx-sender` to be the
+  core owner. `README-stxer.md` still describes a `tx-sender == contract-owner`
+  check in `register` (the bytecode-replay guard); core-v6 does not have it.
+  Defense in depth would be one line in core-v6's `register`; open decision.
 
 ## History (superseded figures)
 

@@ -5,7 +5,7 @@
 // trigger these on purpose: a refused call returning the expected error is a
 // PASSING negative test. trace-coverage.mjs cannot see these arms (they return
 // plain constants), hence this tool.
-//   node simulations/failure-arms.mjs <sim,sim,...> [--by-source | --alias <re>] [--rev HEAD]
+//   node simulations/failure-arms.mjs <sim,sim,...> [--by-source | --alias <re>] [--rev HEAD] [--contract markets-sbtc-stx-jing-v6-3]
 // --by-source: per sim, count only deployments whose code is byte-identical to
 // the source at --rev (see _sim-source.mjs). Missing traces are fetched; any
 // trace that cannot be fetched or decoded is counted and reported.
@@ -14,7 +14,7 @@ import { getSimulationResult, parseContract } from 'stxer';
 import { classify, sha256 } from './_sim-source.mjs';
 const REPO = process.cwd();
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
-const NAME = 'markets-sbtc-stx-jing-v6-3';
+const NAME = arg('--contract', 'markets-sbtc-stx-jing-v6-3');
 const ALIAS = new RegExp(arg('--alias', '^(markets-sbtc-stx-jing-v6-3|err-admin-)'));
 const BY_SOURCE = process.argv.includes('--by-source');
 let SIM_SET = null;
