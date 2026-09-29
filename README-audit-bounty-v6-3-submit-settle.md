@@ -56,9 +56,12 @@ Smaller tips:
 
 The fixes from this review were checked with `clarinet check` only. Still to
 run or do:
-- Market (`markets-sbtc-stx-jing-v6-3` and its two copies): tests or fork runs
-  for Nested Quinn M-1, Void Kael #1, #3, #5 and Regal Anvil #3. v6-3 is not
-  in the unit-test manifest (`Clarinet-legacy.toml`).
+- Market (`markets-sbtc-stx-jing-v6-3`): **done.** 17 stxer fork suites
+  (5,981 / 5,981 checks) on the current source `72b60b0`, covering Nested Quinn
+  M-1, Void Kael #1, #3, #5, Regal Anvil #3 and the treasury guard; 72.2% of
+  expressions, 0 branch nodes never reached, no reachable path untested. See
+  `simulations/README-v6-3-coverage.md`. Clarinet unit tests (273) and RV
+  campaigns live under `tests/unit/v6-3` and `tests/rv/v6-3`.
 - Rung `jing-buy-stx-core-spread-v1`: tests for the index rescale, the Void
   Kael #2 changes and the Regal Anvil #1 reserve release; a fork run of the
   tail roll. `jing-buy-stx-market-spread-v1` has only the Void Kael #2
