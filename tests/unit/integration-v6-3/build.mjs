@@ -11,11 +11,12 @@ export const substitutions={
  "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1":'.jing-ladder-v1',
  "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3":'.miner-oracle',
  "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token":'.token',
- "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2":'.wrong-token',
+ "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2":'.asset-stx',
  '"sbtc-token"':'"token"',
 };
 const sha=s=>crypto.createHash('sha256').update(s).digest('hex');
 fs.mkdirSync(out,{recursive:true});
+for(const file of ['lcov.info','results.json','coverage.json'])fs.rmSync(`${out}/${file}`,{force:true});
 fs.mkdirSync(`${dir}/settings`,{recursive:true});
 fs.copyFileSync('settings/Devnet.toml',`${dir}/settings/Devnet.toml`);
 const sources={};

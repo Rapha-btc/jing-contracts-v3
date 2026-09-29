@@ -1,135 +1,121 @@
-# Core-spread v1 rung integration in Clarinet
+# Core-spread v1 Clarinet tests
 
-2026-09-29 updated-port result: **16/16 passing**. Buy reference: **8/8**.
-Sell: **8/8**, including the formerly failing pending-escrow exit below. This is a
-separate integration suite; it does not replace or change the existing
-273 passing market unit tests or their coverage percentages.
+**52/52 tests pass: 26 buy, 26 sell.** Each rung has **100% function coverage,
+99.05% line coverage and 99.28% branch coverage**. See the generated
+[source-matched coverage report](COVERAGE.md) for counts, hashes and unhit points.
+The original 16 scenarios measured 70.92% lines and 60.14% branches once the
+rungs were included in Clarinet's instrumentation.
 
-Only `jing-buy-stx-core-spread-v1.clar` and
-`jing-sell-stx-core-spread-v1.clar` are in scope. The buy rung is the
-reference for the sell port. The other four v1 rungs and all older
-rungs are excluded. The selected router is
-`swap-router-sbtc-stx-jing-v5-3.clar`, whose market dependency is v6-3;
-router tests have not been added to this suite yet. The contract workstream
-ported the sell rung after the initial failure; this suite reran without
-changing its successful-exit expectation. This test work did not edit contracts.
-
-The [sell port note](../../../contracts/README-core-spread-v1-port.md) records
-the contract changes and Stxer reference status. The available Stxer timeout
-run predates this port; it is not counted as current-source validation.
+Scope is only `jing-buy-stx-core-spread-v1.clar` and
+`jing-sell-stx-core-spread-v1.clar`, using the buy rung as reference. These
+results are separate from the 273 market unit tests and market coverage.
+The other four rung templates and old versions are excluded. The selected
+router is `swap-router-sbtc-stx-jing-v5-3`, but router tests are not included here.
 
 ## Run
 
 ```sh
 npm run test:v6-3:integration
-# Isolate the formerly failing exit regression (both now pass):
-npm run test:v6-3:integration -- -t 'young pending top-up'
+# Focused development run; does not produce a full coverage report:
+npx vitest run --config vitest.integration-v6-3.config.ts -t 'four scales'
 ```
 
-The command passes against the source hashes below. The regression expects
-a successful withdrawal; it was not skipped or converted into an expected-error
-test to accommodate the pre-port behavior.
+The full command runs Vitest and then generates `COVERAGE.md` and
+`.build/coverage.json`. It refuses a release coverage report if any test fails
+or is skipped, checks that production sources are unchanged since the build,
+and enforces 100% functions / 99% lines / 99% branches independently for each
+rung. No unhit instrumentation points are removed from the denominator.
 
-## Real code and dependency boundaries
+The rung sources are loaded by the manifest under their valid deployed names
+at spreads 0 and 25. Unlike dynamic test deployments, these are included in
+Clarinet's LCOV output. The reporter merges records by source and instrumentation
+location, counts both names only once per source location, and checks that all
+34 functions in each actual source are represented.
 
-The suite rebuilds from the current production files on every invocation:
+## What executes
 
-- Real v6-3 market, both real core-spread v1 rungs, real core-v6, real ladder-v1.
-- Core and ladder source is byte-identical. Market/rung substitutions are
-  limited to dependency principals and the local sBTC asset identifier.
-  `build.mjs` lists every substitution; the suite compares entire generated
-  files against those declared substitutions and fails if a production source
-  changes during the run.
-- sBTC is represented by the existing strict, explicitly funded SIP-010
-  fixture. STX uses Clarinet's actual native ledger. The wrapped-STX principal
-  supplies the market trait identity; these scenarios transfer native STX.
-- Pyth and the RFQ native price are configurable oracle inputs. This does not
-  test signed messages, mainnet sBTC, or the RFQ's tenure-price computation.
-- No injected storage, appended accounting helpers, replacement market/core/
-  ladder loggers, or reduced book capacities. Only public production functions
-  construct the positions; simulated burn blocks advance the escrow timeout.
-- Rungs register through the ladder's canonical code-hash checks. They do not
-  register as core custodians: core tracks their admitted market escrow, while
-  the rung tracks its members and locally held funds/proceeds.
+- Actual v6-3 market, both actual core-spread v1 rung bodies, actual core-v6
+  and actual ladder-v1. Core and ladder files are byte-identical to the inputs.
+- Market/rung changes are limited to external dependency principals and the
+  local sBTC asset identifier. `build.mjs` declares every substitution; the
+  test hook and coverage reporter compare the full generated bodies against it.
+- sBTC uses an explicitly funded SIP-010 fixture with strict balances. STX uses
+  Clarinet's native ledger. `asset-stx` supplies the wrapped-STX trait identity;
+  these paths transfer native STX. Pyth prices and the RFQ miner-price input
+  are configurable fixtures; signature verification, mainnet sBTC and RFQ
+  tenure-price computation remain integration concerns for Stxer.
+- Real ladder canonical-hash registration, seating and retirement. Rungs are
+  ladder-registered makers, not core-registered vaults: core equity tracks their
+  admitted market escrow; the rungs track members and local assets.
+- No injected storage, generated accounting implementations, replacement
+  loggers or reduced book capacities. Fills, refills and epoch changes use
+  public production calls. Burn blocks advance the escrow timeout.
+- Two explicitly labeled private-helper unit cases (one per rung) check absent
+  escrow, absent reserve bookkeeping and rejection of an unfunded pull. They
+  call unchanged helpers directly, move no money and leave state unchanged.
+  These are unit boundaries, not evidence those contexts arise through public
+  `withdraw`, which guards them. Every other scenario uses public calls.
 
-These initial scenarios use zero spread and the normal miner guard. They
-are not a claim of complete rung coverage, rescale coverage, or equivalence
-between every behavior of the sell port and the buy reference. Raw LCOV and Vitest
-JSON are separate under `.build/`; the market-only coverage report is untouched.
+## Tested scenarios
 
-## Scenarios
+| File | Tests | Behavior |
+| --- | ---: | --- |
+| `rungs.test.ts` | 16 | Registration, exact paused refunds, two-member partial exits, rejected admission with locally held funds, maker proceeds, seat retirement, expired escrow recovery, unrelated young pending top-up isolation |
+| `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
+| `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
 
-| Public-call scenario | Buy | Sell |
+The rescale test fills approximately half the book and refills it through real
+transfers until four scale transitions occur. Alice stays inactive while Bob
+refills. It checks the index floor, uninterrupted epoch, membership, rescale
+prints, an independent per-fill allocation of Alice's proceeds (with a bounded
+rounding difference), eventual payout, removal of her zero-valued shares and
+final recovery. Total paid proceeds plus remaining custody equals actual maker
+proceeds received. Tests exercise both STX and sBTC accounting directions.
+
+## Remaining gaps
+
+All 34 functions execute on both rungs. Four instrumented lines and one branch
+per rung remain unhit; they remain included in the reported percentages:
+
+| Buy lines | Sell lines | Classification |
 | --- | --- | --- |
-| Real registration, funding and full withdrawal with market/core paused | Pass | Pass |
-| Two members: partial exit preserves the other member, then full recovery | Pass | Pass |
-| Core pause refuses admission; rung holds the deposit and returns it | Pass | Pass |
-| Unauthorized initialization cannot acquire another ladder seat | Pass | Pass |
-| Partial maker fill, member proceeds, rounding remainder and paused exits | Pass | Pass |
-| Ladder seat retirement preserves claims and exit access | Pass | Pass |
-| Expired pending deposit refunds without an oracle while both contracts pause | Pass | Pass |
-| Young pending top-up does not block an already funded live withdrawal | Pass | Pass |
+| 139, 366, 368 | 113, 339, 341 | Callee-name lines inside the multiline calls to `get-min-deposits`, `get-token-*-deposit` and `get-current-cycle`. The enclosing calls/read helpers are exercised, but the SDK reports these individual name lines as unhit. |
+| 791 | 750 | The `back > reserve` zero clamp in `count-reserve-claim`. Public payouts use computed epoch entitlements; no funded scenario produced a claim exceeding the remaining reserve. This guard protects inconsistent accounting or an overreported helper argument. Reachability under every possible history has not been formally proven impossible. |
 
-## Fixed sell-port regression: unrelated young escrow blocked a funded exit
+No artificial over-claim or corrupted storage was introduced solely to hit that
+last branch. Coverage is not a claim that all arithmetic inputs, errors or
+possible trading histories have been proven safe. The report is close to full
+unit execution coverage, **not 100% coverage**.
 
-The initial run had 15 passes and one failure on sell source
-`f2eaa44c6464d901d36f701f8f3e36b4788f3afdd7ed8531b709525cf0981983`.
-The subsequent port (`ef91b659…`) passes all 16 tests. The following
-records the original failure and its recovery evidence.
+## Regression history and Stxer boundary
 
-Reproducer in `rungs.test.ts`, using real public calls:
+The initial sell source `f2eaa44c…` returned `u7012` when Alice requested an
+already-funded live withdrawal while Bob had young pending escrow. The test
+verified unchanged funds/positions after that refusal and eventual complete
+recovery after 24 hours. The buy reference passed immediately. The sell port
+`ef91b659…` then passed the same successful-exit expectation; it was not relaxed
+or converted into an expected-error test. Both still pass that regression.
 
-1. Alice deposits 1,000,000 micro-STX through the sell rung; it rests live
-   in the market and core records that escrow.
-2. A non-crossing sBTC maker is admitted on the opposite side.
-3. Bob deposits 1,000,000 micro-STX through the same rung. With the opposite
-   side present, the market correctly holds this top-up as pending escrow.
-4. Pause market and core. Alice requests 500,000 micro-STX with `update: none`.
-   Her existing live funds suffice, and the market's partial withdrawal permits
-   paused exits.
-5. The pre-port sell rung returned **`(err u7012)`** instead of paying Alice.
+The [sell port note](../../../contracts/README-core-spread-v1-port.md) documents
+that change and the historical Stxer timeout reference. The new
+[buy/sell Stxer report](../../../simulations/README-v1-core-spread-rungs.md)
+records **991/991 passing checks** on these same rung hashes, with the other
+workstream's additional core logger (`d45f1bff…1bce`). Clarinet's release run
+uses the committed core below. Its successful post-cooldown push also covers
+the scenario limited by miner-price data after time advances on the Stxer fork.
+This expansion changed test infrastructure and documentation only, not the
+production rungs.
 
-Original cause: sell `withdraw` called `settle-escrow` unconditionally before `sync`
-(`contracts/jing-sell-stx-core-spread-v1.clar:409`). Young escrow then requires
-an update, even when the withdrawal does not need that escrow. This is the
-already noted escrow-exit port gap, not a new market/core refund rejection.
-The buy reference instead uses `escrow-for`: only a withdrawal exceeding
-held plus live/parked funds must settle pending escrow. Its mirrored test passes.
+## Validation provenance
 
-The failing test also verifies no change to Alice/Bob's positions, pending
-escrow, rung state, tracked core equity, or relevant custody after the refusal.
-It then advances past 24 hours and verifies both members recover their full
-input with market/core still paused and no oracle update; rung input custody,
-market input custody and rung core equity all reach zero. This establishes
-a blocked immediate exit and working timeout recovery in this scenario,
-not permanent loss. The test still fails at the original successful-exit
-expectation after those recovery checks.
+`COVERAGE.md` records the release run against the committed market, core,
+ladder and rung sources. The same 52 tests also passed in the shared checkout
+with the other workstream's in-progress core additions; those additions are
+not part of this test change. To keep the published evidence independent,
+the release run used an isolated checkout of the committed contracts with
+these test files. The temporary checkout used a local SDK setup-file path;
+contract and test bodies were unchanged.
 
-The port now calls `escrow-for` only when the exit needs escrow, matching
-the buy reference. The mirrored successful-exit regression passes on both
-rungs. Rescale, cooldown, nonzero spreads and additional router scenarios
-still need dedicated Clarinet coverage; the 16 passes are not a full port audit.
-
-## Source provenance
-
-The recorded run used:
-
-| Source | SHA-256 |
-| --- | --- |
-| Market v6-3 | `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9` |
-| Core v6 | `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01` |
-| Ladder v1 | `0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786` |
-| Buy core-spread v1 | `9a7b2381728ea1f11b80b1e200f3575e7cc68c1cd4da3d0bd758de5801c666f0` |
-| Sell core-spread v1 | `ef91b6590508db48a859eb0ea66369108ed3d3cb46e63e25cb92b4c2e96964b0` |
-
-Generated principal substitutions and their hashes are in `.build/sources.json`;
-the result file is `.build/results.json`. Local full log:
-`/tmp/v6-3-rung-integration-updated.log` (the original failing run is
-`/tmp/v6-3-rung-integration.log`). This evidence is tied to these files, not
-to another agent's subsequent port or an older deployed rung.
-
-Before committing the port, the 16 tests also passed in an isolated export of
-the staged sources, with the published core hash above rather than concurrent
-vault/core edits. Log: `/tmp/v6-3-rung-staged-validation.log`. The temporary
-checkout used a local SDK setup-file path to resolve its copied dependencies;
-contract and test sources were unchanged.
+Logs: `/tmp/rungs-release-coverage.log` (committed dependencies) and
+`/tmp/rungs-final-coverage.log` (shared working tree). Raw LCOV, test JSON and
+build substitutions are under `.build/`, separate from market-only coverage.

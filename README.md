@@ -191,6 +191,7 @@ Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`
 | Market function coverage | **100.00%** (137/137) |
 | Market line coverage | **99.70%** (2349/2356) |
 | Market branch coverage | **99.64%** (832/835) |
+| Core-spread v1 rung unit tests (separate suite) | **52 passing**; each rung **100% functions / 99.05% lines / 99.28% branches** ([report](tests/unit/integration-v6-3/README.md)) |
 | Current consolidated Stxer rerun | **17 suites, 5,981 passing checks** ([report](simulations/README-v6-3-coverage.md)) |
 | Current full RV campaigns | **12,000 trials + 600 guided episodes**, zero failures; 25,993 accounting checks |
 | Full-book sBTC/STX cancellation integration | **291 checks pass**, exact refunds; <0.317% of each epoch budget ([Stxer report](simulations/README-v6-3-refund-costs.md)) |

@@ -14,7 +14,7 @@ path = "../v6-3/token.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.wrong-token]
+[contracts.asset-stx]
 path = "../v6-3/token.clar"
 clarity_version = 5
 epoch = "3.4"
@@ -41,5 +41,25 @@ epoch = "3.4"
 
 [contracts.market]
 path = ".build/markets-sbtc-stx-jing-v6-3.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-0]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-0]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-25]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-25]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
 clarity_version = 5
 epoch = "3.4"

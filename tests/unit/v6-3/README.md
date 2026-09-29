@@ -60,10 +60,11 @@ unhit paths described below; they exclude mocked dependencies and older versions
 ## Run
 
 A separate [real core-spread v1 rung integration suite](../integration-v6-3/README.md)
-now passes **16/16** against the sell port. Both rungs allow a funded
-live withdrawal despite unrelated young pending escrow; the sell rung failed
-that case before the port. These results are separate from the 273 market
-unit tests above; no production contract was changed by this integration work.
+now passes **52/52**, with **100% functions, 99.05% lines and 99.28% branches**
+for each rung. It covers the sell exit regression, four successive rescales,
+epoch payouts, reserve dust and push controls. These results are separate
+from the 273 market unit tests above; this coverage expansion changes no
+production contract.
 
 From the repository root, with dependencies installed:
 

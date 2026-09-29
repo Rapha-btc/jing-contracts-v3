@@ -22,16 +22,18 @@ expired escrow retains the no-oracle cancellation path.
 
 ## Clarinet evidence
 
-`npm run test:v6-3:integration`: **16/16 passing**, eight mirrored scenarios
-per rung, against the actual market/core/ladder and both production rung
-bodies. The pre-port sell source produced **15 passes and one failure**;
-the success expectation was not relaxed. Tests check live and timeout refunds,
-partial exits, preservation of another member's funds, maker proceeds,
-refused admission, registration, and seat retirement.
+`npm run test:v6-3:integration`: **52/52 passing**, 26 mirrored scenarios
+per rung, against actual market/core/ladder and both production rung bodies.
+Each rung has **100% function, 99.05% line and 99.28% branch coverage**.
+The original 16-test port regression included the sell exit that failed before
+the port; its success expectation was not relaxed. The expanded suite adds
+four successive rescales, old-epoch payouts and reserve dust, push pause and
+cooldown, nonzero spreads, error guards and public-call recovery scenarios.
 
-See [the full report and reproducer](../tests/unit/integration-v6-3/README.md)
-for source hashes, dependency substitutions and limits. The current 16 tests
-do not fully audit rescaling or the new push controls.
+See [the full report and remaining gaps](../tests/unit/integration-v6-3/README.md)
+and [generated coverage](../tests/unit/integration-v6-3/COVERAGE.md). One defensive
+reserve over-claim branch per rung remains unhit; this is not a full audit or
+a proof across every input/history.
 
 ## Stxer reference and status
 
@@ -43,12 +45,15 @@ and conditional-exit port. It is background evidence for timeout recovery,
 **not validation of the current sell source**. Its blanket young-escrow
 refusal behavior has been superseded for exits already covered by held/live funds.
 
-No completed Stxer report matched to the current buy reference or sell port
-was available in this checkout when this note was written. The separate Stxer
-workstream is running the buy reference suite. Its resulting source hashes,
-simulation URL and check count should be recorded when available; the sell
-port also needs its own source-matched run. No current-source Stxer pass is
-claimed here, and no older simulation is relabeled as v1 port coverage.
+The separate workstream has now published the
+[current buy/sell Stxer report](../simulations/README-v1-core-spread-rungs.md):
+**991/991 checks pass**, with both rung source hashes matching those below.
+The [simulation](https://stxer.xyz/simulations/mainnet/02e540f6cdd8456f035ffdc1b7d520e5)
+used core hash `d45f1bff…1bce`, including the other workstream's uncommitted
+reconciliation logger; the Clarinet release report uses committed core
+`67242f19…9b01`. These are separate dependency snapshots. Stxer documents its
+remaining trace and fork-data limits; Clarinet additionally exercises a
+successful push after the timeout cooldown with restored miner data.
 
 ## Source hashes
 
