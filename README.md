@@ -192,6 +192,7 @@ Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`
 | Market line coverage | **99.70%** (2349/2356) |
 | Market branch coverage | **99.64%** (832/835) |
 | Current RV compatibility check | Two dust regressions + 100 native invariant trials pass; 925 accounting checks |
+| Full-book sBTC/STX cancellation integration | **291 checks pass**, exact refunds; <0.317% of each epoch budget ([Stxer report](simulations/README-v6-3-refund-costs.md)) |
 
 The saved full RV campaign (12,000 trials, 600 guided episodes, 25,999 accounting
 checks) predates these fixes, as does the Stxer report. Those reports do not

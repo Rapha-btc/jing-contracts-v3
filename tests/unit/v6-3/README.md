@@ -293,3 +293,7 @@ less than 0.64% of the Clarinet budget. See the
 [cost table and production-integration limits](REFUND-SAFETY.md#execution-cost-headroom).
 Run `node tests/unit/v6-3/refund-costs.mjs` after the full suite to reproduce them.
 These two measurements are separate from the 273 unit tests.
+
+The equivalent [mainnet-fork sBTC check](../../../simulations/README-v6-3-refund-costs.md)
+passes 291 checks with both contracts paused: exact refunds on both sides and
+less than 0.317% of every measured epoch execution budget.

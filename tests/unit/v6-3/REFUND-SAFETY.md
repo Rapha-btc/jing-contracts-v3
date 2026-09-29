@@ -120,9 +120,9 @@ Every measured execution-cost dimension is below **0.64%** of its local limit;
 memory is below 0.003%. This indicates substantial headroom for these tested
 cancellations. It does not prove a universal worst case, measure every settlement
 route, or establish production sBTC transfer costs: x uses the strict local FT
-fixture, y uses native STX, and core is the real production source. Production
-integration should repeat full-book cancellations with the actual dependencies
-and applicable network limits. No source or coverage threshold was changed to
+fixture, y uses native STX, and core is the real production source. The equivalent [Stxer integration check](../../../simulations/README-v6-3-refund-costs.md)
+now passes against actual sBTC and the fork epoch limits: 291 checks, exact
+refunds on both sides, and every measured cost dimension below 0.317%. No source or coverage threshold was changed to
 obtain these results.
 
 ```sh
