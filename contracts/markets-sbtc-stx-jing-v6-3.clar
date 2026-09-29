@@ -2650,8 +2650,11 @@ token-x-rolled: (var-get caller-token-x-rolled),
 )
 (let (
 (aged (try! (fresh-classification-price-aged update)))
-(rebate (/ (* amount (rebate-bps-for-age (get age aged))) BPS_PRECISION))
-(net (- amount rebate))
+;; net = amount / (1 + bps): the pot is net * bps, what the fills pay.
+(net (/ (* amount BPS_PRECISION)
+(+ BPS_PRECISION (rebate-bps-for-age (get age aged)))
+))
+(rebate (- amount net))
 (cycle (var-get current-cycle))
 (depositors (if deposit-x
 (get-token-x-depositors cycle)
@@ -3926,15 +3929,11 @@ acc
 )
 )
 
+;; Largest gross whose swap net, floor(gross * BPS / (BPS + rebate)), fits net.
 (define-private (gross-up (net uint))
-(let (
-(g (/ (* net BPS_PRECISION) (- BPS_PRECISION TAKER_REBATE_BPS)))
-(n (- g (/ (* g TAKER_REBATE_BPS) BPS_PRECISION)))
-)
-(if (> n net)
-(- g u1)
-g
-)
+(if (is-eq net u0)
+u0
+(/ (- (* (+ net u1) (+ BPS_PRECISION TAKER_REBATE_BPS)) u1) BPS_PRECISION)
 )
 )
 (define-read-only (get-taker-capacity
