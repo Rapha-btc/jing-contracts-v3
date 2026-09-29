@@ -1,5 +1,13 @@
 # v6-3 market: stxer fork tests and coverage
 
+**Historical aggregate:** the broad coverage figures below belong to the source
+hash in section 1 (`7f7bc5cc…`, market commit `1a930e3`). They do not describe the
+later registered-maker/refund-safety source (`d1e3bbad…`). The current-source
+[full-book refund integration](README-v6-3-refund-costs.md) passes 291 checks
+against real sBTC; it is separate evidence, not a replacement for a full rerun
+of these coverage campaigns. References to “current source” below describe
+that recorded run.
+
 Scope: `contracts/markets-sbtc-stx-jing-v6-3.clar` (submit + settle market).
 Older market versions are out of scope. All numbers below come from one rerun
 of the 15 suites on the current source, plus one suite added for the last reachable gaps; earlier figures are kept only in the

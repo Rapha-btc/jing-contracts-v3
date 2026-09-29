@@ -191,13 +191,15 @@ Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`
 | Market function coverage | **100.00%** (137/137) |
 | Market line coverage | **99.70%** (2349/2356) |
 | Market branch coverage | **99.64%** (832/835) |
-| Current RV compatibility check | Two dust regressions + 100 native invariant trials pass; 925 accounting checks |
+| Current full RV campaigns | **12,000 trials + 600 guided episodes**, zero failures; 25,993 accounting checks |
 | Full-book sBTC/STX cancellation integration | **291 checks pass**, exact refunds; <0.317% of each epoch budget ([Stxer report](simulations/README-v6-3-refund-costs.md)) |
 
-The saved full RV campaign (12,000 trials, 600 guided episodes, 25,999 accounting
-checks) predates these fixes, as does the Stxer report. Those reports do not
-validate the new source pair. The full RV campaign still needs a rerun; the
-registered-depositor/two-market cases are currently Clarinet unit coverage.
+The full RV campaigns now match this source pair: **12,000 trials**, **600 guided
+episodes**, **25,993 accounting checks**, and zero property/invariant failures.
+Every final recovery sweep returns all claims, leaving zero custody and core
+equity. Registered-depositor/two-market scenarios remain additional Clarinet
+coverage. The broad consolidated Stxer coverage report uses older source;
+the targeted full-book sBTC/STX refund integration above uses the current source.
 
 The three unhit branches are the gross-up decrement and two parking-error
 guards previously hit only by artificial core errors. Details and the

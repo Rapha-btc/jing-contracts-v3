@@ -1,19 +1,16 @@
 # v6-3 Rendezvous fuzzing with the real core
 
-**Historical full-campaign results:** the reports below use the market/core
-hashes listed here, before the registered-maker and refund-safety fixes. They do
-not validate the newer source pair. The current changes pass a compatibility check of
-two RV dust regressions and 100 native invariant trials (seed 230927); the full
-`npm run rv:v6-3` campaign still needs rerunning. See the
-[fixes and current Clarinet results](../../unit/v6-3/REFUND-SAFETY.md).
+**Current-source full campaigns pass.** These reports include the registered-maker
+accounting fix, `is-ok` cancellation/pending-refund logging, and bounded aggregate
+debits. The market/core hashes below match the current production files. The
+[273-test Clarinet suite](../../unit/v6-3/README.md) and
+[actual-sBTC refund integration](../../../simulations/README-v6-3-refund-costs.md)
+provide separate complementary evidence.
 
-These recorded campaigns use the real production `jing-core-v6.clar` at the
-listed hash. Earlier mock-core results remain separate historical evidence.
-
-- Market SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971` (refund fix `da19a4f`).
-- Core SHA-256: `53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32`.
-- Random report generated: `2026-09-29T03:50:59.784Z`.
-- Full-book report generated: `2026-09-29T04:10:12.277Z`.
+- Market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
+- Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
+- Random report generated: `2026-09-29T05:45:56.306Z`.
+- Full-book report generated: `2026-09-29T06:04:54.808Z`.
 
 ## Verified results
 
@@ -22,12 +19,13 @@ listed hash. Earlier mock-core results remain separate historical evidence.
 full-book seeds also completed **600 guided episodes**. Every final recovery
 sweep ended with zero x/STX custody and zero core equity on both assets.
 
-The shared monitor completed **25,999 accounting checks** across the six
+The shared monitor completed **25,993 accounting checks** across the six
 campaigns (8,479 in the full-book campaigns). After initialization,
 every public call is checked, including rejected calls and native VM exceptions.
-These counts include initial/final checks; they are not a source-coverage percentage or individual
-assertion count. Public-call totals include RV wrappers and bookkeeping calls,
-not just economic trades. Two additional public-call refund regressions pass.
+These counts include initial/final checks; they are not a source-coverage percentage
+or individual assertion count. Public-call totals include RV wrappers and
+bookkeeping calls, not just economic trades. Two additional public-call dust
+refund regressions pass.
 
 | Campaign | Seed | Trials | Passed | Discarded | Failed |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -61,10 +59,10 @@ each cancellation. Each remaining owner recovers its exact claim:
 | 230931 | 6 | 8 | x = 0; STX = 0; both equity totals = 0 |
 | 230932 | 27 | 7 | x = 0; STX = 0; both equity totals = 0 |
 
-The raw invariant campaign also rejects **13 invalid asset-name calls**
-with `BadTokenName`; those expected native errors are counted separately from
-property failures. Discards are rejected/inapplicable generated inputs, not
-successful economic operations.
+The random campaigns also reject **14 invalid asset-name calls** with
+`BadTokenName`; those expected native errors are counted separately from property
+failures. Discards are rejected/inapplicable generated inputs, not successful
+economic operations. No failing expectation or contract was changed to pass.
 
 ## Run
 
@@ -162,7 +160,9 @@ Random amount/price helpers retain bounded inputs: x amounts below 20,000,
 y amounts scaled by 1,000, quotes in the 24–40 trillion range plus zero-limit
 cases. Guided replenishments use larger amounts and moving oracle prices.
 This is finite evidence, not a proof over all states, tokens or external callers.
-Recovery still depends on token transfers and core registration. Oracle age
+Refund exits still require successful token transfers and VM execution.
+Returned cancellation logger errors are ignored, and core debit arithmetic is
+bounded; these campaigns also require correct accounting on normal paths. Oracle age
 boundaries are tested separately by the [Clarinet suite](../../unit/v6-3/README.md).
 
 ## Evidence and provenance
@@ -176,8 +176,17 @@ RV output as well as exit status. Raw logs are in the ignored
 `full-book-counterexample.json`; post-call failures save a campaign-specific
 `*-counterexample.json`. Guided traces are not automatically shrunk by native RV.
 
-Older reports using the mock core, including the prior run on this same market
-hash (4,644 passes / 7,356 discards), do not establish real-core equity correctness.
+Older reports using the mock core, including the earlier run
+with 4,644 passes / 7,356 discards, do not establish real-core equity correctness.
 Their historical records remain in git. The old `source-hashes.json` is a caller
 audit snapshot, not current campaign evidence. RV counts are separate from
 Clarinet coverage percentages. No on-chain deployment is performed.
+
+
+## History
+
+The earlier source pair (market `43ed3bf0…`, core `53c9b38a…`) completed 12,000
+trials with 4,659 passes, 7,341 discards, 600 guided episodes and 25,999 accounting
+checks. Those results predated the maker/refund-safety fixes; the current results
+above supersede them for this source pair. Earlier mock-core reports remain
+historical evidence only.

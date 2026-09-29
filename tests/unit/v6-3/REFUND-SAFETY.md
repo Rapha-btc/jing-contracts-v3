@@ -2,8 +2,9 @@
 
 Implemented and verified on 2026-09-29. The full v6-3 suite passes **273/273 tests**,
 including 40 refund/accounting cases and the 16 shared-core/registered-depositor
-cases from the earlier maker fix. Saved full RV and Stxer reports predate these
-changes and do not establish that this source pair passes those campaigns.
+cases from the earlier maker fix. The [full RV campaigns](../../rv/v6-3/README.md) now pass on the same
+source pair. The broad historical Stxer report remains separate from the current
+full-book refund integration linked below.
 
 ## Behavior
 
@@ -96,10 +97,13 @@ node --test tests/unit/v6-3/path-inventory.test.mjs
   No remaining exit is filtered out to improve the count.
 - RV compatibility smoke: two real-core dust regressions and 100 native
   invariant trials, seed 230927, 925 accounting checks.
-  This does not replace the saved 12,000-trial/600-guided-episode campaigns.
+  The subsequent full campaigns also pass: 12,000 native trials, 600 guided
+  episodes, 25,993 accounting checks, zero property/invariant failures, and
+  zero final custody/equity after recovery.
 - Local full-run log: `/tmp/v6-3-refund-full.log`.
 - Local pre-fix reproduction: `/tmp/v6-3-underflow-before.log`.
 - Local RV smoke log: `/tmp/v6-3-refund-rv-smoke.log`.
+- Local full RV log: `/tmp/v6-3-refund-full-rv.log`.
 
 ## Execution-cost headroom
 

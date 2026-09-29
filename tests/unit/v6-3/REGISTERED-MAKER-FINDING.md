@@ -43,9 +43,10 @@ Maker-fix market SHA-256: `3c44b9bfbc90c6b74f49a58b37e88749c5fe2020a8d2a7b96c27f
 Maker-fix core SHA-256: `84f373641805461fd310f8196a2f956a9b6022435d1fbb427dc434c97185fdf1`.
 
 The RV compatibility check also passes: two real-core dust regressions and
-100 native invariant trials, with 924 accounting checks. The saved
-12,000-trial/600-episode campaign predates this fix and has not been rerun.
-Stxer evidence likewise does not establish this new source pair.
+100 native invariant trials, with 924 accounting checks. That initial smoke check is now supplemented by a
+[source-matched full RV rerun](../../rv/v6-3/README.md) and
+[actual-sBTC refund integration](../../../simulations/README-v6-3-refund-costs.md).
+The older broad Stxer coverage figures remain historical.
 
 ## Reproduce
 

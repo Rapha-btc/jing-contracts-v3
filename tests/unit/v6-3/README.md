@@ -18,9 +18,10 @@ maker's traded input and credits its exact received output; the market passes
 that payout to `log-match`. Both sources must be used together.
 
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
-also remain green. Saved full RV and Stxer reports predate the new maker/refund-safety fixes
-and do not validate this source pair. A current RV compatibility smoke test
-passes two dust regressions and 100 native invariant trials.
+also remain green. The full RV campaigns now validate this source pair: 12,000 native trials and
+600 guided episodes, with zero property/invariant failures. The broad historical
+Stxer coverage report remains separate; the targeted current-source sBTC refund
+integration passes 291 checks.
 
 On 2026-09-29, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
@@ -272,18 +273,14 @@ The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
-The current source passes the two RV dust regressions and 100 native invariant
-trials (seed 230927), with 925 post-call/initial accounting checks.
-This checks compatibility with the updated real-core `log-match` interface;
-it is not a replacement for the full campaigns.
-
-The saved 12,000-trial/600-episode results and their 25,999 accounting checks
-use the earlier market `43ed3bf0…` and core `53c9b38a…`. They have not been rerun
-on this fix. Run `npm run rv:v6-3` to regenerate them. Their model covers EOAs;
-registered contracts and multiple markets are covered by the new Clarinet cases.
-See the [RV scenario README](../../rv/v6-3/README.md) for seeds and fixture limits.
-Fuzz trial counts are separate from unit coverage percentages.
-
+The current source passes two RV dust regressions, **12,000 native trials** and
+**600 guided episodes**, with **25,993 accounting checks** and zero
+property/invariant failures. All final recovery sweeps leave zero x/STX custody
+and zero core equity. Source and harness hashes bind both full reports to this
+market/core pair. Registered contracts and multiple markets remain additional
+Clarinet coverage. See the [full RV report](../../rv/v6-3/README.md) for seeds,
+pass/discard counts, successful paths and limits. Trial counts are separate from
+unit coverage percentages.
 
 ## Refund execution costs
 
