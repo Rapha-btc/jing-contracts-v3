@@ -77,6 +77,11 @@ proceeds received. Tests exercise both STX and sBTC accounting directions.
 
 ## Twenty-rung dispatch scenarios
 
+**Result: all seven dispatch scenarios pass; no new contract bug was found
+in these scenarios.** The complete 59-test suite passes on the source hashes
+in `COVERAGE.md`. No production contract changes were needed. The expected
+no-match and invalid-batch refusals below are passing checks, not test failures.
+
 Every dispatch scenario initializes ten buy and ten sell core-spread v1 rungs
 at spreads 10 through 100 bps, approved through the real ladder's code-hash
 gate. Each side reaches the normal ten-seat limit. The dispatch contract
