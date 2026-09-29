@@ -100,3 +100,37 @@ node --test tests/unit/v6-3/path-inventory.test.mjs
 - Local full-run log: `/tmp/v6-3-refund-full.log`.
 - Local pre-fix reproduction: `/tmp/v6-3-underflow-before.log`.
 - Local RV smoke log: `/tmp/v6-3-refund-rv-smoke.log`.
+
+## Execution-cost headroom
+
+An execution budget limits runtime work, reads/writes and memory. Exceeding a
+limit aborts the entire transaction; `is-ok` cannot catch that. To assess this
+separate risk, the source-matched local cost probe creates 50 live makers through
+public calls, admits an opposite-side maker, escrows the original maker's top-up,
+pauses the market and core, then cancels the original maker's live + pending
+claims. Both assets refund the exact wallet amount and leave custody covering
+the other 49 makers.
+
+| Side | Runtime / Clarinet budget | Reads / Clarinet budget |
+| --- | ---: | ---: |
+| x | 428,363 / 5,000,000,000 (0.00857%) | 95 / 15,000 (0.633%) |
+| y | 403,055 / 5,000,000,000 (0.00806%) | 87 / 15,000 (0.580%) |
+
+Every measured execution-cost dimension is below **0.64%** of its local limit;
+memory is below 0.003%. This indicates substantial headroom for these tested
+cancellations. It does not prove a universal worst case, measure every settlement
+route, or establish production sBTC transfer costs: x uses the strict local FT
+fixture, y uses native STX, and core is the real production source. Production
+integration should repeat full-book cancellations with the actual dependencies
+and applicable network limits. No source or coverage threshold was changed to
+obtain these results.
+
+```sh
+npm run test:v6-3
+node tests/unit/v6-3/refund-costs.mjs
+```
+
+The probe requires the suite's generated source, verifies both current source
+hashes and dependency-only substitutions, and writes `.build/refund-costs.json`.
+It does not rebuild or overwrite the full-suite coverage report. The two cost
+scenarios are additional measurements, not part of the 273 Vitest count.

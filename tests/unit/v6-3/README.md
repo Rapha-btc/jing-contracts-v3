@@ -283,3 +283,13 @@ on this fix. Run `npm run rv:v6-3` to regenerate them. Their model covers EOAs;
 registered contracts and multiple markets are covered by the new Clarinet cases.
 See the [RV scenario README](../../rv/v6-3/README.md) for seeds and fixture limits.
 Fuzz trial counts are separate from unit coverage percentages.
+
+
+## Refund execution costs
+
+Two source-checked full-book cancellation measurements pass with 50 live makers
+plus the caller's pending top-up. Each measured execution-cost dimension uses
+less than 0.64% of the Clarinet budget. See the
+[cost table and production-integration limits](REFUND-SAFETY.md#execution-cost-headroom).
+Run `node tests/unit/v6-3/refund-costs.mjs` after the full suite to reproduce them.
+These two measurements are separate from the 273 unit tests.
