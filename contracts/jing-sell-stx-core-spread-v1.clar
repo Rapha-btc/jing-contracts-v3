@@ -25,17 +25,25 @@
 (define-constant ERR_ZERO_PRICE (err u7008))
 (define-constant ERR_BAD_SPREAD (err u7010))
 (define-constant ERR_BAD_NAME (err u7009))
-;; The floor under the index: sync closes the epoch (a tail roll) as soon as
-;; unfilled-index drops under 1e-3 of SCALE. The dust test (SOLD_OUT_DUST) is
-;; on an AMOUNT, which leaves the index unbounded from below: new-index reduces
-;; to actual * SCALE / total-shares, and shares are minted as amount * SCALE /
-;; unfilled-index, so every sell-down and top-up cycle mints more of them until
-;; the index truncates to 0 with `actual` still above the dust floor. At index 0
-;; a deposit divides by zero, every withdraw is u7007 and sync freezes the zero.
-;; Every action syncs first, so an open epoch never has an index under this
-;; floor: shares are minted at most 1000 per micro-STX, and 0 is out of reach.
+;; The floor under the index. `unfilled-index` only goes down: every fill
+;; multiplies it by actual/recorded and a deposit mints more shares instead of
+;; raising it, so a healthy pool that is filled and topped up again and again
+;; drifts toward 0 while still full (Nested Quinn M-2), and at 0 a deposit
+;; divides by zero. When a fill takes the index under this floor, sync
+;; RESCALES instead of closing: the index goes up RESCALE times, total shares
+;; go down RESCALE times, and `scale` counts one more step. Every share is
+;; then worth the same micro-STX as before, the pool stays on the book, and an open
+;; epoch never has an index under this floor, so shares are minted at most
+;; 1000 per micro-STX. A fill that takes the index under MINT_FLOOR / RESCALE in one
+;; go sold over 99.9% of the pool at once: that closes the epoch (a tail roll).
 (define-constant MINT_FLOOR u1000000000)
+(define-constant RESCALE u1000)
+;; a position is carried across at most this many rescales; past that its
+;; shares are worth under 1e-9 of what it last held and count as 0
+(define-constant MAX_SCALE_STEPS u3)
 (define-constant ERR_UPDATE_REQUIRED (err u7012))
+(define-constant ERR_PUSH_PAUSED (err u7014))
+(define-constant ERR_ESCROW_COOLDOWN (err u7015))
 
 ;; an epoch closes when what is left unsold, on the market plus held here, is
 ;; under this many micro-STX: a walk fill is sized in whole sats so a fully
@@ -115,6 +123,32 @@
 ;; the same cap in the market unit (1e18 / cents): what the order rests with
 (define-data-var cap uint u0)
 (define-data-var total-shares uint u0)
+;; positions in the current epoch; the last one out closes the epoch (rescale
+;; rounding can leave a few shares nobody owns, so total-shares can stay > 0)
+(define-data-var members uint u0)
+;; rescale steps since the contract started (never reset); a share of scale k
+;; is RESCALE^(j - k) shares of scale j
+(define-data-var scale uint u0)
+;; proceeds-index at the moment scale k began (k >= 1)
+(define-map scale-start
+  uint
+  uint
+)
+;; the scale an epoch closed at (absent: the epoch is still open)
+(define-map epoch-final-scale
+  uint
+  uint
+)
+;; a tail-rolled epoch's reserve and how many of its members have not taken
+;; their share yet. Each share is rounded down, so the reserve can keep a few
+;; units nobody owns; when the last one is paid they go back to the pool.
+(define-map epoch-reserve
+  uint
+  {
+    left: uint,
+    reserve: uint,
+  }
+)
 ;; a sold-out pool closes its epoch: index and shares restart, old members
 ;; keep their claim against the epoch's final proceeds-index
 (define-data-var epoch uint u0)
@@ -135,11 +169,18 @@
 )
 ;; sats balance already folded into proceeds-index
 (define-data-var sats-accounted uint u0)
+;; the ladder owner can stop every push to the market (deposits then stay
+;; held here), e.g. while an oracle outage lets anyone re-lock exits
+(define-data-var push-paused bool false)
+;; when settle-escrow last took the 24h cancel: no push for 24h after it, so
+;; the returned funds stay here and every member can exit without an oracle
+(define-data-var escrow-cancelled-at uint u0)
 
 (define-map positions
   principal
   {
     epoch: uint,
+    scale: uint,
     shares: uint,
     paid-index: uint,
   }
@@ -161,6 +202,8 @@
     cap: (var-get cap),
     epoch: (var-get epoch),
     total-shares: (var-get total-shares),
+    members: (var-get members),
+    scale: (var-get scale),
     unfilled-index: (var-get unfilled-index),
     proceeds-index: (var-get proceeds-index),
     held-ustx: (var-get held-ustx),
@@ -170,20 +213,33 @@
 )
 
 ;; STX still unsold for `who`, and the sBTC they can claim, as of the last sync
+;; (shares carried to the current scale, or to the scale their epoch closed at)
 (define-read-only (get-position (who principal))
   (match (map-get? positions who)
-    p (if (is-eq (get epoch p) (var-get epoch))
+    p (let (
+        (e (get epoch p))
+        (stored (get shares p))
+        (from (get scale p))
+        (current (is-eq e (var-get epoch)))
+        (to (if current
+          (var-get scale)
+          (final-scale e)
+        ))
+        (sh (carried stored from to))
+      )
       {
-        shares: (get shares p),
-        stx: (/ (* (get shares p) (var-get unfilled-index)) SCALE),
-        sbtc: (/ (* (get shares p) (- (var-get proceeds-index) (get paid-index p))) SCALE),
-      }
-      ;; an earlier epoch: its proceeds against the final index, plus its unsold
-      ;; share when it closed by a tail roll
-      {
-        shares: (get shares p),
-        stx: (/ (* (get shares p) (final-unfilled (get epoch p))) SCALE),
-        sbtc: (/ (* (get shares p) (- (final-index (get epoch p)) (get paid-index p))) SCALE),
+        shares: sh,
+        stx: (/ (* sh (if current
+          (var-get unfilled-index)
+          (final-unfilled e)
+        ))
+          SCALE
+        ),
+        sbtc: (earned stored from to (get paid-index p)
+          (if current
+            (var-get proceeds-index)
+            (final-index e)
+          )),
       }
     )
     {
@@ -200,6 +256,80 @@
 
 (define-read-only (final-index (e uint))
   (default-to (var-get proceeds-index) (map-get? epoch-final-proceeds e))
+)
+
+(define-read-only (final-scale (e uint))
+  (default-to (var-get scale) (map-get? epoch-final-scale e))
+)
+
+;; `shares` of scale `from` expressed at scale `to` (0 past MAX_SCALE_STEPS)
+(define-read-only (carried
+    (shares uint)
+    (from uint)
+    (to uint)
+  )
+  (if (> (- to from) MAX_SCALE_STEPS)
+    u0
+    (/ shares (pow RESCALE (- to from)))
+  )
+)
+
+;; STX earned by `shares` of scale `from`, paid up to `paid`, when the
+;; proceeds-index is at `upto` and the scale at `to`. Each scale step is its
+;; own segment: the shares count RESCALE times less from one step to the next,
+;; while every step's proceeds-index is per share of that step.
+(define-read-only (earned
+    (shares uint)
+    (from uint)
+    (to uint)
+    (paid uint)
+    (upto uint)
+  )
+  (get owed
+    (fold earned-step (list u0 u1 u2 u3) {
+      shares: shares,
+      from: from,
+      to: to,
+      paid: paid,
+      upto: upto,
+      owed: u0,
+    })
+  )
+)
+
+(define-read-only (earned-step
+    (step uint)
+    (acc {
+      shares: uint,
+      from: uint,
+      to: uint,
+      paid: uint,
+      upto: uint,
+      owed: uint,
+    })
+  )
+  (let ((j (+ (get from acc) step)))
+    (if (> j (get to acc))
+      acc
+      (let (
+          (seg-start (if (is-eq step u0)
+            (get paid acc)
+            (default-to u0 (map-get? scale-start j))
+          ))
+          (seg-end (if (is-eq j (get to acc))
+            (get upto acc)
+            (default-to u0 (map-get? scale-start (+ j u1)))
+          ))
+        )
+        (merge acc {
+          owed: (+ (get owed acc)
+            (/ (* (get shares acc) (- seg-end seg-start))
+              (* SCALE (pow RESCALE step))
+            )),
+        })
+      )
+    )
+  )
 )
 
 ;; live + parked size of this contract on the market
@@ -268,6 +398,21 @@
   )
 )
 
+;; ladder owner only: stop or resume pushes to the market
+(define-public (set-push-paused (paused bool))
+  (begin
+    (asserts! (is-eq tx-sender (contract-call? LADDER get-owner))
+      ERR_NOT_AUTHORIZED
+    )
+    (var-set push-paused paused)
+    (print {
+      event: "rung-push-paused",
+      paused: paused,
+    })
+    (ok true)
+  )
+)
+
 ;; ---------- sync ----------
 
 ;; `actual` = market size + micro-STX held here; fills shrink it and put sBTC here.
@@ -297,16 +442,35 @@
             (var-get proceeds-index)
           ))
         )
-        (var-set unfilled-index new-index)
         (var-set proceeds-index new-proceeds)
         (var-set sats-accounted sbtc-now)
-        ;; sold out (under the dust floor or the index floor): close the epoch
-        ;; the lossless way, a tail roll. What still rests comes off the market
-        ;; and the closing epoch's unsold share is reserved for its members, so
-        ;; nothing of theirs rides into the next epoch or fills with no members.
-        (and
-          (or (< actual SOLD_OUT_DUST) (< new-index MINT_FLOOR))
-          (try! (roll-tail))
+        (if (or (< actual SOLD_OUT_DUST) (< new-index (/ MINT_FLOOR RESCALE)))
+          ;; sold out (under the dust floor, or over 99.9% of the pool gone in
+          ;; one fill): close the epoch the lossless way, a tail roll. What
+          ;; still rests comes off the market and the closing epoch's unsold
+          ;; share is reserved for its members.
+          (begin
+            (var-set unfilled-index new-index)
+            (try! (roll-tail))
+          )
+          (if (< new-index MINT_FLOOR)
+            ;; a healthy pool whose index drifted under the floor: rescale.
+            ;; index x RESCALE, total shares / RESCALE, one more scale step;
+            ;; positions are carried across lazily by settle-proceeds
+            (let ((next (+ (var-get scale) u1)))
+              (var-set unfilled-index (* new-index RESCALE))
+              (var-set total-shares (/ shares RESCALE))
+              (var-set scale next)
+              (map-set scale-start next new-proceeds)
+              (is-ok (contract-call? LADDER log-rescale (var-get epoch) next new-proceeds
+                (var-get unfilled-index) (var-get total-shares)
+              ))
+            )
+            (begin
+              (var-set unfilled-index new-index)
+              true
+            )
+          )
         )
         (ok true)
       )
@@ -322,7 +486,7 @@
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
-    ;; sync rolls an epoch in its tail (index under MINT_FLOOR), so the mint
+    ;; sync keeps the index at or above MINT_FLOOR (rescale), so the mint
     ;; below never divides by a collapsed index
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
@@ -337,7 +501,10 @@
             u0
           ))
           (shares (/ (* (+ amount orphan) SCALE) (var-get unfilled-index)))
+          ;; settle-proceeds carried an existing position to the current
+          ;; scale (and deleted an old-epoch one), so the shares add up
           (pos (position-of member))
+          (joining (is-none (map-get? positions member)))
           (epo (var-get epoch))
         )
         ;; the market's minimum is on the whole position (live + parked + new);
@@ -354,10 +521,12 @@
         )
         (map-set positions member {
           epoch: epo,
+          scale: (var-get scale),
           shares: (+ (get shares pos) shares),
           paid-index: (var-get proceeds-index),
         })
         (var-set total-shares (+ (var-get total-shares) shares))
+        (and joining (var-set members (+ (var-get members) u1)))
         ;; the log is best effort: a member's funds never hang on a print
         (is-ok (contract-call? LADDER log-deposit member amount shares epo
           (is-eq (var-get held-ustx) u0) (var-get held-ustx)
@@ -401,12 +570,9 @@
     (amount uint)
     (update (optional (buff 8192)))
   )
-  (let (
-      (member tx-sender)
-      (pos (unwrap! (map-get? positions member) ERR_NO_POSITION))
-    )
+  (let ((member tx-sender))
+    (asserts! (is-some (map-get? positions member)) ERR_NO_POSITION)
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
-    (try! (settle-escrow update))
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
       ;; an old-epoch member was paid out and deleted by settle-proceeds:
@@ -416,7 +582,9 @@
         (ok paid)
         (let (
             (fi (var-get unfilled-index))
-            (member-shares (get shares pos))
+            ;; read after settle-proceeds: it carried the position to the
+            ;; current scale, which changes its share count
+            (member-shares (get shares (unwrap-panic (map-get? positions member))))
             (mine (/ (* member-shares fi) SCALE))
             ;; round the burn UP: a floor here paid `amount` for fewer shares than
             ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
@@ -444,6 +612,7 @@
           (and
             (> take u0)
             (begin
+              (try! (escrow-for take update))
               (try! (pull-to-held-ustx take))
               (try! (as-contract? ((with-stx take))
                 (try! (stx-transfer? take current-contract member))
@@ -456,19 +625,24 @@
             (map-delete positions member)
             (map-set positions member {
               epoch: epo,
+              scale: (var-get scale),
               shares: (- member-shares shares-out),
               paid-index: (var-get proceeds-index),
             })
           )
           (var-set total-shares (- (var-get total-shares) shares-out))
-          ;; the last member left: close the epoch and restart the index, so a pool
-          ;; that ended in the tail takes deposits again at a fresh index
+          (and full (var-set members (- (var-get members) u1)))
+          ;; the last member left: close the epoch and restart the index and
+          ;; the shares (any shares a rescale left without an owner go too;
+          ;; the units behind them go to the next depositor as orphan)
           (and
-            (is-eq (var-get total-shares) u0)
-            (begin
-              (map-set epoch-final-proceeds epo (var-get proceeds-index))
-              (is-ok (contract-call? LADDER log-epoch-closed epo (var-get proceeds-index)))
+            (is-eq (var-get members) u0)
+            (let ((final-proceeds (var-get proceeds-index)))
+              (map-set epoch-final-proceeds epo final-proceeds)
+              (map-set epoch-final-scale epo (var-get scale))
+              (is-ok (contract-call? LADDER log-epoch-closed epo final-proceeds))
               (var-set epoch (+ epo u1))
+              (var-set total-shares u0)
               (var-set unfilled-index SCALE)
             )
           )
@@ -510,6 +684,7 @@
 (define-private (position-of (who principal))
   (default-to {
     epoch: (var-get epoch),
+    scale: (var-get scale),
     shares: u0,
     paid-index: (var-get proceeds-index),
   }
@@ -517,10 +692,6 @@
   )
 )
 
-;; RAPHA NEEDS TO DOUBLE REVIEW this tail roll before any deploy (bounty
-;; muerdzoc805a745ecc99, Nilo's tail freeze). Not fork-tested yet. Also still
-;; open for this rung: ARION F-7 (proceeds absorbed while no members), F-9 (settle-escrow wants
-;; a Lazer update even for exits that do not need one).
 ;; Tail roll: every sold-out close in sync (dust or index floor) closes the
 ;; epoch without loss. The order comes back from the market
 ;; (cancel returns pending, live and parked with no oracle or pause check),
@@ -549,14 +720,51 @@
       )
       (map-set epoch-final-proceeds epo final-proceeds)
       (map-set epoch-final-unfilled epo (var-get unfilled-index))
+      (map-set epoch-final-scale epo (var-get scale))
       (var-set reserved-ustx (+ (var-get reserved-ustx) reserve))
       (var-set held-ustx (- free reserve))
+      (map-set epoch-reserve epo {
+        left: (var-get members),
+        reserve: reserve,
+      })
       (is-ok (contract-call? LADDER log-epoch-closed epo final-proceeds))
       (var-set epoch (+ epo u1))
       (var-set total-shares u0)
+      (var-set members u0)
       (var-set unfilled-index SCALE)
       (ok true)
     )
+  )
+)
+
+;; One old member of tail-rolled epoch `e` took `back` from its reserve. The
+;; last one releases what rounding left in the reserve to the pool (held).
+(define-private (count-reserve-claim
+    (e uint)
+    (back uint)
+  )
+  (match (map-get? epoch-reserve e)
+    r (let (
+        (reserve (get reserve r))
+        (rest (if (> back reserve)
+          u0
+          (- reserve back)
+        ))
+      )
+      (if (<= (get left r) u1)
+        (begin
+          (map-delete epoch-reserve e)
+          (var-set reserved-ustx (- (var-get reserved-ustx) rest))
+          (var-set held-ustx (+ (var-get held-ustx) rest))
+          true
+        )
+        (map-set epoch-reserve e {
+          left: (- (get left r) u1),
+          reserve: rest,
+        })
+      )
+    )
+    true
   )
 )
 
@@ -564,15 +772,23 @@
   (match (map-get? positions who)
     pos (let (
         (pos-epoch (get epoch pos))
+        (stored (get shares pos))
+        (from (get scale pos))
         (current (is-eq pos-epoch (var-get epoch)))
+        ;; the scale this position is carried to: now, or where its epoch closed
+        (to (if current
+          (var-get scale)
+          (final-scale pos-epoch)
+        ))
         (upto (if current
           (var-get proceeds-index)
           (final-index pos-epoch)
         ))
-        (owed (/ (* (get shares pos) (- upto (get paid-index pos))) SCALE))
+        (owed (earned stored from to (get paid-index pos) upto))
+        (carried-shares (carried stored from to))
         (back (if current
           u0
-          (/ (* (get shares pos) (final-unfilled pos-epoch)) SCALE)
+          (/ (* carried-shares (final-unfilled pos-epoch)) SCALE)
         ))
       )
       (and
@@ -590,9 +806,14 @@
         ))
       )
       (var-set reserved-ustx (- (var-get reserved-ustx) back))
+      (and (not current) (count-reserve-claim pos-epoch back))
       ;; an old-epoch position has nothing left: paid in full, gone
       (if current
-        (map-set positions who (merge pos { paid-index: upto }))
+        (map-set positions who (merge pos {
+          scale: to,
+          shares: carried-shares,
+          paid-index: upto,
+        }))
         (map-delete positions who)
       )
       ;; one log for every payout, whichever action ran it (claim, withdraw,
@@ -616,6 +837,10 @@
   ;; a miner-band rung re-derives its cap on every push; with no miner data
   ;; (u0) it does not push at all, the funds stay held
   (let ((g (current-cap)))
+    (asserts! (not (var-get push-paused)) ERR_PUSH_PAUSED)
+    (asserts! (>= stacks-block-time (+ (var-get escrow-cancelled-at) u86400))
+      ERR_ESCROW_COOLDOWN
+    )
     (asserts! (> g u0) ERR_ZERO_PRICE)
     (var-set cap g)
     (as-contract? ((with-stx to-push))
@@ -638,10 +863,11 @@
   )
 )
 
-;; An exit normally settles pending escrow before pulling funds from the market.
-;; Once pending escrow is at least 24 hours old, cancel instead: cancellation
-;; returns pending + live + parked funds without an oracle or pause check.
-;; Add the refund to held funds; withdraw synchronizes before paying the member.
+;; An exit that needs the pending escrow (escrow-for) settles it before pulling
+;; funds from the market. Once pending escrow is at least 24 hours old, cancel
+;; instead: cancellation returns pending + live + parked funds without an oracle
+;; or pause check, and starts the 24h push cooldown.
+;; Add the refund to held funds; escrow-for synchronizes before paying the member.
 (define-private (settle-escrow (update (optional (buff 8192))))
   (match (contract-call? MARKET get-token-y-pending-deposit current-contract)
     pending (if (>= stacks-block-time (+ (get submitted-at pending) u86400))
@@ -649,6 +875,7 @@
           (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
         ))))
         (var-set held-ustx (+ (var-get held-ustx) refunded))
+        (var-set escrow-cancelled-at stacks-block-time)
         (ok true)
       )
       (begin
@@ -662,13 +889,45 @@
   )
 )
 
+;; live + parked on the market: what a partial withdraw or a cancel can take
+;; without settling the pending escrow
+(define-private (on-book)
+  (+
+    (contract-call? MARKET get-token-y-deposit
+      (contract-call? MARKET get-current-cycle)
+      current-contract
+    )
+    (contract-call? MARKET get-token-y-parked current-contract)
+  )
+)
+
+;; An exit waits on the pending escrow only when it needs those funds: when
+;; what is held here plus live + parked cannot pay `take`. Otherwise a young
+;; pending (a 1-sat push, an honest top-up) does not ask for an oracle
+;; (Void Kael #2, ARION F-9). A settle can refund the escrow here (crossing,
+;; queue-full), so sync again to count it as held.
+(define-private (escrow-for
+    (take uint)
+    (update (optional (buff 8192)))
+  )
+  (if (<= take (+ (var-get held-ustx) (on-book)))
+    (ok true)
+    (begin
+      (try! (settle-escrow update))
+      (sync)
+    )
+  )
+)
+
 (define-private (pull-to-held-ustx (amount uint))
   (let ((have (var-get held-ustx)))
     (if (>= have amount)
       (ok true)
       (let (
           (gap (- amount have))
-          (on-market (market-size))
+          ;; a pending escrow the exit did not need stays pending: size the
+          ;; partial on live + parked (a cancel returns the pending too)
+          (on-market (on-book))
         )
         (asserts! (>= on-market gap) ERR_INSUFFICIENT)
         (if (>= (- on-market gap) (min-market))

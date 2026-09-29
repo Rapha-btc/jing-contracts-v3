@@ -50,6 +50,7 @@
     "rv:router:props": "rv . swap-router-sbtc-stx-jing-v5 test --runs=500",
     "verify:creator-stx-stxer": "node simulations/verify-creator-stx-stxer.js",
     "test:v6-3": "vitest run --config vitest.v6-3.config.ts && node tests/unit/v6-3/coverage.mjs",
+    "test:v6-3:integration": "vitest run --config vitest.integration-v6-3.config.ts --reporter=default --reporter=json --outputFile=tests/unit/integration-v6-3/.build/results.json",
     "rv:v6-3": "node tests/rv/v6-3/run.mjs && node tests/rv/v6-3/run-full-book.mjs",
     "rv:v6-3:random": "node tests/rv/v6-3/run.mjs",
     "rv:v6-3:scenarios": "node tests/rv/v6-3/run-full-book.mjs"

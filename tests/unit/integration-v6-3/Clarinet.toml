@@ -1,0 +1,45 @@
+[project]
+name = "integration-v6-3"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../../rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.token]
+path = "../v6-3/token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.wrong-token]
+path = "../v6-3/token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = "../v6-3/oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.miner-oracle]
+path = "miner-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = ".build/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = ".build/jing-ladder-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = ".build/markets-sbtc-stx-jing-v6-3.clar"
+clarity_version = 5
+epoch = "3.4"

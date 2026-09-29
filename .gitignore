@@ -11,3 +11,5 @@ simulations/results/
 # Generated isolated Clarinet unit fixture and coverage artifacts
 tests/unit/v6-3/.build/
 tests/unit/v6-3/settings/
+tests/unit/integration-v6-3/.build/
+tests/unit/integration-v6-3/settings/

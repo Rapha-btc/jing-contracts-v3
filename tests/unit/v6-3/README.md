@@ -59,6 +59,12 @@ unhit paths described below; they exclude mocked dependencies and older versions
 
 ## Run
 
+A separate [real core-spread v1 rung integration suite](../integration-v6-3/README.md)
+now passes **16/16** against the local sell port. Both rungs allow a funded
+live withdrawal despite unrelated young pending escrow; the sell rung failed
+that case before the port. These results are separate from the 273 market
+unit tests above; no production contract was changed by this integration work.
+
 From the repository root, with dependencies installed:
 
 ```sh
