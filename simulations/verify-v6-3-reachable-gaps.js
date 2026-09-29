@@ -19,10 +19,18 @@
 // 2. Read-only getters no suite calls, traced through gapsprobe-v1 public
 //    functions: get-token-{x,y}-limit, get-seated-{x,y}, is-protected-{x,y},
 //    get-token-{x,y}-pending-readmit, asserted against the market state.
+// 3. Read-only getters the other suites only read through evals (not traced
+//    by stxer), called inside transactions through gapsprobe-v2 on a fresh
+//    `gaps-ms` market deployed after 1-2: get-distance-slots (changed from
+//    the default u10), get-settlement (a cycle settled by a y swap against one
+//    x maker, every field asserted against the settlement model; an
+//    unsettled cycle -> none), get-token-{y,x}-pending-limit (a pending limit
+//    on each side, both sides on the book; a non-submitter -> none).
 import fs from 'node:fs';
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
-  noneCV, deserializeCV, cvToString, getAddressFromPrivateKey, makeUnsignedSTXTokenTransfer,
+  noneCV, someCV, boolCV, deserializeCV, cvToString, getAddressFromPrivateKey, makeUnsignedSTXTokenTransfer,
+  makeUnsignedContractDeploy, PostConditionMode,
 } from '@stacks/transactions';
 import {
   SimulationBuilder, getSimulationResult, getSimulationTip, submitSimulationSteps,
@@ -202,12 +210,12 @@ async function run() {
   if (failures) return;
 
   // ---------- phase 2: pin fork time just before one signed Lazer update ----------
-  let upd, at;
+  let upd, at, uUsed;
   const tip0 = await retry(() => getSimulationTip(sid));
   for (let i = 0; i < 30; i++) {
     const u = await fetchLazerUpdateAny();
     at = (await lazerFeedTimes(u.hex)).at;
-    if (at - 2 > Number(tip0.block_time)) { upd = bufferCV(Buffer.from(u.hex.replace(/^0x/, ''), 'hex')); break; }
+    if (at - 2 > Number(tip0.block_time)) { upd = bufferCV(Buffer.from(u.hex.replace(/^0x/, ''), 'hex')); uUsed = u; break; }
     await new Promise((r) => setTimeout(r, 2000));
   }
   if (!upd) throw new Error('no Lazer update newer than the fork tip');
@@ -306,6 +314,99 @@ async function run() {
     await ev(`${side}: P wallet unchanged`, m, keys.wallet, snap.wallet);
     await ev(`${side}: solvent: market = book + P parked`, m, `(is-eq ${bal(side, m)} (+ ${total(side)} (get-token-${side}-parked '${p})))`, 'true');
   }
+
+  await evalOnlyGetters(upd, uUsed, stamp, keeper);
+}
+
+// ---------- 3: getters the suites read only through evals ----------
+const MS = `${DEP}.gaps-ms`;
+const PROBE2 = `${DEP}.gapsprobe-v2`;
+const PROBE2_SRC = `
+(define-public (distance-slots-y) (ok (contract-call? .gaps-my get-distance-slots)))
+(define-public (distance-slots-s) (ok (contract-call? .gaps-ms get-distance-slots)))
+(define-public (settlement-s (cycle uint)) (ok (contract-call? .gaps-ms get-settlement cycle)))
+(define-public (pending-limit-y (who principal)) (ok (contract-call? .gaps-ms get-token-y-pending-limit who)))
+(define-public (pending-limit-x (who principal)) (ok (contract-call? .gaps-ms get-token-x-pending-limit who)))
+`;
+async function deployMid(name, code) {
+  const raw = await makeUnsignedContractDeploy({ contractName: name, codeBody: code, clarityVersion: ClarityVersion.Clarity5, nonce: await retry(() => getNonce(sid, DEP)), network: 'mainnet', publicKey: '', fee: 0, postConditionMode: PostConditionMode.Allow });
+  setSender(raw, DEP);
+  const out = await retry(() => submitSimulationSteps(sid, { steps: [{ Transaction: raw.serialize() }] }));
+  check(`deploy ${name}`, decode(out.steps[0]), ok);
+}
+async function evalOnlyGetters(upd, u, stamp, keeper) {
+  const S = 10_000_000_000n, BPS = 10_000n, FEE = 10n, REBATE_BPS = 20n;
+  const Pm = (u.px * 100_000_000n) / u.py; // the market's oracle price for this print
+  const at = (k) => Pm * BigInt(k) / 1000n;
+  const X1 = mk(7201), TK = mk(7202), Y2 = mk(7203), NOBODY = mk(7204);
+  const X1AMT = 1_000_000n, G = 20_000_000n, Y2AMT = 2_000_000n;
+  console.log(`section 3: oracle price ${Pm}`);
+
+  // fresh gaps-ms market: exact working-tree source, verified + initialized
+  await deployMid('gaps-ms', MARKET);
+  await deployMid('gapsprobe-v2', PROBE2_SRC);
+  await tx('ms: verify in core', DEP, CORE, 'set-verified-contract', [P(MS)], '(ok true)');
+  await tx('ms: initialize', DEP, MS, 'initialize', [P(MS), T.x, T.y, uintCV(1000), uintCV(1_000_000), uintCV(1), uintCV(45)], '(ok true)');
+
+  // ---- get-distance-slots: gaps-my changed to u0 at setup; gaps-ms default u10 -> u7 ----
+  await ev('my: distance-slots (eval)', MY, '(var-get distance-slots)', 'u0');
+  await tx('my: probe get-distance-slots = u0 (changed from default u10)', keeper, PROBE2, 'distance-slots-y', [], '(ok u0)');
+  await tx('ms: probe get-distance-slots = default u10', keeper, PROBE2, 'distance-slots-s', [], '(ok u10)');
+  await tx('ms: set-distance-slots u7', DEP, MS, 'set-distance-slots', [uintCV(7)], '(ok true)');
+  await tx('ms: probe get-distance-slots = u7', keeper, PROBE2, 'distance-slots-s', [], '(ok u7)');
+  await ev('ms: distance-slots (eval)', MS, '(var-get distance-slots)', 'u7');
+
+  // ---- get-settlement: y swap against one x maker settles cycle 0 ----
+  await tx('ms: probe get-settlement(u0) before settle = none', keeper, PROBE2, 'settlement-s', [uintCV(0)], '(ok none)');
+  await fund('x', X1, Number(X1AMT));
+  await tx(`ms: X1 places ${X1AMT} sats @ 0.9 P`, X1, MS, 'deposit-token-x', depArgs('x', Number(X1AMT), at(900)), `(ok u${X1AMT})`);
+  await ev('ms: X1 on the book', MS, dep('x', X1), `u${X1AMT}`);
+  await fund('y', TK, Number(G));
+  // model (settlement-edges.js phase a): age 0 -> 20 bps rebate; y binding
+  const rebate = G * REBATE_BPS / BPS, net = G - rebate;
+  const Ty = net, Tx = X1AMT;
+  const yvx = Tx * Pm / S, xb = yvx <= Ty;
+  const yc = xb ? yvx : Ty, xc = xb ? Tx : Ty * S / Pm;
+  const yfee = yc * FEE / BPS, xfee = xc * FEE / BPS;
+  const rideY = Ty > 0n ? rebate * yc / Ty : 0n;
+  const xAfter = xc - xfee;
+  const xRoll = Tx - xc;
+  check('ms: model is y binding with a remainder for X1 (no taker rest)', `${xb} ${yc === Ty} ${xRoll > 0n}`, 'false true true');
+  const height = await ev('ms: block height before the swap', MS, 'stacks-block-height');
+  const treasury = await ev('ms: treasury', MS, '(var-get treasury)');
+  const tBefore = { y: await ev('ms: treasury STX before', MS, bal('y', treasury)), x: await ev('ms: treasury sBTC before', MS, bal('x', treasury)) };
+  const r = await tx(`ms: T swaps ${G} uSTX @ 1.1 P, settles cycle 0`, TK, MS, 'swap',
+    [uintCV(G), uintCV(at(1100)), upd, T.x, A.x, T.y, A.y, boolCV(false)],
+    `(ok (tuple (rebate-refunded u${rebate - rideY}) (token-x-received u${xAfter}) (token-x-rolled u0) (token-y-received u0) (token-y-rolled u0)))`);
+  check('ms: swap prints settlement and no refund', prints(r).join(' '), (v) => v.includes('"settlement"') && !v.includes('refund'));
+  await ev('ms: cycle advanced to 1', MS, cyc, 'u1');
+  const settlement = `(some (tuple (price u${Pm}) (settled-at ${height}) (token-x-cleared u${xc}) (token-x-fee u${xfee}) (token-y-cleared u${yc}) (token-y-fee u${yfee})))`;
+  await tx('ms: probe get-settlement(u0) = the settled cycle, every field', keeper, PROBE2, 'settlement-s', [uintCV(0)], `(ok ${settlement})`);
+  await ev('ms: settlements map (eval) agrees', MS, '(map-get? settlements u0)', settlement);
+  await tx('ms: probe get-settlement(u1) (open cycle) = none', keeper, PROBE2, 'settlement-s', [uintCV(1)], '(ok none)');
+  await ev('ms: treasury received the STX fee', MS, `(- ${bal('y', treasury)} ${tBefore.y})`, `u${yfee}`);
+  await ev('ms: treasury received the sBTC fee', MS, `(- ${bal('x', treasury)} ${tBefore.x})`, `u${xfee}`);
+  await ev('ms: X1 remainder rolled into cycle 1', MS, dep('x', X1), `u${xRoll}`);
+  await ev('ms: cycle 1 totals', MS, `(get-cycle-totals ${cyc})`, `(tuple (total-token-x u${xRoll}) (total-token-y u0))`);
+
+  // ---- get-token-{y,x}-pending-limit: both sides on the book, limits go pending ----
+  await fund('y', Y2, Number(Y2AMT));
+  await tx(`ms: Y2 submits ${Y2AMT} uSTX @ 0.5 P (x side non-empty -> pending)`, Y2, MS, 'deposit-token-y', depArgs('y', Number(Y2AMT), at(500)), `(ok u${Y2AMT})`);
+  await tx('ms: settle Y2 deposit (bid below the ask, not crossing)', keeper, MS, 'settle-token-y-deposit', settleArgs('y', Y2, upd), `(ok u${Y2AMT})`);
+  await ev('ms: Y2 on the book', MS, dep('y', Y2), `u${Y2AMT}`);
+  await tx('ms: probe pending-limit-y(Y2) before submit = none', keeper, PROBE2, 'pending-limit-y', [P(Y2)], '(ok none)');
+  await tx('ms: probe pending-limit-x(X1) before submit = none', keeper, PROBE2, 'pending-limit-x', [P(X1)], '(ok none)');
+  await tx('ms: Y2 set-token-y-limit 0.6 P (x side non-empty -> pending)', Y2, MS, 'set-token-y-limit', [uintCV(at(600)), noneCV()], '(ok false)');
+  await tx('ms: X1 set-token-x-limit 0.95 P spread 50 bps (y side non-empty -> pending)', X1, MS, 'set-token-x-limit', [uintCV(at(950)), someCV(uintCV(50))], '(ok false)');
+  const now = await ev('ms: block time of the submits', MS, 'stacks-block-time');
+  check('ms: clock still pinned', now, `u${stamp}`);
+  await tx('ms: probe get-token-y-pending-limit(Y2) = submitted limit', keeper, PROBE2, 'pending-limit-y', [P(Y2)],
+    `(ok (some (tuple (limit u${at(600)}) (spread-bps none) (submitted-at u${stamp}))))`);
+  await tx('ms: probe get-token-x-pending-limit(X1) = submitted limit + spread', keeper, PROBE2, 'pending-limit-x', [P(X1)],
+    `(ok (some (tuple (limit u${at(950)}) (spread-bps (some u50)) (submitted-at u${stamp}))))`);
+  await tx('ms: probe get-token-y-pending-limit(non-submitter) = none', keeper, PROBE2, 'pending-limit-y', [P(NOBODY)], '(ok none)');
+  await tx('ms: probe get-token-x-pending-limit(non-submitter) = none', keeper, PROBE2, 'pending-limit-x', [P(NOBODY)], '(ok none)');
+  await ev('ms: stored limits unchanged while pending', MS, `(list (get limit (get-token-y-order '${Y2})) (get limit (get-token-x-order '${X1})))`, `(list u${at(500)} u${at(900)})`);
 }
 
 try { await run(); } catch (e) { console.error(e.stack || e); failures++; failed.push(`exception: ${String(e.message ?? e).slice(0, 120)}`); }
