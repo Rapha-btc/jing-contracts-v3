@@ -2,7 +2,7 @@
 
 Baseline: [Stxer report at f2386cf](https://github.com/Rapha-btc/jing-contracts-v3/blob/f2386cf/simulations/README-v6-3-coverage.md). Stxer market SHA-256: `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
 
-Clarinet market SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`. The refund-accounting fix changes the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).
+Clarinet market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`. The refund, registered-maker, and refund logging fixes change the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).
 
 This report is generated after the full Clarinet suite and coverage thresholds pass. It checks the source locations listed by Stxer; it does not add or average the two tools’ coverage percentages.
 
@@ -13,16 +13,16 @@ This report is generated after the full Clarinet suite and coverage thresholds p
 | Stxer baseline line | Current market line | Validation | Clarinet witness |
 | ---: | ---: | --- | --- |
 | 1065 | [1065](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1065) | Malformed y-feed shape | [T25](PATHS.md#t25) |
-| 1083 | [1083](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1083) | Stale y feed during classification | [T104](PATHS.md#t104) |
-| 1084 | [1084](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1084) | Non-positive x classification price | [T107](PATHS.md#t107) |
-| 1085 | [1085](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1085) | Non-positive y classification price | [T110](PATHS.md#t110) |
-| 3401 | [3407](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3407) | Zero x settlement price | [T97](PATHS.md#t97) |
-| 3402 | [3408](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3408) | Zero y settlement price | [T99](PATHS.md#t99) |
-| 3404 | [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | Stale y feed during settlement | [T82](PATHS.md#t82) |
-| 3405 | [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | x confidence at threshold | [T116](PATHS.md#t116) |
-| 3408 | [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | y confidence at threshold | [T98](PATHS.md#t98) |
-| 3411 | [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | Mismatched exponents | [T100](PATHS.md#t100) |
-| 3413 | [3419](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3419) | Cross-price rounds to zero | [T116](PATHS.md#t116) |
+| 1083 | [1083](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1083) | Stale y feed during classification | [T106](PATHS.md#t106) |
+| 1084 | [1084](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1084) | Non-positive x classification price | [T109](PATHS.md#t109) |
+| 1085 | [1085](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1085) | Non-positive y classification price | [T112](PATHS.md#t112) |
+| 3401 | [3407](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3407) | Zero x settlement price | [T99](PATHS.md#t99) |
+| 3402 | [3408](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3408) | Zero y settlement price | [T101](PATHS.md#t101) |
+| 3404 | [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | Stale y feed during settlement | [T84](PATHS.md#t84) |
+| 3405 | [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | x confidence at threshold | [T118](PATHS.md#t118) |
+| 3408 | [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | y confidence at threshold | [T100](PATHS.md#t100) |
+| 3411 | [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | Mismatched exponents | [T102](PATHS.md#t102) |
+| 3413 | [3419](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3419) | Cross-price rounds to zero | [T118](PATHS.md#t118) |
 
 The added boundary suite checks confidence one unit below, exactly at, and one unit above 2% independently on each feed; it also checks feed ages 79, 80 and 81 seconds on each side during funded settlement. Rejected calls preserve market storage, core equity and asset balances. A corrected feed then settles the same book with exact payouts and zero remaining custody.
 

@@ -14,8 +14,8 @@ test('inventory ignores comments and quoted operator names and preserves source 
 test('each current market error exit has a unique source identity',()=>{
  const got=inventory(fs.readFileSync('contracts/markets-sbtc-stx-jing-v6-3.clar','utf8'));
  assert.equal(got.functions.length,137);
- assert.equal(got.arms.length,298);
- assert.equal(new Set(got.arms.map(a=>a.id)).size,298);
+ assert.equal(got.arms.length,286);
+ assert.equal(new Set(got.arms.map(a=>a.id)).size,286);
 });
 test('trace returns are associated with the calling operand, not its parent or sibling',()=>{
  const trace=['├── ( outer )  market:10:1','│   ├── ( child )  market:20:2','│   │   └── (err u1)','│   └── (ok true)','├── ( sibling )  market:30:1','│   └── (ok true)'].join('\n');

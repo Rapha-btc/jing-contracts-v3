@@ -171,39 +171,36 @@ this command or its coverage totals.
 
 ### Current v6-3 results — 2026-09-29
 
-The market now notifies the core when refunding small taker remainders on either
-side. Four swap/reprice regressions, two long lifecycle scenarios, six refund
-boundary/recovery cases, and the full **217-test suite** pass. See the
-[finding and fix](tests/unit/v6-3/LIFECYCLE-FINDING.md). The core is unchanged.
+The registered-maker and refund-safety fixes are implemented and verified. All **273
+Clarinet tests pass**, including 16 scenarios for registered contract depositors
+and two markets sharing the real core, plus 40 refund/accounting regressions.
+Core debits now clamp the aggregate as well as owner equity, preventing a low
+aggregate from underflowing during a refund. Cancellation and pending-deposit
+settlement refund logs use `is-ok`; see [the tests and limits](tests/unit/v6-3/REFUND-SAFETY.md).
+The market passes the exact maker payout
+to `jing-core-v6`, which now updates passive maker equity during a book walk.
+The updated market and core must be used together. See the
+[finding and fix](tests/unit/v6-3/REGISTERED-MAKER-FINDING.md).
 
-The Clarinet suite now runs the real `jing-core-v6.clar` directly, including
-registration, pause guards, event logging and equity accounting. The previous
-selective core-error fixture has been removed.
-
-The completed Clarinet run includes the treasury guard, exact rolled-result
-reporting, and taker refund-accounting fix. Market SHA-256:
-`43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
-The RV random and full-book campaigns have also been rerun on this hash,
-now using the real `jing-core-v6.clar`. After initialization, every public call
-checks actual core equity against live + parked claims. Oracle, ladder and
-strict FT fixtures remain. The Stxer report still records the previous market
-hash (`7f7bc5cc…`) and does not validate the refund fix. Linked reports explain
-their dependency fixtures and instrumentation.
+Market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
+Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **217 passing** |
-| Market function coverage | **100%** (137/137) |
-| Market line coverage | **99.70%** (2,349/2,356) |
-| Market branch coverage | **99.64%** (830/833) |
-| Native RV trials | **12,000 completed**: 4,659 passed, 7,341 discarded, zero property/invariant failures |
-| Guided RV scenarios | **600 episodes**, 8,479 accounting checks across the full-book campaigns |
-| Real-core RV accounting | **25,999 checks** across all six campaigns, plus two passing dust-refund regressions |
-| RV paused recovery | All three guided seeds returned every remaining claim with the real core paused; market x/STX balances and both core equity totals ended at zero |
+| Clarinet unit tests | **273 passing** |
+| Market function coverage | **100.00%** (137/137) |
+| Market line coverage | **99.70%** (2349/2356) |
+| Market branch coverage | **99.64%** (832/835) |
+| Current RV compatibility check | Two dust regressions + 100 native invariant trials pass; 925 accounting checks |
+
+The saved full RV campaign (12,000 trials, 600 guided episodes, 25,999 accounting
+checks) predates these fixes, as does the Stxer report. Those reports do not
+validate the new source pair. The full RV campaign still needs a rerun; the
+registered-depositor/two-market cases are currently Clarinet unit coverage.
 
 The three unhit branches are the gross-up decrement and two parking-error
 guards previously hit only by artificial core errors. Details and the
-298-site error-exit matrix are in the
+286-site error-exit matrix are in the
 [unit report](tests/unit/v6-3/README.md). The
 [RV report](tests/rv/v6-3/README.md) records seeds, source hashes, successful
 operations, rejected inputs, and fixture limits. Neither execution coverage
@@ -218,7 +215,9 @@ boundaries, rollback, and successful settlement after a corrected feed.
 The unit tests accept a 79-second-old Lazer feed and reject either feed at
 80 seconds or older. Recovery tests exercise live, parked, and pending
 claims, including cancellation while paused. Production recovery still
-depends on successful token transfers and core logging.
+depends on successful token transfers and VM execution. Returned cancellation
+and pending-settlement refund logger errors are ignored, and core debit
+subtractions are bounded; this is not a blanket guarantee against every abort.
 
 Clarinet tests and RV campaigns run locally; Stxer validates integration
 against mainnet forks and is documented separately in the

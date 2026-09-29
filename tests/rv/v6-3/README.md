@@ -1,8 +1,14 @@
 # v6-3 Rendezvous fuzzing with the real core
 
-All campaigns below run the current market and the unchanged production
-`contracts/jing-core-v6.clar`. The earlier mock-core results are historical;
-these results supersede them for the real-core harness.
+**Historical full-campaign results:** the reports below use the market/core
+hashes listed here, before the registered-maker and refund-safety fixes. They do
+not validate the newer source pair. The current changes pass a compatibility check of
+two RV dust regressions and 100 native invariant trials (seed 230927); the full
+`npm run rv:v6-3` campaign still needs rerunning. See the
+[fixes and current Clarinet results](../../unit/v6-3/REFUND-SAFETY.md).
+
+These recorded campaigns use the real production `jing-core-v6.clar` at the
+listed hash. Earlier mock-core results remain separate historical evidence.
 
 - Market SHA-256: `43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971` (refund fix `da19a4f`).
 - Core SHA-256: `53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32`.
@@ -157,7 +163,7 @@ y amounts scaled by 1,000, quotes in the 24–40 trillion range plus zero-limit
 cases. Guided replenishments use larger amounts and moving oracle prices.
 This is finite evidence, not a proof over all states, tokens or external callers.
 Recovery still depends on token transfers and core registration. Oracle age
-boundaries are tested separately by the [217-test Clarinet suite](../../unit/v6-3/README.md).
+boundaries are tested separately by the [Clarinet suite](../../unit/v6-3/README.md).
 
 ## Evidence and provenance
 

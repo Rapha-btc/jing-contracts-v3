@@ -131,7 +131,11 @@
     }
       (- current applied)
     )
-    (map-set total-token-equity token (- total applied))
+    ;; An inconsistent aggregate must not prevent a user's refund or withdrawal.
+    ;; Saturate the aggregate independently of the bounded owner debit.
+    (map-set total-token-equity token
+      (- total (if (> applied total) total applied))
+    )
     true
   )
 )
@@ -1066,6 +1070,7 @@
     (y-is-taker bool)
     (x-traded uint)
     (y-traded uint)
+    (maker-received uint)
     (price uint)
     (mid uint)
     (cycle uint)
@@ -1075,14 +1080,18 @@
   (begin
     (try! (check-not-paused))
     (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    ;; Passive makers cannot log their fill themselves. Registered takers
+    ;; still account through their caller-side log-jing-swap.
     (if y-is-taker
       (begin
         (debit-if-not-registered token-y taker y-traded)
-        (debit-if-not-registered token-x maker x-traded)
+        (debit token-x maker x-traded)
+        (credit-if-registered token-y maker maker-received)
       )
       (begin
         (debit-if-not-registered token-x taker x-traded)
-        (debit-if-not-registered token-y maker y-traded)
+        (debit token-y maker y-traded)
+        (credit-if-registered token-x maker maker-received)
       )
     )
     (print {
@@ -1659,4 +1668,3 @@
     (ok true)
   )
 )
-

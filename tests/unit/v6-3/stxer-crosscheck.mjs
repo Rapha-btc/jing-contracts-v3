@@ -5,10 +5,15 @@ const dir = 'tests/unit/v6-3';
 const matrix = JSON.parse(fs.readFileSync(`${dir}/.build/path-matrix.json`));
 const stxer = {reportCommit: 'f2386cf', sourceSha256: '7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74'};
 const reviewedRefundFix = '43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971';
-if (![stxer.sourceSha256, reviewedRefundFix].includes(matrix.summary.sha256)) throw Error('Market changed; review the Stxer cross-check source locations.');
+const reviewedMakerFix = '3c44b9bfbc90c6b74f49a58b37e88749c5fe2020a8d2a7b96c27f2e3c3697c6e';
+const reviewedSettleRefundFix = 'd1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9';
+const reviewedCancelFix = 'f52942b8f31d3da3bacbfdc97ae3d02e925f547ff3f0ae6599b51da3b37183ae';
+if (![stxer.sourceSha256, reviewedRefundFix, reviewedMakerFix, reviewedCancelFix, reviewedSettleRefundFix].includes(matrix.summary.sha256)) throw Error('Market changed; review the Stxer cross-check source locations.');
 // The reviewed fix adds three lines at old L3283 and three at old L3350.
-// All compared validation/branch expressions below are unchanged.
-const currentLine = old => matrix.summary.sha256 === reviewedRefundFix ? old + (old >= 3350 ? 6 : old >= 3283 ? 3 : 0) : old;
+// The maker-accounting fix only changes the log-match argument line, with
+// no added source lines. Cancellation and pending settlement replace twelve try! wrappers
+// with is-ok on the same lines. All compared gap expressions are unchanged.
+const currentLine = old => [reviewedRefundFix, reviewedMakerFix, reviewedCancelFix, reviewedSettleRefundFix].includes(matrix.summary.sha256) ? old + (old >= 3350 ? 6 : old >= 3283 ? 3 : 0) : old;
 const oracleSites = [
   [1065, 'Malformed y-feed shape'], [1083, 'Stale y feed during classification'],
   [1084, 'Non-positive x classification price'], [1085, 'Non-positive y classification price'],
@@ -55,7 +60,7 @@ const sourceLink = line => `[${line}](../../../contracts/markets-sbtc-stx-jing-v
 const lines = [
   '# Stxer gaps cross-checked against Clarinet', '',
   `Baseline: [Stxer report at ${stxer.reportCommit}](https://github.com/Rapha-btc/jing-contracts-v3/blob/${stxer.reportCommit}/simulations/README-v6-3-coverage.md). Stxer market SHA-256: \`${stxer.sourceSha256}\`.`, '',
-  `Clarinet market SHA-256: \`${matrix.summary.sha256}\`. The refund-accounting fix changes the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).`, '',
+  `Clarinet market SHA-256: \`${matrix.summary.sha256}\`. The refund, registered-maker, and refund logging fixes change the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).`, '',
   'This report is generated after the full Clarinet suite and coverage thresholds pass. It checks the source locations listed by Stxer; it does not add or average the two tools’ coverage percentages.', '',
   '## Eleven oracle error paths', '',
   '**All 11 have Clarinet rejection witnesses through public market calls.** The market and core are real code. Decoded oracle fields are controlled by the existing local oracle fixture, so these cases establish market validation, not signed-Pyth reachability or signature verification.', '',

@@ -7,15 +7,22 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
-The market now notifies the real core when refunding small taker remainders
-on either side. All four swap/reprice dust regressions and both long lifecycle
-scenarios pass; see [the finding and fix](LIFECYCLE-FINDING.md). The core itself
-is unchanged. The RV campaigns have since passed on this same market hash
-using the actual core too, checking equity after every public call after
-initialization.
-The pinned Stxer baseline uses the previous source and does not validate the fix.
+The registered-maker and refund-safety fixes are implemented and verified.
+All **273 tests pass**, including 16 shared-core scenarios with registered
+contract depositors and two markets, plus 40 refund/accounting cases. Core
+debits now bound the aggregate subtraction, so an inconsistent low total cannot
+underflow and block a refund. Cancellation and pending-settlement refund logs
+use `is-ok`; see [the regressions and limits](REFUND-SAFETY.md). See the
+[reproducer and fix](REGISTERED-MAKER-FINDING.md). The core now debits a passive
+maker's traded input and credits its exact received output; the market passes
+that payout to `log-match`. Both sources must be used together.
 
-On 2026-09-28, all **217 v6-3 tests passed** against the source including
+The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
+also remain green. Saved full RV and Stxer reports predate the new maker/refund-safety fixes
+and do not validate this source pair. A current RV compatibility smoke test
+passes two dust regressions and 100 native invariant trials.
+
+On 2026-09-29, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
 treasury, preserves the funded book and configured recipient, and confirms
 that subsequent batch fees reach the valid treasury. The suite also includes
@@ -30,17 +37,17 @@ remain unchanged and pass. No unrelated failures occurred in the full run.
 
 | Market-only metric | Covered / total | Coverage |
 | --- | ---: | ---: |
-| Functions | 137 / 137 | **100%** |
+| Functions | 137 / 137 | **100.00%** |
 | Lines | 2349 / 2356 | **99.70%** |
-| Branches | 830 / 833 | **99.64%** |
+| Branches | 832 / 835 | **99.64%** |
 
 Toolchain: Clarinet SDK/WASM 3.21.0, Vitest 2.1.9,
 vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 
 Source SHA-256:
-`43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
+`d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
 Core SHA-256:
-`53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32`.
+`67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
 The suite loads `contracts/jing-core-v6.clar` directly from the manifest, with
 no core source substitutions or generated logger bodies. Market initialization
 uses the real owner verification and contract-hash registration flow.
@@ -78,7 +85,10 @@ only the selected tests.
 only the external SIP-010 trait, Lazer oracle, and Lazer decoder principals
 with local fixture principals. The market's functions, constants, initial
 state, queue sizes, authorization, and price checks are otherwise unchanged.
-No private wrappers are appended and no market maps or variables are injected.
+That primary market has no appended wrappers or injected storage. Separate,
+explicit fault-state copies in the [refund tests](REFUND-SAFETY.md) append
+constructor snapshots or a private aggregate setter while retaining the actual
+production function bodies; their execution is excluded from primary coverage.
 A test compares the entire generated market with the source after those
 three declared substitutions. The reporter repeats that comparison and checks
 both the market and real core source SHA-256. Source line numbers are preserved.
@@ -91,7 +101,7 @@ The real core and remaining local dependencies:
 - **Oracle:** configurable decoded feeds, including timestamps, confidence,
   exponent, missing fields, invalid prices, and errors. Signature verification
   belongs to integration tests against the real oracle.
-- **Core:** the actual `contracts/jing-core-v6.clar`, unchanged. Tests exercise
+- **Core:** the actual `contracts/jing-core-v6.clar`, loaded directly. Tests exercise
   owner verification, registration, pause/unpause, real print events, equity
   updates, and rollback after a real core pause rejection. There is no
   `set-fail` or selective logger-error fixture.
@@ -212,7 +222,7 @@ simulation suites.
 
 ## Error-exit matrix
 
-[PATHS.md](PATHS.md) inventories all **298 explicit error-exit sites** against
+[PATHS.md](PATHS.md) inventories all **286 explicit error-exit sites** against
 the current market, with conservative negative-witness attribution. This is
 separate from LCOV branch coverage. Unattributed exits remain visible; they
 are not silently treated as covered or unreachable. Related Stxer scenario
@@ -257,19 +267,19 @@ The cross-check is regenerated and validated by the full test command. Its
 machine-readable counterpart is `.build/stxer-crosscheck.json`. It fails if any
 of the 11 rejection witnesses, seven private branch hits, or eight getter hits
 is missing, or if the market source is neither the pinned Stxer baseline nor the reviewed
-refund fix. Historical Stxer evidence is not attributed to the patched source.
+refund, registered-maker, or pending-refund logging fixes. Historical Stxer evidence is not attributed to the patched source.
 The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
-Run `npm run rv:v6-3` for separate Rendezvous campaigns against the current
-market and real `jing-core-v6.clar`. All 12,000 native trials and 600 guided
-episodes completed on the refund-fix source with zero property/invariant
-failures. The campaigns performed 25,999 accounting checks; final recovery
-with the core paused left zero custody and zero core equity in all three
-full-book seeds. Two additional RV dust-refund regressions pass, separate from
-the 217 unit tests. Oracle, ladder and strict FT fixtures remain; this is finite
-evidence for the tested account universe. See the
-[RV scenario README](../../rv/v6-3/README.md) for seeds, successful operations,
-discarded trials, recovery checks, and fixture limits.
-Fuzz trial counts are separate from the unit coverage percentages above.
+The current source passes the two RV dust regressions and 100 native invariant
+trials (seed 230927), with 925 post-call/initial accounting checks.
+This checks compatibility with the updated real-core `log-match` interface;
+it is not a replacement for the full campaigns.
+
+The saved 12,000-trial/600-episode results and their 25,999 accounting checks
+use the earlier market `43ed3bf0…` and core `53c9b38a…`. They have not been rerun
+on this fix. Run `npm run rv:v6-3` to regenerate them. Their model covers EOAs;
+registered contracts and multiple markets are covered by the new Clarinet cases.
+See the [RV scenario README](../../rv/v6-3/README.md) for seeds and fixture limits.
+Fuzz trial counts are separate from unit coverage percentages.

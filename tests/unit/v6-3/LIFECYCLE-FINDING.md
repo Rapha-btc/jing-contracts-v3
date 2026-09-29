@@ -1,5 +1,9 @@
 # Taker dust refunds: equity-accounting fix
 
+This report records the earlier taker-refund fix and its source hashes. The
+subsequent [registered-maker fix](REGISTERED-MAKER-FINDING.md) changes both the
+market and core; its current Clarinet run also includes these regressions.
+
 The market fix adds the
 existing core `log-refund-y` / `log-refund-x` calls to the respective
 `cross-remainder-as-*` dust-refund branches. The core itself is unchanged.

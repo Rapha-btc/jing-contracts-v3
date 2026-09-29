@@ -1374,7 +1374,7 @@
         (try! (as-contract? ((with-stx amount))
           (try! (stx-transfer? amount current-contract who))
         ))
-        (try! (contract-call? .jing-core-v6 log-pending-refund-y who amount price
+        (is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price
           (if crosses
             "crossing"
             "queue-full"
@@ -1602,7 +1602,7 @@
         (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
           (try! (contract-call? t transfer amount current-contract who none))
         ))
-        (try! (contract-call? .jing-core-v6 log-pending-refund-x who amount price
+        (is-ok (contract-call? .jing-core-v6 log-pending-refund-x who amount price
           (if crosses
             "crossing"
             "queue-full"
@@ -1645,7 +1645,7 @@
         ))
         (map-delete token-y-parked caller)
         (map-delete token-y-deposit-limits caller)
-        (try! (contract-call? .jing-core-v6 log-refund-y caller parked cycle
+        (is-ok (contract-call? .jing-core-v6 log-refund-y caller parked cycle
           (var-get token-x) tok-y
         ))
         (ok parked)
@@ -1666,7 +1666,7 @@
         (map-set cycle-totals cycle
           (merge totals { total-token-y: (- (get total-token-y totals) amount) })
         )
-        (try! (contract-call? .jing-core-v6 log-refund-y caller amount cycle
+        (is-ok (contract-call? .jing-core-v6 log-refund-y caller amount cycle
           (var-get token-x) tok-y
         ))
         (ok amount)
@@ -1695,7 +1695,7 @@
         ))
         (map-delete token-x-parked caller)
         (map-delete token-x-deposit-limits caller)
-        (try! (contract-call? .jing-core-v6 log-refund-x caller parked cycle tok-x
+        (is-ok (contract-call? .jing-core-v6 log-refund-x caller parked cycle tok-x
           (var-get token-y)
         ))
         (ok parked)
@@ -1716,7 +1716,7 @@
         (map-set cycle-totals cycle
           (merge totals { total-token-x: (- (get total-token-x totals) amount) })
         )
-        (try! (contract-call? .jing-core-v6 log-refund-x caller amount cycle tok-x
+        (is-ok (contract-call? .jing-core-v6 log-refund-x caller amount cycle tok-x
           (var-get token-y)
         ))
         (ok amount)
@@ -2845,7 +2845,7 @@
             x-who
             y-who
           ) y-is-taker
-          x-traded y-traded price mid (- cycle u1) (var-get token-x)
+          x-traded y-traded (if y-is-taker (+ (- y-traded y-fee) reb-y) (+ (- x-traded x-fee) reb-x)) price mid (- cycle u1) (var-get token-x)
           (var-get token-y)
         ))
         (ok true)
