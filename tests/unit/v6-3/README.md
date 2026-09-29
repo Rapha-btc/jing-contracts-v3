@@ -7,7 +7,13 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
-On 2026-09-28, all **205 v6-3 tests passed** against the source including
+The market now notifies the real core when refunding small taker remainders
+on either side. All four swap/reprice dust regressions and both long lifecycle
+scenarios pass; see [the finding and fix](LIFECYCLE-FINDING.md). The core itself
+is unchanged. Older Stxer/RV reports use the previous market hash and do not
+validate this fix.
+
+On 2026-09-28, all **211 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
 treasury, preserves the funded book and configured recipient, and confirms
 that subsequent batch fees reach the valid treasury. The suite also includes
@@ -23,14 +29,14 @@ remain unchanged and pass. No unrelated failures occurred in the full run.
 | Market-only metric | Covered / total | Coverage |
 | --- | ---: | ---: |
 | Functions | 137 / 137 | **100%** |
-| Lines | 2345 / 2352 | **99.70%** |
+| Lines | 2349 / 2356 | **99.70%** |
 | Branches | 830 / 833 | **99.64%** |
 
 Toolchain: Clarinet SDK/WASM 3.21.0, Vitest 2.1.9,
 vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 
 Source SHA-256:
-`7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
+`43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
 Core SHA-256:
 `53c9b38a46196f777b3c76f76152c172aa50c220e4e8e449d47cb6cd3fe9ab32`.
 The suite loads `contracts/jing-core-v6.clar` directly from the manifest, with
@@ -136,6 +142,12 @@ y-feed fields and rejection while deposit/limit/readmission requests are pending
 Rejection snapshots include market variables and relevant maps, both asset
 ledgers, core variables, and core equity for both asset identities.
 
+The six cases in `lifecycle.test.ts` check real core equity against live + parked
+claims and market custody against live + parked + pending claims. Two long
+sequences cover parking, readmission, walks, another settlement cycle and paused
+recovery; four regressions cover dust refunds in swap/reprice on both sides,
+including exactly one real refund event and zero remaining taker equity.
+
 ## Coverage and remaining work
 
 Coverage is collected by Clarinet, not JavaScript coverage. The reporter merges
@@ -167,7 +179,7 @@ Every function executes. The remaining branch sites are:
   park logs; the later admission logger enforces pause and rolls back the call.
   These two artificial hits are no longer counted. The branch threshold is
   explicitly rebased from 99.88% to **99.64%** for the real-core suite.
-- Line **3929**: the mathematically unreachable `gross-up` decrement branch.
+- Line **3935**: the mathematically unreachable `gross-up` decrement branch.
 
 The `gross-up` calculation computes
 `g = floor(net * 10000 / 9980)`, so the resulting net
@@ -175,7 +187,7 @@ The `gross-up` calculation computes
 condition cannot be true for non-overflowing inputs; overflowing inputs abort
 before that condition. Boundary tests verify the returned gross is maximal
 without exceeding the requested net. The unreachable branch stays in the
-coverage denominator, and production code is unchanged.
+coverage denominator, and the refund fix does not change this arithmetic.
 
 Defensive rebate caps, empty distributions, and the already-settled guard are
 covered by the explicitly isolated private-helper cases described above.
@@ -191,7 +203,7 @@ simulation suites.
 
 ## Error-exit matrix
 
-[PATHS.md](PATHS.md) inventories all **296 explicit error-exit sites** against
+[PATHS.md](PATHS.md) inventories all **298 explicit error-exit sites** against
 the current market, with conservative negative-witness attribution. This is
 separate from LCOV branch coverage. Unattributed exits remain visible; they
 are not silently treated as covered or unreachable. Related Stxer scenario
@@ -206,7 +218,7 @@ node --test tests/unit/v6-3/path-inventory.test.mjs
 ## Cross-check with Stxer
 
 [STXER-CROSSCHECK.md](STXER-CROSSCHECK.md) compares the gaps published in the
-Stxer report at `f2386cf` against Clarinet evidence on the same market source:
+Stxer report at `f2386cf` against current Clarinet evidence, with reviewed line offsets for the refund fix:
 
 - All **11 oracle error paths** already have checked rejections through public
   market calls using controlled decoded feeds. Signature verification remains
@@ -228,12 +240,13 @@ recovery assertions; they do not increase the already-covered source branches.
 The cross-check is regenerated and validated by the full test command. Its
 machine-readable counterpart is `.build/stxer-crosscheck.json`. It fails if any
 of the 11 rejection witnesses, seven private branch hits, or eight getter hits
-is missing, or if the market source no longer matches the pinned Stxer baseline.
+is missing, or if the market source is neither the pinned Stxer baseline nor the reviewed
+refund fix. Historical Stxer evidence is not attributed to the patched source.
 The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
-Run `npm run rv:v6-3` for the separate Rendezvous campaigns against the same
-current market. See the [RV scenario README](../../rv/v6-3/README.md) for seeds,
+Run `npm run rv:v6-3` for separate Rendezvous campaigns against the current
+market. The saved RV results still concern the previous source hash. See the [RV scenario README](../../rv/v6-3/README.md) for seeds,
 successful operations, discarded trials, recovery checks, and fixture limits.
 Fuzz trial counts are separate from the unit coverage percentages above.

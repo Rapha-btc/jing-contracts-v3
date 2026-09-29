@@ -171,30 +171,35 @@ this command or its coverage totals.
 
 ### Current v6-3 results — 2026-09-28
 
+The market now notifies the core when refunding small taker remainders on either
+side. All four swap/reprice regressions, both long lifecycle scenarios, and the
+full **211-test suite** pass. See the
+[finding and fix](tests/unit/v6-3/LIFECYCLE-FINDING.md). The core is unchanged.
+
 The Clarinet suite now runs the real `jing-core-v6.clar` directly, including
 registration, pause guards, event logging and equity accounting. The previous
 selective core-error fixture has been removed.
 
-The completed Clarinet unit and RV runs include both `e338e27` (treasury
-guard) and `1a930e3` (exact rolled-result reporting). They used
-`contracts/markets-sbtc-stx-jing-v6-3.clar`, SHA-256
-`7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
-The harnesses load the real market source with local dependency fixtures;
-the linked reports explain the substitutions and instrumentation.
+The completed Clarinet run includes the treasury guard, exact rolled-result
+reporting, and taker refund-accounting fix. Market SHA-256:
+`43ed3bf012ee04b332244c79aca6af8371f9812b4d266589c4ec360d0d294971`.
+The saved RV and Stxer reports use the previous market hash (`7f7bc5cc…`);
+**they do not validate the refund fix**. Linked reports explain their dependency
+fixtures and instrumentation.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **205 passing** |
+| Clarinet unit tests | **211 passing** |
 | Market function coverage | **100%** (137/137) |
-| Market line coverage | **99.70%** (2,345/2,352) |
+| Market line coverage | **99.70%** (2,349/2,356) |
 | Market branch coverage | **99.64%** (830/833) |
-| Native RV trials | **12,000 completed**: 4,644 passed, 7,356 discarded, zero property/invariant failures |
-| Guided RV scenarios | **600 episodes**, 8,473 explicit invariant checks |
-| Final paused recovery | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
+| Native RV trials (previous source) | **12,000 completed**: 4,644 passed, 7,356 discarded, zero property/invariant failures |
+| Guided RV scenarios (previous source) | **600 episodes**, 8,473 explicit invariant checks |
+| RV paused recovery (previous source) | All three guided seeds returned every remaining claim; market x and STX balances ended at zero |
 
 The three unhit branches are the gross-up decrement and two parking-error
 guards previously hit only by artificial core errors. Details and the
-296-site error-exit matrix are in the
+298-site error-exit matrix are in the
 [unit report](tests/unit/v6-3/README.md). The
 [RV report](tests/rv/v6-3/README.md) records seeds, source hashes, successful
 operations, rejected inputs, and fixture limits. Neither execution coverage

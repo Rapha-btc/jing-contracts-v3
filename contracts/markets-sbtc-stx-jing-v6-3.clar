@@ -3280,6 +3280,9 @@ depositor: swapper,
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem) })
 )
+(try! (contract-call? .jing-core-v6 log-refund-y swapper rem cycle
+(var-get token-x) (var-get token-y)
+))
 true
 )
 )
@@ -3347,6 +3350,9 @@ depositor: swapper,
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem) })
 )
+(try! (contract-call? .jing-core-v6 log-refund-x swapper rem cycle
+(var-get token-x) (var-get token-y)
+))
 true
 )
 )
