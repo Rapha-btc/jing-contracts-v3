@@ -46,7 +46,8 @@ The RV compatibility check also passes: two real-core dust regressions and
 100 native invariant trials, with 924 accounting checks. That initial smoke check is now supplemented by a
 [source-matched full RV rerun](../../rv/v6-3/README.md) and
 [actual-sBTC refund integration](../../../simulations/README-v6-3-refund-costs.md).
-The older broad Stxer coverage figures remain historical.
+The [consolidated Stxer report](../../../simulations/README-v6-3-coverage.md)
+now also records a current-source rerun: 17 suites, 5,981 passing checks.
 
 ## Reproduce
 

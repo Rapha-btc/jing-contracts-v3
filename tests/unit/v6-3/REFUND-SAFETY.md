@@ -3,8 +3,9 @@
 Implemented and verified on 2026-09-29. The full v6-3 suite passes **273/273 tests**,
 including 40 refund/accounting cases and the 16 shared-core/registered-depositor
 cases from the earlier maker fix. The [full RV campaigns](../../rv/v6-3/README.md) now pass on the same
-source pair. The broad historical Stxer report remains separate from the current
-full-book refund integration linked below.
+source pair. The [consolidated Stxer rerun](../../../simulations/README-v6-3-coverage.md)
+also uses the current market source and passes 17 suites / 5,981 checks. Its
+coverage remains separate from the full-book refund integration linked below.
 
 ## Behavior
 

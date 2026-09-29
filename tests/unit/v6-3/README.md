@@ -19,9 +19,10 @@ that payout to `log-match`. Both sources must be used together.
 
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
 also remain green. The full RV campaigns now validate this source pair: 12,000 native trials and
-600 guided episodes, with zero property/invariant failures. The broad historical
-Stxer coverage report remains separate; the targeted current-source sBTC refund
-integration passes 291 checks.
+600 guided episodes, with zero property/invariant failures. The
+[current-source Stxer rerun](../../../simulations/README-v6-3-coverage.md) passes
+all 17 suites and 5,981 checks; the separate sBTC refund integration passes
+291 checks. These check counts remain distinct from Clarinet coverage.
 
 On 2026-09-29, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as

@@ -14,7 +14,7 @@ real sBTC).
 |---|---|
 | market source commit (last change to the file) | `72b60b0` (2026-09-29, "protect v6-3 refunds and account for registered makers") |
 | market source sha256 | `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9` |
-| `jing-core-v6` | as of `72b60b0` (`log-match` takes the taker's net received) |
+| `jing-core-v6` | as of `72b60b0` (`log-match` takes the maker's net payout) |
 
 Only traces from deployments whose code is **byte-identical** to that source
 are combined. `simulations/_sim-source.mjs` decodes every deploy transaction in
@@ -93,7 +93,7 @@ purpose; each is a passing negative test. `trace-coverage.mjs` cannot see these
 arms (the returned value is a constant, not a traced expression), so
 `failure-arms.mjs` counts them separately. The total fell from 296 to 286
 because `72b60b0` turned twelve refund / cancel log `try!` calls into `is-ok`
-(a core log can no longer block a refund) and `da19a4f` added two.
+(returned refund-logger errors no longer propagate) and `da19a4f` added two.
 
 Reproduce (sim ids as in section 2):
 
