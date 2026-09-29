@@ -5,6 +5,22 @@ seated band rungs, or withdraws the user's unsold positions from 1–10
 registered rungs, in one transaction. Deploy `jing-rung-deposit-trait.clar`
 under the same principal first. Both contracts are simulation-verified source; they have not been deployed on-chain.
 
+## Current core-spread v1 Clarinet scenarios
+
+The [v1 Clarinet suite](../tests/unit/integration-v6-3/README.md#twenty-rung-dispatch-scenarios)
+now includes seven dispatch scenarios with ten buy and ten sell core-spread
+v1 rungs, the real v6-3 market, core-v6, ladder-v1 and this dispatcher. It tests
+weighted deposits on one or both sides, two-member ownership, real taker fills,
+proceeds-paying top-ups, paused ten-rung withdrawals, exact receipts and
+atomic rollback when the tenth deposit or withdrawal refuses. The complete
+suite passes **59/59 tests**; these numbers are separate from the historical
+Stxer and fixture results below. Source hashes and fixture boundaries are
+recorded in the linked report.
+
+Funding both sides takes two calls, each with at most ten rungs. Positive-spread
+buy and sell rungs do not cross each other at the midpoint; the scenarios check
+the keeper's no-match refusal and use taker swaps for the actual fills.
+
 Both deposit and withdrawal entry points use one `rung-trait`, defined in
 `jing-rung-deposit-trait.clar`. It requires all three rung methods: `deposit`,
 `withdraw`, and `claim`. The helper still exposes no batch-claim function.
@@ -122,7 +138,6 @@ The two deposit functions accept:
 ```clarity
 (total uint)
 (allocations (list 10 { rung: <rung>, amount: uint }))
-(update (buff 8192))
 ```
 
 The frontend chooses equal or weighted amounts and passes the explicit total.
@@ -150,7 +165,6 @@ const functionArgs = [
       amount: Cl.uint(amounts[i]),
     });
   })),
-  Cl.bufferFromHex(signedLazerUpdateHex),
 ];
 // Call jing-ladder-dispatch.deposit-buy with these arguments.
 // Return includes amount: u200000, rungs: u10, payout totals, and 10 receipts.

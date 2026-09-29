@@ -22,8 +22,9 @@ expired escrow retains the no-oracle cancellation path.
 
 ## Clarinet evidence
 
-`npm run test:v6-3:integration`: **52/52 passing**, 26 mirrored scenarios
-per rung, against actual market/core/ladder and both production rung bodies.
+`npm run test:v6-3:integration`: **59/59 passing**, 26 mirrored scenarios
+per rung plus seven real-dispatch scenarios with ten rungs per side, against
+actual market/core/ladder/dispatch and both production rung bodies.
 Each rung has **100% function, 99.05% line and 99.28% branch coverage**.
 The original 16-test port regression included the sell exit that failed before
 the port; its success expectation was not relaxed. The expanded suite adds

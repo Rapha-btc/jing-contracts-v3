@@ -63,3 +63,113 @@ epoch = "3.4"
 path = ".build/jing-sell-stx-core-spread-v1.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.jing-rung-deposit-trait]
+path = ".build/jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-dispatch]
+path = ".build/jing-ladder-dispatch.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-10]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-20]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-30]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-40]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-50]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-60]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-70]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-80]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-90]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-spread-100]
+path = ".build/jing-buy-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-10]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-20]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-30]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-40]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-50]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-60]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-70]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-80]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-90]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-spread-100]
+path = ".build/jing-sell-stx-core-spread-v1.clar"
+clarity_version = 5
+epoch = "3.4"

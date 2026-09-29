@@ -1,6 +1,6 @@
 # Core-spread v1 Clarinet tests
 
-**52/52 tests pass: 26 buy, 26 sell.** Each rung has **100% function coverage,
+**59/59 tests pass: 52 mirrored rung tests plus 7 dispatch scenarios.** Each rung has **100% function coverage,
 99.05% line coverage and 99.28% branch coverage**. See the generated
 [source-matched coverage report](COVERAGE.md) for counts, hashes and unhit points.
 The original 16 scenarios measured 70.92% lines and 60.14% branches once the
@@ -27,15 +27,17 @@ and enforces 100% functions / 99% lines / 99% branches independently for each
 rung. No unhit instrumentation points are removed from the denominator.
 
 The rung sources are loaded by the manifest under their valid deployed names
-at spreads 0 and 25. Unlike dynamic test deployments, these are included in
+at spreads 0 and 25, plus 10/20/…/100 for the twenty-rung dispatch scenarios.
+Unlike dynamic test deployments, these are included in
 Clarinet's LCOV output. The reporter merges records by source and instrumentation
-location, counts both names only once per source location, and checks that all
+location, counts all deployment names only once per source location, and checks that all
 34 functions in each actual source are represented.
 
 ## What executes
 
-- Actual v6-3 market, both actual core-spread v1 rung bodies, actual core-v6
-  and actual ladder-v1. Core and ladder files are byte-identical to the inputs.
+- Actual v6-3 market, both actual core-spread v1 rung bodies, actual core-v6,
+  ladder-v1, dispatch and its rung trait. Core, ladder and trait files are
+  byte-identical to the inputs; dispatch only redirects its ladder principal.
 - Market/rung changes are limited to external dependency principals and the
   local sBTC asset identifier. `build.mjs` declares every substitution; the
   test hook and coverage reporter compare the full generated bodies against it.
@@ -63,6 +65,7 @@ location, counts both names only once per source location, and checks that all
 | `rungs.test.ts` | 16 | Registration, exact paused refunds, two-member partial exits, rejected admission with locally held funds, maker proceeds, seat retirement, expired escrow recovery, unrelated young pending top-up isolation |
 | `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
 | `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
+| `dispatch.test.ts` | 7 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, tenth-leg deposit/withdraw rollback |
 
 The rescale test fills approximately half the book and refills it through real
 transfers until four scale transitions occur. Alice stays inactive while Bob
@@ -71,6 +74,45 @@ prints, an independent per-fill allocation of Alice's proceeds (with a bounded
 rounding difference), eventual payout, removal of her zero-valued shares and
 final recovery. Total paid proceeds plus remaining custody equals actual maker
 proceeds received. Tests exercise both STX and sBTC accounting directions.
+
+## Twenty-rung dispatch scenarios
+
+Every dispatch scenario initializes ten buy and ten sell core-spread v1 rungs
+at spreads 10 through 100 bps, approved through the real ladder's code-hash
+gate. Each side reaches the normal ten-seat limit. The dispatch contract
+accepts ten allocations per call: funding both sides uses one `deposit-buy`
+and one `deposit-sell`, not a single twenty-rung transaction.
+
+The buy-only and sell-only scenarios allocate 1–10 weighted units: respectively
+10,000–100,000 sats (550,000 total) and 1–10 STX (55 STX total). A taker consumes
+the first five rungs and part of the sixth; the remaining four retain their
+original inventory. The first five close their epochs. A ten-rung dispatch
+top-up pays the user's accrued proceeds and reopens those rungs, then a
+ten-rung dispatch withdrawal exits all positions while market and core are
+paused. The inactive side remains unfunded.
+
+The two-sided scenario repeats the allocations for Alice and Bob on all twenty
+rungs. A keeper `settle-with-refresh` correctly returns `u1009` without changes:
+positive-spread asks and bids do not cross at the oracle midpoint. Trades then
+settle through real taker swaps walking each side. Both members top up through
+dispatch and receive proceeds. Alice's batch exits leave Bob's claims unchanged;
+Bob then exits. Receipts are compared to exact wallet changes and per-rung
+payout sums. Core equity equals live plus parked inventory, market custody
+equals live plus parked plus pending claims, book totals match the rung orders,
+dispatch owns no shares or tokens, and aggregate asset balances are conserved.
+
+Four rejection tests cover both asset directions: a below-minimum tenth
+deposit rolls back the first nine deposits (`u7005`), and a missing position
+on the tenth withdrawal rolls back the first nine withdrawals (`u7006`).
+Wallets, positions, market balances and rung states remain unchanged, receipt
+events are empty, and the valid nine-position exit subsequently succeeds.
+
+The suite does not claim complete dispatch branch coverage or a mainnet
+execution-cost benchmark. It exercises actual dispatch/rung logic with the
+token and oracle fixture boundaries described above. Dispatch has no batch
+claim function; these scenarios use its proceeds-paying top-ups before batch
+exiting. They do not assume a sold-out rung can be blindly included in a
+withdrawal batch.
 
 ## Remaining gaps
 
@@ -108,14 +150,14 @@ production rungs.
 
 ## Validation provenance
 
-`COVERAGE.md` records the release run against the committed market, core,
-ladder and rung sources. The same 52 tests also passed in the shared checkout
-with the other workstream's in-progress core additions; those additions are
-not part of this test change. To keep the published evidence independent,
-the release run used an isolated checkout of the committed contracts with
-these test files. The temporary checkout used a local SDK setup-file path;
-contract and test bodies were unchanged.
+`COVERAGE.md` records the 59-test release run against committed market, core,
+ladder, dispatch, trait and rung sources. During development, the shared core
+changed while a focused test was running; the source-stability hook rejected
+that run even though its scenario passed. The release run therefore used an
+isolated checkout of committed contracts with these test files. The temporary
+checkout used a local SDK setup-file path; contract and test bodies were
+unchanged. Native-vault work is not included in this change.
 
-Logs: `/tmp/rungs-release-coverage.log` (committed dependencies) and
-`/tmp/rungs-final-coverage.log` (shared working tree). Raw LCOV, test JSON and
-build substitutions are under `.build/`, separate from market-only coverage.
+Release log: `/tmp/rungs-dispatch-release.log`. Raw LCOV, test JSON and build
+substitutions are in the release checkout's `.build/`, separate from
+market-only coverage. A normal rerun regenerates them in this suite's `.build/`.

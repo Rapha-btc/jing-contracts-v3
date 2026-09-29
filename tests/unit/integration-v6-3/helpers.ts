@@ -24,6 +24,7 @@ function value(cv:any):any{
  if(cv.type==='none')return null;
  if(cv.type==='true'||cv.type==='false')return cv.type==='true';
  if(cv.type==='tuple')return Object.fromEntries(Object.entries(cv.value).map(([k,v])=>[k,value(v)]));
+ if(cv.type==='list')return cv.value.map(value);
  return cv.value;
 }
 const call=(contract:string,fn:string,args:ClarityValue[]=[],sender=owner)=>simnet.callPublicFn(contract,fn,args,sender);

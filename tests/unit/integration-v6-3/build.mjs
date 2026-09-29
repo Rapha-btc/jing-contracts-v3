@@ -20,10 +20,10 @@ for(const file of ['lcov.info','results.json','coverage.json'])fs.rmSync(`${out}
 fs.mkdirSync(`${dir}/settings`,{recursive:true});
 fs.copyFileSync('settings/Devnet.toml',`${dir}/settings/Devnet.toml`);
 const sources={};
-for(const name of ['markets-sbtc-stx-jing-v6-3','jing-core-v6','jing-ladder-v1',...rungFiles]){
+for(const name of ['markets-sbtc-stx-jing-v6-3','jing-core-v6','jing-ladder-v1','jing-rung-deposit-trait','jing-ladder-dispatch',...rungFiles]){
  const path=`contracts/${name}.clar`,source=fs.readFileSync(path,'utf8');
  let generated=source;
- // Core and ladder run byte-identically. Only market/rung dependency identities change.
+ // Core and ladder run byte-identically. Market/rung/dispatch dependency identities change.
  if(name!=='jing-core-v6'&&name!=='jing-ladder-v1')for(const [from,to] of Object.entries(substitutions))generated=generated.replaceAll(from,to);
  fs.writeFileSync(`${out}/${name}.clar`,generated);
  sources[name]={path,sha256:sha(source),generatedSha256:sha(generated)};
