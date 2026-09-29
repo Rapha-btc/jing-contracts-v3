@@ -71,10 +71,12 @@ run or do:
   push cooldown / pause, reserve-dust release); the sell rung got them in
   `702a545`, mirrored from the buy rung. The other four `-v1` rungs are out of
   deploy scope. Fork suite for the two core-spread v1 rungs: next.
-- Vaults: rerun the stxer vault sims (juice, fastpool, ccd016 v2 happy-path,
-  liquidation, recovery) for Nested Quinn L-1 / L-2 and Void Kael #6, #7, #8.
-  The juicestx `test:vault` harness fails at build (its fixture market is v6,
-  see the Fluid Briar section).
+- Vaults: **done.** Every swap-vault stxer sim rerun green on the current
+  vault and Jing sources, plus new fork scenarios for L-1, L-2, #6 and #7
+  (#8 cannot be built since the market's M-1 fix: the book leg fills in full).
+  juicestx `987b064` (`simulations/README-pool-vault-stx.md`), fastpool
+  `7fe5327` / `247ec6b` (`simulations/README-v6-3-recovery.md`), ccd016 v2
+  `2e0853e` (`simulations/README-ccd016-v2-verification.md`). No contract bug.
 - `ccd016-swap-vault-mia-v3` (work in progress) has none of the vault fixes.
 
 ## Found after the review: treasury guard
