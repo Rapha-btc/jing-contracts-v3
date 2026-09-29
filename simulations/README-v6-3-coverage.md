@@ -2,7 +2,7 @@
 
 Scope: `contracts/markets-sbtc-stx-jing-v6-3.clar` (submit + settle market).
 Older market versions are out of scope. All numbers below come from one rerun
-of the 15 suites on the current source; earlier figures are kept only in the
+of the 15 suites on the current source, plus one suite added for the last reachable gaps; earlier figures are kept only in the
 History section at the end.
 
 ## 1. Source provenance
@@ -27,8 +27,8 @@ not the market and are not counted.
 ## 2. Test results
 
 Every suite asserts exact outcomes, including negative tests: a call that must
-be refused passes when it returns the expected error and moves nothing. All 15
-suites pass; **5,554 / 5,554 checks, 0 unexpected failures.**
+be refused passes when it returns the expected error and moves nothing. All 16
+suites pass; **5,896 / 5,896 checks, 0 unexpected failures.**
 
 | Suite | Passed / total | Unexpected failures | stxer |
 |---|---|---|---|
@@ -47,6 +47,7 @@ suites pass; **5,554 / 5,554 checks, 0 unexpected failures.**
 | `verify-v6-3-settlement-edges.js` | 365 / 365 | 0 | [aeb76701](https://stxer.xyz/simulations/mainnet/aeb76701adb25b7a1dfb673ead63ac52) |
 | `verify-v6-3-errors-admin.js` | 514 / 514 | 0 | [880c87e0](https://stxer.xyz/simulations/mainnet/880c87e00142dd3910a7d1bbe3099e2b) |
 | `verify-v6-3-full-side.js` | 921 / 921 | 0 | [4da85888](https://stxer.xyz/simulations/mainnet/4da85888899cf282a57ab1657b3b0c18) |
+| `verify-v6-3-reachable-gaps.js` (added for the gaps in section 4) | 342 / 342 | 0 | [7515f273](https://stxer.xyz/simulations/mainnet/7515f2730d0548151b7d155cd3f71064) |
 
 `errors-admin` pins its fork to block 8984873 so that the signed but malformed
 Lazer updates saved by the earlier lazer-paths run `c014c741` are still fresh;
@@ -54,19 +55,19 @@ it deploys the current source like the others.
 
 ## 3. Coverage (combined, current source only)
 
-18 simulation runs, 2,865 transactions. 1,654 are calls to a counted market
-instance: **all 1,654 have a trace, 0 decode errors.** The 396 transactions
+19 simulation runs, 3,136 transactions. 1,774 are calls to a counted market
+instance: **all 1,774 have a trace, 0 decode errors.** The 452 transactions
 without a trace are all outside the market (deploys, STX / sBTC fundings,
 ladder calls).
 
 | metric | covered / total | % |
 |---|---|---|
-| expressions executed | 3,116 / 4,348 | 71.7% |
-| code lines touched (incl. deploy-time definitions) | 1,706 / 2,585 | 66.0% |
-| function-body lines touched | 1,706 / 2,476 | 68.9% |
+| expressions executed | 3,130 / 4,348 | 72.0% |
+| code lines touched (incl. deploy-time definitions) | 1,714 / 2,585 | 66.3% |
+| function-body lines touched | 1,714 / 2,476 | 69.2% |
 | branch nodes (`if` / `match` / `asserts!`) fully taken | 290 / 298 | 97.3% |
 | branch nodes never reached | 0 / 298 | 0% |
-| error paths (failure arms) hit | 151 / 296 | 51.0% |
+| error paths (failure arms) hit | 153 / 296 | 51.7% |
 
 What "error path (failure arm)" means: every `asserts!`, `unwrap!`,
 `unwrap-err!` and `try!` can return early with an error. The arm is **hit**
@@ -85,7 +86,7 @@ node simulations/failure-arms.mjs <ids> --by-source
 
 ## 4. Remaining gaps
 
-### Expressions and lines not covered (1,232 expressions, 879 lines)
+### Expressions and lines not covered (1,218 expressions, 871 lines)
 
 - **Instrumentation (deploy time):** 109 top-level lines, the 31 `ERR_*`
   constants and the map / data-var declarations run only at deploy, which
@@ -96,10 +97,11 @@ node simulations/failure-arms.mjs <ids> --by-source
 - **Instrumentation (evals are not traced):** `get-settlement`,
   `get-distance-slots`, `get-token-*-pending-limit` are exercised by the suites
   through read-only evals, which stxer does not trace.
-- **Reachable, untested:** read-only getters no suite calls:
-  `get-token-x-limit`, `get-token-y-limit`, `get-seated-x`, `get-seated-y`,
-  `is-protected-x`, `is-protected-y`, `get-token-x-pending-readmit`,
-  `get-token-y-pending-readmit`.
+- **Reachable, untested: none.** The eight read-only getters no suite called
+  (`get-token-*-limit`, `get-seated-*`, `is-protected-*`,
+  `get-token-*-pending-readmit`) are now called inside transactions through the
+  `gapsprobe-v1` contract in `verify-v6-3-reachable-gaps.js`, each value
+  asserted.
 - The eight partial branches below.
 
 ### Partial branches (8 of 298): one arm provably unreachable
@@ -111,7 +113,7 @@ node simulations/failure-arms.mjs <ids> --by-source
 | 3526, 3530, 3621, 3625 | `distribute-to-token-*-depositor` | total = 0 | these run only over listed depositors, each holding a positive amount |
 | 3928 | `gross-up` | `(- g u1)` | `g = floor(net x 10000 / 9980)` gives `g - floor(20 g / 10000) <= net`, so `n > net` never holds |
 
-### Error paths not hit (145 of 296)
+### Error paths not hit (143 of 296)
 
 | group | arms | lines | classification |
 |---|---|---|---|
@@ -122,7 +124,14 @@ node simulations/failure-arms.mjs <ids> --by-source
 | A5 seat list full (`ERR_SEATS_FULL`) | 2 | 142, 146 | **provably unreachable.** `jing-ladder-v1` caps band seats at 49 (`set-max-band-per-side` refuses 50, `ERR_BAND_FULL`), below the 50-entry seat list. |
 | A6 `ERR_ALREADY_SETTLED` | 1 | 3400 | **provably unreachable.** The cycle advances in the same transaction that writes its settlement. |
 | B signed-oracle fixtures | 11 | 1065 (y-feed shape), 1083 (y-feed stale), 1084, 1085, 3401, 3402, 3413 (zero price), 3404 (y-feed stale in settlement), 3405, 3408 (confidence ratio), 3411 (exponent mismatch) | **unavailable with the signed fixtures used.** Needs a signed Lazer print with price <= 0, a confidence above 2% of price, feeds with different exponents, or feeds stamped at different times (Lazer stamps both feeds the same second, so the x-feed check fails first). Not reachable by crafting input: the updates are signed. |
-| D reachable, untested | 2 | 1960, 2029 (`settle-token-*-readmit` list append, u1010) | **reachable.** In the stale-seat state (list at 50 while `side-full-*` is false) the readmit append fails u1010 and the settle rolls back whole. Reproduced by Void Kael's harness; not exercised by these suites. |
+
+The two arms that were "reachable, untested" (`settle-token-*-readmit` list
+append, lines 1960 / 2029) are now hit with u1010 by
+`verify-v6-3-reachable-gaps.js`: in the stale-seat state (list at 50,
+`side-full-*` false) the readmit settle returns `(err u1010)` and rolls back
+whole (pending readmit, parked, list, totals, balances unchanged), both sides;
+after `prune-seats` the same readmit is refused "queue-full" `(ok u0)`.
+**No reachable but untested path remains.**
 
 ## 5. Tooling fixes in this round
 
@@ -165,6 +174,8 @@ the record and are replaced by sections 2–4.
   expressions, 60.0% of lines.
 - Error-admin sim alone on `e338e27`: 149 / 296 failure arms (cache-only,
   missing traces skipped).
+- Before `verify-v6-3-reachable-gaps.js` (18 runs): 71.7% of expressions
+  (3,116 / 4,348), 66.0% of lines, 151 / 296 error paths.
 - Per-suite first runs, before the final rerun: swap-walk `a796043f` (388/388)
   then `60b21233` (382/382, after the treasury guard); capacity `0124df9e`;
   settlement-edges `0f8df262`; errors-admin `3cf12a3f`; full-side `dabb4070`;
