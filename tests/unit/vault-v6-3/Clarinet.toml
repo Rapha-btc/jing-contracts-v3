@@ -1,0 +1,80 @@
+[project]
+name = "vault-v6-3"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../../rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.token]
+path = "../v6-3/token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.wrong-token]
+path = "../v6-3/token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = "../v6-3/oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = ".build/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = ".build/jing-ladder-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = ".build/market.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-vault-auth]
+path = ".build/jing-vault-auth.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-core]
+path = ".build/mock-dlmm-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-pool]
+path = ".build/mock-dlmm-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-dlmm-router]
+path = ".build/mock-dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-core]
+path = ".build/mock-xyk-core.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-xyk-pool]
+path = ".build/mock-xyk-pool.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-velar-fees]
+path = ".build/mock-velar-fees.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-velar-pool]
+path = ".build/mock-velar-pool.clar"
+clarity_version = 5
+epoch = "3.4"

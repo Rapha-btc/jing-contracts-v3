@@ -9,6 +9,10 @@ one-call deposit and withdrawal helper, verified Stxer simulation, and exact
 step numbers for multi-rung deposits, exits, taker fills, and funded-seat
 replacement.
 
+The [native vault v6-3 guide](contracts/README-vault-v6-3.md) covers its
+market/router/Core dependencies, pending maker submissions, swap equity
+reconciliation, and deployment order.
+
 ## Layout
 
 ```
@@ -183,7 +187,7 @@ The updated market and core must be used together. See the
 [finding and fix](tests/unit/v6-3/REGISTERED-MAKER-FINDING.md).
 
 Market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
-Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
+Core SHA-256: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 
 | Check | Verified result |
 | --- | --- |
@@ -193,16 +197,18 @@ Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`
 | Market branch coverage | **99.64%** (832/835) |
 | Core-spread v1 rung unit tests (separate suite) | **59 passing**, including 20-rung dispatch scenarios; each rung **100% functions / 99.05% lines / 99.28% branches** ([report](tests/unit/integration-v6-3/README.md)) |
 | Current consolidated Stxer rerun | **17 suites, 5,981 passing checks** ([report](simulations/README-v6-3-coverage.md)) |
-| Current full RV campaigns | **12,000 trials + 600 guided episodes**, zero failures; 25,993 accounting checks |
+| Prior Core revision RV campaigns | **12,000 trials + 600 guided episodes**, zero failures; 25,993 accounting checks |
 | Full-book sBTC/STX cancellation integration | **291 checks pass**, exact refunds; <0.317% of each epoch budget ([Stxer report](simulations/README-v6-3-refund-costs.md)) |
 
-The full RV campaigns now match this source pair: **12,000 trials**, **600 guided
+The full RV campaigns tested the preceding Core revision: **12,000 trials**, **600 guided
 episodes**, **25,993 accounting checks**, and zero property/invariant failures.
 Every final recovery sweep returns all claims, leaving zero custody and core
 equity. Registered-depositor/two-market scenarios remain additional Clarinet
 coverage. The [consolidated Stxer rerun](simulations/README-v6-3-coverage.md)
-also matches the current market source: **17 suites, 5,981 checks, zero
-unexpected failures**. The 291-check full-book refund integration is separate.
+also matches the current market source on that preceding Core revision:
+**17 suites, 5,981 checks, zero unexpected failures**. The 291-check
+full-book refund integration is separate. Those RV and Stxer campaigns have
+not been rerun against this vault/Core amendment.
 
 The three unhit branches are the gross-up decrement and two parking-error
 guards previously hit only by artificial core errors. Details and the

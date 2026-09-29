@@ -1,51 +1,12 @@
-;; vault-sbtc-stx-v6
-;; v6: the v5 source bound to markets-sbtc-stx-jing-v6 (pegged orders),
-;; swap-router-sbtc-stx-jing-v5 and jing-core-v5. Every market call that
-;; carried a limit price passes `none` in the new spread slot: a vault order
-;; stays a fixed order. No other change.
-;; vault-sbtc-stx-v5
-;;
-;; v4: same vault as v3, bound to the next deploy set under the repo names:
-;; market markets-sbtc-stx-jing-v6 (partial withdrawals), router
-;; swap-router-sbtc-stx-jing-v5, ledger jing-core-v5. No logic change; the
-;; vault does not use withdraw-token-x/y yet.
-;;
-;; ---- v3 header follows ----
-;; vault-sbtc-stx-v3
-;;
-;; Per-user vault for the sBTC/STX pair on the Pyth Lazer market
-;; (markets-sbtc-stx-jingswap) and the retail router
-;; (swap-router-sbtc-stx-jingswap-v1). Same shape as vault-sbtc-stx-v2:
-;; the owner deploys it, funds it, and signs SIP-018 intents (size, side,
-;; limit, salt, expiry); the owner or the keeper executes them later,
-;; attaching the freshest signed Lazer `update` and its `mid` at broadcast
-;; time. That is what a pre-signed wallet transaction cannot do: a price
-;; older than 80 s is refused by the oracle, so a BTC-bridged swap signed
-;; minutes before broadcast has to skip the book. Through the vault the
-;; keeper fires the intent when the sBTC lands, with a live price, and the
-;; router takes the Jing book first.
-;;
-;; The bridge can mint straight into this contract: an sBTC deposit whose
-;; recipient is the vault principal lands here, no second hop. Such a mint
-;; makes no vault call, so jing-core's equity ledger does not see it; the
-;; indexer records the mint event off chain instead (the on-chain ledger is
-;; informational and already double-credits registered vaults on market
-;; payouts, so no on-chain catch-up entry is offered: it could not be made
-;; both exact and replay-safe).
-;;
-;; What the keeper may do is exactly what the owner signed. `update` and
-;; `mid` are never part of the intent: the market verifies the update
-;; itself and settles at its own mid, so a wrong or stale one only fails or
-;; mis-sizes the book leg. The limit and the min-out (derived from the limit)
-;; bound every execution.
-;;
-;; v3 changes from v2:
-;;   - market + router on Lazer: `update (buff 8192)` replaces the Pyth VAA,
-;;     no oracle fee budget (Lazer charges none)
-;;   - execute-router-swap: smart swap through the router, book + pools,
-;;     min-out = amount at the signed limit
-;;   - execute-jing-set-limit: pure reprice (set-token-*-limit), no crossing
-;;   - the direct XYK / DLMM entries are gone (the router covers them)
+;; Per-user signed-intent vault for market v6-3, router v5-3 and core v6.
+;; Maker deposits and limit changes submit first; permissionless settlement
+;; uses an oracle update newer than submission. A successful intent can leave
+;; pending state: inspect get-jing-position and the market's settlement events.
+;; Maker execute methods no longer take an update. Intent hashes and successful
+;; (ok msg-hash) responses are unchanged. Orders use fixed limits (spread none).
+;; The owner funds the vault and signs SIP-018 intents; only owner/keeper may
+;; execute them. Oracle updates and router mid are not signed; price limits are.
+;; Direct bridge mints remain outside core's informational equity ledger.
 
 (define-constant OWNER tx-sender)
 
@@ -55,9 +16,9 @@
 (define-constant SBTC_TOKEN 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX_TOKEN 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 
-(define-constant JING-MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6)
-(define-constant JING-ROUTER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5)
-(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v5)
+(define-constant JING-MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3)
+(define-constant JING-ROUTER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-3)
+(define-constant JING-CORE 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v6)
 (define-constant JING-VAULT-AUTH 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-vault-auth)
 
 (define-constant ASSET_WSTX "wstx")
@@ -75,9 +36,9 @@
 (define-constant ERR_AMOUNT_MISMATCH (err u6022))
 (define-constant ERR_REBATE_MISMATCH (err u6023))
 
-;; Mirror of the market's taker economics, used to size the allowance for
-;; the crossing reprice: that path pulls exactly this rebate from the vault.
-(define-constant TAKER_REBATE_BPS u20)
+;; Allowance ceiling, checked against the market during initialization.
+;; The market pulls only its actual age-dependent rebate, at most this rate.
+(define-constant TAKER_REBATE_MAX_BPS u70)
 (define-constant BPS_PRECISION u10000)
 
 (define-constant DEFAULT_PUBKEY 0x000000000000000000000000000000000000000000000000000000000000000000)
@@ -121,12 +82,32 @@
   (begin
     (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
     (asserts!
-      (is-eq (contract-call? JING-MARKET get-taker-rebate-bps) TAKER_REBATE_BPS)
+      (is-eq (contract-call? JING-MARKET get-taker-rebate-max-bps) TAKER_REBATE_MAX_BPS)
       ERR_REBATE_MISMATCH
     )
     (var-set initialized true)
     (try! (contract-call? JING-CORE register canonical))
     (ok true)
+  )
+)
+
+;; All reads use the vault principal; pending escrow is separate from the
+;; inventory eligible for set-limit / reprice. Invalid sides never default.
+(define-read-only (get-jing-position (side (string-ascii 128)))
+  (let ((cycle (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-current-cycle)))
+    (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC)) ERR_INVALID_SIDE)
+    (if (is-eq side ASSET_WSTX)
+      (ok {
+        live: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-y-deposit cycle current-contract),
+        parked: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-y-parked current-contract),
+        pending-deposit: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-y-pending-deposit current-contract),
+      })
+      (ok {
+        live: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-x-deposit cycle current-contract),
+        parked: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-x-parked current-contract),
+        pending-deposit: (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3 get-token-x-pending-deposit current-contract),
+      })
+    )
   )
 )
 
@@ -222,8 +203,8 @@
   )
 )
 
-;; Rest a maker order on the market. `update` is the keeper's fresh Lazer
-;; update for the market's maker gate, not part of the intent.
+;; Submit a maker deposit. It may be immediately live or escrowed pending
+;; market settle-token-x/y-deposit with a later update; the signed limit is unchanged.
 (define-public (execute-jing-deposit
     (sig (buff 65))
     (side (string-ascii 128))
@@ -231,7 +212,6 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint)
-    (update (buff 8192))
   )
   (let ((msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
       action: "jing-deposit",
@@ -248,26 +228,25 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
       (try! (as-contract? ((with-stx amount))
-        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price none update
+        (try! (contract-call? JING-MARKET deposit-token-y amount limit-price none
           WSTX_TOKEN ASSET_WSTX
         ))
       ))
       (try! (as-contract? ((with-ft SBTC_TOKEN ASSET_SBTC amount))
-        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price none update
+        (try! (contract-call? JING-MARKET deposit-token-x amount limit-price none
           SBTC_TOKEN ASSET_SBTC
         ))
       ))
     )
-    (try! (contract-call? JING-CORE log-jing-deposit msg-hash JING-MARKET
-      (token-in side) (token-out side) amount limit-price
-    ))
+    (print { event: "vault-jing-submitted", action: "jing-deposit",
+      msg-hash: msg-hash, position: (try! (get-jing-position side)) })
     (ok msg-hash)
   )
 )
 
-;; Pure reprice of the vault's resting order: the new limit replaces the old
-;; one and the order stays a maker order. The market refuses a limit that
-;; would cross a live maker (u1022); use execute-jing-reprice for that.
+;; Submit a pure limit change for live + parked inventory (not pending
+;; deposits). The current limit remains active until settlement accepts it;
+;; a crossing or superseded pending limit is refused by settlement.
 (define-public (execute-jing-set-limit
     (sig (buff 65))
     (side (string-ascii 128))
@@ -275,7 +254,6 @@
     (limit-price uint)
     (auth-id uint)
     (expiry uint)
-    (update (buff 8192))
   )
   (let (
       (msg-hash (contract-call? JING-VAULT-AUTH build-intent-hash {
@@ -297,15 +275,14 @@
     (try! (verify-and-consume msg-hash sig expiry))
     (if (is-eq side ASSET_WSTX)
       (try! (as-contract? ()
-        (try! (contract-call? JING-MARKET set-token-y-limit limit-price none update))
+        (try! (contract-call? JING-MARKET set-token-y-limit limit-price none))
       ))
       (try! (as-contract? ()
-        (try! (contract-call? JING-MARKET set-token-x-limit limit-price none update))
+        (try! (contract-call? JING-MARKET set-token-x-limit limit-price none))
       ))
     )
-    (try! (contract-call? JING-CORE log-jing-deposit msg-hash JING-MARKET
-      (token-in side) (token-out side) amount limit-price
-    ))
+    (print { event: "vault-jing-submitted", action: "jing-set-limit",
+      msg-hash: msg-hash, position: (try! (get-jing-position side)) })
     (ok msg-hash)
   )
 )
@@ -333,7 +310,7 @@
       ERR_INVALID_SIDE
     )
     (try! (verify-and-consume msg-hash sig expiry))
-    (let ((result (if (is-eq side ASSET_WSTX)
+    (let ((before (swap-snapshot side)) (result (if (is-eq side ASSET_WSTX)
         (try! (as-contract? ((with-stx amount))
           (try! (contract-call? JING-MARKET swap amount limit-price update SBTC_TOKEN
             ASSET_SBTC WSTX_TOKEN ASSET_WSTX false
@@ -345,12 +322,7 @@
           ))
         ))
       )))
-      (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-MARKET
-        (token-in side) (token-out side) amount limit-price
-        (if (is-eq side ASSET_WSTX)
-          (get token-x-received result)
-          (get token-y-received result)
-        )))
+      (try! (log-swap msg-hash JING-MARKET side limit-price before))
       (ok msg-hash)
     )
   )
@@ -359,8 +331,8 @@
 ;; Reprice the resting order; when the new limit crosses a live maker the
 ;; market turns it taker on the spot (fill-or-kill). The intent's `amount`
 ;; must equal the resting size so a stale intent cannot run after the
-;; position changed. The allowance is exactly the taker rebate, the only
-;; thing the crossing path pulls from the vault.
+;; position changed. Authorize the maximum age-dependent rebate; the market
+;; pulls only the actual rebate. A noncrossing change can remain pending.
 (define-public (execute-jing-reprice
     (sig (buff 65))
     (side (string-ascii 128))
@@ -380,7 +352,7 @@
         expiry: expiry,
       }))
       (cycle (contract-call? JING-MARKET get-current-cycle))
-      (rebate (/ (* amount TAKER_REBATE_BPS) BPS_PRECISION))
+      (rebate (/ (* amount TAKER_REBATE_MAX_BPS) BPS_PRECISION))
     )
     (asserts! (> limit-price u0) ERR_INVALID_PRICE)
     (asserts! (or (is-eq side ASSET_WSTX) (is-eq side ASSET_SBTC))
@@ -389,7 +361,7 @@
     (asserts! (> amount u0) ERR_NO_FUNDS)
     (asserts! (is-eq amount (resting side cycle)) ERR_AMOUNT_MISMATCH)
     (try! (verify-and-consume msg-hash sig expiry))
-    (let ((result (if (is-eq side ASSET_WSTX)
+    (let ((before (swap-snapshot side)) (result (if (is-eq side ASSET_WSTX)
         (try! (as-contract? ((with-stx rebate))
           (try! (contract-call? JING-MARKET reprice-or-swap-token-y limit-price none update
             SBTC_TOKEN ASSET_SBTC WSTX_TOKEN ASSET_WSTX
@@ -401,21 +373,13 @@
           ))
         ))
       )))
-      (if (>
-          (if (is-eq side ASSET_WSTX)
-            (get token-x-received result)
-            (get token-y-received result)
-          )
-          u0
-        )
-        (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-MARKET
-          (token-in side) (token-out side) (+ amount rebate) limit-price
-          (if (is-eq side ASSET_WSTX)
-            (get token-x-received result)
-            (get token-y-received result)
-          )))
-        true
-      )
+      (if (> (if (is-eq side ASSET_WSTX)
+            (get token-x-received result) (get token-y-received result)) u0)
+        (try! (log-swap msg-hash JING-MARKET side limit-price before))
+        (begin
+          (print { event: "vault-jing-submitted", action: "jing-reprice",
+            msg-hash: msg-hash, position: (try! (get-jing-position side)) })
+          true))
       (ok msg-hash)
     )
   )
@@ -431,8 +395,9 @@
 ;; Allowance: as-contract? counts GROSS transfers out of the vault. The book
 ;; leg can refund sub-minimum dust to the taker and the router re-sells that
 ;; dust on the fallback venue, so the gross outflow can exceed `amount` by
-;; up to the market's minimum deposit while the net outflow never does (the
-;; router asserts legs + unsold = amount). Hence amount + min deposit.
+;; up to the market minimum plus the refunded rebate. Authorize amount +
+;; minimum deposit + maximum rebate (the fastpool/juice allowance pattern).
+;; The router still bounds net input by amount and enforces the signed limit.
 (define-public (execute-router-swap
     (sig (buff 65))
     (side (string-ascii 128))
@@ -461,25 +426,24 @@
     )
     (try! (verify-and-consume msg-hash sig expiry))
     (let (
+        (before (swap-snapshot side))
         (mins (contract-call? JING-MARKET get-min-deposits))
+        (max-rebate (/ (* amount TAKER_REBATE_MAX_BPS) BPS_PRECISION))
         (result (if (is-eq side ASSET_WSTX)
-          (try! (as-contract? ((with-stx (+ amount (get min-token-y mins))))
+          (try! (as-contract? ((with-stx (+ amount (get min-token-y mins) max-rebate)))
             (try! (contract-call? JING-ROUTER smart-swap-stx-for-sbtc amount
               limit-price update mid min-out
             ))
           ))
           (try! (as-contract?
-            ((with-ft SBTC_TOKEN ASSET_SBTC (+ amount (get min-token-x mins))))
+            ((with-ft SBTC_TOKEN ASSET_SBTC (+ amount (get min-token-x mins) max-rebate)))
             (try! (contract-call? JING-ROUTER smart-swap-sbtc-for-stx amount
               limit-price update mid min-out
             ))
           ))
         ))
       )
-      (try! (contract-call? JING-CORE log-jing-swap msg-hash JING-ROUTER
-        (token-in side) (token-out side) (- amount (get unsold result))
-        limit-price (get out result)
-      ))
+      (try! (log-swap msg-hash JING-ROUTER side limit-price before))
       (ok msg-hash)
     )
   )
@@ -560,3 +524,53 @@
     (/ (* amount limit-price) (* PRICE_PRECISION DECIMAL_FACTOR))
   )
 )
+
+;; Include pending escrow in custody, but not in `resting`: a pending deposit
+;; cannot be repriced by set-limit. Snapshots preserve unlogged bridge mints:
+;; apply only this operation's balance delta to its pre-call recorded equity.
+(define-private (custody (side (string-ascii 128)))
+  (let (
+      (cycle (contract-call? JING-MARKET get-current-cycle))
+      (pending (if (is-eq side ASSET_WSTX)
+        (contract-call? JING-MARKET get-token-y-pending-deposit current-contract)
+        (contract-call? JING-MARKET get-token-x-pending-deposit current-contract)))
+    )
+    (+
+      (if (is-eq side ASSET_WSTX)
+        (stx-get-balance current-contract)
+        (unwrap-panic (contract-call? SBTC_TOKEN get-balance current-contract)))
+      (resting side cycle)
+      (default-to u0 (get amount pending)))))
+
+(define-private (other-side (side (string-ascii 128)))
+  (if (is-eq side ASSET_WSTX) ASSET_SBTC ASSET_WSTX))
+
+(define-private (swap-snapshot (side (string-ascii 128)))
+  {
+    balance-in: (custody side),
+    balance-out: (custody (other-side side)),
+    equity-in: (contract-call? JING-CORE get-token-equity (token-in side) current-contract),
+    equity-out: (contract-call? JING-CORE get-token-equity (token-out side) current-contract),
+  })
+
+(define-private (gain (before uint) (after uint))
+  (if (> after before) (- after before) u0))
+
+(define-private (equity-after (equity uint) (before uint) (after uint))
+  (if (>= after before)
+    (+ equity (- after before))
+    (let ((spent (- before after)))
+      (- equity (if (> spent equity) equity spent)))))
+
+(define-private (log-swap
+    (msg-hash (buff 32)) (market principal) (side (string-ascii 128))
+    (limit-price uint)
+    (before { balance-in: uint, balance-out: uint, equity-in: uint, equity-out: uint })
+  )
+  (let ((input (custody side)) (output (custody (other-side side))))
+    (contract-call? JING-CORE log-jing-swap-reconciled
+      msg-hash market (token-in side) (token-out side)
+      (gain input (get balance-in before)) limit-price
+      (gain (get balance-out before) output)
+      (equity-after (get equity-in before) (get balance-in before) input)
+      (equity-after (get equity-out before) (get balance-out before) output))))

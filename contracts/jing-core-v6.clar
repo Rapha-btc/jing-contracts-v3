@@ -340,31 +340,6 @@
   )
 )
 
-(define-public (log-jing-deposit
-    (msg-hash (buff 32))
-    (market principal)
-    (token-in principal)
-    (token-out principal)
-    (amount uint)
-    (limit-price uint)
-  )
-  (begin
-    (try! (check-not-paused))
-    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
-    (print {
-      event: "vault-jing-deposit",
-      vault: contract-caller,
-      market: market,
-      msg-hash: msg-hash,
-      token-in: token-in,
-      token-out: token-out,
-      amount: amount,
-      limit-price: limit-price,
-    })
-    (ok true)
-  )
-)
-
 (define-public (log-bitflow-swap
     (msg-hash (buff 32))
     (token-in principal)
@@ -1664,6 +1639,51 @@
       out: out,
       equity-in: (get-token-equity token-in contract-caller),
       equity-out: (get-token-equity token-out contract-caller),
+    })
+    (ok true)
+  )
+)
+
+;; Registered vaults can snapshot their equity and total custody before a swap,
+;; then reconcile the net change after market distribution and router legs have
+;; already logged some of it. The old log-jing-swap remains for legacy callers.
+;; Like log-deposit/log-withdraw, this trusts canonical registered caller code;
+;; it may only update that caller's own equity, never another user's ledger.
+(define-private (reconcile-vault-equity (token principal) (target uint))
+  (let ((current (get-token-equity token contract-caller)))
+    (if (> target current)
+      (credit token contract-caller (- target current))
+      (debit token contract-caller (- current target)))))
+
+(define-public (log-jing-swap-reconciled
+    (msg-hash (buff 32))
+    (market principal)
+    (token-in principal)
+    (token-out principal)
+    (amount uint)
+    (limit-price uint)
+    (out uint)
+    (equity-in uint)
+    (equity-out uint)
+  )
+  (begin
+    (try! (check-not-paused))
+    (asserts! (is-registered contract-caller) ERR_NOT_AUTHORIZED)
+    (reconcile-vault-equity token-in equity-in)
+    (reconcile-vault-equity token-out equity-out)
+    (print {
+      event: "vault-jing-swap",
+      vault: contract-caller,
+      market: market,
+      msg-hash: msg-hash,
+      token-in: token-in,
+      token-out: token-out,
+      amount: amount,
+      limit-price: limit-price,
+      out: out,
+      equity-in: (get-token-equity token-in contract-caller),
+      equity-out: (get-token-equity token-out contract-caller),
+      reconciled: true,
     })
     (ok true)
   )

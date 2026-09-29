@@ -18,11 +18,12 @@ maker's traded input and credits its exact received output; the market passes
 that payout to `log-match`. Both sources must be used together.
 
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
-also remain green. The full RV campaigns now validate this source pair: 12,000 native trials and
+also remain green. The full RV campaigns validated the preceding Core revision: 12,000 native trials and
 600 guided episodes, with zero property/invariant failures. The
 [current-source Stxer rerun](../../../simulations/README-v6-3-coverage.md) passes
 all 17 suites and 5,981 checks; the separate sBTC refund integration passes
-291 checks. These check counts remain distinct from Clarinet coverage.
+291 checks. The RV and Stxer campaigns have not been rerun against the later
+vault/Core amendment. These check counts remain distinct from Clarinet coverage.
 
 On 2026-09-29, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
@@ -49,7 +50,7 @@ vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 Source SHA-256:
 `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
 Core SHA-256:
-`67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
+`88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 The suite loads `contracts/jing-core-v6.clar` directly from the manifest, with
 no core source substitutions or generated logger bodies. Market initialization
 uses the real owner verification and contract-hash registration flow.
