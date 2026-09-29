@@ -25,7 +25,7 @@ outside these unit cases.
 
 Before the fix, **all four refund regressions failed on stale core equity**.
 After the fix, all four pass, as do both long lifecycle scenarios. The full
-Clarinet suite passes **211/211 tests**: 137/137 functions, 2349/2356 lines,
+Clarinet suite passes **217/217 tests**: 137/137 functions, 2349/2356 lines,
 and 830/833 branches.
 
 | Regression | Refunded dust | Core equity before fix | Core equity after fix |
@@ -60,6 +60,20 @@ had the same omission, now covered by both swap and reprice regressions.
 The defect was **stale equity accounting, not lost or trapped funds**. The
 refund transfer already succeeded. Downstream equity consumers have not been
 separately assessed.
+
+## Refund threshold and subsequent recovery
+
+Six more public-call cases test both sides with remainders of zero, minimum
+minus one (99 x units / 9,999 micro-STX), and exactly the minimum (100 x units /
+10,000 micro-STX). Zero emits no taker refund event; the sub-minimum amount
+emits exactly one and leaves zero equity. At the minimum, `u1017` rejects the
+entire walk, with unchanged market storage, both ledgers and core equity and
+no committed events. Replacing the insufficient maker liquidity lets the
+same swap succeed.
+
+Every case then deposits again from the same wallet, checks that its equity
+is exactly the fresh amount, pauses both market and core, and cancels fully.
+All six focused tests pass with zero final custody and equity.
 
 ## Longer lifecycle scenarios
 

@@ -127,3 +127,42 @@ describe('walk rounding leaves no core claim after refunded taker dust',()=>{
   zeroClaims();
  });
 });
+
+describe('real-core accounting at the taker refund threshold',()=>{
+ for(const s of sides)for(const boundary of ['zero','below-minimum','at-minimum'] as const)
+ it(`${s}: ${boundary} remainder, rollback or refund, then wallet reuse`,()=>{
+  const opposite=h.other(s),quote=s==='x'?P/2:P*2;
+  const minimum=s==='x'?100n:10000n;
+  const remainder=boundary==='zero'?0n:boundary==='below-minimum'?minimum-1n:minimum;
+  // Exact integer fills at these quotes leave the selected remainder. The y
+  // below-minimum input nets 999,999 after the 20 bps taker prepayment.
+  const input=s==='y'&&boundary==='below-minimum'?1002003:h.amount(s);
+  const makerAmount=s==='x'?Number((9980n-remainder)*50n):boundary==='zero'?4990:boundary==='below-minimum'?4950:4940;
+  step('maker admitted for boundary fill',()=>deposit(opposite,makerAmount,quote));
+  if(boundary==='at-minimum'){
+    // A walk can transfer funds and emit logs before this guard rejects it;
+    // the public transaction must roll all of them back, including core equity.
+    h.rejectUnchanged(()=>swap(s,input,quote),1017);accounting('partial fill rolled back');
+    expect(h.cycle()).toBe(0n);
+    expect(h.live(opposite,alice)).toBe(BigInt(makerAmount));
+    step('maker removes undersized liquidity',()=>cancel(opposite));
+    step('maker supplies a complete fill',()=>deposit(opposite,s==='x'?499000:4990,quote));
+  }
+  const receipt=step('successful boundary fill',()=>swap(s,input,quote));
+  const dust=boundary==='at-minimum'?0n:remainder;
+  const refunds=receipt.events.filter(e=>e.event==='print_event'&&e.data.contract_identifier===`${owner}.jing-core-v6`)
+    .map(e=>value(e.data.value)).filter(e=>e.event===`refund-${s}`&&e.depositor===carol);
+  expect(refunds).toHaveLength(dust===0n?0:1);
+  if(dust>0n)expect(refunds[0]).toMatchObject({amount:dust,cycle:h.cycle(),[`equity-${s}`]:0n});
+  expect(value(receipt.result)[`token-${s}-rolled`]).toBe(dust);
+  zeroClaims();
+  // Reusing the same wallet must credit only its fresh deposit, and allow a
+  // complete exit even when both market and core have subsequently paused.
+  step('same taker deposits again',()=>deposit(s,h.amount(s),h.off(s),carol));
+  expect(equity(s,carol)).toBe(BigInt(h.amount(s)));
+  step('core pauses after reuse',()=>call('pause',[],owner,'jing-core-v6'));
+  step('market pauses after reuse',()=>call('set-paused',[Cl.bool(true)]));
+  step('reused wallet exits during both pauses',()=>cancel(s,carol));
+  zeroClaims();
+ });
+});

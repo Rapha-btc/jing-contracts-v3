@@ -13,7 +13,7 @@ scenarios pass; see [the finding and fix](LIFECYCLE-FINDING.md). The core itself
 is unchanged. Older Stxer/RV reports use the previous market hash and do not
 validate this fix.
 
-On 2026-09-28, all **211 v6-3 tests passed** against the source including
+On 2026-09-28, all **217 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
 treasury, preserves the funded book and configured recipient, and confirms
 that subsequent batch fees reach the valid treasury. The suite also includes
@@ -142,11 +142,18 @@ y-feed fields and rejection while deposit/limit/readmission requests are pending
 Rejection snapshots include market variables and relevant maps, both asset
 ledgers, core variables, and core equity for both asset identities.
 
-The six cases in `lifecycle.test.ts` check real core equity against live + parked
+The twelve cases in `lifecycle.test.ts` check real core equity against live + parked
 claims and market custody against live + parked + pending claims. Two long
 sequences cover parking, readmission, walks, another settlement cycle and paused
 recovery; four regressions cover dust refunds in swap/reprice on both sides,
 including exactly one real refund event and zero remaining taker equity.
+Six additional cases check the taker refund threshold on both sides: zero
+remainder emits no taker refund, one unit below the minimum refunds exactly
+that amount, and exactly the minimum rejects with `u1017`, reverting market
+state, core equity, transfers and events. After rejection, replacing the maker
+liquidity allows a successful retry. Every case then reuses the same taker
+wallet for a fresh deposit and full cancellation while both contracts are
+paused, ending with zero custody and zero equity.
 
 ## Coverage and remaining work
 
@@ -208,6 +215,13 @@ the current market, with conservative negative-witness attribution. This is
 separate from LCOV branch coverage. Unattributed exits remain visible; they
 are not silently treated as covered or unreachable. Related Stxer scenario
 links are navigation only, not combined per-arm coverage evidence.
+
+The two new `try!` sites at lines 3283 and 3353 propagate core refund-log
+errors. The actual core refund functions only explicitly reject unregistered
+callers; an initialized market has already registered, and this core provides
+no unregister operation. These error outcomes have no negative witness; we do
+not fabricate logger errors to hit them. Their successful paths are exercised
+by the public dust-refund regressions.
 
 The inventory/trace parser has a separate check:
 

@@ -172,8 +172,8 @@ this command or its coverage totals.
 ### Current v6-3 results — 2026-09-28
 
 The market now notifies the core when refunding small taker remainders on either
-side. All four swap/reprice regressions, both long lifecycle scenarios, and the
-full **211-test suite** pass. See the
+side. Four swap/reprice regressions, two long lifecycle scenarios, six refund
+boundary/recovery cases, and the full **217-test suite** pass. See the
 [finding and fix](tests/unit/v6-3/LIFECYCLE-FINDING.md). The core is unchanged.
 
 The Clarinet suite now runs the real `jing-core-v6.clar` directly, including
@@ -189,7 +189,7 @@ fixtures and instrumentation.
 
 | Check | Verified result |
 | --- | --- |
-| Clarinet unit tests | **211 passing** |
+| Clarinet unit tests | **217 passing** |
 | Market function coverage | **100%** (137/137) |
 | Market line coverage | **99.70%** (2,349/2,356) |
 | Market branch coverage | **99.64%** (830/833) |
