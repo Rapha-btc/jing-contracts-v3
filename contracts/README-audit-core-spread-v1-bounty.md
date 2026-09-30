@@ -37,6 +37,8 @@ and a `rebate-bps` field. Vault and public router interfaces are unchanged.
 
 ## Submission decisions
 
+Reviewed through submission 7 of 7 (muogs6i8, 2026-09-30 18:54 UTC). Anything after it is new.
+
 | Submission | Claim or contribution | Current decision |
 | --- | --- | --- |
 | [munla02j — source/model review](https://paste.rs/to2Rp) | No exploitable finding; carry and gross-up analysis. No Clarinet run. | Supporting review only. Its assertion that v6-3 nets by dividing by BPS contradicts the actual `BPS + bps` denominator. Do not use its no-findings conclusion as proof. |
@@ -45,6 +47,7 @@ and a `rebate-bps` field. Vault and public router interfaces are unchanged.
 | [Celestial Shark, munor39t](https://gist.github.com/celestialsharkaibt/6dcff3e54cb3af30bcc83997f7ccc953) | F1: Medium vault allowance failure. F2: Low withdrawal overflow, with a Clarinet reproduction. | F2 accepted and reproduced locally. F1 is not established on the actual vault/router path; see below. |
 | [Cunning Nexus, munwd5wp](https://paste.rs/SZMLP) | L-1: withdrawal overflow, including dispatch. L-2: aged-price book skip. I-1/I-2: direct-swap refunds and last-member rounding. | L-1 accepted, same class. L-2 reproduced independently; a market-owned quote and corresponding router update are implemented and verified. Informational claims are assessed below. |
 | [muob06gj — epoch-map prototype](https://gist.github.com/bodhibuurstede-sys/a9c6f857e3d354374d37b9d764d32448) | No new exploit; optional four-epoch-maps-to-one proposal with reported 93/93 tests. | Rejected for the optional 2,000-sat bonus: repackages storage without simplifying the mechanism. Not adopted or independently tested here; cost benefits are unverified. |
+| [muogs6i8 — Pure Leo](https://gist.github.com/aipd506/fd3e88078aaf9be78c6644dbb7d92910) | Medium vault allowance deficit; Low withdrawal overflow; Low aged-price router rejection; epoch-map bonus proposal. | All duplicates, no award. The Medium restates Shark's F1 with the same numbers (10,069 refund, 18 sats short) and is not established on the vault/router path: quote and swap run in one transaction and the leg is capped at the exact `gross-cap`, so the juicestx `+51` allowance stands. The two Lows are already fixed (`b41dbd6`, `ee2edde`); the bonus proposal repeats muob06gj's, already rejected. |
 
 ## Accepted: oversized withdrawal requests overflow
 
