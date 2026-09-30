@@ -7,7 +7,8 @@ export const owner = accounts.get('deployer')!;
 export const maker = accounts.get('wallet_1')!;
 export const user = accounts.get('wallet_2')!;
 export const P = 1_000_000_000_000n, SCALE = 10_000_000_000n;
-export const U = Cl.uint, N = Cl.none(), UPDATE = Cl.some(Cl.bufferFromHex('00'));
+// Placeholder EVM envelope and payload; the local oracle controls decoded feeds.
+export const U = Cl.uint, N = Cl.none(), UPDATE = Cl.some(Cl.bufferFromHex('00'.repeat(72)));
 export const venues = ['dlmm','xyk','velar'] as const;
 export const principal = (c:string) => `${owner}.${c}`;
 export const token = Cl.principal(principal('token')), stx = Cl.principal(principal('asset-stx'));

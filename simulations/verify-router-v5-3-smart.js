@@ -53,6 +53,7 @@ import {
 import { uintCV, noneCV } from '@stacks/transactions';
 
 const SCALE = 10_000_000_000n;
+process.env.ROUTER_RENEW_TENURE = '1'; // This broad suite spans several budgets.
 const DLMM_CORE = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
 const DLMM_ADMIN = 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD';
 const sims = [];
@@ -64,7 +65,7 @@ const cpSplit = (r, cx, cv) => { const t = cx + cv; if (r <= t) { const x = t > 
 // the router's sizing on the fork, as the caller
 async function sizing(sellX, taker, { amount, limit, u, mid }) {
   const b = sellX ? 'true' : 'false';
-  return fields(await evRaw(ROUTER, `{ j: (jing-size u${amount} u${limit} ${u ? '(some 0x00)' : 'none'} u${mid} ${b}),
+  return fields(await evRaw(ROUTER, `{ j: (jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b}),
     d: (dlmm-capacity u${limit} ${b}),
     x: (cp-capacity (xyk-reserves ${b}) (xyk-keep ${b}) u${limit} ${b}),
     v: (cp-capacity (velar-reserves ${b}) (velar-keep) u${limit} ${b}) }`, taker));
@@ -161,17 +162,22 @@ async function routes() {
 
     console.log('S1 update none, loose limit');
     let x = await smart('S1 no update, loose limit, small amount', sellX, taker, { amount: small, limit: loose, mid: P });
-    check('S1 30-bin walk never stopped: dlmm-cap > amount, DLMM took it all', `${x.pre.d > small} ${x.f['dlmm-in']} ${x.f.unsold}`, `true ${small} 0`);
-    await ev('S1 the 30-bin fold at the loose limit ends not done, 30 bins past the active bin', ROUTER,
+    check('S1 loose-limit capacity > amount, DLMM took it all', `${x.pre.d > small} ${x.f['dlmm-in']} ${x.f.unsold}`, `true ${small} 0`);
+    await ev('S1 loose-limit fold advances 30 bins or stops at the pool boundary', ROUTER,
       `(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
         (r (fold dlmm-bin-step DLMM_WALK_BINS { bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) BPS) (- BPS fee))`},
           initial-price: (get initial-price p), bin-step: (get bin-step p), fee: fee, cap: u0, done: false })))
-        (and (not (get done r)) (is-eq (get bin r) (${sellX ? '+' : '-'} (get active-bin-id p) 30)) (is-eq (get cap r) (dlmm-capacity u${loose} ${sellX}))))`, 'true');
+        (let ((end (${sellX ? '+' : '-'} (get active-bin-id p) 30))
+              (edge ${sellX ? '500' : '-500'}))
+          (and (is-eq (get done r) (${sellX ? '>' : '<'} end edge))
+            (is-eq (get bin r) (if (${sellX ? '>' : '<'} end edge) edge end))
+            (is-eq (get cap r) (dlmm-capacity u${loose} ${sellX})))))`, 'true');
 
     console.log('S2 / S3 tight limit: every venue has some room');
-    // tightest limit (from 10% on the wrong side of the mid) where all three venues have room
+    // Start far enough beyond the oracle mid to find a tight pool limit even
+    // when a historical pool snapshot differs from the current signed price.
     let lim = null, pre = null;
-    for (let k = 1100n; k >= 800n && !lim; k -= 5n) {
+    for (let k = 1500n; k >= 500n && !lim; k -= 5n) {
       const cand = sellX ? P * k / 1000n : P * (2000n - k) / 1000n;
       const z = await sizing(sellX, taker, { amount: 1n, limit: cand, mid: P });
       if (z.d > 0n && z.x > 0n && z.v > 0n) { lim = cand; pre = z; }
@@ -195,11 +201,16 @@ async function routes() {
       await fund(side, poor, sp.v);
       await refused('S10 wallet = all three legs - 1: DLMM and XYK run, the Velar leg fails -> (err u1), all rolled back', poor, ROUTER, fn, smartArgs({ amount: a2, limit: lim, mid: P }), '(err u1)', [poor, ...who]);
     }
+    // The pool-derived trade can exceed the original fixed wallet funding.
+    const available2 = (await wallet(taker))[s];
+    if (available2 < a2) await fund(s, taker, a2 - available2);
     x = await smart('S2 amount = dlmm room + half the CP room', sellX, taker, { amount: a2, limit: lim, mid: P });
     check('S2 DLMM to its cap, both pools filled pro rata, nothing home', `${x.f['dlmm-in'] === x.pre.d} ${x.f['xyk-in'] > 0n} ${x.f['velar-in'] > 0n} ${x.f.unsold}`, 'true true true 0');
     const z3 = await sizing(sellX, taker, { amount: 1n, limit: lim, mid: P });
     const extra = sellX ? 5_000n : 20_000_000n;
     const a3 = z3.d + z3.x + z3.v + extra;
+    const available3 = (await wallet(taker))[s];
+    if (available3 < a3) await fund(s, taker, a3 - available3);
     x = await smart('S3 amount = every room + extra', sellX, taker, { amount: a3, limit: lim, mid: P });
     check('S3 each pool to its cap, the extra stays home', `${x.f['xyk-in'] === x.pre.x} ${x.f['velar-in'] === x.pre.v} ${x.f.unsold}`, `true true ${extra + (x.pre.d - x.f['dlmm-in'])}`);
 
@@ -218,6 +229,7 @@ async function routes() {
     check('S5 fixture: a slightly larger amount (worth >= 2 units at the limit) is not dust', String(dust(d5b, loose, sellX)), 'false');
     x = await smart(`S5 amount ${d5b} (just over dust): the DLMM stage runs`, sellX, taker, { amount: d5b, limit: loose, mid: P });
 
+    await fund(s, taker, sellX ? 1_000_000n : 1_000_000_000n);
     console.log('S6-S9 the book leg');
     const maker = sellX ? MB : MA, ms = sellX ? 'y' : 'x';
     const makerLimit = ms === 'y' ? P * 2n : P / 2n;
@@ -227,7 +239,7 @@ async function routes() {
       const live = await evRaw(MARKET, `(get-token-${ms}-deposit (var-get current-cycle) '${maker})`);
       if (live !== 'u0') await tx('maker cancels its rest', maker, MARKET, `cancel-token-${ms}-deposit`, [traits[ms], assets[ms]], (v) => v.startsWith('(ok'));
     };
-    const grossCap = async (mid, limit) => fields(await evRaw(MARKET, `(get-taker-capacity u${mid} u${limit} ${sellX} '${taker})`))['gross-cap'];
+    const grossCap = async (mid, limit) => fields(await evRaw(MARKET, `(get-taker-capacity u${mid} u${limit} ${sellX} '${taker} (some 0x${u.hex.replace(/^0x/, '')}))`))['gross-cap'];
     const bookAmt = sellX ? 20_000n : 50_000_000n;
     await place(worth(sellX ? 200_000n : 500_000_000n));
     const gc6 = await grossCap(P, loose);
@@ -287,7 +299,7 @@ async function minTaker() {
   await tx('market: sync seats -> 49 reserved', DEP, MARKET, 'sync-seat-count', [], '(ok u49)');
   await ev('the x side is full for the taker', MARKET, `(side-full-x (get-token-x-depositors (var-get current-cycle)) '${taker})`, 'true');
   const limit = at(950);
-  const cap = fields(await evRaw(MARKET, `(get-taker-capacity u${P} u${limit} true '${taker})`));
+  const cap = fields(await evRaw(MARKET, `(get-taker-capacity u${P} u${limit} true '${taker} (some 0x${u.hex.replace(/^0x/, '')}))`));
   check('get-taker-capacity: min-taker = Q + 1, admitted (walk > smallest)', `${cap['min-taker']} ${cap['gross-cap'] > 0n}`, '2001 true');
   // net = size * 10000 / 10020: 1500 -> 1497 (>= 1000, < 2001); 2600 -> 2594 (>= 2001)
   let x = await smart('M1 net 1497: over min-dep, under min-taker -> no book leg', true, taker, { amount: 1_500n, limit, u, mid: P });

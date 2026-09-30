@@ -420,15 +420,15 @@ for (const s of ['x','y'] as const) describe(`${s} swaps and reprice`, () => {
   });
   it('reports shared mid capacity and excludes the requesting maker from the walk', () => {
     ok(deposit(other(s),amount(other(s)),P,alice));
-    const capacity=value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(bob)]));
+    const capacity=value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(bob),Cl.none()]));
     expect(capacity).toMatchObject({'mid-cap':BigInt(amount(s)),'net-cap':BigInt(amount(s)),'walk-cap':0n,'min-taker':0n});
     expect(capacity['gross-cap']).toBeGreaterThan(capacity['net-cap']);
     // Midpoint settlement aggregates all makers; only the bilateral walk skips self.
-    expect(value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(alice)]))['net-cap']).toBe(BigInt(amount(s)));
+    expect(value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(alice),Cl.none()]))['net-cap']).toBe(BigInt(amount(s)));
     ok(setLimit(other(s),off(other(s))));
-    const walk=value(ro('get-taker-capacity',[U(P),U(off(other(s))),Cl.bool(s==='x'),Cl.principal(bob)]));
+    const walk=value(ro('get-taker-capacity',[U(P),U(off(other(s))),Cl.bool(s==='x'),Cl.principal(bob),Cl.none()]));
     expect(walk['walk-cap']).toBeGreaterThan(0n);
-    expect(value(ro('get-taker-capacity',[U(P),U(off(other(s))),Cl.bool(s==='x'),Cl.principal(alice)]))['walk-cap']).toBe(0n);
+    expect(value(ro('get-taker-capacity',[U(P),U(off(other(s))),Cl.bool(s==='x'),Cl.principal(alice),Cl.none()]))['walk-cap']).toBe(0n);
   });
 });
 
@@ -485,7 +485,7 @@ for (const s of ['x','y'] as const) describe(`${s} remaining public transitions`
   });
   it('capacity on full books reports size threshold, door parking, and disabled liquidity', () => {
     queue(); ok(deposit(s,amount(s),P));
-    const capacity=() => value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(carol)]));
+    const capacity=() => value(ro('get-taker-capacity',[U(P),U(P),Cl.bool(s==='x'),Cl.principal(carol),Cl.none()]));
     expect(capacity()).toMatchObject({'min-taker':BigInt(amount(s)+1),'net-cap':0n});
     ok(deposit(other(s),amount(other(s))*4,P,bob)); mid(s==='x'?P/2:P*2); ok(settleDeposit(other(s),bob)); mid(P);
     expect(capacity()['net-cap']).toBe(BigInt(amount(s)*3));
@@ -575,7 +575,7 @@ describe('pure private arithmetic boundaries', () => {
   });
   it('gross-up respects the net capacity through fee rounding boundaries', () => {
     for (const net of [0,1,99,498,499,500,501,998,999,1000,10000]) {
-      const gross=value(h.privateCall('gross-up',[U(net)],owner).result);
+      const gross=value(h.privateCall('gross-up',[U(net),U(20)],owner).result);
       expect(gross).toBe(net===0?0n:((BigInt(net)+1n)*10020n-1n)/10000n);
       expect(gross*10000n/10020n).toBeLessThanOrEqual(BigInt(net));
       // Returned gross is the maximum input fitting this net capacity.

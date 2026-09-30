@@ -1,0 +1,73 @@
+{
+  "date": "2026-09-30",
+  "sources": {
+    "swap-router-sbtc-stx-jing-v5-3": "c8bb651f0df1417adddf7a50e0d29424218ce65db8f54c0a40238d578107113c",
+    "jing-ladder-v1": "0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786",
+    "markets-sbtc-stx-jing-v6-3": "ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848",
+    "jing-core-v6": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697"
+  },
+  "clarinet": {
+    "market": 320,
+    "router": 185,
+    "rungDispatch": 97,
+    "nativeVault": 23,
+    "total": 625
+  },
+  "stxer": {
+    "targeted": {
+      "passed": 482,
+      "checks": 482,
+      "simulations": [
+        {
+          "side": "x",
+          "version": "baseline",
+          "url": "https://stxer.xyz/simulations/mainnet/2f0b6ca395c61a1b5814a6036abd38a2"
+        },
+        {
+          "side": "x",
+          "version": "fixed",
+          "url": "https://stxer.xyz/simulations/mainnet/11bd63a9e19cdab3b45f8a0c380d0abb"
+        },
+        {
+          "side": "y",
+          "version": "baseline",
+          "url": "https://stxer.xyz/simulations/mainnet/242342a85cc645511f5e5ca7e4815d0b"
+        },
+        {
+          "side": "y",
+          "version": "fixed",
+          "url": "https://stxer.xyz/simulations/mainnet/8821dd9354239805794a63b256cb3b16"
+        }
+      ]
+    },
+    "smart": {
+      "passed": 503,
+      "checks": 503,
+      "forkHeight": 9094335,
+      "simulations": [
+        "https://stxer.xyz/simulations/mainnet/f2b05d80793f75b1e37c59afc383f9b1",
+        "https://stxer.xyz/simulations/mainnet/994d2cbe14b3428765bf811381a16482",
+        "https://stxer.xyz/simulations/mainnet/5164797eb1ba2c814451dc19df2bfb2a"
+      ]
+    },
+    "v6": {
+      "passed": 290,
+      "checks": 290,
+      "forkHeight": 9094335,
+      "simulations": [
+        "https://stxer.xyz/simulations/mainnet/9d3c3db8d2f859fe2a9dc1ae9686b6ce"
+      ],
+      "deployments": {
+        "markets-sbtc-stx-jing-v6-3": {
+          "sha256": "90ab6b3d38410beefb5e9ab1a33ea3e618724d9bba394de1be8561fd9f669271",
+          "commentLinesRemoved": true
+        },
+        "swap-router-sbtc-stx-jing-v5-3": {
+          "sha256": "c8bb651f0df1417adddf7a50e0d29424218ce65db8f54c0a40238d578107113c",
+          "commentLinesRemoved": false
+        }
+      }
+    },
+    "total": 1275
+  }
+}

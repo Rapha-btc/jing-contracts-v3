@@ -56,7 +56,7 @@ Gate: 100% functions / 99% executable lines / 99% reachable branches, unchanged.
 
 ## Source SHA-256
 
-- markets-sbtc-stx-jing-v6-3: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
+- markets-sbtc-stx-jing-v6-3: `ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 - jing-ladder-v1: `0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786`.
 - jing-rung-deposit-trait: `927fbba4826710ded7e81fb4847ed92f5c4310bc4e0cf42537600876b0a01163`.

@@ -1,10 +1,8 @@
 ;; title: swap-router-sbtc-stx-jing-v5-3
-;; swap-router-sbtc-stx-jing-v5-2, byte for byte, with one change: JING_MARKET is
-;; markets-sbtc-stx-jing-v6-3 instead of v6-2. The market's change (the maker
-;; margin gate searches the book up to min/max(limit, mid -/+ 0.4%), clean
-;; ERR_QUEUE_FULL, pruned seat count, jing-ladder-v1) moved no signature the
-;; router calls, so the router needs nothing else - but the market is bound by
-;; name, so a new market means a new router.
+;; Targets markets-sbtc-stx-jing-v6-3. Smart book sizing asks the market for
+;; gross capacity and the rebate rate using the supplied oracle update.
+;; The market owns timestamp decoding and rebate arithmetic, and verifies
+;; the signed update before any trade. Public router signatures are unchanged.
 ;;
 ;; title: swap-router-sbtc-stx-jing-v4
 ;; v3: the smart swaps take `mid` from the caller instead of verifying the
@@ -735,13 +733,16 @@
   ;; fail (the public already refused a zero mid), so it returns a plain uint.
   (match update
     v (let (
-        (quote (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc tx-sender))
+        (quote (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc
+          tx-sender (some v)
+        ))
+        (bps (get rebate-bps quote))
         (cap (get gross-cap quote))
         (size (if (> cap amount)
           amount
           cap
         ))
-        (net (/ (* size BPS) (+ BPS u20)))
+        (net (/ (* size BPS) (+ BPS bps)))
         (mins (contract-call? JING_MARKET get-min-deposits))
         (min-dep (if sell-sbtc
           (get min-token-x mins)

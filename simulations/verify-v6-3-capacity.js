@@ -197,7 +197,7 @@ function capModel({ ds, P, limit, taker, bids, asks, minX = MIN_X, minY = MIN_Y,
   const net = admitted ? midCap + walkCap : 0n;
   return { midCap: admitted ? midCap : 0n, walkCap: admitted ? walkCap : 0n, net, gross: grossUp(net), minTaker, opposite, own, full, door };
 }
-const capString = (c) => `(ok (tuple (gross-cap u${c.gross}) (mid-cap u${c.midCap}) (min-taker u${c.minTaker}) (net-cap u${c.net}) (walk-cap u${c.walkCap})))`;
+const capString = (c) => `(ok (tuple (gross-cap u${c.gross}) (mid-cap u${c.midCap}) (min-taker u${c.minTaker}) (net-cap u${c.net}) (rebate-bps u20) (walk-cap u${c.walkCap})))`;
 // swap: settlement (limit filter, small-share filter, clearing, distribution)
 // then cross-remainder (walk). own: the taker side AFTER any park/bump, in
 // list order (the taker is appended at the end). opp: the other side.
@@ -358,7 +358,7 @@ async function main() {
   const kinds = ['mix', 'own', 'ownbig', 'edge', 'foff', 'ftop', 'fin', 'fout'];
   const names = kinds.flatMap((k) => [`capacity-${k}-y`, `capacity-${k}-x`]);
   const probeSrc = names.map((n) => `(define-public (probe-${n} (mid uint) (limit uint) (deposit-x bool) (taker principal))
-  (let ((r (contract-call? .${n} get-taker-capacity mid limit deposit-x taker)))
+  (let ((r (contract-call? .${n} get-taker-capacity mid limit deposit-x taker none)))
     (print r)
     (ok r)))`).join('\n');
   const b = SimulationBuilder.new({ stacksNodeAPI: 'http://77.42.3.101/stacks-api' });

@@ -115,7 +115,7 @@ for(const s of ['x','y'] as const) describe(`existing orders ${s}`,()=>{
   });
   for(const smart of [false,true]) it(`${smart?'smart':'manual'} cannot walk the caller's own off-mid quote`,()=>{
     bothSides(s,h.amount(h.other(s)),h.quote(s));cancelInput(s);
-    const q=h.ro('market','get-taker-capacity',[h.U(h.P),h.U(h.quote(s)),Cl.bool(s==='x'),Cl.principal(h.user)]);
+    const q=h.ro('market','get-taker-capacity',[h.U(h.P),h.U(h.quote(s)),Cl.bool(s==='x'),Cl.principal(h.user),Cl.none()]);
     expect(q['mid-cap']).toBe(0n);expect(q['walk-cap']).toBe(0n);expect(q['gross-cap']).toBe(0n);
     const before=h.state(),n=h.amount(s),r=h.ok(smart?h.smart(s,n):h.manual(s,{jing:n}));
     expect(r).toMatchObject({'jing-ok':false,'jing-in':0n,out:0n,unsold:n});expect(h.state()).toBe(before);

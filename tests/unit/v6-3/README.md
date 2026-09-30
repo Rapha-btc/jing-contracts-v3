@@ -7,17 +7,23 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
-On 2026-09-29, `clarinet check` passed for all four root-manifest contracts,
-and `npm test` passed **287/287 tests** plus the unchanged coverage thresholds
-against the `34bbe18` market. Fourteen new rebate/capacity regressions cover
-the new net-based pot and exact gross-up. Existing midpoint, lifecycle,
-registered-taker, minimum-input, and exact-walk-exhaustion expectations were
-adjusted only for the new arithmetic. No production contract was edited and
-no unexpected failures remain. The separate rung epoch rerun passed **8/8**;
-the prior full 69-test rung coverage is historical, as documented below.
+On 2026-09-30, `npm test` passed **320/320 tests** against the
+market-owned age-aware capacity quote. The 33 new cases in
+`capacity-age.test.ts` cover configured feed IDs, age/rate boundaries,
+missing hints, duplicate feeds, exact gross-cap fills and stale rejection.
+`get-taker-capacity` now takes an optional update and returns `rebate-bps`;
+existing fixed-rate quote cases explicitly pass `none`.
+
+Market coverage gates remain unchanged. The router suite passes **185/185**,
+rung/dispatch integration **97/97**, and native-vault tests **23/23**.
+Clarinet checks pass for the router dependency graph and both market mirror
+variants. See the [bounty decision](../../../contracts/README-audit-core-spread-v1-bounty.md)
+and [current Stxer evidence](../../../simulations/README-router-v5-3-rebate-age.md).
+The 2026-09-29 result was 287/287 against `34bbe18`; historical campaigns
+below retain their original source scope.
 
 The registered-maker and refund-safety fixes are implemented and verified.
-All **287 tests pass**, including 16 shared-core scenarios with registered
+All **320 tests pass**, including 16 shared-core scenarios with registered
 contract depositors and two markets, plus 40 refund/accounting cases. Core
 debits now bound the aggregate subtraction, so an inconsistent low total cannot
 underflow and block a refund. Cancellation and pending-settlement refund logs
@@ -27,13 +33,13 @@ maker's traded input and credits its exact received output; the market passes
 that payout to `log-match`. Both sources must be used together.
 
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
-also remain green. The full [RV campaigns](../../rv/v6-3/README.md) now validate
-this same market/core pair: 12,000 native trials and 600 guided episodes,
+also remain green. The historical [RV campaigns](../../rv/v6-3/README.md) validate
+the earlier market/core pair: 12,000 native trials and 600 guided episodes,
 with zero property/invariant failures and 25,998 accounting checks. The
 [previously documented Stxer rerun](../../../simulations/README-v6-3-coverage.md) passed
 all 17 suites and 5,981 checks; the separate sBTC refund integration passes
-291 checks. Those Stxer figures are historical here; this session reran RV,
-not Stxer. All campaign check counts remain distinct from Clarinet coverage;
+291 checks. Those figures and the RV campaigns predate the capacity-age change. Current
+router Stxer evidence is linked above; the full RV campaigns were not rerun. All campaign check counts remain distinct from Clarinet coverage;
 the linked reports identify the sources tested by each campaign.
 
 In the preceding 2026-09-29 run, all **273 v6-3 tests passed** against the source including
@@ -51,15 +57,15 @@ remain unchanged and pass. No unrelated failures occurred in the full run.
 
 | Market-only metric | Covered / total | Coverage |
 | --- | ---: | ---: |
-| Functions | 137 / 137 | **100.00%** |
-| Lines | 2348 / 2354 | **99.75%** |
-| Branches | 833 / 835 | **99.76%** |
+| Functions | 139 / 139 | **100.00%** |
+| Lines | 2361 / 2367 | **99.75%** |
+| Branches | 837 / 839 | **99.76%** |
 
 Toolchain: Clarinet SDK/WASM 3.21.0, Vitest 2.1.9,
 vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 
 Source SHA-256:
-`5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
+`ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848`.
 Core SHA-256:
 `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 The suite loads `contracts/jing-core-v6.clar` directly from the manifest, with

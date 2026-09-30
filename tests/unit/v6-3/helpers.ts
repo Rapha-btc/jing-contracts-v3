@@ -17,7 +17,7 @@ export const C = 'market';
 export const P = 1_000_000_000_000;
 export const U = Cl.uint;
 export const N = Cl.none();
-export const UPDATE = Cl.bufferFromHex('00');
+export const UPDATE = Cl.bufferFromHex('00'.repeat(72));
 export const accounts = simnet.getAccounts();
 export const owner = accounts.get('deployer')!;
 export const alice = accounts.get('wallet_1')!;
@@ -108,9 +108,10 @@ export const value = (cv: any): any => {
 export function verifyMarket() {
   ok(call('set-verified-contract', [Cl.principal(market)], owner, 'jing-core-v6'));
 }
-export function init() {
+export function init() { initFeeds(1,45); }
+export function initFeeds(feedX: number, feedY: number) {
   verifyMarket();
-  ok(call('initialize', [Cl.principal(market), token, token, U(100), U(10_000), U(1), U(45)]), Cl.bool(true));
+  ok(call('initialize', [Cl.principal(market), token, token, U(100), U(10_000), U(feedX), U(feedY)]), Cl.bool(true));
   for (const who of [alice, bob, keeper, carol]) ok(call('mint', [U(1_000_000_000), Cl.principal(who)], owner, 'token'));
 }
 export function balance(s: Side, who: string) {

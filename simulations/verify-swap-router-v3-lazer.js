@@ -289,6 +289,11 @@ async function main() {
     call(sender, "deposit-token-y", [uintCV(amount), uintCV(limit), ...SPREAD, upd, wstxTrait, wstxAsset], CID);
 
   let b = SimulationBuilder.new({ stacksNodeAPI: STACKS_NODE_API });
+  if (process.env.ROUTER_FORK_HEIGHT) {
+    const height = Number(process.env.ROUTER_FORK_HEIGHT);
+    if (!Number.isSafeInteger(height) || height <= 0) throw new Error('Invalid ROUTER_FORK_HEIGHT');
+    b.useBlockHeight(height);
+  }
   if (DEPLOYED || DEPLOY_COPY || LIVE_V5) { const origDeploy = b.addContractDeploy.bind(b); b.addContractDeploy = (p) => (p.contract_name === CORE || p.contract_name === MARKET || ((DEPLOYED || LIVE_V5) && p.contract_name === ROUTER)) ? b : origDeploy(p); }
   const tx = (label, fn, want) => { b = fn(b); const slot = { label, kind: "tx", want, raw: null }; steps.push(slot); return slot; };
   const ev = (label, code, want, cid = RID) => { b = b.addEvalCode(cid, code); steps.push({ label, kind: "eval", want }); };
@@ -446,11 +451,11 @@ async function main() {
   tx("W8 fund the low bidder with 60 STX", (b) => b.withSender(S).addSTXTransfer({ recipient: M8, amount: 60_000_000 }), () => true);
   tx("W8 50 STX bid at -0.5% (fresh maker)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_LOW), ...SPREAD, DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
   tx("W8 refresh-mid verifies the Lazer update and returns the mid", call(T, "refresh-mid", [DUMMY_VAA], CID), `(ok u${MID})`);
-  ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78)`, (v) =>
+  ev(`W8 capacity at limit u1: mid ${midCap8} + walk ${walkCap8} -> gross ${gross8}`, `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) =>
     String(v).includes(`(gross-cap u${gross8})`) && String(v).includes(`(mid-cap u${midCap8})`) && String(v).includes(`(walk-cap u${walkCap8})`), CID);
-  ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true 'SP000000000000000000002Q6VF78)`, (v) =>
+  ev("W8 capacity at a limit above the low bid: walk-cap u0", `(get-taker-capacity u${MID} u${(MID * 998n) / 1000n} true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) =>
     String(v).includes("(walk-cap u0)") && String(v).includes(`(mid-cap u${midCap8})`), CID);
-  ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true 'SP000000000000000000002Q6VF78)`, (v) =>
+  ev("W8 capacity with the taker's limit out of range: mid-cap u0", `(get-taker-capacity u${MID} u${MID + 1n} true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) =>
     String(v).includes("(mid-cap u0)"), CID);
   const k0s = sbtcOf(T, "W8 before"); const k0x = stxOf(T, "W8 before");
   // one min deposit over still fills (the sub-min residual is refunded as
@@ -480,7 +485,7 @@ async function main() {
   const smartStx = (sender, amount, limit, vaa, minOut, mid = MID, cid = RID) =>
     call(sender, "smart-swap-stx-for-sbtc", [inputCV(amount), inputCV(limit), vaa, uintCV(mid), uintCV(minOut)], cid);
   const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
-  const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
+  const L_TIGHT = V6 ? MID * 3n : (MID * 102n) / 100n; // A historical pool can differ from today's oracle; prove zero room below.
   // gross-cap for a taker facing a 100 STX bid at the mid with an empty own side
   const midGross9a = grossUp((BID * PP * 100n) / MID);
   // W9a / W9g / W17: sell half again the bid's capacity, so the book is taken
@@ -497,6 +502,8 @@ async function main() {
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
   const n2s = sbtcOf(T, "W9b after"); const n2x = stxOf(T, "W9b after");
   const n3s = sbtcOf(T, "W9c before"); const n3x = stxOf(T, "W9c before");
+  if (V6) ev("W9c fixture: no AMM room at the rejection limit",
+    `(list (dlmm-capacity u${L_TIGHT} true) (cp-capacity (xyk-reserves true) (xyk-keep true) u${L_TIGHT} true) (cp-capacity (velar-reserves true) (velar-keep) u${L_TIGHT} true))`, "(list u0 u0 u0)");
   tx("W9c smart sell 5000 sats, tight limit, empty book: no venue respects it -> u3002", smartSbtc(T, 5000n, L_TIGHT, VAA, 1n), "(err u3002)");
   const n4s = sbtcOf(T, "W9c after"); const n4x = stxOf(T, "W9c after");
   // W9a's mid fill left S a few uSTX of pro-rata rounding dust, rolled under
@@ -508,8 +515,8 @@ async function main() {
   const ASK9 = 20_000n;
   tx("W9d 20000 sat ask rests on Jing", call(T, "deposit-token-x", [uintCV(ASK9), uintCV(1n), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK9})`);
   const n5s = sbtcOf(S, "W9d before"); const n5x = stxOf(S, "W9d before");
-  const L_STX = (MID * 103n) / 100n; // STX seller: 3% over the mid reaches the AMMs
-  const r9d = tx("W9d smart sell 200 STX, limit 3% over the mid: book to capacity, DLMM next, rest XYK/Velar", smartStx(S, 200_000_000n, L_STX, VAA, 1n), (v) =>
+  const L_STX = V6 ? MID * 2n : (MID * 103n) / 100n; // Generous ceiling for the historical-pool fixture.
+  const r9d = tx("W9d smart sell 200 STX at the configured ceiling: book to capacity, DLMM next, rest XYK/Velar", smartStx(S, 200_000_000n, L_STX, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const n6s = sbtcOf(S, "W9d after"); const n6x = stxOf(S, "W9d after");
   ev("W9d ask fully cleared (dust at most)", `(get-token-x-deposit ${cyc(6)} '${T})`, (v) => uintOf(v) < MIN_SBTC, CID);
@@ -549,7 +556,7 @@ async function main() {
   tx("W9g M8 asks 10000 sats at +1% (own side, out of range)", call(M8, "deposit-token-x", [uintCV(ASK_OWN), uintCV((MID * 101n) / 100n), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
   tx("W9g S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
   if(V6)tx("W9g settle pending bid with newer signed print",call(T,"settle-token-y-deposit",[standardPrincipalCV(S),FRESH_UPDATE,wstxTrait,wstxAsset],CID),`(ok u${BID})`);
-  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78)`, (v) =>
+  ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) =>
     String(v).includes(`(gross-cap u${midGross9a})`) && String(v).includes("(walk-cap u0)"), CID);
   const w0s = sbtcOf(T, "W9g before"); const w0x = stxOf(T, "W9g before"); const g8s0 = sbtcOf(M8, "W9g M8 before"); const g8x0 = stxOf(M8, "W9g M8 before");
   const r9g = tx(`W9g smart sell ${SELL9} sats, loose limit: bid to capacity, ask untouched, rest on the AMMs`, smartSbtc(T, SELL9, L_LOOSE, VAA, 1n), (v) =>
@@ -629,7 +636,8 @@ async function main() {
   tx("W11 M8 asks 20000 sats at +0.5% (walkable)", call(M8, "deposit-token-x", [uintCV(20_000n), uintCV(A_IN), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
   tx("W11 M9 asks 20000 sats at +3% (outside the 2% limit)", call(M9, "deposit-token-x", [uintCV(20_000n), uintCV(A_OUT), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
   const v0x = stxOf(S, "W11 before"); const v0s = sbtcOf(S, "W11 before"); const v8x = stxOf(M8, "W11 M8 before"); const v9x = stxOf(M9, "W11 M9 before"); const vtx = stxOf(T, "W11 T before");
-  const r11 = tx("W11 smart sell 200 STX at +2%: mid ask cleared, +0.5% walked, +3% untouched, rest DLMM", smartStx(S, 200_000_000n, L_STX2, VAA, 1n), (v) =>
+  const dlmmRoom11 = V6 ? cap("W11 actual DLMM room before the call", `(dlmm-capacity u${L_STX2} false)`, RID) : null;
+  const r11 = tx("W11 smart sell 200 STX at +2%: mid ask cleared, +0.5% walked, +3% untouched, rest AMMs", smartStx(S, 200_000_000n, L_STX2, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)"));
   const v1x = stxOf(S, "W11 after"); const v1s = sbtcOf(S, "W11 after"); const v8x1 = stxOf(M8, "W11 M8 after"); const v9x1 = stxOf(M9, "W11 M9 after"); const vtx1 = stxOf(T, "W11 T after");
   tx("W11 M9 cancels its untouched ask in full", call(M9, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), "(ok u20000)");
@@ -639,7 +647,7 @@ async function main() {
   // deposit: capacity says so, jing-size returns u0, the AMMs take it all
   // and the bid stays where it is
   tx("W12 S bids 1 STX at the mid", depositY(S, MIN_STX, HUGE), `(ok u${MIN_STX})`);
-  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78)`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
+  ev("W12 capacity under the x min deposit", `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) => uintOf(String(v).match(/gross-cap (u\d+)/)?.[1] ?? "u0") < MIN_SBTC, CID);
   // Earlier large trades move the AMMs away from the oracle mid. Use a
   // positive floor derived from their current reserves for this size test.
   let limit12=L_LOOSE;
@@ -693,7 +701,7 @@ async function main() {
   tx("W16 smart sell sBTC, mid u0 -> u3007", smartSbtc(T, 5000n, L_LOOSE, VAA, 1n, 0n), "(err u3007)");
   tx("W16 smart sell STX, mid u0 -> u3007", smartStx(S, 5_000_000n, HUGE, VAA, 1n, 0n), "(err u3007)");
   tx("W16 smart sell sBTC, vaa none, mid u0 -> still u3007 (guard is unconditional)", smartSbtc(T, 5000n, L_LOOSE, NO_VAA, 1n, 0n), "(err u3007)");
-  ev("W16 market get-taker-capacity happy -> (ok {...})", `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78)`, (v) => String(v).startsWith("(tuple") && String(v).includes("gross-cap"), CID);
+  ev("W16 market get-taker-capacity happy -> (ok {...})", `(get-taker-capacity u${MID} u1 true 'SP000000000000000000002Q6VF78${V6 ? ' none' : ''})`, (v) => String(v).startsWith("(tuple") && String(v).includes("gross-cap"), CID);
 
   // =============== W17: the mid is a hint, not a trust ===============
   // The router no longer verifies the update itself; the caller passes the
@@ -765,7 +773,7 @@ async function main() {
   } else tx("W10 bid with the stale fixture against a resting ask -> refused", depositY(S, BID, HUGE, STALE), (v) => v === "(err u1002)" || v === E_STALE);
 
   // ---- run ----
-  const currentRun = V6 ? await runCurrentPlan(b) : null;
+  const currentRun = V6 ? await runCurrentPlan(b, {renewEvery: 8}) : null;
   const sid = currentRun ? currentRun.sid : await b.run();
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}\n`);
   const res = currentRun ? currentRun.result : await getSimulationResult(sid);
@@ -926,7 +934,11 @@ async function main() {
   check("W11 T (ask at the mid) was paid STX", vtx1.value - vtx.value, (d) => d > 0n);
   check("W11 M8 (+0.5%, inside) was walked and paid STX", v8x1.value - v8x.value, (d) => d > 0n);
   check("W11 M9 (+3%, outside) received nothing", v9x1.value - v9x.value, (d) => d === 0n);
-  check("W11 DLMM took the rest", field(r11.raw, "dlmm-in"), (d) => d > 0n);
+  check("W11 DLMM input matches its measured capacity and residual", field(r11.raw, "dlmm-in"), (d) => {
+    if (!V6) return d > 0n;
+    const residual = 200_000_000n - field(r11.raw, "jing-in");
+    return d === (dlmmRoom11.value < residual ? dlmmRoom11.value : residual);
+  });
   legPriceOk("W11", r11, L_STX2, false);
   // W12
   check("W12 sBTC delta == 5000, all on AMMs", t0s12.value - t1s12.value, (d) => d === 5000n);

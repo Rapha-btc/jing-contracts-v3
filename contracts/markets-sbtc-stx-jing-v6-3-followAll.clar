@@ -1066,6 +1066,21 @@
     })
   )
 )
+(define-private (feed-age
+    (pub-x uint)
+    (pub-y uint)
+  )
+  (let ((oldest (if (< pub-x pub-y)
+      pub-x
+      pub-y
+    )))
+    (if (> oldest stacks-block-time)
+      u0
+      (- stacks-block-time oldest)
+    )
+  )
+)
+
 (define-private (fresh-classification-price-aged (update (buff 8192)))
   (let (
       (feeds (try! (lazer-feeds update)))
@@ -1087,10 +1102,7 @@
       price: (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
         (to-uint (get price feed-y))
       ),
-      age: (if (> oldest stacks-block-time)
-        u0
-        (- stacks-block-time oldest)
-      ),
+      age: (feed-age pub-x pub-y),
       at: oldest,
     })
   )
@@ -3862,10 +3874,42 @@
   )
 )
 ;; Largest gross whose swap net, floor(gross * BPS / (BPS + rebate)), fits net.
-(define-private (gross-up (net uint))
+;; A fee-free, unverified sizing hint. Swap verifies the signed envelope.
+;; Missing/undecodable hints preserve the historical 20-bps quote.
+(define-private (capacity-rebate-hint (update (buff 8192)))
+  (let (
+      (payload (unwrap! (slice? update u71 (len update)) none))
+      (decoded (unwrap! (contract-call? 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1 decode-lazer-payload payload) none))
+      (feeds (get price-feeds decoded))
+      (fx (unwrap!
+        (get found
+          (fold pick-feed feeds {
+            id: (var-get feed-id-x),
+            found: none,
+          })
+        )
+        none
+      ))
+      (fy (unwrap!
+        (get found
+          (fold pick-feed feeds {
+            id: (var-get feed-id-y),
+            found: none,
+          })
+        )
+        none
+      ))
+      (pub-x (/ (unwrap! (get feed-update-timestamp fx) none) MICROS_PER_SECOND))
+      (pub-y (/ (unwrap! (get feed-update-timestamp fy) none) MICROS_PER_SECOND))
+    )
+    (some (rebate-bps-for-age (feed-age pub-x pub-y)))
+  )
+)
+
+(define-private (gross-up (net uint) (bps uint))
   (if (is-eq net u0)
     u0
-    (/ (- (* (+ net u1) (+ BPS_PRECISION TAKER_REBATE_BPS)) u1) BPS_PRECISION)
+    (/ (- (* (+ net u1) (+ BPS_PRECISION bps)) u1) BPS_PRECISION)
   )
 )
 (define-read-only (get-taker-capacity
@@ -3873,9 +3917,14 @@
     (limit uint)
     (deposit-x bool)
     (taker principal)
+    (update (optional (buff 8192)))
   )
   (let (
       (cycle (var-get current-cycle))
+      (bps (match update
+        v (default-to TAKER_REBATE_BPS (capacity-rebate-hint v))
+        TAKER_REBATE_BPS
+      ))
       (bids (fold cap-bid-fold (get-token-y-depositors cycle) {
         cycle: cycle,
         mid: mid,
@@ -4026,7 +4075,8 @@
         u0
       ),
       net-cap: net-cap,
-      gross-cap: (gross-up net-cap),
+      gross-cap: (gross-up net-cap bps),
+      rebate-bps: bps,
       min-taker: min-taker,
     }
   )

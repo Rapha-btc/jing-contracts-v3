@@ -1,6 +1,6 @@
 // Execute explicit scenario steps sequentially so a signed update can be fetched
 // AFTER submit. No contract/source/storage patches; added settle calls stay in
-// each harness's plan and its N/M count. Normal steps keep fork time fixed.
+// each harness's plan and its N/M count. Optional tenure renewal can advance time.
 import {
   SimulationBuilder, getSimulationResult, submitSimulationSteps, getNonce, setSender,
 } from 'stxer';
@@ -17,7 +17,7 @@ const marker = cvToString(FRESH_UPDATE);
 const DEP = 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
 const MARKET = `${DEP}.markets-sbtc-stx-jing-v6-3`;
 
-export async function runCurrentPlan(builder) {
+export async function runCurrentPlan(builder, {renewEvery = 0} = {}) {
   const initial = SimulationBuilder.new({stacksNodeAPI:'http://77.42.3.101/stacks-api'});
   if (Number.isFinite(builder.block)) initial.useBlockHeight(builder.block);
   initial.steps = [builder.steps[0]];
@@ -27,6 +27,12 @@ export async function runCurrentPlan(builder) {
   const first = await getSimulationResult(sid);
   const result = {steps: [...first.steps]};
   for (const [index, step] of builder.steps.slice(1).entries()) {
+    // This long suite spans multiple execution budgets. Tenure extension may
+    // advance time; individual call limits and oracle validation still apply.
+    if (renewEvery > 0 && index % renewEvery === 0) {
+      const extended = await submitSimulationSteps(sid, {steps: [{TenureExtend: {cause: 'Extended'}}]});
+      if (!extended.steps[0].TenureExtend) throw new Error(`Tenure extension failed: ${JSON.stringify(extended)}`);
+    }
     let wire;
     if (step.function_name) {
       let args = [];
@@ -39,6 +45,7 @@ export async function runCurrentPlan(builder) {
       }
       if (args.some(a => cvToString(a) === marker)) {
         const clock = await submitSimulationSteps(sid, {steps:[{Eval:[DEP,'',MARKET,'stacks-block-time']}]});
+        if (!clock.steps[0].Eval?.Ok) throw new Error(`Fork clock read failed: ${JSON.stringify(clock)}`);
         const stamp = Number(cvToString(deserializeCV(clock.steps[0].Eval.Ok)).slice(1));
         let fresh;
         for (let i=0;i<30;i++) {
@@ -61,7 +68,10 @@ export async function runCurrentPlan(builder) {
     else if (step.type==='AdvanceBlocks') wire={AdvanceBlocks:step.request};
     else throw new Error(`Unsupported planned step: ${JSON.stringify(step)}`);
     const out=await submitSimulationSteps(sid,{steps:[wire]});
-    result.steps.push({Result:out.steps[0]});
+    const r = out.steps[0];
+    if (r.Transaction?.Err || r.Transaction?.Ok?.vm_error || r.Eval?.Err)
+      throw new Error(`Engine failure at planned step ${index+1}: ${JSON.stringify(r).slice(0,1200)}; ${sid}`);
+    result.steps.push({Result:r});
   }
   return {sid,result};
 }

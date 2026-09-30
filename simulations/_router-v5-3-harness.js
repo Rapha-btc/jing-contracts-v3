@@ -77,7 +77,18 @@ export async function retry(fn) {
     }
   }
 }
+let budgetOperations = 0;
+async function renewBudget() {
+  // Exact-age tests advance blocks explicitly and must not renew mid-case.
+  if (process.env.ROUTER_KEEP_TENURE === '1' || process.env.ROUTER_RENEW_TENURE !== '1') return;
+  // Long regression sessions span several tenure cost budgets; each
+  // individual call remains limited. Tenure extension may advance time.
+  if (budgetOperations++ % 20 !== 0) return;
+  const r = await retry(() => submitSimulationSteps(H.sid, {steps: [{TenureExtend: {cause: 'Extended'}}]}));
+  if (!r.steps[0].TenureExtend) throw new Error(`Tenure extension failed: ${JSON.stringify(r)}`);
+}
 export async function evRaw(cid, code, sender = DEP) {
+  await renewBudget();
   const out = await retry(() => submitSimulationSteps(H.sid, { steps: [{ Eval: [sender, '', cid, code] }] }));
   return decode({ Result: out.steps[0] });
 }
@@ -90,6 +101,7 @@ export const printsOf = (r, contract) => (r.receipt?.events ?? []).map((e) => ty
   .filter((e) => e.committed !== false && e.contract_event && (!contract || e.contract_event.contract_identifier === contract))
   .map((e) => cv(e.contract_event.raw_value));
 export async function tx(label, sender, cid, fn, args, want) {
+  await renewBudget();
   const r = await retry(() => callContract(H.sid, { sender, contract: cid, functionName: fn, functionArgs: args, fee: 0 }));
   const result = r.vmError || r.pcAborted ? `ENGINE-ERR ${JSON.stringify(r).slice(0, 600)}` : r.result;
   check(label, result, want);
@@ -110,17 +122,25 @@ const PROBE_SRC = `;; rtrprobe-v1: the router's read-only getter, read inside a 
   (ok { router: (contract-call? .swap-router-sbtc-stx-jing-v5-3 get-jing-min-deposits),
         market: (contract-call? .markets-sbtc-stx-jing-v6-3 get-min-deposits) }))
 `;
-export async function deployAll(extra = []) {
+export async function deployAll(extra = [], sourceOverrides = {}) {
   const b = SimulationBuilder.new({ stacksNodeAPI: NODE });
+  // Optional historical pool snapshot for scenarios that require depth in
+  // every venue. Oracle updates still use real signed bytes.
+  if (process.env.ROUTER_FORK_HEIGHT) {
+    const height = Number(process.env.ROUTER_FORK_HEIGHT);
+    if (!Number.isSafeInteger(height) || height <= 0) throw new Error('Invalid ROUTER_FORK_HEIGHT');
+    b.useBlockHeight(height);
+  }
   for (const name of ['jing-core-v6', 'jing-ladder-v1', 'markets-sbtc-stx-jing-v6-3', 'swap-router-sbtc-stx-jing-v5-3']) {
-    b.withSender(DEP).addContractDeploy({ contract_name: name, source_code: source(name), clarity_version: ClarityVersion.Clarity5 });
+    b.withSender(DEP).addContractDeploy({ contract_name: name, source_code: sourceOverrides[name] ?? source(name), clarity_version: ClarityVersion.Clarity5 });
   }
   b.withSender(DEP).addContractDeploy({ contract_name: 'rtrprobe-v1', source_code: PROBE_SRC, clarity_version: ClarityVersion.Clarity5 });
   for (const [name, code] of extra) b.withSender(DEP).addContractDeploy({ contract_name: name, source_code: code, clarity_version: ClarityVersion.Clarity5 });
   H.sid = await retry(() => b.run());
+  budgetOperations = 0;
   console.log(`View: https://stxer.xyz/simulations/mainnet/${H.sid}`);
   const setup = await retry(() => getSimulationResult(H.sid));
-  for (const st of setup.steps.filter((s) => s.Result?.Transaction)) check('deploy exact working-tree source', decode(st), ok);
+  for (const st of setup.steps.filter((s) => s.Result?.Transaction)) check('deploy supplied source', decode(st), ok);
   // AMM depth on this fork, logged rather than assumed
   console.log('AMM depth at the fork:', await evRaw(ROUTER, `{ dlmm: (let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool)))) { active-bin: (get active-bin-id p), bin-step: (get bin-step p), fee-x: (+ (get x-protocol-fee p) (get x-provider-fee p) (get x-variable-fee p)), fee-y: (+ (get y-protocol-fee p) (get y-provider-fee p) (get y-variable-fee p)), stx: (stx-get-balance DLMM_POOL), sbtc: (unwrap-panic (contract-call? SBTC get-balance DLMM_POOL)) }),
     xyk: (let ((p (unwrap-panic (contract-call? XYK_POOL get-pool)))) { sbtc: (get x-balance p), stx: (get y-balance p) }),

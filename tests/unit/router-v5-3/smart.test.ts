@@ -10,7 +10,7 @@ const cpCap=(s:h.Side,rin:bigint,rout:bigint,limit:bigint,fee:bigint)=>{
 for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
   for(const above of [0n,1n]) it(`sizes to the exact new gross-cap with ${above} extra input`,()=>{
     h.book(s);
-    const q=h.ro('market','get-taker-capacity',[h.U(h.P),h.U(h.quote(s)),Cl.bool(s==='x'),Cl.principal(h.user)]);
+    const q=h.ro('market','get-taker-capacity',[h.U(h.P),h.U(h.quote(s)),Cl.bool(s==='x'),Cl.principal(h.user),Cl.none()]);
     const cap=q['net-cap'],grossCap=((cap+1n)*10020n-1n)/10000n;
     expect(q['gross-cap']).toBe(grossCap);expect(h.net(grossCap)).toBe(cap);expect(h.net(grossCap+1n)).toBe(cap+1n);
     const n=grossCap+above,before=h.wallet(s),receipt=h.smart(s,n),r=h.ok(receipt);
@@ -59,7 +59,7 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     expect(r['jing-out']).toBe(rawOut-rawOut/1000n);expect(r.unsold).toBe(n-spent);
     h.conservation(s,before,r,n);
   });
-  it('falls back when an accepted older update pushes the net below the market minimum',()=>{
+  it('skips the book when the input budget cannot cover the older update rebate and market minimum',()=>{
     h.book(s);h.fund('dlmm');h.config('dlmm');
     h.ok(h.call('oracle','configure',[h.U(0),h.U(79),h.U(79)]));
     // Use a 1,000-sat minimum here: at 100 sats both ages round to the
@@ -69,7 +69,7 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     const n=h.gross(minimum),before=h.wallet(s);
     expect(h.net(n)).toBe(minimum);expect(h.net(n,69n)).toBeLessThan(minimum);
     const receipt=h.smart(s,n),r=h.ok(receipt);
-    expect(h.routerPrint(receipt)['jing-cap']).toBe(n);expect(r['jing-ok']).toBe(false);
+    expect(h.routerPrint(receipt)['jing-cap']).toBe(0n);expect(r['jing-ok']).toBe(false);
     expect(r['dlmm-in']).toBe(n);h.conservation(s,before,r,n);
   });
   for(const reverse of [false,true]) for(const exhausted of [false,true]) it(`CP sizing, fees and exact output: reverse=${reverse}, exhaust=${exhausted}`,()=>{

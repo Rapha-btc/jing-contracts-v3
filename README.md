@@ -2,6 +2,18 @@
 
 The Jing protocol on Stacks: a fair-batch swap venue for sBTC pairs, plus tools that let users automate trades and borrow against their position. This repo holds the smart contracts; the file layout below is the same one you'll see in the `contracts/` folder.
 
+## v6-3 age-aware capacity and router
+
+Market v6-3 now accepts an optional signed update in `get-taker-capacity`
+and returns the age-adjusted `gross-cap` and `rebate-bps`. Router v5-3 uses
+that quote, preventing valid older updates from skipping fillable Jing
+liquidity. Deploy/use the updated market and router together; public router
+and vault signatures remain unchanged.
+
+Verification: **625/625 Clarinet tests** and **1,275/1,275 Stxer checks**.
+See the [bounty decisions](contracts/README-audit-core-spread-v1-bounty.md)
+and [simulation results, source hashes and scope](simulations/README-router-v5-3-rebate-age.md).
+
 ## v6-2 ladder deposits and simulations
 
 See [the ladder dispatch README](contracts/README-jing-ladder-dispatch.md) for the

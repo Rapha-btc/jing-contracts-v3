@@ -77,7 +77,7 @@ describe('gross-cap is the maximum input whose net fits capacity', () => {
     it(`${side}: swaps gross-cap${extra ? ' + 1' : ''} against the quoted book`, () => {
       const makerSide = h.other(side), quote = h.off(makerSide);
       h.ok(h.deposit(makerSide, h.amount(makerSide), quote));
-      const capacity = h.value(h.ro('get-taker-capacity', [h.U(h.P), h.U(quote), Cl.bool(side === 'x'), Cl.principal(h.bob)]));
+      const capacity = h.value(h.ro('get-taker-capacity', [h.U(h.P), h.U(quote), Cl.bool(side === 'x'), Cl.principal(h.bob),Cl.none()]));
       const cap = capacity['net-cap'], grossCap = capacity['gross-cap'];
       expect(cap).toBeGreaterThan(0n);
       expect(grossCap).toBe(((cap + 1n) * 10020n - 1n) / BPS);

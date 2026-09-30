@@ -58,11 +58,7 @@
   }
 )
 
-(define-public (verify-price-feeds
-    (update (buff 8192))
-    (decoder principal)
-    (max-age (optional uint))
-  )
+(define-read-only (decode-lazer-payload (payload (buff 8192)))
   (let ((ts (* stacks-block-time u1000000)))
     (asserts! true (err u0))
     (ok {
@@ -74,4 +70,8 @@
       ),
     })
   )
+)
+
+(define-public (verify-price-feeds (update (buff 8192)) (decoder principal) (max-age (optional uint)))
+  (decode-lazer-payload update)
 )

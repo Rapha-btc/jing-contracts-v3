@@ -7,12 +7,12 @@ npm run test:router-v5-3
 ```
 
 This offline suite executes the current **real router, real v6-3 market and real
-jing-core-v6**. Production contract files are not edited. It is independent of
-the core-spread rung suite, whose buy/sell fixes are being handled separately.
+jing-core-v6**. The harness only substitutes dependency identities. It is
+independent of the core-spread rung integration suite.
 
 The [generated coverage report](COVERAGE.md) records the passing count, router
 coverage and exact production source hashes. Coverage belongs to the router;
-it is separate from the [287 market tests](../v6-3/README.md),
+it is separate from the [320 market tests](../v6-3/README.md),
 [RV campaigns](../../rv/v6-3/README.md), and Stxer integration checks.
 
 The isolated `clarinet check --manifest-path tests/unit/router-v5-3/Clarinet.toml`
@@ -34,8 +34,11 @@ External dependencies are controlled fixtures:
 
 - The strict SIP-010 asset has finite, explicitly minted balances; STX transfers
   use native STX via the SIP-010 facade. Every venue payout must be funded.
-- The oracle supplies independently configured prices, confidence and ages.
-  The actual market performs validation, rebate calculation and execution.
+- The oracle supplies independently configured prices, confidence and ages,
+  and exposes the same decoded fields to the router's timestamp hint parser.
+  Router test updates include a placeholder 71-byte EVM header and payload;
+  this fixture does not validate real envelope encoding or signatures.
+  The actual market performs price validation, rebate calculation and execution.
 - The ladder supplies membership/seat information; no rung executes here.
 - DLMM, XYK and Velar are **external venue fixtures**, not their production
   contracts. Each has its own balances and state. CP swaps use constant-product
@@ -50,8 +53,20 @@ surrounding bins with a linear price ladder. It exercises the router's bin walk
 and stopping rules, but is not a reproduction of the production DLMM engine.
 Stxer remains responsible for integration with the real external venues,
 production sBTC, signed oracle updates and mainnet execution costs.
+The [aged-rebate Stxer report](../../../simulations/README-router-v5-3-rebate-age.md)
+records current-source checks against those dependencies and their fixture limits.
 
 ## Cases checked in both directions
+
+`rebate-age.test.ts` adds 24 cases for the September 30 age-sizing fix:
+capacity-capped fills with independent BTC/STX feed ages of 0, 30, 31 and 79
+seconds, and input budgets just below/at the true aged minimum on both sides.
+The market now grosses up its `net-cap` using the older configured feed's age
+and returns `rebate-bps` with `gross-cap`. The router passes the update and
+uses both returned values. Eight quote/negative cases cover failed timestamp
+hints, future timestamps and stale-feed fallback through the public market
+getter; the router has no private timestamp parser. The full suite passes **185/185**, with unchanged
+coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
 
 Manual routes cover the real book's net input, maker-price output, fees, rebates,
 sub-minimum refunds, all three fallback destinations, pro-rata fallback minimums,
@@ -114,14 +129,14 @@ debit is 9 sats. All positions and market custody end at zero. The test accepts
 
 ## Coverage gaps and interpretation
 
-All router tests call public or read-only entrypoints. No private helper is
-called directly to inflate the coverage percentage.
+All router-suite cases call public or read-only entrypoints. Timestamp-hint
+boundaries are checked through the market's read-only capacity getter.
 
-- Line 773 / branch `773,0,1`: `cp-split`'s zero-total division guard. Taking it
+- Line 774 / branch `774,0,1`: `cp-split`'s zero-total division guard. Taking it
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Lines 1140–1141: the literal principal and function name inside the read-only
+- Lines 1141–1142: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.
