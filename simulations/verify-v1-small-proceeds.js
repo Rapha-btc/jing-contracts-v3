@@ -13,6 +13,8 @@ const RUNG=`${DEP}.jing-sell-stx-spread-10`;
 const SBTC='SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
 const WSTX='SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2';
 const WHALE_X='SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2',WHALE_Y='SP354663MXNWN2B6HKNBYD8JBNJK2ZNBZE764X1RR';
+// Funds the ~1,002,101 STX top-up: WHALE_Y alone no longer holds enough at the tip (2026-09-30).
+const WHALE_TOPUP='SP33XEHK2SXXH625VG6W6665WBBPX1ENQVKNEYCYY';
 const mk=n=>getAddressFromPrivateKey(String(n).repeat(64).slice(0,64)+'01','mainnet');
 const alice=mk(781),bob=mk(782),taker=mk(783);
 const files=['jing-core-v6','jing-ladder-v1','markets-sbtc-stx-jing-v6-3','jing-sell-stx-core-spread-v1'];
@@ -123,7 +125,7 @@ async function main(){
  const scaled=await state();check('real fill rescales to scale 1',scaled.scale===1n,show(scaled));
  // Just over 1,001 * 1e12 shares triggers the old zero-increment bug.
  const topup=(1_001_100_000_000_000n*scaled['unfilled-index']+999999999999n)/1000000000000n;
- await fundSTX(bob,topup);await send('large top-up',bob,RUNG,'deposit',[Cl.uint(topup)]);
+ await fundSTX(bob,topup,WHALE_TOPUP);await send('large top-up',bob,RUNG,'deposit',[Cl.uint(topup)]);
  const before=await state(),beforeBalance=await sbtc(RUNG);
  await swap(1002n);
  const gain=(await sbtc(RUNG))-beforeBalance;

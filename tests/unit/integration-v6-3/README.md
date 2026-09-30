@@ -6,7 +6,7 @@ The original 9-micro-STX rescale shortfall was reproduced before the fix; its
 custody/solvency expectations are unchanged. See the [accounting proof and
 fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The full integration suite passed **97/97 tests**, in nine files with no skips.
+The full integration suite passed **102/102 tests**, in ten files with no skips.
 Its six seeded campaigns completed 396 invariant checkpoints, 52 randomized
 withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
 
@@ -41,9 +41,31 @@ member's position, and final recovery with zero residue. Logs are
 `/tmp/jing-withdraw-overflow-before.log` and
 `/tmp/jing-withdraw-overflow-full.log`.
 
-The earlier Stxer reports below predate this withdrawal guard; their recorded
+The earlier Stxer reports below predate this withdrawal guard and the close-epoch
+flush removal below; their recorded
 hashes are historical. The regenerated Clarinet coverage report identifies
-the sources tested with the guard.
+the sources tested with both changes.
+
+## Epoch close without a second payout
+
+`withdraw` pays the sole member's proceeds through `settle-proceeds` before
+returning the input. The epoch close is inline in `withdraw` again (the
+`close-epoch` helper is gone): it records the final index/scale, logs closure
+and advances the epoch. It neither transfers proceeds nor clears/debits their
+exact balance. Withdrawal reports only the proceeds already paid by settlement.
+
+Normal settlement/admission, crossing refunds and cancellation move only the
+input asset. If unexpected proceeds are recognized after settlement, they
+remain in `current-proceeds` and the accounted balance for the next epoch's
+final member. They are not indexed a second time. The public fee-to-rung
+regression retains 7 micro-STX through closure, opens a two-member epoch,
+and pays those 7 only to its final member, with zero final residue.
+
+`withdraw-dust.test.ts` contains five normal public-exit cases and two oracle
+fee cases. Its oracle and trait snapshots are exact deployed source; the
+decoder uses deterministic test feeds, so signatures are outside this test.
+The positive-fee scenario is deliberately configured through oracle governance;
+it is a recovery-policy test, not a claim about the current Pyth configuration.
 
 ## Run
 
@@ -91,12 +113,8 @@ functions in each actual source are represented.
   escrow, absent reserve bookkeeping and rejection of an unfunded pull. They
   call the production helpers directly, move no money and leave state unchanged.
   These are unit boundaries, not evidence those contexts arise through public
-  `withdraw`, which guards them. Four additional `epoch-helper` units cover
-  the missing-reserve read-only fallback and private positive `close-epoch`
-  transfers/snapshots/idempotent payouts on both assets. The latter use publicly
-  funded and synchronized balances, then invoke the close component directly;
-  they do not claim to simulate a full member exit or establish public-path
-  reachability of this defensive payout. No storage is injected. The sell share
+  `withdraw`, which guards them. Two additional `epoch-helper` units cover
+  the missing-reserve read-only fallback on both assets. No storage is injected. The sell share
   cap fixture explicitly mints native test STX, just as the buy fixture mints
   test sBTC; both rejection tests verify wallet and state rollback.
 
@@ -110,7 +128,8 @@ functions in each actual source are represented.
 | `dispatch.test.ts` | 19 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, oversized tenth-leg full exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
 | `proceeds-precision.test.ts` | 6 | Real 1,001-sat receipt after rescale/top-up, late membership, share ceiling, all supported carried-share segments |
 | `proceeds-conservation.test.ts` | 6 | Carry across receipts, ownership changes, repeated claims/fills, isolated old epochs and exact final balances |
-| `epoch-helper.test.ts` | 4 | Isolated close-epoch transfers, snapshots and no duplicate payout; absent-old-reserve read-only fallback, both mirrors |
+| `epoch-helper.test.ts` | 2 | Absent-old-reserve read-only fallback, both mirrors |
+| `withdraw-dust.test.ts` | 7 | Public final exits through held/live/admitted/crossing/expired paths; oracle fees sent elsewhere or retained for the next epoch's final member |
 | `rescale-solvency.test.ts` | 2 | Original 9-micro-STX shortfall and sell mirror; both members claim successfully and fully drain input/proceeds |
 | `rescale-fuzz.test.ts` | 6 | Seeds 12648430, 1592594996 and 305419896 on each side; randomized public operations, at least four rescales and two tail rolls per seed; per-epoch receipt/payout/custody invariants after each action |
 

@@ -388,18 +388,15 @@ class Model {
     if (full) m.pos.delete(who); else m.pos.set(who, { epoch: epo, scale: m.sc, shares: ms - sharesOut, paid: m.pi });
     m.carry = 0n; m.ts -= sharesOut;
     if (full) m.mem -= 1n;
-    let dust = 0n;
     if (m.mem === 0n) {
-      dust = m.cp; m.cp = 0n; m.carry = 0n; m.acc -= dust; m.qbal -= dust;
-      wallet(m, who).q += dust;
-      if (dust > 0n) ev.push({ event: 'rung-payout', member: who, proceeds: dust, back: 0n, epoch: epo });
+      m.carry = 0n;
       this.lastExit.close = true; this.lastExit.leftoverShares = m.ts;
       m.finalP.set(epo, m.pi); m.finalS.set(epo, m.sc);
       ev.push({ event: 'rung-epoch-closed', epoch: epo, 'final-proceeds-index': m.pi });
       m.ep = epo + 1n; m.ts = 0n; m.ui = S;
     }
     ev.push({ event: 'rung-withdraw', member: who, amount: take, shares: sharesOut, epoch: epo, held: m.held });
-    return r.buy ? { stx: paid.owed + dust, sbtc: take } : { stx: take, sbtc: paid.owed + dust };
+    return r.buy ? { stx: paid.owed, sbtc: take } : { stx: take, sbtc: paid.owed };
   }
   claim(who, ev) {
     if (!this.m.pos.has(who)) throw new CErr(7006);

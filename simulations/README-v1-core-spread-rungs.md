@@ -115,6 +115,16 @@ the final-member entitlement, so it can increase when another member leaves.
 Unsolicited transfers into an empty rung retain the existing next-depositor
 policy; completed funded epochs leave no residue for a later depositor.
 
+After the close-epoch flush removal, `withdraw` returns only the proceeds
+already paid by `settle-proceeds`. The epoch close, inline in `withdraw` again,
+performs bookkeeping without a second transfer or clearing
+`current-proceeds`/the accounted balance. Normal
+input settlement and refunds produce no new proceeds. Any unexpected proceeds
+recognized after settlement remain backed for the next epoch's final member,
+without being indexed again. The Clarinet fee-to-rung regression verifies this
+exceptional carryover and eventual complete payout. The Stxer runs below were
+rerun on these bytes (`d8b01e4`, epoch close inlined).
+
 After sync processes receipts for a funded epoch, the proceeds invariant is:
 
 ```text
@@ -124,8 +134,10 @@ proceeds balance = accounted = current-proceeds + sum(old epoch proceeds)
 Between a receipt and sync, `balance - accounted` is the unprocessed receipt.
 Within each epoch, unpaid proceeds consist of currently claimable amounts
 plus rounding assigned to its final member. Reserved input is the sum of
-old epoch input reserves. After all positions exit/claim, both token balances
-and all market custody/reserves must be exactly zero.
+old epoch input reserves. With no unexpected post-settlement inflow, after all
+positions exit/claim, both token balances and all market custody/reserves must
+be exactly zero. The exceptional carryover above is exhausted by the next
+epoch's final member.
 
 These are undeployed templates, not an in-place state migration. Raw proceeds
 indices and snapshots use 18 decimals; consumers should use `get-position`
@@ -152,9 +164,6 @@ its 99% thresholds and reports raw metrics as well as narrowly adjusted metrics:
 only the two invariant-unreachable arms and static literal/callee instrumentation
 are excepted. See [the exact exception policy](../tests/unit/integration-v6-3/README.md#coverage-exceptions).
 Share-cap rejection is tested for both assets, including atomic rollback.
-Isolated private-helper tests exercise both positive `close-epoch` transfers,
-watermark/carry resets, snapshots and no duplicate payout; these are unit
-component tests, not claims of public-path reachability.
 
 ### Verification
 
@@ -201,18 +210,18 @@ positions, custody, wallet movements and ladder events.
 
 | Harness | Checks | Simulation |
 |---|---:|---|
-| `verify-v1-core-spread-rungs.js` | 998 / 998 | [rungs](https://stxer.xyz/simulations/mainnet/feefde943db62d21f3c3dbf249708e0c) |
-| `verify-v1-core-spread-ladder-dispatch.js` | 391 / 391 | [twenty rungs and dispatch](https://stxer.xyz/simulations/mainnet/4135a4ef4d94ca74c8a5cdbae5d93f76) |
-| `verify-v1-small-proceeds.js` | 77 / 77 | [small fill after rescale/top-up](https://stxer.xyz/simulations/mainnet/6833db442f85d2f3403f3e31001dcb63) |
+| `verify-v1-core-spread-rungs.js` | 998 / 998 | [rungs](https://stxer.xyz/simulations/mainnet/36a2994e688608a9c9ad0924c23bd2da) |
+| `verify-v1-core-spread-ladder-dispatch.js` | 391 / 391 | [twenty rungs and dispatch](https://stxer.xyz/simulations/mainnet/2869b71b738b552a870810d1b55691d4) |
+| `verify-v1-small-proceeds.js` | 77 / 77 | [small fill after rescale/top-up](https://stxer.xyz/simulations/mainnet/5faf7670c9b602444f7d1229209dca76) |
 
 The dispatch run asserts **0 sats and 0 micro-STX ownerless** across all 20
 rungs; the earlier precision-only version left 4 sats and 7 micro-STX.
 
 Current source SHA-256:
 
-- `jing-buy-stx-core-spread-v1`: `cd0040542bdbdb98c41e23df016f76441d38b3468abf5e69d569474c8c87c70c`
-- `jing-sell-stx-core-spread-v1`: `6e939827da2a319cc70bd2e00560adb47260cc5a25060eec95c4cead10fdb69e`
-- `markets-sbtc-stx-jing-v6-3`: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`
+- `jing-buy-stx-core-spread-v1`: `584b66804090ae2363244e277a6e840f1d60ece92ad67ee5525a772e0f3e9467`
+- `jing-sell-stx-core-spread-v1`: `fdf5c2b11dadcf61d1e1d2d30df2f1127e1375fcf553f24105075035d70f10e5`
+- `markets-sbtc-stx-jing-v6-3`: `ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848`
 - `jing-core-v6`: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`
 
 The earlier results below are historical and refer to their listed revisions.
