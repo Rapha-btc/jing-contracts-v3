@@ -716,18 +716,26 @@
           (var-set proceeds-carry u0)
           (var-set total-shares (- (var-get total-shares) shares-out))
           (and full (var-set members (- (var-get members) u1)))
-          (let ((dust (if (is-eq (var-get members) u0)
-              (try! (close-epoch member))
-              u0
-            )))
-            (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
-              (var-get held-ustx)
-            ))
-            (ok {
-              stx: take,
-              sbtc: (+ (get sbtc paid) dust),
-            })
+          ;; the last member left: close the epoch and restart the index and
+          ;; the shares (that member was already paid every remaining unit)
+          (and
+            (is-eq (var-get members) u0)
+            (let ((final-proceeds (var-get proceeds-index)))
+              (map-set epoch-final-proceeds epo final-proceeds)
+              (map-set epoch-final-scale epo (var-get scale))
+              (is-ok (contract-call? LADDER log-epoch-closed epo final-proceeds))
+              (var-set epoch (+ epo u1))
+              (var-set total-shares u0)
+              (var-set unfilled-index SCALE)
+            )
           )
+          (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
+            (var-get held-ustx)
+          ))
+          (ok {
+            stx: take,
+            sbtc: (get sbtc paid),
+          })
         )
       )
     )
@@ -789,17 +797,16 @@
     )
     (let (
         (free (- (stx-get-balance current-contract) (var-get reserved-ustx)))
-        (reserve free)
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)
       (map-set epoch-final-unfilled epo (var-get unfilled-index))
       (map-set epoch-final-scale epo (var-get scale))
-      (var-set reserved-ustx (+ (var-get reserved-ustx) reserve))
-      (var-set held-ustx (- free reserve))
+      (var-set reserved-ustx (+ (var-get reserved-ustx) free))
+      (var-set held-ustx u0)
       (map-set epoch-reserve epo {
         left: (var-get members),
-        reserve: reserve,
+        reserve: free,
         proceeds: (var-get current-proceeds),
       })
       (var-set current-proceeds u0)
@@ -811,31 +818,6 @@
       (var-set unfilled-index SCALE)
       (ok true)
     )
-  )
-)
-
-;; Last current member has already received all unfilled input. Flush any
-;; proceeds recognized while escrow-for synchronized, then close the epoch.
-(define-private (close-epoch (who principal))
-  (let (
-      (e (var-get epoch))
-      (owed (var-get current-proceeds))
-      (final-proceeds (var-get proceeds-index))
-    )
-    (and (> owed u0) (try! (as-contract? ((with-ft SBTC SBTC_NAME owed))
-      (try! (contract-call? SBTC transfer owed current-contract who none))
-    )))
-    (var-set sats-accounted (- (var-get sats-accounted) owed))
-    (var-set current-proceeds u0)
-    (var-set proceeds-carry u0)
-    (map-set epoch-final-proceeds e final-proceeds)
-    (map-set epoch-final-scale e (var-get scale))
-    (and (> owed u0) (is-ok (contract-call? LADDER log-payout who owed u0 e)))
-    (is-ok (contract-call? LADDER log-epoch-closed e final-proceeds))
-    (var-set epoch (+ e u1))
-    (var-set total-shares u0)
-    (var-set unfilled-index SCALE)
-    (ok owed)
   )
 )
 
