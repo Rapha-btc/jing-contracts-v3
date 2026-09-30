@@ -44,7 +44,7 @@ and a `rebate-bps` field. Vault and public router interfaces are unchanged.
 | [ARION, munnuftf](https://gist.github.com/maegminhui-tech/f8b35f896737df802f97d8003e8c3d65) | Low: oversized withdrawal arithmetic; conservation review and informational observations. | Withdrawal class accepted below. Other conclusions remain report claims unless independently checked. |
 | [Celestial Shark, munor39t](https://gist.github.com/celestialsharkaibt/6dcff3e54cb3af30bcc83997f7ccc953) | F1: Medium vault allowance failure. F2: Low withdrawal overflow, with a Clarinet reproduction. | F2 accepted and reproduced locally. F1 is not established on the actual vault/router path; see below. |
 | [Cunning Nexus, munwd5wp](https://paste.rs/SZMLP) | L-1: withdrawal overflow, including dispatch. L-2: aged-price book skip. I-1/I-2: direct-swap refunds and last-member rounding. | L-1 accepted, same class. L-2 reproduced independently; a market-owned quote and corresponding router update are implemented and verified. Informational claims are assessed below. |
-| [muob06gj — epoch-map prototype](https://gist.github.com/bodhibuurstede-sys/a9c6f857e3d354374d37b9d764d32448) | No new exploit; optional four-epoch-maps-to-one proposal with reported 93/93 tests. | Design proposal only, not adopted or independently tested here. No bonus decision yet. |
+| [muob06gj — epoch-map prototype](https://gist.github.com/bodhibuurstede-sys/a9c6f857e3d354374d37b9d764d32448) | No new exploit; optional four-epoch-maps-to-one proposal with reported 93/93 tests. | Rejected for the optional 2,000-sat bonus: repackages storage without simplifying the mechanism. Not adopted or independently tested here; cost benefits are unverified. |
 
 ## Accepted: oversized withdrawal requests overflow
 
@@ -219,6 +219,15 @@ entrypoints or establish a universal allowance bound.
   policy assigns the epoch's unpaid rounding balance to its final member.
   It does not give a new member earlier indexed earnings. No change accepted
   on this observation; see [the accounting policy](../simulations/README-v1-core-spread-rungs.md#accounting-and-ownership).
-- **Epoch-map consolidation:** potentially useful simplification, but it
-  changes storage and needs a separate review and validation. It is not part
-  of the accepted withdrawal fix.
+- **Epoch-map consolidation (sixth submission): rejected for the optional
+  2,000-sat bonus.** The proposal combines `epoch-final-scale`, `epoch-reserve`,
+  `epoch-final-proceeds` and `epoch-final-unfilled` into one `epoch-closure`
+  tuple map. It reports reducing write sites from eight to three per rung,
+  preserving public functions and accounting formulas, and passing the
+  existing 93 tests on both versions. These are submission claims; we have
+  not applied or independently tested the patch. The maintainer's decision
+  is that this repackages storage rather than simplifying the design or
+  accounting mechanism, and fixes no reported bug. Larger tuple reads and
+  tuple manipulation are a cost concern, not a measured regression here;
+  no net execution-cost benefit has been established. The proposal will not
+  be adopted. This rejection does not close the bounty.
