@@ -6,7 +6,7 @@ The original 9-micro-STX rescale shortfall was reproduced before the fix; its
 custody/solvency expectations are unchanged. See the [accounting proof and
 fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The full integration suite passed **93/93 tests**, in nine files with no skips.
+The full integration suite passed **97/97 tests**, in nine files with no skips.
 Its six seeded campaigns completed 396 invariant checkpoints, 52 randomized
 withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
 
@@ -23,6 +23,27 @@ Scope is only `jing-buy-stx-core-spread-v1.clar` and
 results are separate from the market unit tests and market coverage.
 The other four rung templates and old versions are excluded. The selected
 router is `swap-router-sbtc-stx-jing-v5-3`, but router tests are not included here.
+
+## Oversized withdrawal requests
+
+Both core-spread v1 rungs check whether `amount >= mine` before evaluating
+the scaled partial-share calculation. Even a max-uint request exits only the
+member's position; partial withdrawals retain the existing ceiling burn.
+This fixes the withdrawal overflow reported in
+[the September 30 bounty](https://aibtc.com/bounties/munkpv0qe7d1683c6411).
+
+Four regressions first failed with `ArithmeticOverflow` on the original
+sources: direct buy/sell exits and ten-rung buy/sell dispatch batches with
+max-uint on the tenth leg. Direct cases cover the former ceiling-addition
+and multiplication overflow boundaries, max-uint, and the final member's
+paused exit. All cases require exact payouts, preservation of another
+member's position, and final recovery with zero residue. Logs are
+`/tmp/jing-withdraw-overflow-before.log` and
+`/tmp/jing-withdraw-overflow-full.log`.
+
+The earlier Stxer reports below predate this withdrawal guard; their recorded
+hashes are historical. The regenerated Clarinet coverage report identifies
+the sources tested with the guard.
 
 ## Run
 
@@ -83,10 +104,10 @@ functions in each actual source are represented.
 
 | File | Tests | Behavior |
 | --- | ---: | --- |
-| `rungs.test.ts` | 16 | Registration, exact paused refunds, two-member partial exits, rejected admission with locally held funds, maker proceeds, seat retirement, expired escrow recovery, unrelated young pending top-up isolation |
+| `rungs.test.ts` | 18 | Registration, oversized full exits, exact paused refunds, two-member partial exits, rejected admission with locally held funds, maker proceeds, seat retirement, expired escrow recovery, unrelated young pending top-up isolation |
 | `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
 | `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
-| `dispatch.test.ts` | 17 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
+| `dispatch.test.ts` | 19 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, oversized tenth-leg full exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
 | `proceeds-precision.test.ts` | 6 | Real 1,001-sat receipt after rescale/top-up, late membership, share ceiling, all supported carried-share segments |
 | `proceeds-conservation.test.ts` | 6 | Carry across receipts, ownership changes, repeated claims/fills, isolated old epochs and exact final balances |
 | `epoch-helper.test.ts` | 4 | Isolated close-epoch transfers, snapshots and no duplicate payout; absent-old-reserve read-only fallback, both mirrors |
@@ -104,7 +125,7 @@ consumed by fills equal receipts for each epoch.
 
 ## Twenty-rung dispatch scenarios
 
-The 17 dispatch scenarios check the two amended production templates.
+The 19 dispatch scenarios check the two amended production templates.
 Expected no-match and invalid-batch refusals below are passing checks, not
 test failures. Final-member claims include all remaining epoch rounding.
 
@@ -211,7 +232,7 @@ recovery after 24 hours. The buy reference passed immediately. The sell port
 or converted into an expected-error test. Both still pass that regression.
 
 The [sell port note](../../../contracts/README-core-spread-v1-port.md) records
-that earlier fix. The current [Stxer record](../../../simulations/README-v1-core-spread-rungs.md)
+that earlier fix. The pre-withdrawal-guard [Stxer record](../../../simulations/README-v1-core-spread-rungs.md)
 has 998/998 rung checks, 391/391 dispatch checks and 77/77 small-proceeds checks
 on the recorded contract hashes, including exact zero final balances.
 
@@ -219,6 +240,6 @@ on the recorded contract hashes, including exact zero final balances.
 
 The release command regenerates `.build/results.json`, `lcov.info`, source
 substitutions and `COVERAGE.md`. Contract hashes and complete generated bodies
-are checked against the working tree. Current run log: `/tmp/jing-clamp-full.log`.
+are checked against the working tree. Current run log: `/tmp/jing-withdraw-overflow-full.log`.
 The former 69-test coverage report described a historical committed revision;
 it must not be treated as coverage of these accounting changes.

@@ -138,6 +138,28 @@ function refused(s:Side,rs:string[],amounts:bigint[],code:number,who=alice){
 }
 
 describe('real dispatch with ten buy and ten sell core-spread v1 rungs',()=>{
+ for(const s of specs)it(`${s.label}: oversized tenth-leg full-exit request succeeds and preserves the other member`,()=>{
+  const originalSupply=setupTwenty(),amounts=weighted(s),rs=rungs(s);
+  const beforeAlice=wallets(alice),beforeBob=wallets(bob);
+  deposit(s,alice,amounts,true);admit(s);
+  deposit(s,bob,amounts);admit(s);
+  const bobClaims=rs.map(r=>position(r,bob));
+  success('jing-core-v6','pause');success('market','set-paused',[Cl.bool(true)]);
+  const caps=[...amounts];caps[9]=(1n<<128n)-1n;
+  const result=success(dispatch,`withdraw-${s.label}`,[allocations(rs,caps),Cl.none()],alice);
+  expect(result.withdrawn).toBe(10n);
+  expect(result.positions).toHaveLength(10);
+  expect(result.sbtc).toBe(s.x?sum(amounts):0n);
+  expect(result.stx).toBe(s.x?0n:sum(amounts));
+  expect(wallets(alice)).toEqual(beforeAlice);
+  for(const r of rs)expect(position(r,alice).shares).toBe(0n);
+  expect(rs.map(r=>position(r,bob))).toEqual(bobClaims);
+  backed();
+  withdraw(s,bob);drained(s);
+  expect(wallets(bob)).toEqual(beforeBob);
+  expect(supply()).toEqual(originalSupply);
+ },120000);
+
  for(const s of specs)it(`${s.label}: weighted batch, five fills and a partial fill, proceeds-paying batch top-up, paused ten-rung exit`,()=>{
   const originalSupply=setupTwenty(),amounts=weighted(s),other=specs.find(x=>x.x!==s.x)!;
   deposit(s,alice,amounts,true);admit(s);

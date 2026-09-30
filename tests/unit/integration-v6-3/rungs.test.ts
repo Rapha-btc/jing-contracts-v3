@@ -3,6 +3,35 @@ import {Cl} from '@stacks/transactions';
 import {U,P,owner,alice,bob,taker,token,stx,name,update,call,read,ok,balance,specs,setup} from './helpers';
 
 for(const spec of specs)describe(`real ${spec.label} core-spread v1 rung`,()=>{
+ it('caps oversized full-exit requests before share arithmetic and preserves another member',()=>{
+  const r=setup(spec),input=spec.x?'sbtc':'stx',max=(1n<<128n)-1n;
+  const beforeA=balance(spec.x,alice),beforeB=balance(spec.x,bob);
+  r.deposit(bob);
+  // Exercise both former overflow boundaries (ceiling addition and scaling)
+  // as well as the max-uint sentinel commonly used for "withdraw everything".
+  for(const amount of [(max-(P-1n))/P+1n,max/P+1n,max]){
+   r.deposit(alice);
+   const other=r.position(bob);
+   const paid=r.withdraw(alice,amount);
+   expect(paid).toEqual({sbtc:spec.x?spec.amount:0n,stx:spec.x?0n:spec.amount});
+   expect(balance(spec.x,alice)).toBe(beforeA);
+   expect(r.position(alice).shares).toBe(0n);
+   expect(r.position(bob)).toEqual(other);
+   expect(r.state().members).toBe(1n);
+   expect(r.equity()).toBe(spec.amount);
+   expect(balance(spec.x,`${owner}.market`)).toBe(spec.amount);
+  }
+  // The final member also exits with max-uint and exhausts the backing.
+  r.paused();
+  expect(r.withdraw(bob,max)[input]).toBe(spec.amount);
+  expect(balance(spec.x,bob)).toBe(beforeB);
+  expect(r.state().members).toBe(0n);
+  expect(r.state()['total-shares']).toBe(0n);
+  expect(r.equity()).toBe(0n);
+  expect(balance(spec.x,`${owner}.market`)).toBe(0n);
+  expect(balance(true,r.principal)).toBe(0n);
+  expect(balance(false,r.principal)).toBe(0n);
+ });
  it('registers with the real ladder and returns a funded position while market and core are paused',()=>{
   const r=setup(spec),before=balance(spec.x,alice);
   r.deposit(alice);

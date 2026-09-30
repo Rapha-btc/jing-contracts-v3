@@ -704,9 +704,12 @@
             ;; current scale, which changes its share count
             (member-shares (get shares (unwrap-panic (map-get? positions member))))
             (mine (/ (* member-shares fi) SCALE))
-            ;; round the burn UP: a floor here paid `amount` for fewer shares than
-            ;; it is worth once fi < SCALE, so 1-sat withdraws drained the others
-            (partial (/ (+ (* amount SCALE) (- fi u1)) fi))
+            ;; Full-exit caps, including max-uint, need no scaled arithmetic.
+            ;; For a partial exit, round the burn UP so it covers the payout.
+            (partial (if (>= amount mine)
+              member-shares
+              (/ (+ (* amount SCALE) (- fi u1)) fi)
+            ))
             ;; a full exit when asked for all, or when the partial would leave
             ;; shares worth under 1 sat (ARION F-8: such a rest could never be
             ;; withdrawn). `or` stops at the first test, so the subtraction only
