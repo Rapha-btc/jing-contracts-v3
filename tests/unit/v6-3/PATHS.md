@@ -1,6 +1,6 @@
 # v6-3 error-exit matrix
 
-Market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
+Market SHA-256: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
 
 Inventory: **286 explicit error-exit sites**, with a conservative negative witness for **134**. **152 have no attributed negative witness**.
 
@@ -38,17 +38,17 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 | [1227](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1227) | deposit-token-y-core | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1235](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1235) | deposit-token-y-core | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1238](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1238) | deposit-token-y-core | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1253](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1253) | deposit-token-y-core | `try!` | [T282](#t282) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1253](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1253) | deposit-token-y-core | `try!` | [T296](#t296) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1262](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1262) | deposit-token-y-core | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1268](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1268) | deposit-token-y-core | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1279](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1279) | deposit-token-y-core | `try!` | [T281](#t281) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1279](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1279) | deposit-token-y-core | `try!` | [T295](#t295) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1303](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1303) | deposit-token-y | `asserts!` | [T197](#t197) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1304](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1304) | deposit-token-y | `asserts!` | [T193](#t193) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1305](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1305) | deposit-token-y | `asserts!` | [T197](#t197) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1306](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1306) | deposit-token-y | `asserts!` | [T197](#t197) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1307](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1307) | deposit-token-y | `asserts!` | [T197](#t197) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1308](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1308) | deposit-token-y | `asserts!` | [T197](#t197) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1316](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1316) | deposit-token-y | `try!` | [T281](#t281) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1316](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1316) | deposit-token-y | `try!` | [T295](#t295) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1320](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1320) | deposit-token-y | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1327](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1327) | deposit-token-y | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1342](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1342) | settle-token-y-deposit | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
@@ -68,17 +68,17 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 | [1470](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1470) | deposit-token-x-core | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1478](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1478) | deposit-token-x-core | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1481](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1481) | deposit-token-x-core | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1496](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1496) | deposit-token-x-core | `try!` | [T273](#t273) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1496](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1496) | deposit-token-x-core | `try!` | [T287](#t287) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1505](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1505) | deposit-token-x-core | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1511](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1511) | deposit-token-x-core | `try!` | [T30](#t30) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1522](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1522) | deposit-token-x-core | `try!` | [T272](#t272) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1522](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1522) | deposit-token-x-core | `try!` | [T286](#t286) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1546](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1546) | deposit-token-x | `asserts!` | [T142](#t142) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1547](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1547) | deposit-token-x | `asserts!` | [T138](#t138) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1548](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1548) | deposit-token-x | `asserts!` | [T142](#t142) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1549](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1549) | deposit-token-x | `asserts!` | [T142](#t142) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1550](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1550) | deposit-token-x | `asserts!` | [T142](#t142) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1551](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1551) | deposit-token-x | `asserts!` | [T142](#t142) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [1559](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1559) | deposit-token-x | `try!` | [T272](#t272) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [1559](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1559) | deposit-token-x | `try!` | [T286](#t286) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1563](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1563) | deposit-token-x | `try!` | [T31](#t31) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1570](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1570) | deposit-token-x | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [1585](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1585) | settle-token-x-deposit | `unwrap!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
@@ -206,102 +206,102 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 | [2624](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2624) | settle-with-refresh | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
 | [2630](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2630) | settle-with-refresh | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
 | [2652](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2652) | swap | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2669](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2669) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2670](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2670) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2671](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2671) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2681](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2681) | swap | `asserts!` | [T166](#t166) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2691](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2691) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2699](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2699) | swap | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2708](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2708) | swap | `try!` | [T33](#t33) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2714](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2714) | swap | `try!` | [T37](#t37) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2719](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2719) | swap | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2722](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2722) | swap | `try!` | [T36](#t36) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2730](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2730) | swap | `try!` | [T278](#t278) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2733](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2733) | swap | `try!` | [T279](#t279) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2738](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2738) | swap | `try!` | [T288](#t288) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [2817](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2817) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2818](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2818) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2672](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2672) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2673](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2673) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2674](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2674) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2684](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2684) | swap | `asserts!` | [T166](#t166) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2694](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2694) | swap | `asserts!` | [T179](#t179) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2702](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2702) | swap | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2711](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2711) | swap | `try!` | [T33](#t33) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2717](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2717) | swap | `try!` | [T37](#t37) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2722](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2722) | swap | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2725](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2725) | swap | `try!` | [T36](#t36) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2733](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2733) | swap | `try!` | [T292](#t292) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2736](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2736) | swap | `try!` | [T293](#t293) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [2741](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2741) | swap | `try!` | [T302](#t302) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [2820](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2820) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2821](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2821) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
 | [2823](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2823) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2824](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2824) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2828](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2828) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2880](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2880) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2881](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2881) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2826](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2826) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2827](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2827) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2831](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2831) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
 | [2883](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2883) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2891](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2891) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2892](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2892) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2884](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2884) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2886](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2886) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
 | [2894](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2894) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2906](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2906) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2954](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2954) | walk-x-book-step | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [2995](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2995) | walk-y-book-step | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3240](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3240) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3259](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3259) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3260](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3260) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3264](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3264) | cross-remainder-as-y | `asserts!` | [T234](#t234) | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3268](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3268) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3269](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3269) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3283](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3283) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3310](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3310) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3329](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3329) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3330](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3330) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3334](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3334) | cross-remainder-as-x | `asserts!` | [T179](#t179) | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3338](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3338) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3339](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3339) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3353](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3353) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
-| [3398](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3398) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3399](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3399) | execute-settlement | `asserts!` | [T89](#t89) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3406](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3406) | execute-settlement | `asserts!` | [T98](#t98) (private) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3407](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3407) | execute-settlement | `asserts!` | [T99](#t99) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3408](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3408) | execute-settlement | `asserts!` | [T101](#t101) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3409](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3409) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | execute-settlement | `asserts!` | [T118](#t118) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | execute-settlement | `asserts!` | [T100](#t100) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | execute-settlement | `asserts!` | [T102](#t102) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3419](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3419) | execute-settlement | `asserts!` | [T118](#t118) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3434](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3434) | execute-settlement | `asserts!` | [T169](#t169) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3464](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3464) | execute-settlement | `asserts!` | [T117](#t117) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3483](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3483) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3484](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3484) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3489](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3489) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3490](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3490) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3508](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3508) | execute-settlement | `try!` | [T275](#t275) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3527](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3527) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3570](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3570) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3572](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3572) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3595](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3595) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3596](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3596) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [2895](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2895) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2897](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2897) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2909](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2909) | execute-fill | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2957](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2957) | walk-x-book-step | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [2998](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2998) | walk-y-book-step | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3243](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3243) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3262](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3262) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3263](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3263) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3267](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3267) | cross-remainder-as-y | `asserts!` | [T234](#t234) | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3271](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3271) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3272](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3272) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3286](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3286) | cross-remainder-as-y | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3313](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3313) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3332](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3332) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3333](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3333) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3337](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3337) | cross-remainder-as-x | `asserts!` | [T179](#t179) | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3341](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3341) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3342](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3342) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3356](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3356) | cross-remainder-as-x | `try!` | unattributed | [swap-walk](../../../simulations/verify-v6-3-swap-walk.js) |
+| [3401](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3401) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3402](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3402) | execute-settlement | `asserts!` | [T89](#t89) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3409](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3409) | execute-settlement | `asserts!` | [T98](#t98) (private) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | execute-settlement | `asserts!` | [T99](#t99) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | execute-settlement | `asserts!` | [T101](#t101) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3412](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3412) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3413](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3413) | execute-settlement | `asserts!` | [T84](#t84) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | execute-settlement | `asserts!` | [T118](#t118) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | execute-settlement | `asserts!` | [T100](#t100) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3420](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3420) | execute-settlement | `asserts!` | [T102](#t102) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3422](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3422) | execute-settlement | `asserts!` | [T118](#t118) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3437](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3437) | execute-settlement | `asserts!` | [T169](#t169) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3467](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3467) | execute-settlement | `asserts!` | [T117](#t117) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3486](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3486) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3487](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3487) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3492](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3492) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3493](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3493) | execute-settlement | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3511](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3511) | execute-settlement | `try!` | [T289](#t289) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3530](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3530) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3573](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3573) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3575](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3575) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
 | [3598](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3598) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3606](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3606) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3622](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3622) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3665](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3665) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3666](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3666) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3687](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3687) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3689](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3689) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3693](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3693) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3701](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3701) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3735](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3735) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3736](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3736) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3741](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3741) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3742](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3742) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3748](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3748) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [3766](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3766) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3767](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3767) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3599](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3599) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3601](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3601) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3609](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3609) | distribute-to-token-y-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3625](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3625) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3668](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3668) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3669](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3669) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3690](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3690) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3692](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3692) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3696](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3696) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3704](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3704) | distribute-to-token-x-depositor | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3738](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3738) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3739](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3739) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3744](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3744) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3745](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3745) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3751](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3751) | roll-and-sweep-dust | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3769](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3769) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
 | [3770](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3770) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3771](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3771) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3779](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3779) | initialize | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3785](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3785) | set-treasury | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3786](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3786) | set-treasury | `asserts!` | [T91](#t91) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3792](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3792) | set-paused | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3798](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3798) | set-operator | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3804](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3804) | set-min-token-y-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3805](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3805) | set-min-token-y-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3811](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3811) | set-min-token-x-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3812](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3812) | set-min-token-x-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3818](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3818) | set-distance-slots | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [3819](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3819) | set-distance-slots | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
-| [4107](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L4107) | prune-one | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
-| [4108](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L4108) | prune-one | `asserts!` | [T89](#t89) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [3773](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3773) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3774](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3774) | initialize | `asserts!` | [T92](#t92) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3782](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3782) | initialize | `try!` | unattributed | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3788](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3788) | set-treasury | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3789](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3789) | set-treasury | `asserts!` | [T91](#t91) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3795](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3795) | set-paused | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3801](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3801) | set-operator | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3807](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3807) | set-min-token-y-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3808](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3808) | set-min-token-y-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3814](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3814) | set-min-token-x-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3815](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3815) | set-min-token-x-deposit | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3821](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3821) | set-distance-slots | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [3822](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3822) | set-distance-slots | `asserts!` | [T90](#t90) | [errors-admin](../../../simulations/verify-v6-3-errors-admin.js) |
+| [4106](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L4106) | prune-one | `try!` | unattributed | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
+| [4107](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L4107) | prune-one | `asserts!` | [T89](#t89) | [settlement-edges](../../../simulations/verify-v6-3-settlement-edges.js) |
 
 ## Witness test catalog
 
@@ -355,15 +355,15 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 
 <a id="t125"></a>**T125**: tests/unit/v6-3/market.test.ts__unreduced queue boundaries__fills all 40 default public y slots before escrowing the 41st maker
 
-<a id="t282"></a>**T282**: y queues, parking, and readmission > a paused core rejects admission after parking and restores incumbent and escrow
+<a id="t296"></a>**T296**: y queues, parking, and readmission > a paused core rejects admission after parking and restores incumbent and escrow
 
-<a id="t281"></a>**T281**: y maker lifecycle > rejects funding while the real core is paused but permits withdrawals and cancellation
+<a id="t295"></a>**T295**: y maker lifecycle > rejects funding while the real core is paused but permits withdrawals and cancellation
 
-<a id="t280"></a>**T280**: y final guard and walk boundaries > rolls back price-priority parking when the real core rejects admission
+<a id="t294"></a>**T294**: y final guard and walk boundaries > rolls back price-priority parking when the real core rejects admission
 
 <a id="t36"></a>**T36**: registered contract depositor with real core accounting > x: core pause rejects a walk without changing either market or equity
 
-<a id="t283"></a>**T283**: y real core pause and rollback > rejects crossing settlement while the real core is paused
+<a id="t297"></a>**T297**: y real core pause and rollback > rejects crossing settlement while the real core is paused
 
 <a id="t197"></a>**T197**: tests/unit/v6-3/market.test.ts__y maker lifecycle__rejects invalid deposits and quotes without touching funds
 
@@ -387,17 +387,17 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 
 <a id="t124"></a>**T124**: tests/unit/v6-3/market.test.ts__unreduced queue boundaries__fills all 40 default public x slots before escrowing the 41st maker
 
-<a id="t273"></a>**T273**: x queues, parking, and readmission > a paused core rejects admission after parking and restores incumbent and escrow
+<a id="t287"></a>**T287**: x queues, parking, and readmission > a paused core rejects admission after parking and restores incumbent and escrow
 
 <a id="t30"></a>**T30**: real core registration and equity > an unfunded direct token input returns the real FT balance error
 
-<a id="t272"></a>**T272**: x maker lifecycle > rejects funding while the real core is paused but permits withdrawals and cancellation
+<a id="t286"></a>**T286**: x maker lifecycle > rejects funding while the real core is paused but permits withdrawals and cancellation
 
-<a id="t271"></a>**T271**: x final guard and walk boundaries > rolls back price-priority parking when the real core rejects admission
+<a id="t285"></a>**T285**: x final guard and walk boundaries > rolls back price-priority parking when the real core rejects admission
 
 <a id="t37"></a>**T37**: registered contract depositor with real core accounting > y: core pause rejects a walk without changing either market or equity
 
-<a id="t274"></a>**T274**: x real core pause and rollback > rejects crossing settlement while the real core is paused
+<a id="t288"></a>**T288**: x real core pause and rollback > rejects crossing settlement while the real core is paused
 
 <a id="t142"></a>**T142**: tests/unit/v6-3/market.test.ts__x maker lifecycle__rejects invalid deposits and quotes without touching funds
 
@@ -457,25 +457,25 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 
 <a id="t1"></a>**T1**: batch settlement and history > rejects empty, paused, stale, and wrong-trait settlement without mutations
 
-<a id="t278"></a>**T278**: x swaps and reprice > does not count pending escrow as settlement liquidity
+<a id="t292"></a>**T292**: x swaps and reprice > does not count pending escrow as settlement liquidity
 
-<a id="t287"></a>**T287**: y swaps and reprice > does not count pending escrow as settlement liquidity
+<a id="t301"></a>**T301**: y swaps and reprice > does not count pending escrow as settlement liquidity
 
-<a id="t277"></a>**T277**: x remaining public transitions > rejects a taker below the minimum pro-rata share without committing rebates or fills
+<a id="t291"></a>**T291**: x remaining public transitions > rejects a taker below the minimum pro-rata share without committing rebates or fills
 
-<a id="t286"></a>**T286**: y remaining public transitions > rejects a taker below the minimum pro-rata share without committing rebates or fills
+<a id="t300"></a>**T300**: y remaining public transitions > rejects a taker below the minimum pro-rata share without committing rebates or fills
 
 <a id="t39"></a>**T39**: rounding and additional oracle boundaries > does not settle a book with no eligible liquidity after limit filtering
 
 <a id="t40"></a>**T40**: rounding and additional oracle boundaries > rejects zero computed cross-price and confidence at the x threshold
 
-<a id="t275"></a>**T275**: x real core pause and rollback > reverts limit filtering when the real settlement logger rejects a paused core
+<a id="t289"></a>**T289**: x real core pause and rollback > reverts limit filtering when the real settlement logger rejects a paused core
 
-<a id="t276"></a>**T276**: x real core pause and rollback > reverts small share filtering when the real settlement logger rejects a paused core
+<a id="t290"></a>**T290**: x real core pause and rollback > reverts small share filtering when the real settlement logger rejects a paused core
 
-<a id="t284"></a>**T284**: y real core pause and rollback > reverts limit filtering when the real settlement logger rejects a paused core
+<a id="t298"></a>**T298**: y real core pause and rollback > reverts limit filtering when the real settlement logger rejects a paused core
 
-<a id="t285"></a>**T285**: y real core pause and rollback > reverts small share filtering when the real settlement logger rejects a paused core
+<a id="t299"></a>**T299**: y real core pause and rollback > reverts small share filtering when the real settlement logger rejects a paused core
 
 <a id="t41"></a>**T41**: settles distinct asset identities through the real core and clears deposited equity
 
@@ -501,11 +501,11 @@ Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs
 
 <a id="t33"></a>**T33**: real core registration and equity > an unfunded swap token input returns the real FT balance error
 
-<a id="t279"></a>**T279**: x swaps and reprice > rejects zero limit, below-minimum, resting, and insufficient-liquidity swaps atomically
+<a id="t293"></a>**T293**: x swaps and reprice > rejects zero limit, below-minimum, resting, and insufficient-liquidity swaps atomically
 
 <a id="t34"></a>**T34**: real-core accounting at the taker refund threshold > x: at-minimum remainder, rollback or refund, then wallet reuse
 
-<a id="t288"></a>**T288**: y swaps and reprice > rejects zero limit, below-minimum, resting, and insufficient-liquidity swaps atomically
+<a id="t302"></a>**T302**: y swaps and reprice > rejects zero limit, below-minimum, resting, and insufficient-liquidity swaps atomically
 
 <a id="t35"></a>**T35**: real-core accounting at the taker refund threshold > y: at-minimum remainder, rollback or refund, then wallet reuse
 

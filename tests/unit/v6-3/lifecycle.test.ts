@@ -97,7 +97,7 @@ describe('walk rounding leaves no core claim after refunded taker dust',()=>{
  for(const s of sides)for(const action of ['swap','reprice'] as const)it(`${s} ${action}: dust refund clears real core equity exactly once`,()=>{
   const opposite=h.other(s),input=h.amount(s),quote=s==='y'?P*1.5:P/2;
   const makerAmount=s==='y'?10000:action==='swap'?498000:494000;
-  const dust=s==='y'?50n:20n;
+  const dust=s==='y'?(action==='swap'?53n:50n):20n;
   if(action==='reprice')step('taker first rests off-market',()=>deposit(s,input,h.off(s),carol));
   step('maker supplies walk liquidity',()=>deposit(opposite,makerAmount,quote));
   if(action==='reprice'){
@@ -135,8 +135,9 @@ describe('real-core accounting at the taker refund threshold',()=>{
   const minimum=s==='x'?100n:10000n;
   const remainder=boundary==='zero'?0n:boundary==='below-minimum'?minimum-1n:minimum;
   // Exact integer fills at these quotes leave the selected remainder. The y
-  // below-minimum input nets 999,999 after the 20 bps taker prepayment.
-  const input=s==='y'&&boundary==='below-minimum'?1002003:h.amount(s);
+  // below-minimum input nets 999,999 after the 20 bps net-based rebate.
+  const targetNet=s==='x'?9980n:boundary==='below-minimum'?999999n:998000n;
+  const input=Number((targetNet*10020n+9999n)/10000n);
   const makerAmount=s==='x'?Number((9980n-remainder)*50n):boundary==='zero'?4990:boundary==='below-minimum'?4950:4940;
   step('maker admitted for boundary fill',()=>deposit(opposite,makerAmount,quote));
   if(boundary==='at-minimum'){

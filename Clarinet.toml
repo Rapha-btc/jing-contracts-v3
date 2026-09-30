@@ -34,22 +34,22 @@ contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
 [contracts.jing-core-v6]
 path = "contracts/jing-core-v6.clar"
 clarity_version = 5
-epoch = "3.4"
+epoch = "latest"
 
 [contracts.jing-ladder-v1]
 path = "contracts/jing-ladder-v1.clar"
 clarity_version = 5
-epoch = "3.4"
+epoch = "latest"
 
 [contracts.jing-rung-deposit-trait]
 path = "contracts/jing-rung-deposit-trait.clar"
 clarity_version = 5
-epoch = "3.4"
+epoch = "latest"
 
 [contracts.markets-sbtc-stx-jing-v6-3]
 path = "contracts/markets-sbtc-stx-jing-v6-3.clar"
 clarity_version = 5
-epoch = "3.4"
+epoch = "latest"
 
 [repl.remote_data]
 enabled = true

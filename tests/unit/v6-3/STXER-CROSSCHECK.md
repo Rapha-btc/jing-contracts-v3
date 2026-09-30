@@ -2,7 +2,7 @@
 
 Baseline: [Stxer report at f2386cf](https://github.com/Rapha-btc/jing-contracts-v3/blob/f2386cf/simulations/README-v6-3-coverage.md). Stxer market SHA-256: `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
 
-Clarinet market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`. The refund, registered-maker, and refund logging fixes change the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).
+Clarinet market SHA-256: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`. The refund, registered-maker, refund logging, and net-based rebate fixes change the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).
 
 This report is generated after the full Clarinet suite and coverage thresholds pass. It checks the source locations listed by Stxer; it does not add or average the two tools’ coverage percentages.
 
@@ -16,32 +16,31 @@ This report is generated after the full Clarinet suite and coverage thresholds p
 | 1083 | [1083](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1083) | Stale y feed during classification | [T106](PATHS.md#t106) |
 | 1084 | [1084](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1084) | Non-positive x classification price | [T109](PATHS.md#t109) |
 | 1085 | [1085](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L1085) | Non-positive y classification price | [T112](PATHS.md#t112) |
-| 3401 | [3407](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3407) | Zero x settlement price | [T99](PATHS.md#t99) |
-| 3402 | [3408](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3408) | Zero y settlement price | [T101](PATHS.md#t101) |
-| 3404 | [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | Stale y feed during settlement | [T84](PATHS.md#t84) |
-| 3405 | [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | x confidence at threshold | [T118](PATHS.md#t118) |
-| 3408 | [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | y confidence at threshold | [T100](PATHS.md#t100) |
-| 3411 | [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | Mismatched exponents | [T102](PATHS.md#t102) |
-| 3413 | [3419](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3419) | Cross-price rounds to zero | [T118](PATHS.md#t118) |
+| 3401 | [3410](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3410) | Zero x settlement price | [T99](PATHS.md#t99) |
+| 3402 | [3411](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3411) | Zero y settlement price | [T101](PATHS.md#t101) |
+| 3404 | [3413](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3413) | Stale y feed during settlement | [T84](PATHS.md#t84) |
+| 3405 | [3414](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3414) | x confidence at threshold | [T118](PATHS.md#t118) |
+| 3408 | [3417](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3417) | y confidence at threshold | [T100](PATHS.md#t100) |
+| 3411 | [3420](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3420) | Mismatched exponents | [T102](PATHS.md#t102) |
+| 3413 | [3422](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3422) | Cross-price rounds to zero | [T118](PATHS.md#t118) |
 
 The added boundary suite checks confidence one unit below, exactly at, and one unit above 2% independently on each feed; it also checks feed ages 79, 80 and 81 seconds on each side during funded settlement. Rejected calls preserve market storage, core equity and asset balances. A corrected feed then settles the same book with exact payouts and zero remaining custody.
 
-## Eight partial branches
+## Eight historical partial branches
 
-Seven execute in isolated tests of the actual private helpers. Those tests deliberately supply a boundary context and do not show that the context can arise through public transactions. The remaining gross-up arm stays unhit and stays in the denominator.
+Seven execute in isolated tests of the actual private helpers. Those tests deliberately supply a boundary context and do not show that the context can arise through public transactions. The eighth, the old gross-up decrement, was removed by 34bbe18. Both outcomes of its replacement zero-capacity guard execute; the removed branch is not claimed as covered.
 
 | Stxer node line | Current node line | Missing outcome | Clarinet operand branch | Evidence |
 | ---: | ---: | --- | --- | --- |
 | 13 | [13](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L13) | Age >= 80 cap | `14,0,0`: hit | rebate age 80 / 1000 gives 70 bps |
-| 2936 | [2936](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2936) | x-book failed accumulator | `2961,0,1`: hit | walk-x-book-step propagates a failed fold accumulator |
-| 2977 | [2977](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2977) | y-book failed accumulator | `3002,0,1`: hit | walk-y-book-step propagates a failed fold accumulator |
-| 3526 | [3532](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3532) | Empty y distribution: payout denominator | `3534,0,1`: hit | handles an empty y distribution |
-| 3530 | [3536](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3536) | Empty y distribution: unfilled denominator | `3540,0,1`: hit | handles an empty y distribution |
-| 3621 | [3627](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3627) | Empty x distribution: payout denominator | `3629,0,1`: hit | handles an empty x distribution |
-| 3625 | [3631](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3631) | Empty x distribution: unfilled denominator | `3635,0,1`: hit | handles an empty x distribution |
-| 3928 | [3934](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3934) | Gross-up decrement | `3935,0,0`: unhit | Arithmetic proof; no test claims this arm executes |
+| 2936 | [2939](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2939) | x-book failed accumulator | `2964,0,1`: hit | walk-x-book-step propagates a failed fold accumulator |
+| 2977 | [2980](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L2980) | y-book failed accumulator | `3005,0,1`: hit | walk-y-book-step propagates a failed fold accumulator |
+| 3526 | [3535](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3535) | Empty y distribution: payout denominator | `3537,0,1`: hit | handles an empty y distribution |
+| 3530 | [3539](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3539) | Empty y distribution: unfilled denominator | `3543,0,1`: hit | handles an empty y distribution |
+| 3621 | [3630](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3630) | Empty x distribution: payout denominator | `3632,0,1`: hit | handles an empty x distribution |
+| 3625 | [3634](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L3634) | Empty x distribution: unfilled denominator | `3638,0,1`: hit | handles an empty x distribution |
 
-The helper tests are in [market.test.ts](market.test.ts), under “pure private arithmetic boundaries”, “walk rounding and error propagation”, and “isolated defensive helper cases”. For gross-up, `g = floor(net * 10000 / 9980)` implies `g - floor(g * 20 / 10000) <= net`; therefore the decrement condition cannot hold for non-overflowing inputs. This proof is separate from sampled boundary tests.
+The helper tests are in [market.test.ts](market.test.ts), under “pure private arithmetic boundaries”, “walk rounding and error propagation”, and “isolated defensive helper cases”. For positive net capacity, the new gross-up returns `floor(((net + 1) * 10020 - 1) / 10000)`. Boundary tests check zero capacity and maximality; [rebate-capacity.test.ts](rebate-capacity.test.ts) also swaps gross-cap and gross-cap + 1 on both sides and verifies the latter exceeds net capacity by one and refunds that dust.
 
 The walk-error reachability argument in the Stxer report depends on its custody and dependency assumptions. Private-helper coverage is not a formal proof that production transfers can never fail.
 

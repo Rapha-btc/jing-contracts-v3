@@ -148,9 +148,9 @@ describe('registered contract depositor with real core accounting',()=>{
    step('EOA resting maker',()=>deposit('market',opposite,makerAmount,quote,bob));
    const receipt=step('registered taker swaps and logs',()=>pub(client,'swap',[Cl.bool(s==='x'),U(h.amount(s)),U(quote)]));
    const result=value(receipt.result);
-   expect(result['rebate-refunded']).toBe(s==='x'?1n:4n);
-   expect(result[`token-${s}-rolled`]).toBe(0n);
-   expect(equity(s,clientPrincipal)).toBe(BigInt(h.amount(s)*3)+result['rebate-refunded']);
+   expect(result['rebate-refunded']).toBe(1n);
+   expect(result[`token-${s}-rolled`]).toBe(s==='x'?0n:3n);
+   expect(equity(s,clientPrincipal)).toBe(BigInt(h.amount(s)*3)+result['rebate-refunded']+result[`token-${s}-rolled`]);
    expect(equity(opposite,clientPrincipal)).toBeGreaterThan(0n);drain();
   });
   it(`${s}: core pause rejects a walk without changing either market or equity`,()=>{

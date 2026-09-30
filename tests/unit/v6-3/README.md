@@ -7,8 +7,17 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
+On 2026-09-29, `clarinet check` passed for all four root-manifest contracts,
+and `npm test` passed **287/287 tests** plus the unchanged coverage thresholds
+against the `34bbe18` market. Fourteen new rebate/capacity regressions cover
+the new net-based pot and exact gross-up. Existing midpoint, lifecycle,
+registered-taker, minimum-input, and exact-walk-exhaustion expectations were
+adjusted only for the new arithmetic. No production contract was edited and
+no unexpected failures remain. The separate rung epoch rerun passed **8/8**;
+the prior full 69-test rung coverage is historical, as documented below.
+
 The registered-maker and refund-safety fixes are implemented and verified.
-All **273 tests pass**, including 16 shared-core scenarios with registered
+All **287 tests pass**, including 16 shared-core scenarios with registered
 contract depositors and two markets, plus 40 refund/accounting cases. Core
 debits now bound the aggregate subtraction, so an inconsistent low total cannot
 underflow and block a refund. Cancellation and pending-settlement refund logs
@@ -20,12 +29,14 @@ that payout to `log-match`. Both sources must be used together.
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
 also remain green. The full RV campaigns validated the preceding Core revision: 12,000 native trials and
 600 guided episodes, with zero property/invariant failures. The
-[current-source Stxer rerun](../../../simulations/README-v6-3-coverage.md) passes
+[previously documented Stxer rerun](../../../simulations/README-v6-3-coverage.md) passed
 all 17 suites and 5,981 checks; the separate sBTC refund integration passes
 291 checks. The RV and Stxer campaigns have not been rerun against the later
-vault/Core amendment. These check counts remain distinct from Clarinet coverage.
+vault/Core amendment or the net-based swap rebate change in this Clarinet session.
+These historical check counts remain distinct from current Clarinet coverage;
+the linked reports identify the sources tested by those separate campaigns.
 
-On 2026-09-29, all **273 v6-3 tests passed** against the source including
+In the preceding 2026-09-29 run, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
 treasury, preserves the funded book and configured recipient, and confirms
 that subsequent batch fees reach the valid treasury. The suite also includes
@@ -41,14 +52,14 @@ remain unchanged and pass. No unrelated failures occurred in the full run.
 | Market-only metric | Covered / total | Coverage |
 | --- | ---: | ---: |
 | Functions | 137 / 137 | **100.00%** |
-| Lines | 2349 / 2356 | **99.70%** |
-| Branches | 832 / 835 | **99.64%** |
+| Lines | 2348 / 2354 | **99.75%** |
+| Branches | 833 / 835 | **99.76%** |
 
 Toolchain: Clarinet SDK/WASM 3.21.0, Vitest 2.1.9,
 vitest-environment-clarinet 3.0.2, and @stacks/transactions 7.4.0.
 
 Source SHA-256:
-`d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
+`5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
 Core SHA-256:
 `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 The suite loads `contracts/jing-core-v6.clar` directly from the manifest, with
@@ -61,12 +72,13 @@ unhit paths described below; they exclude mocked dependencies and older versions
 ## Run
 
 A separate [real core-spread v1 rung integration suite](../integration-v6-3/README.md)
-now passes **69/69**, with **100% functions, 99.05% lines and 99.28% branches**
+previously passed **69/69**, with **100% functions, 99.05% lines and 99.28% branches**
 for each rung. It covers the sell exit regression, four successive rescales,
 epoch payouts, reserve dust, push controls and 17 real-dispatch scenarios
-with ten rungs per side. These results are separate
-from the 273 market unit tests above; this coverage expansion changes no
-production contract.
+with ten rungs per side. After `34bbe18`, only the eight epoch cases were
+rerun, all passing; full rung coverage was not regenerated. These results are
+separate from the 287 market unit tests above; this coverage expansion changes
+no production contract.
 
 From the repository root, with dependencies installed:
 
@@ -74,6 +86,10 @@ From the repository root, with dependencies installed:
 npm test
 # Equivalent explicit command: npm run test:v6-3
 ```
+
+`clarinet check` uses the root manifest. Its four contracts now use
+`epoch = "latest"` to resolve the CLI dependency-epoch mismatch with the cached
+Pyth requirements. The offline unit manifest remains pinned to epoch `3.4`.
 
 The command builds the isolated fixtures, runs Vitest in Clarinet simnet,
 produces market-only coverage and the [error-exit matrix](PATHS.md), and checks
@@ -131,6 +147,31 @@ reachable through the normal public call chain. No test patches or injects
 market state.
 
 ## Scenarios
+
+The `34bbe18` swap arithmetic is covered by [rebate-capacity.test.ts](rebate-capacity.test.ts)
+and updated expectations in `market.test.ts`, `lifecycle.test.ts`, and
+`shared-core.test.ts`:
+
+- Swap computes `net = floor(amount * 10000 / (10000 + bps))` and
+  `pot = amount - net`. Eight three-maker walk cases cover both sides at
+  oracle ages 0, 30, 31, and 79 seconds. Each checks that the pot covers the
+  uncapped per-fill rebates, actual maker wallet payouts, exact unused-pot
+  refund, taker spending, and final custody. When all net input trades,
+  `rebate-refunded <= fills + 2`.
+- Two cases cover a sub-minimum untraded rest. Its prepaid rebate is returned
+  too, so the bound is `fills + 2 + ceil(untradedNet * bps / 10000)`.
+  The STX example has net 999,999, trades 990,000 in one fill, and refunds
+  9,999 micro-STX of input plus 20 micro-STX of unused rebate. The 20-unit
+  rebate refund is correct; the original rounding-only bound was a test error.
+- Four public swaps check `gross-cap` and `gross-cap + 1` on both sides at
+  fresh 20 bps. The former fits net capacity exactly. The latter exceeds it
+  by one unit, which the market correctly returns as sub-minimum dust;
+  exceeding capacity by one does not require the whole swap to reject.
+- Midpoint settlement clears the binding input in full. Its expected maker
+  payout uses the full new net, with conversion rounding applied to output.
+  Lifecycle fixtures use the inverse formula to preserve their intended
+  zero, below-minimum, and at-minimum remainder boundaries. Reprice's
+  on-top rebate formula is unchanged.
 
 Both sides are covered for direct deposits and top-ups; escrow submission and
 permissionless settlement; crossing and queue refunds; raised minimums;
@@ -209,22 +250,21 @@ Every function executes. The remaining branch sites are:
   park logs; the later admission logger enforces pause and rolls back the call.
   These two artificial hits are no longer counted. The branch threshold is
   explicitly rebased from 99.88% to **99.64%** for the real-core suite.
-- Line **3935**: the mathematically unreachable `gross-up` decrement branch.
 
-The `gross-up` calculation computes
-`g = floor(net * 10000 / 9980)`, so the resulting net
-`ceil(g * 9980 / 10000)` cannot exceed the input net. Consequently the `n > net`
-condition cannot be true for non-overflowing inputs; overflowing inputs abort
-before that condition. Boundary tests verify the returned gross is maximal
-without exceeding the requested net. The unreachable branch stays in the
-coverage denominator, and the refund fix does not change this arithmetic.
+Commit `34bbe18` replaced the old, unreachable `gross-up` decrement branch
+with an explicit zero-capacity guard and the exact inverse of the new swap
+formula. For positive net capacity, it returns
+`floor(((net + 1) * 10020 - 1) / 10000)`; zero capacity returns zero.
+Tests exercise both outcomes and check that the returned gross fits capacity
+while one additional unit exceeds it. The removed historical branch is not
+claimed as covered.
 
 Defensive rebate caps, empty distributions, and the already-settled guard are
 covered by the explicitly isolated private-helper cases described above.
 
 Clarinet also reports some tuple-label and continuation lines as unhit although
-the surrounding expression executes (currently 625, 667, 2428, 2476, 3097,
-and 3140). These remain in the denominator rather than being filtered away.
+the surrounding expression executes (currently 625, 667, 2428, 2476, 3100,
+and 3143). These remain in the denominator rather than being filtered away.
 
 Function execution coverage is not exhaustive behavioral coverage. Real Pyth
 signature validation, production sBTC integration, ladder authorization,
@@ -239,7 +279,7 @@ separate from LCOV branch coverage. Unattributed exits remain visible; they
 are not silently treated as covered or unreachable. Related Stxer scenario
 links are navigation only, not combined per-arm coverage evidence.
 
-The two new `try!` sites at lines 3283 and 3353 propagate core refund-log
+The two `try!` sites at lines 3286 and 3356 propagate core refund-log
 errors. The actual core refund functions only explicitly reject unregistered
 callers; an initialized market has already registered, and this core provides
 no unregister operation. These error outcomes have no negative witness; we do
@@ -255,15 +295,15 @@ node --test tests/unit/v6-3/path-inventory.test.mjs
 ## Cross-check with Stxer
 
 [STXER-CROSSCHECK.md](STXER-CROSSCHECK.md) compares the gaps published in the
-Stxer report at `f2386cf` against current Clarinet evidence, with reviewed line offsets for the refund fix:
+Stxer report at `f2386cf` against current Clarinet evidence, with reviewed line offsets for the refund and net-based rebate fixes:
 
 - All **11 oracle error paths** already have checked rejections through public
   market calls using controlled decoded feeds. Signature verification remains
   an integration concern.
-- **Seven of the eight partial branches** execute in isolated tests of the real
+- **Seven of the eight historical partial branches** execute in isolated tests of the real
   private helpers. These do not claim the boundary states are publicly reachable.
-  The remaining gross-up decrement is excluded by the arithmetic proof above
-  and remains in the coverage denominator.
+  The eighth, the old gross-up decrement, was removed by `34bbe18`; both
+  outcomes of the replacement zero-capacity guard are checked independently.
 - All **eight getters** listed as untested in that Stxer report execute and have
   value assertions in the existing Clarinet lifecycle/seat/readmission tests.
 
@@ -278,29 +318,32 @@ The cross-check is regenerated and validated by the full test command. Its
 machine-readable counterpart is `.build/stxer-crosscheck.json`. It fails if any
 of the 11 rejection witnesses, seven private branch hits, or eight getter hits
 is missing, or if the market source is neither the pinned Stxer baseline nor the reviewed
-refund, registered-maker, or pending-refund logging fixes. Historical Stxer evidence is not attributed to the patched source.
+refund, registered-maker, pending-refund logging, or net-based rebate fixes.
+For the net-based revision it also requires both new gross-up outcomes.
+Historical Stxer evidence is not attributed to the patched source.
 The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
-The current source passes two RV dust regressions, **12,000 native trials** and
+The previously recorded RV campaign passed two dust regressions, **12,000 native trials** and
 **600 guided episodes**, with **25,993 accounting checks** and zero
 property/invariant failures. All final recovery sweeps leave zero x/STX custody
 and zero core equity. Source and harness hashes bind both full reports to this
-market/core pair. Registered contracts and multiple markets remain additional
+recorded market/core pair, not the later `34bbe18` market. This Clarinet update
+does not rerun RV. Registered contracts and multiple markets remain additional
 Clarinet coverage. See the [full RV report](../../rv/v6-3/README.md) for seeds,
 pass/discard counts, successful paths and limits. Trial counts are separate from
 unit coverage percentages.
 
 ## Refund execution costs
 
-Two source-checked full-book cancellation measurements pass with 50 live makers
+Two previously recorded, source-checked full-book cancellation measurements passed with 50 live makers
 plus the caller's pending top-up. Each measured execution-cost dimension uses
 less than 0.64% of the Clarinet budget. See the
 [cost table and production-integration limits](REFUND-SAFETY.md#execution-cost-headroom).
 Run `node tests/unit/v6-3/refund-costs.mjs` after the full suite to reproduce them.
-These two measurements are separate from the 273 unit tests.
+These two measurements are separate from the 287 unit tests.
 
-The equivalent [mainnet-fork sBTC check](../../../simulations/README-v6-3-refund-costs.md)
-passes 291 checks with both contracts paused: exact refunds on both sides and
+The equivalent recorded [mainnet-fork sBTC check](../../../simulations/README-v6-3-refund-costs.md)
+passed 291 checks with both contracts paused: exact refunds on both sides and
 less than 0.317% of every measured epoch execution budget.

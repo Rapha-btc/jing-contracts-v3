@@ -9,8 +9,8 @@ for(const spec of specs)describe(`${spec.label} v1 epochs and rescale`,()=>{
   r.deposit(alice,amount);r.deposit(bob,amount+2n);
   const targetRest=spec.x?200n:20000n,total=amount*2n+2n;
   const counter=spec.x?(total-targetRest)*100n:(total-targetRest)/100n;
-  // The market withholds 20 bps from the gross input; invert that deduction.
-  const gross=(counter*10000n+9979n)/9980n;
+  // Smallest gross whose net equals counter at the fresh 20 bps rate.
+  const gross=(counter*10020n+9999n)/10000n;
   ok(call('market','swap',[U(gross),U(P),update,token,name,stx,name,Cl.bool(!spec.x)],taker));
   const live=r.state().resting;
   expect(live).toBeGreaterThanOrEqual(spec.x?100n:10000n);

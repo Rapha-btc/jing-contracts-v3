@@ -1,6 +1,14 @@
 # Core-spread v1 Clarinet tests
 
-**69/69 tests pass: 52 mirrored rung tests plus 17 dispatch scenarios.** Each rung has **100% function coverage,
+After the market's net-based rebate change (`34bbe18`), the focused
+`epochs.test.ts` rerun passes **8/8 tests**. Its gross-input helper now uses
+`ceil(net * 10020 / 10000)` at 20 bps. This run uses market SHA-256
+`5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
+It does not regenerate full-suite coverage.
+
+The preceding full run passed **69/69 tests: 52 mirrored rung tests plus 17 dispatch scenarios**,
+against market SHA-256 `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
+Each rung had **100% function coverage,
 99.05% line coverage and 99.28% branch coverage**. See the generated
 [source-matched coverage report](COVERAGE.md) for counts, hashes and unhit points.
 The original 16 scenarios measured 70.92% lines and 60.14% branches once the
@@ -8,7 +16,7 @@ rungs were included in Clarinet's instrumentation.
 
 Scope is only `jing-buy-stx-core-spread-v1.clar` and
 `jing-sell-stx-core-spread-v1.clar`, using the buy rung as reference. These
-results are separate from the 273 market unit tests and market coverage.
+results are separate from the market unit tests and market coverage.
 The other four rung templates and old versions are excluded. The selected
 router is `swap-router-sbtc-stx-jing-v5-3`, but router tests are not included here.
 

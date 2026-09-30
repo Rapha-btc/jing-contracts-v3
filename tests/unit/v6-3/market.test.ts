@@ -345,13 +345,15 @@ for (const s of ['x','y'] as const) describe(`${s} swaps and reprice`, () => {
   it.each([0,30,31,79])('fills at mid with exact age-dependent rebate (age %i)', age => {
     ok(deposit(other(s),amount(other(s))*2,P,alice));
     oracle(0,age,age);
-    const input=amount(s), bps=age<=30?20:20+age-30, rebate=Math.floor(input*bps/10000), net=input-rebate;
+    const input=amount(s), bps=age<=30?20:20+age-30, net=Math.floor(input*10000/(10000+bps)), rebate=input-net;
     const startOut=balance(other(s),bob), makerIn=balance(s,alice), startIn=balance(s,bob);
     const result=value(ok(swap(s,input,P)));
     const cleared=s==='x'?net*100:Math.floor(net/100), fee=Math.floor(cleared/1000);
     expect(result[`token-${other(s)}-received`]).toBe(BigInt(cleared-fee));
     expect(balance(other(s),bob)-startOut).toBe(BigInt(cleared-fee));
-    const traded=s==='x'?net:Math.floor(net/100)*100;
+    // Midpoint settlement clears the binding input in full; conversion
+    // rounding affects the output, not the amount paid to the maker.
+    const traded=net;
     expect(balance(s,alice)-makerIn).toBe(BigInt(traded-Math.floor(traded/1000)+Math.floor(rebate*traded/net)));
     expect(startIn-balance(s,bob)).toBe(BigInt(input)-result[`token-${s}-rolled`]-result['rebate-refunded']);
     expect(live(s,bob)).toBe(0n); custody('x'); custody('y');
@@ -359,6 +361,8 @@ for (const s of ['x','y'] as const) describe(`${s} swaps and reprice`, () => {
   it('rejects zero limit, below-minimum, resting, and insufficient-liquidity swaps atomically', () => {
     ok(deposit(other(s),amount(other(s)),P,alice)); const before=snapshot(s,bob);
     err(swap(s,0),1001); err(swap(s,amount(s),0),1011); err(swap(s,1),1001);
+    // Gross 1 now nets zero; gross 2 reaches the positive-but-subminimum guard.
+    err(swap(s,2),1001);
     err(swap(s,amount(s)*3),1017); expect(snapshot(s,bob)).toEqual(before);
     ok(deposit(s,amount(s),off(s),bob)); ok(settleDeposit(s,bob)); err(swap(s),1018);
   });
@@ -505,7 +509,7 @@ for (const s of ['x','y'] as const) describe(`${s} remaining public transitions`
     const makerAmount=s==='x'?995000:9970;
     ok(deposit(other(s),makerAmount,P,alice)); const start=balance(s,bob);
     const r=value(ok(swap(s)));
-    expect(r[`token-${s}-rolled`]).toBe(s==='x'?30n:1000n);
+    expect(r[`token-${s}-rolled`]).toBe(s==='x'?30n:1003n);
     expect(start-balance(s,bob)).toBe(BigInt(amount(s))-r[`token-${s}-rolled`]-r['rebate-refunded']);
     expect(live(s,bob)).toBe(0n); custody(s); custody(other(s));
   });
@@ -519,7 +523,7 @@ for (const s of ['x','y'] as const) describe(`${s} remaining public transitions`
   });
   it('walk refunds dust to a maker when the taker exhausts just before it', () => {
     const quote=s==='x'?P/2:P*2;
-    // net input 9980 x / 998000 y consumes 499000 y / 4990 x.
+    // Net input 9980 x / 998003 y consumes 499000 y / 4990 x; y has 3 units of dust.
     const first=s==='x'?499001:4991;
     const start=balance(other(s),alice); ok(deposit(other(s),first,quote,alice));
     ok(swap(s,amount(s),quote));
@@ -572,9 +576,11 @@ describe('pure private arithmetic boundaries', () => {
   it('gross-up respects the net capacity through fee rounding boundaries', () => {
     for (const net of [0,1,99,498,499,500,501,998,999,1000,10000]) {
       const gross=value(h.privateCall('gross-up',[U(net)],owner).result);
-      expect(gross-gross*20n/10000n).toBeLessThanOrEqual(BigInt(net));
+      expect(gross).toBe(net===0?0n:((BigInt(net)+1n)*10020n-1n)/10000n);
+      expect(gross*10000n/10020n).toBeLessThanOrEqual(BigInt(net));
       // Returned gross is the maximum input fitting this net capacity.
-      expect(gross+1n-(gross+1n)*20n/10000n).toBeGreaterThan(BigInt(net));
+      // Zero capacity deliberately returns zero, though gross 1 also nets zero.
+      if(net>0)expect((gross+1n)*10000n/10020n).toBeGreaterThan(BigInt(net));
     }
   });
 });
@@ -606,7 +612,11 @@ for (const s of ['x','y'] as const) describe(`${s} final guard and walk boundari
     ok(deposit(other(s),amount(other(s)),quote,alice));
     ok(deposit(other(s),amount(other(s)),quote,carol));
     ok(deposit(other(s),amount(other(s)),s==='x'?P/4:P*4,keeper,Cl.some(U(0))));
-    const before=live(other(s),keeper); ok(swap(s,amount(s)/2,quote));
+    // Preserve the exact walk exhaustion this scenario is meant to test.
+    // Gross 500,000 now nets 499,001 y, leaving one unit after the first fill.
+    const net=s==='x'?4990n:499000n, gross=(net*10020n+9999n)/10000n;
+    const before=live(other(s),keeper), result=value(ok(swap(s,Number(gross),quote)));
+    expect(result[`token-${s}-rolled`]).toBe(0n);
     expect(live(other(s),keeper)).toBe(before); expect(live(other(s),carol)).toBe(BigInt(amount(other(s))));
     custody(s); custody(other(s));
   });
