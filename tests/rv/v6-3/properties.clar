@@ -63,7 +63,7 @@
 (define-public (test-swap (raw uint) (price uint) (x bool))
  (begin (asserts! true (err u9900))
   (let ((amount (rv-amount raw x)) (limit (rv-price price))
-        (net (- amount (/ (* amount u20) u10000)))
+        (net (/ (* amount u10000) u10020))
         (minimum (if x (var-get min-token-x-deposit) (var-get min-token-y-deposit))))
     (match (swap amount limit 0x .mock-ft "mock-ft" .mock-stx "mock-ft" x)
       r (begin (print {rv-success: "test-swap"}) (rv-check (and (> limit u0) (>= net minimum)))) e (ok false)))))

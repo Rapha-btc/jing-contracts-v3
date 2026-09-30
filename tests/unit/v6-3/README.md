@@ -27,14 +27,14 @@ maker's traded input and credits its exact received output; the market passes
 that payout to `log-match`. Both sources must be used together.
 
 The earlier [taker-refund fix](LIFECYCLE-FINDING.md) and its lifecycle regressions
-also remain green. The full RV campaigns validated the preceding Core revision: 12,000 native trials and
-600 guided episodes, with zero property/invariant failures. The
+also remain green. The full [RV campaigns](../../rv/v6-3/README.md) now validate
+this same market/core pair: 12,000 native trials and 600 guided episodes,
+with zero property/invariant failures and 25,998 accounting checks. The
 [previously documented Stxer rerun](../../../simulations/README-v6-3-coverage.md) passed
 all 17 suites and 5,981 checks; the separate sBTC refund integration passes
-291 checks. The RV and Stxer campaigns have not been rerun against the later
-vault/Core amendment or the net-based swap rebate change in this Clarinet session.
-These historical check counts remain distinct from current Clarinet coverage;
-the linked reports identify the sources tested by those separate campaigns.
+291 checks. Those Stxer figures are historical here; this session reran RV,
+not Stxer. All campaign check counts remain distinct from Clarinet coverage;
+the linked reports identify the sources tested by each campaign.
 
 In the preceding 2026-09-29 run, all **273 v6-3 tests passed** against the source including
 the `e338e27` treasury guard. The regression refuses the market itself as
@@ -325,12 +325,13 @@ The separate Stxer agent owns its stale-seat/readmission and getter scenarios.
 
 ## Scenario fuzzing
 
-The previously recorded RV campaign passed two dust regressions, **12,000 native trials** and
-**600 guided episodes**, with **25,993 accounting checks** and zero
+The current-source RV campaign passed two dust regressions, **12,000 native trials** and
+**600 guided episodes**, with **25,998 accounting checks** and zero
 property/invariant failures. All final recovery sweeps leave zero x/STX custody
 and zero core equity. Source and harness hashes bind both full reports to this
-recorded market/core pair, not the later `34bbe18` market. This Clarinet update
-does not rerun RV. Registered contracts and multiple markets remain additional
+`34bbe18` market and core SHA-256 `88a689af…`, matching this unit report.
+The random and full-book reports were regenerated at 2026-09-30 01:31 and
+01:51 UTC. Registered contracts and multiple markets remain additional
 Clarinet coverage. See the [full RV report](../../rv/v6-3/README.md) for seeds,
 pass/discard counts, successful paths and limits. Trial counts are separate from
 unit coverage percentages.

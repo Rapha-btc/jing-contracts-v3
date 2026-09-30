@@ -1,16 +1,24 @@
 # v6-3 Rendezvous fuzzing with the real core
 
-**Current-source full campaigns pass.** These reports include the registered-maker
-accounting fix, `is-ok` cancellation/pending-refund logging, and bounded aggregate
-debits. The market/core hashes below match the current production files. The
-[273-test Clarinet suite](../../unit/v6-3/README.md) and
+**Current-source full campaigns pass.** These reports include the `34bbe18`
+net-based swap rebate and exact gross-up, the registered-maker accounting fix,
+`is-ok` cancellation/pending-refund logging, and bounded aggregate debits.
+The market/core hashes below match the production files tested. The
+[287-test Clarinet suite](../../unit/v6-3/README.md) and
 [actual-sBTC refund integration](../../../simulations/README-v6-3-refund-costs.md)
 provide separate complementary evidence.
 
-- Market SHA-256: `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
-- Core SHA-256: `67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01`.
-- Random report generated: `2026-09-29T05:45:56.306Z`.
-- Full-book report generated: `2026-09-29T06:04:54.808Z`.
+- Market SHA-256: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
+- Core SHA-256: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
+- Random report generated: `2026-09-30T01:31:08.155Z`.
+- Full-book report generated: `2026-09-30T01:51:10.053Z`.
+
+The RV swap model now computes `floor(amount * 10000 / 10020)` for its
+always-fresh oracle fixture. The STX dust regression expects 53 micro-STX:
+net input is 998,003 and the walk trades 997,950. This is the same arithmetic
+already verified by Clarinet. Production market/core code and invariant
+requirements were unchanged for this rerun. The two core-spread rungs are
+outside these campaigns; their small-proceeds fix is being tested separately.
 
 ## Verified results
 
@@ -19,7 +27,7 @@ provide separate complementary evidence.
 full-book seeds also completed **600 guided episodes**. Every final recovery
 sweep ended with zero x/STX custody and zero core equity on both assets.
 
-The shared monitor completed **25,993 accounting checks** across the six
+The shared monitor completed **25,998 accounting checks** across the six
 campaigns (8,479 in the full-book campaigns). After initialization,
 every public call is checked, including rejected calls and native VM exceptions.
 These counts include initial/final checks; they are not a source-coverage percentage
@@ -62,7 +70,8 @@ each cancellation. Each remaining owner recovers its exact claim:
 The random campaigns also reject **14 invalid asset-name calls** with
 `BadTokenName`; those expected native errors are counted separately from property
 failures. Discards are rejected/inapplicable generated inputs, not successful
-economic operations. No failing expectation or contract was changed to pass.
+economic operations. Only the swap-net model and formula-derived STX dust
+expectation were updated; no production contract or accounting check was weakened.
 
 ## Run
 
@@ -135,7 +144,7 @@ contract depositors and interacting markets are not covered by that model.
 Settlement properties determine admission/refund from exact wallet and claim
 changes. Refund reasons are counted from actual core events, replacing the old
 mock's `get-last-refund` interface. The refund regression cases exercise dust
-of 20 x units and 50 micro-STX, exactly one real refund event, wallet reuse,
+of 20 x units and 53 micro-STX, exactly one real refund event, wallet reuse,
 rejected paused deposits, and complete exit while both contracts are paused.
 
 The `test-config` and cancellation wrappers retain their explicit test-only
@@ -184,6 +193,13 @@ Clarinet coverage percentages. No on-chain deployment is performed.
 
 
 ## History
+
+The preceding full reports (market `d1e3bbad…`, core `67242f19…`, generated
+2026-09-29 at 05:45/06:04 UTC) completed 12,000 trials with 4,659 passes,
+7,341 discards, 600 guided episodes and 25,993 accounting checks. They did not
+validate `34bbe18` or the later core revision; the current source-hashed reports
+above replace them. The unchanged pass/discard counts are from fresh reruns,
+not copied historical evidence.
 
 The earlier source pair (market `43ed3bf0…`, core `53c9b38a…`) completed 12,000
 trials with 4,659 passes, 7,341 discards, 600 guided episodes and 25,999 accounting

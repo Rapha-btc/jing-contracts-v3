@@ -19,7 +19,8 @@ for(const side of ['x','y'])test(`${side} taker refund and paused exit use actua
  const receipt=call('market','swap',[Cl.uint(side==='x'?10000:1000000),Cl.uint(quote),Cl.bufferFromHex(''),traits.x,asset,traits.y,asset,Cl.bool(side==='x')],taker);
  const events=receipt.events.filter(e=>e.event==='print_event'&&e.data.contract_identifier===`${sim.deployer}.jing-core-v6`)
   .map(e=>e.data.value.value).filter(v=>v.event.value===`refund-${side}`&&v.depositor.value===taker);
- assert.equal(events.length,1);assert.equal(BigInt(events[0].amount.value),side==='x'?20n:50n);
+ // Net-based rebate leaves 998,003 y; the walk trades 997,950 and refunds 53.
+ assert.equal(events.length,1);assert.equal(BigInt(events[0].amount.value),side==='x'?20n:53n);
  const equity=()=>cvToString(sim.callReadOnlyFn('jing-core-v6','get-token-equity',[traits[side],Cl.principal(taker)],sim.deployer).result);
  assert.equal(equity(),'u0');
  if(cvToString(sim.callReadOnlyFn('market',`rv-owned-${opposite}`,[Cl.principal(maker)],sim.deployer).result)!=='u0')

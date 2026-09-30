@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-29T06:04:54.808Z",
+  "generatedAt": "2026-09-30T01:51:10.053Z",
   "realCore": true,
   "results": [
     {
@@ -175,20 +175,20 @@
     }
   ],
   "hashes": {
-    "contracts/markets-sbtc-stx-jing-v6-3.clar": "d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9",
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb",
     "tests/rv/v6-3/Clarinet.toml": "1e379bf01bceab77c94aa1539b6c80eb463f044ce972c60e959c21b7e5dc6dfe",
-    "tests/rv/v6-3/properties.clar": "1c964e4961fb3c143479038eec15d3a9c5977bbc7b43325db9fb8b4464c8e526",
+    "tests/rv/v6-3/properties.clar": "18b74229c398370436c12ccadd2dc0e144e80f2fba98b5e2005e19383b2b0fed",
     "tests/rv/v6-3/build.py": "39c685572564e9842be5d0e514c75b8073b35fa6017e0520ab9857332e6ebfce",
     "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
     "tests/rv/v6-3/source-integrity.mjs": "badbf2d8a81f914d17faf2c05ebaa1d8e99974e62861ebc19595632e47a0d376",
     "tests/rv/sip-010-trait.clar": "2761036dc8bf48034b7db7e01f6aa80a38d4633e29210ec892a9cceb764e4252",
     "tests/rv/mock-lazer-oracle.clar": "584629df6874d7db46a83451d65e7ec83eea8942471564be6ed69b619588cc24",
     "tests/rv/mock-jing-ladder.clar": "60dfd743e0dc37d497acfb85d3eec4b7578a4d61c5197e417537421360241f10",
-    "tests/rv/.build/v6-3/source.json": "6416537afe213465222e9d63f56b56fd917ce7979075e99308bd8009c52a8326",
-    "contracts/jing-core-v6.clar": "67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01",
+    "tests/rv/.build/v6-3/source.json": "d8bde88ecfc482969fe280fd94cbfd495429ef644fc43ce958ff869b2a7326cd",
+    "contracts/jing-core-v6.clar": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697",
     "tests/rv/v6-3/runtime.mjs": "66b7d6b0117defbf25fdde6ffc0e03561b08f94ae9255dcdf8ada7937c0e5bac",
     "tests/rv/.build/v6-3/ladder.clar": "c88d04ddb6298c44b2868d720d77a61518391a3868557b1a529d69677f4534cd",
-    "tests/rv/.build/v6-3/market.clar": "dc673b10e50b5a7b24706bd247828b9e83273c3abee472a531380012775967de",
+    "tests/rv/.build/v6-3/market.clar": "f31cdd940521dde080608be3f15b85123a9e03cf732dba2b5fc722ef91b8ad0c",
     "tests/rv/v6-3/run-full-book.mjs": "63e617cf6382bd1da8913d0791dab98d27bf79df4cd16e642dd09f35ff033193",
     "tests/rv/v6-3/full-book-accounts.json": "8ccd2fad81ff7d9daf3ad4ec10988340a205954321388741e517e3be8545a07e"
   }

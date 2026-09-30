@@ -1,25 +1,25 @@
 {
-  "generatedAt": "2026-09-29T05:45:56.306Z",
+  "generatedAt": "2026-09-30T01:31:08.155Z",
   "realCore": true,
   "refundRegressions": 2,
   "hashes": {
-    "contracts/markets-sbtc-stx-jing-v6-3.clar": "d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9",
+    "contracts/markets-sbtc-stx-jing-v6-3.clar": "5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb",
     "tests/rv/v6-3/Clarinet.toml": "1e379bf01bceab77c94aa1539b6c80eb463f044ce972c60e959c21b7e5dc6dfe",
-    "tests/rv/v6-3/properties.clar": "1c964e4961fb3c143479038eec15d3a9c5977bbc7b43325db9fb8b4464c8e526",
+    "tests/rv/v6-3/properties.clar": "18b74229c398370436c12ccadd2dc0e144e80f2fba98b5e2005e19383b2b0fed",
     "tests/rv/v6-3/build.py": "39c685572564e9842be5d0e514c75b8073b35fa6017e0520ab9857332e6ebfce",
     "tests/rv/v6-3/strict-ft.clar": "6f880c822822a4a65a0a7cc1ed1475da6a6d3d56853680889cc583bb89b3ca50",
     "tests/rv/v6-3/source-integrity.mjs": "badbf2d8a81f914d17faf2c05ebaa1d8e99974e62861ebc19595632e47a0d376",
     "tests/rv/sip-010-trait.clar": "2761036dc8bf48034b7db7e01f6aa80a38d4633e29210ec892a9cceb764e4252",
     "tests/rv/mock-lazer-oracle.clar": "584629df6874d7db46a83451d65e7ec83eea8942471564be6ed69b619588cc24",
     "tests/rv/mock-jing-ladder.clar": "60dfd743e0dc37d497acfb85d3eec4b7578a4d61c5197e417537421360241f10",
-    "tests/rv/.build/v6-3/source.json": "cee8895d271e26992b38098683e96586fbbef4ad9878d8bb694dd51adc93a25b",
-    "contracts/jing-core-v6.clar": "67242f19794e864336bc5adf5a00391281160176339922c17e964b938c289b01",
+    "tests/rv/.build/v6-3/source.json": "1a047928bee244d1b87284ad98182c44bb62a3c21929575004174257df831075",
+    "contracts/jing-core-v6.clar": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697",
     "tests/rv/v6-3/runtime.mjs": "66b7d6b0117defbf25fdde6ffc0e03561b08f94ae9255dcdf8ada7937c0e5bac",
     "tests/rv/.build/v6-3/ladder.clar": "c5e400f00e6d7f079145d85a07e7892b8b4c3c4d0ae73cda480a6b80bff552d6",
-    "tests/rv/.build/v6-3/market.clar": "3c22909b13dd890ca5fb4cca323c9c88c89206fe8fd88555600e59e52a5a13c3",
+    "tests/rv/.build/v6-3/market.clar": "f14bc2aea332d58e17bde1df49fb88bc3d75385b4836ced60ea3aa3ba637bb75",
     "tests/rv/v6-3/run.mjs": "27defa25650ee8653d8d900a9c1d1f969e01677cd0e1e3c27f2176fc40fcd213",
     "tests/rv/v6-3/run-seeded.mjs": "503a8e4611d84c0d9a30b0efb75a7c39e8f358c54b871e91a300eba1bb59b266",
-    "tests/rv/v6-3/runtime.test.mjs": "dcadf526b6999240848b717bf0aa59ef4929333ce8d9a5e7744d362621a3b13b"
+    "tests/rv/v6-3/runtime.test.mjs": "a27fba64ec6adfc8c0e7c58801886d72d475ea211ad565a34be9884c2d918d7e"
   },
   "results": [
     {
@@ -30,37 +30,39 @@
       "discarded": 0,
       "failed": 0,
       "actualSuccessfulWrapperCalls": {
-        "test-deposit-x": 36,
-        "test-deposit-y": 30,
-        "test-settle-y": 2,
-        "test-cancel-y": 17,
+        "test-deposit-x": 34,
+        "test-deposit-y": 28,
+        "test-settle-y": 5,
+        "test-cancel-y": 18,
         "test-cancel-x": 26,
-        "test-limit-x": 9,
-        "test-settle-limit-x": 2,
+        "test-limit-x": 15,
+        "test-settle-limit-x": 4,
         "test-withdraw-x": 6,
-        "test-reprice-x": 11,
-        "test-reprice-y": 3,
-        "test-withdraw-y": 5,
-        "test-limit-y": 4,
+        "test-reprice-x": 12,
+        "test-reprice-y": 4,
         "test-settle-limit-y": 1,
-        "test-settle-x": 4,
-        "test-swap": 5
+        "test-limit-y": 4,
+        "test-withdraw-y": 6,
+        "test-settle-x": 5,
+        "test-swap": 4
       },
       "settleOutcomes": {
         "cancel": 30,
+        "crossing": 1,
         "queue-full": 2
       },
       "monitor": {
-        "publicCalls": 9495,
-        "invariantChecks": 9496,
+        "publicCalls": 9500,
+        "invariantChecks": 9501,
         "getterCrossChecks": 1,
         "pendingRefunds": {
           "cancel": 30,
+          "crossing": 1,
           "queue-full": 2
         },
         "refundEvents": {
           "x": 16,
-          "y": 12
+          "y": 14
         }
       },
       "invalidAssetRuntimeErrors": 14,
