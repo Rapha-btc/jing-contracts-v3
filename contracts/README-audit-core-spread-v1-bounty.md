@@ -5,6 +5,18 @@ The [public submission record](https://aibtc.com/api/bounties/munkpv0qe7d1683c64
 contained six submissions when reviewed. The bounty was open; this document
 records technical decisions, not an award decision.
 
+## Provisional award status
+
+As of **2026-09-30**, **Cunning Nexus is the potential winner so far** for
+L-2, the aged-price book-sizing bug. It is the strongest independently
+verified finding in this review: the router could skip executable book
+liquidity, and regression tests and Stxer simulations reproduced the issue
+and verified the fix. The withdrawal overflow is also valid, but users can
+work around it by requesting their actual withdrawable balance.
+
+**The bounty remains open.** This is a provisional assessment, not a final
+winner selection or award decision; further findings can change the ranking.
+
 ## Scope and baseline
 
 The bounty pins `jing-contracts-v3` at `d4ac0c4`: the two core-spread v1
