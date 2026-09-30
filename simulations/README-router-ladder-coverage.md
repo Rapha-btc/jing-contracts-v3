@@ -151,8 +151,9 @@ Every AMM leg's output is checked against the limit (`limit-min`).
 Baseline before this work, from the runs listed in the v6-3 README section 2
 and the core-spread rung README (24 sims; the router is counted in
 router-impact's four runs and deploy-bytes): 184 / 926 expressions, 116 / 548
-lines, 70 branch nodes: 17 full, 8 partial, 45 never reached. The smart entry
-points were never called on the current bytes. (`verify-v6-3-router-bin-boundary.js`
+lines, 70 branch nodes: 17 full, 8 partial, 45 never reached, 2 / 35 error
+paths (u3002 in both manual entry points). The smart entry points were never
+called on the current bytes. (`verify-v6-3-router-bin-boundary.js`
 installs the router with `SetContractCode`, which is not a deploy
 transaction, so source-hash matching does not count it.)
 
@@ -168,7 +169,14 @@ From the new suites (`377132c3`, `424cd36a`, `7dbd701c`, `c78c356f`):
 | branch nodes never reached | 1 / 70 | |
 | error paths (failure arms) hit | 35 / 35 | 100% |
 
-### `jing-ladder-v1` (from `05e53a0b`)
+### `jing-ladder-v1`
+
+Baseline before this work, from the same 24 sims (the ladder is deployed in
+23 of them next to the market and the rungs): 191 / 473 expressions, 108 /
+300 lines, 24 branch nodes: 16 full, 1 partial (`claim-seat`'s replace arm),
+7 never reached, 5 / 37 error paths.
+
+From the new ladder suite (`05e53a0b`):
 
 | metric | covered / total | % |
 |---|---|---|
@@ -178,6 +186,19 @@ From the new suites (`377132c3`, `424cd36a`, `7dbd701c`, `c78c356f`):
 | branch nodes (`if` / `match` / `asserts!`) fully taken | 24 / 24 | 100% |
 | branch nodes never reached | 0 / 24 | 0% |
 | error paths (failure arms) hit | 37 / 37 | 100% |
+
+### Combined (baseline runs + new runs, current source only)
+
+Router: the 24 baseline sims plus the four new router runs (28 sims, 3,927
+transactions, 144 calls to a counted router instance, all traced, 0 decode
+errors). Ladder: the same plus the ladder run (29 sims, 4,083 transactions,
+146 calls to a counted ladder instance, all traced, 0 decode errors). The
+baseline adds nothing the new suites do not already reach:
+
+| contract | expressions | lines | branch nodes full / partial / never | error paths |
+|---|---|---|---|---|
+| `swap-router-sbtc-stx-jing-v5-3` | 588 / 926 (63.5%) | 340 / 548 (62.0%) | 67 / 2 / 1 of 70 | 35 / 35 |
+| `jing-ladder-v1` | 247 / 473 (52.2%) | 141 / 300 (47.0%) | 24 / 0 / 0 of 24 | 37 / 37 |
 
 ## 4. Remaining gaps
 
@@ -224,5 +245,9 @@ node simulations/trace-coverage.mjs --contract jing-ladder-v1 --by-source --md -
 node simulations/failure-arms.mjs 05e53a0b18d65e210badc524ca7c48dd --by-source --contract jing-ladder-v1
 ```
 
-Sim ids must be ONE comma-separated argument; a space-separated list counts
-only the first.
+For the combined figures, prepend the sim ids of section 2 of
+[README-v6-3-coverage.md](README-v6-3-coverage.md) and the core-spread rung
+runs `feefde943db62d21f3c3dbf249708e0c`, `4135a4ef4d94ca74c8a5cdbae5d93f76`,
+`6833db442f85d2f3403f3e31001dcb63` and the core admin run
+`9581ea76408083fef64e1232d96fc477`. Sim ids must be ONE comma-separated
+argument; a space-separated list counts only the first.
