@@ -1,0 +1,60 @@
+[project]
+name = "unit-router-v5-3"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../../rv/sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.token]
+path = "../v6-3/token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.asset-stx]
+path = "../../rv/mock-wstx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = "../v6-3/oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = "../../rv/mock-jing-ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = ".build/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = ".build/market.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm]
+path = "venues.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.xyk]
+path = "venues.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.velar]
+path = "venues.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.router]
+path = ".build/router.clar"
+clarity_version = 5
+epoch = "3.4"
