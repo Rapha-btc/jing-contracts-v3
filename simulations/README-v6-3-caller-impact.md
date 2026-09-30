@@ -44,7 +44,7 @@ obsolete adapter alone is retired; its scenarios remain in those scripts.
 | `verify-v6-rungs-miner-band-lazer.js` | Updated | 225/225 | [run](https://stxer.xyz/simulations/mainnet/759ed5c78152fefcf6a068834c5aae69) |
 | `verify-v6-rungs-replace-keyless.js` | Updated | 250/250 | [run](https://stxer.xyz/simulations/mainnet/a9a3e8f7d411df8900b238e01e9ff23f) |
 | `verify-v6-3-deploy-bytes.js` | Updated | 17/17 | [run](https://stxer.xyz/simulations/mainnet/071e552bc759e3b108713fe9a2ca8341) |
-| `verify-swap-router-v3-lazer.js` / V6=1 | Updated; v5-3 router edge fix | 285/285 | [run](https://stxer.xyz/simulations/mainnet/1b87a78280e83a84dbaa6af79e31b203) |
+| `verify-swap-router-v3-lazer.js` / V6=1 | Updated; v5-3 router edge fix; exact 20 bps gross-up, live-sized fixtures | 287/287 | [run](https://stxer.xyz/simulations/mainnet/1b0d36cf5959ff8bb66ca76e87a0fd12) |
 | `verify-v6-3-router-bin-boundary.js` | New; exact failure replay and both edges | 22/22 | [run](https://stxer.xyz/simulations/mainnet/22825ead524c41102000f6d7e87661b1) |
 | Historical `router-c018402` invocation | Historical only; same broad scenarios remain in the current router suite | — | Historical result retained below |
 

@@ -29,7 +29,7 @@
 //      sat (mid + walk, own side subtracted), limit filters, selling exactly
 //      gross-cap fills in full (dust at most), two min deposits over is
 //      FOK-refused; refresh-mid verifies the Lazer update and returns the mid.
-//   W9 smart swaps, split computed ON CHAIN at execution: W9a sell 40000 sats
+//   W9 smart swaps, split computed ON CHAIN at execution: W9a sell 1.5x the bid's capacity
 //      with a bid resting, loose limit: book to capacity, DLMM the rest;
 //      W9b vaa none: no book leg; W9c tight limit on an empty book: no venue
 //      respects it -> u3002, nothing moved; W9d sell 200 STX with an ask
@@ -422,15 +422,22 @@ async function main() {
   // gross-cap + two min deposits is refused by the market (FOK u1023 caught,
   // jing-ok false, nothing moved); selling exactly gross-cap fills in full
   // (at most sub-min dust back), both bids consumed.
-  const MAX_REBATE = V6 ? 70n : 20n;
+  // v6-3 grosses up at TAKER_REBATE_BPS (20) with the exact inverse of the
+  // swap's net (largest gross whose net fits): ((net+1)*(BPS+bps) - 1) / BPS.
+  // v4/v5 keep their old 20 bps approximation.
+  const MAX_REBATE = 20n;
+  const grossUp = (net) => {
+    if (V6) return net === 0n ? 0n : ((net + 1n) * (10_000n + MAX_REBATE) - 1n) / 10_000n;
+    const g = (net * 10_000n) / (10_000n - MAX_REBATE);
+    return g - (g * MAX_REBATE) / 10_000n > net ? g - 1n : g;
+  };
   const SCALE = PP * 100n;
   const L_LOW = (MID * 995n) / 1000n;
   const BID_LOW = 50_000_000n;
   const midCap8 = (BID * SCALE) / MID;
   const walkCap8 = (BID_LOW * SCALE) / L_LOW;
   const netCap8 = midCap8 + walkCap8;
-  const g0 = (netCap8 * 10_000n) / (10_000n - MAX_REBATE);
-  const gross8 = g0 - (g0 * MAX_REBATE) / 10_000n > netCap8 ? g0 - 1n : g0;
+  const gross8 = grossUp(netCap8);
   tx("W8 T cancels its rolled ask so the x side is empty", call(T, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), okPrefix);
   tx("W8 100 STX bid in range (S)", depositY(S, BID, HUGE), `(ok u${BID})`);
   // a fresh account funded by S: the walkable bid must belong to neither the
@@ -475,10 +482,14 @@ async function main() {
   const L_LOOSE = (MID * 90n) / 100n;  // 10% under the mid: every venue has room
   const L_TIGHT = (MID * 102n) / 100n; // 2% over the mid: no venue, taker out of range
   // gross-cap for a taker facing a 100 STX bid at the mid with an empty own side
-  const midGross9a = (() => { const net = (BID * PP * 100n) / MID; const g = (net * 10_000n) / (10_000n - MAX_REBATE); return g - (g * MAX_REBATE) / 10_000n > net ? g - 1n : g; })();
+  const midGross9a = grossUp((BID * PP * 100n) / MID);
+  // W9a / W9g / W17: sell half again the bid's capacity, so the book is taken
+  // to capacity and the rest reaches the AMMs at any mid (a fixed 40000 sats
+  // fit inside the bid once 100 STX was worth more than that)
+  const SELL9 = (midGross9a * 3n) / 2n;
   tx("W9 100 STX bid rests on Jing", depositY(S, BID, HUGE), `(ok u${BID})`);
   const n0s = sbtcOf(T, "W9a before"); const n0x = stxOf(T, "W9a before");
-  const r9a = tx("W9a smart sell 40000 sats, loose limit: book to capacity, DLMM next, rest XYK/Velar", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+  const r9a = tx(`W9a smart sell ${SELL9} sats, loose limit: book to capacity, DLMM next, rest XYK/Velar`, smartSbtc(T, SELL9, L_LOOSE, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const n1s = sbtcOf(T, "W9a after"); const n1x = stxOf(T, "W9a after");
   ev("W9a bid fully cleared (dust at most)", `(get-token-y-deposit ${cyc(5)} '${S})`, (v) => uintOf(v) < MIN_STX, CID);
@@ -519,7 +530,7 @@ async function main() {
   tx("W9f M8 50 STX bid at -0.5% (walkable)", call(M8, "deposit-token-y", [uintCV(BID_LOW), uintCV(L_IN), ...SPREAD, DUMMY_VAA, wstxTrait, wstxAsset], CID), `(ok u${BID_LOW})`);
   tx("W9f M9 40 STX bid at -3% (outside the 2% limit)", call(M9, "deposit-token-y", [uintCV(40_000_000n), uintCV(L_OUT), ...SPREAD, DUMMY_VAA, wstxTrait, wstxAsset], CID), "(ok u40000000)");
   const jingNet9f = (BID * PP * 100n) / MID + (BID_LOW * PP * 100n) / L_IN;
-  const jingGross9f = (() => { const g = (jingNet9f * 10_000n) / (10_000n - MAX_REBATE); return g - (g * MAX_REBATE) / 10_000n > jingNet9f ? g - 1n : g; })();
+  const jingGross9f = grossUp(jingNet9f);
   const q0s = sbtcOf(T, "W9f before"); const q0x = stxOf(T, "W9f before");
   const m8s0 = sbtcOf(M8, "W9f M8 before"); const m9s0 = sbtcOf(M9, "W9f M9 before"); const s9s0 = sbtcOf(S, "W9f S before");
   const r9f = tx("W9f smart sell 0.5 BTC, limit 2% under the mid: Jing mid + walk, DLMM to its room, spill-over on XYK + Velar, rest home", smartSbtc(T, 50_000_000n, L_NEAR, VAA, 1n), (v) =>
@@ -541,7 +552,7 @@ async function main() {
   ev(`W9g capacity ignores the out-of-range own-side ask (gross ${midGross9a})`, `(get-taker-capacity u${MID} u${L_LOOSE} true 'SP000000000000000000002Q6VF78)`, (v) =>
     String(v).includes(`(gross-cap u${midGross9a})`) && String(v).includes("(walk-cap u0)"), CID);
   const w0s = sbtcOf(T, "W9g before"); const w0x = stxOf(T, "W9g before"); const g8s0 = sbtcOf(M8, "W9g M8 before"); const g8x0 = stxOf(M8, "W9g M8 before");
-  const r9g = tx("W9g smart sell 40000 sats, loose limit: bid to capacity, ask untouched, rest on DLMM", smartSbtc(T, 40_000n, L_LOOSE, VAA, 1n), (v) =>
+  const r9g = tx(`W9g smart sell ${SELL9} sats, loose limit: bid to capacity, ask untouched, rest on the AMMs`, smartSbtc(T, SELL9, L_LOOSE, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const w1s = sbtcOf(T, "W9g after"); const w1x = stxOf(T, "W9g after"); const g8s1 = sbtcOf(M8, "W9g M8 after"); const g8x1 = stxOf(M8, "W9g M8 after");
   tx("W9g M8 cancels its untouched ask: the full 10000 sats come back", call(M8, "cancel-token-x-deposit", [sbtcTrait, sbtcAsset], CID), `(ok u${ASK_OWN})`);
@@ -563,10 +574,25 @@ async function main() {
   // mid while XYK and Velar stay at 2%; a smart sell at 4% under then finds no DLMM bin inside the
   // limit (capacity u0, the DLMM stage runs empty) and the whole residual lands inside the two pools'
   // room between 2% and 4%, split pro rata: both fill, nothing stays home.
-  const L_4 = (MID * 96n) / 100n; // 4% under the mid
-  tx("W18p T sells 1.2 BTC on the DLMM alone (~25 bins): its active bin drops to ~5.5% under the mid, XYK + Velar stay at 2%", sellSbtc(T, 0n, NONE, amts(120_000_000n, 0n, 0n), ONES, 1n, NO_VAA), okPrefix);
+  let L_4 = (MID * 96n) / 100n; // 4% under the mid
+  // v6: 1.2 BTC is a fork-dependent guess (the DLMM's depth moves; on a thin book it runs off the
+  // last bin, u2003). Sell exactly its live capacity down to 5.5% under instead; if the DLMM already
+  // sits below that (capacity u0) there is nothing to push and the router refuses the zero amount.
+  const L_55 = (MID * 945n) / 1000n;
+  if (V6) tx("W18p T sells the DLMM's live capacity down to 5.5% under the mid on the DLMM alone (u3001 if already there), XYK + Velar stay at 2%",
+    call(T, "swap-sbtc-for-stx", [forkValue(RID, `(dlmm-capacity u${L_55} true)`), uintCV(0n), uintCV(1n), NO_VAA, NONE,
+      forkValue(RID, `{ dlmm: (dlmm-capacity u${L_55} true), xyk: u0, velar: u0 }`), ONES, uintCV(1n)], RID),
+    (v) => okPrefix(v) || String(v) === "(err u3001)");
+  else tx("W18p T sells 1.2 BTC on the DLMM alone (~25 bins): its active bin drops to ~5.5% under the mid, XYK + Velar stay at 2%", sellSbtc(T, 0n, NONE, amts(120_000_000n, 0n, 0n), ONES, 1n, NO_VAA), okPrefix);
   const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
-  const r18a = tx("W18a smart sell 250000 sats at 4% under, vaa none: no DLMM bin inside the limit, the residual split pro rata over XYK + Velar, nothing home", smartSbtc(T, 250_000n, L_4, NO_VAA, 1n), okPrefix);
+  // v6: the pools' spot after W9f / W9e moves with the fork, so a fixed 4% can leave them no room.
+  // Put the limit 1% under the lower pool's live spot (both pools have room) and prove the DLMM has none.
+  const cpRoomCode = `(let ((x (xyk-reserves true)) (v (velar-reserves true))
+    (px (/ (* (get out x) PRICE_SCALE) (get in x)))
+    (pv (/ (* (get out v) PRICE_SCALE) (get in v)))) (/ (* (if (< px pv) px pv) u99) u100))`;
+  if (V6) ev("W18a fixture: DLMM has no room at the measured limit", `(dlmm-capacity ${cpRoomCode} true)`, "u0");
+  const L_4_INPUT = V6 ? forkValue(RID, cpRoomCode, (v) => { L_4 = BigInt(cvToString(v).slice(1)); }) : L_4;
+  const r18a = tx(`W18a smart sell 250000 sats ${V6 ? "1% under the pools' spot" : "at 4% under"}, vaa none: no DLMM bin inside the limit, the residual split pro rata over the pools with room`, smartSbtc(T, 250_000n, L_4_INPUT, NO_VAA, 1n), okPrefix);
   const x1s18 = sbtcOf(T, "W18a after"); const x1x18 = stxOf(T, "W18a after");
   // the STX side: the DLMM now sits ~5.5% under the mid and the pools at 4%; T pushes XYK + Velar
   // alone to ~8.5% under (explicit legs), and an STX seller at 7% under the mid then finds the DLMM
@@ -685,19 +711,19 @@ async function main() {
   const hintFloorLo=V6?forkValue(RID,hintFloorCode,v=>{limit17lo=BigInt(cvToString(v).slice(1));}):L_LOOSE;
   const HINT_HI = (MID * 105n) / 100n;
   const HINT_LO = (MID * 95n) / 100n;
-  const grossAt = (bid, mid) => { const net = (bid * PP * 100n) / mid; const g = (net * 10_000n) / (10_000n - MAX_REBATE); return g - (g * MAX_REBATE) / 10_000n > net ? g - 1n : g; };
+  const grossAt = (bid, mid) => grossUp((bid * PP * 100n) / mid);
   const gross17hi = grossAt(BID, HINT_HI); // what the router will size at
   const gross17lo = grossAt(BID, HINT_LO); // > the true capacity by ~5%
   tx("W17 S cancels its rolled dust (if any)", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), () => true);
   tx("W17 S 100 STX bid at the mid", depositY(S, BID, HUGE), `(ok u${BID})`);
   const ha0s = sbtcOf(T, "W17a before"); const ha0x = stxOf(T, "W17a before");
-  const r17a = tx(`W17a smart sell 40000 sats, hint 5% HIGH: book leg undersized to ${gross17hi} but fills, rest on the AMMs`, smartSbtc(T, 40_000n, hintFloorHi, VAA, 1n, HINT_HI), (v) =>
+  const r17a = tx(`W17a smart sell ${SELL9} sats, hint 5% HIGH: book leg undersized to ${gross17hi} but fills, rest on the AMMs`, smartSbtc(T, SELL9, hintFloorHi, VAA, 1n, HINT_HI), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)") && String(v).includes("(unsold u0)"));
   const ha1s = sbtcOf(T, "W17a after"); const ha1x = stxOf(T, "W17a after");
   tx("W17a S's bid was only partly taken: the rest comes back on cancel", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), (v) => okPrefix(v) && uintOf(v.slice(4, -1)) > 0n && uintOf(v.slice(4, -1)) < BID);
   tx("W17 S 100 STX bid at the mid again", depositY(S, BID, HUGE), `(ok u${BID})`);
   const hb0s = sbtcOf(T, "W17b before"); const hb0x = stxOf(T, "W17b before");
-  const r17b = tx(`W17b smart sell 40000 sats, hint 5% LOW: book leg oversized to ${gross17lo}, market FOK refuses, all on the AMMs`, smartSbtc(T, 40_000n, hintFloorLo, VAA, 1n, HINT_LO), (v) =>
+  const r17b = tx(`W17b smart sell ${SELL9} sats, hint 5% LOW: book leg oversized to ${gross17lo}, market FOK refuses, all on the AMMs`, smartSbtc(T, SELL9, hintFloorLo, VAA, 1n, HINT_LO), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok false)") && String(v).includes("(jing-in u0)") && String(v).includes("(unsold u0)"));
   const hb1s = sbtcOf(T, "W17b after"); const hb1x = stxOf(T, "W17b after");
   tx("W17b S's bid is untouched: cancel returns all 100 STX", call(S, "cancel-token-y-deposit", [wstxTrait, wstxAsset], CID), `(ok u${BID})`);
@@ -823,12 +849,12 @@ async function main() {
   check(`W8 exact: sBTC delta == jing-in (${jingIn8})`, k1s.value - k2s.value, (d) => d === jingIn8);
   check(`W8 exact: STX grew by out (${out8})`, k2x.value - k1x.value, (d) => d === out8 && d > 0n);
   const out9a = field(r9a.raw, "out");
-  check("W9a sBTC delta == 40000", n0s.value - n1s.value, (d) => d === 40_000n);
+  check(`W9a sBTC delta == ${SELL9}`, n0s.value - n1s.value, (d) => d === SELL9);
   check(`W9a STX grew by out (${out9a})`, n1x.value - n0x.value, (d) => d === out9a && d > 0n);
   check("W9a out == sum of the four legs", legs(r9a), (t) => t === out9a);
   check(`W9a book leg sized to the mid capacity (gross-cap ${midGross9a}, dust at most)`, field(r9a.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
-  check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === 40_000n - field(r9a.raw, "jing-in"));
-  check("W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == 40000", ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === 40_000n);
+  check("W9a DLMM took the remainder after the book (active bin + bins inside a loose limit)", field(r9a.raw, "dlmm-in"), (d) => d === SELL9 - field(r9a.raw, "jing-in"));
+  check(`W9a legs add up: jing-in + dlmm-in + xyk-in + velar-in == ${SELL9}`, ["jing-in", "dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9a.raw, k), 0n), (t) => t === SELL9);
   const out9b = field(r9b.raw, "out");
   check("W9b sBTC delta == 10000", n1s.value - n2s.value, (d) => d === 10_000n);
   check(`W9b STX grew by out (${out9b})`, n2x.value - n1x.value, (d) => d === out9b && d > 0n);
@@ -879,11 +905,11 @@ async function main() {
   check("W9f M9 (outside the limit) received nothing", m9s1.value - m9s0.value, (d) => d === 0n);
   legPriceOk("W9f", r9f, L_NEAR, true);
   const out9g = field(r9g.raw, "out");
-  check("W9g sBTC delta == 40000", w0s.value - w1s.value, (d) => d === 40_000n);
+  check(`W9g sBTC delta == ${SELL9}`, w0s.value - w1s.value, (d) => d === SELL9);
   check(`W9g STX grew by out (${out9g})`, w1x.value - w0x.value, (d) => d === out9g && d > 0n);
   check("W9g out == sum of the legs", legs(r9g), (t) => t === out9g);
   check(`W9g book leg == the bid's capacity (gross ${midGross9a}, dust at most)`, field(r9g.raw, "jing-in"), (j) => j >= midGross9a - MIN_SBTC && j <= midGross9a);
-  check("W9g DLMM took the rest", field(r9g.raw, "dlmm-in"), (d) => d === 40_000n - field(r9g.raw, "jing-in"));
+  check("W9g the AMMs took the rest (DLMM first, XYK/Velar once W9f has drained it)", ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r9g.raw, k), 0n), (d) => d === SELL9 - field(r9g.raw, "jing-in"));
   check("W9g M8's ask received no STX (untouched)", g8x1.value - g8x0.value, (d) => d === 0n);
   legPriceOk("W9g", r9g, L_LOOSE, true);
   const out9d = field(r9d.raw, "out");
@@ -926,8 +952,10 @@ async function main() {
   const in18a = ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r18a.raw, k));
   check("W18a legs + unsold == 250000", in18a.reduce((t, x) => t + x, 0n) + field(r18a.raw, "unsold"), (t) => t === 250_000n);
   check("W18a no book leg, no DLMM leg (its active bin sits outside the 4% limit)", [in18a[0], in18a[1]], (a) => a[0] === 0n && a[1] === 0n);
-  check("W18a the residual was split pro rata: XYK and Velar both filled, nothing home", [in18a[2], in18a[3], field(r18a.raw, "unsold")], (a) => a[0] > 0n && a[1] > 0n && a[2] === 0n);
-  check("W18a sBTC delta == 250000", x0s18.value - x1s18.value, (d) => d === 250_000n);
+  // Velar's room 4% under depends on the live pools after W9f / W9e: with room, both pools fill and
+  // nothing stays home; with none, the router sizes Velar at 0 and the part XYK can't take stays home.
+  check("W18a the residual was split pro rata over the pools with room (XYK filled; Velar filled and nothing home, or Velar 0 and the rest home)", [in18a[2], in18a[3], field(r18a.raw, "unsold")], (a) => a[0] > 0n && (a[1] > 0n ? a[2] === 0n : a[2] > 0n));
+  check("W18a sBTC delta == 250000 - unsold", x0s18.value - x1s18.value, (d) => d === 250_000n - field(r18a.raw, "unsold"));
   check(`W18a STX grew by out (${field(r18a.raw, "out")})`, x1x18.value - x0x18.value, (d) => d === field(r18a.raw, "out") && d > 0n);
   legPriceOk("W18a", r18a, L_4, true);
   const in18d = ["jing-in", "dlmm-in", "xyk-in", "velar-in"].map((k) => field(r18d.raw, k));
@@ -950,18 +978,18 @@ async function main() {
   // time. A local bin-price (one call for the active bin, then the 15 bps
   // step applied per bin) would cut that ~10x. Bar set at 15% until then.
   check("W15 30-bin walk + 4 legs stays under 15% of every block limit", r15.cost, (c) => !!c && Object.keys(LIMITS).every((k) => c[k] < LIMITS[k] * 0.15));
-  const yGross9 = (() => { const net = (ASK9 * MID) / (PP * 100n); const g = (net * 10_000n) / (10_000n - MAX_REBATE); return g - (g * MAX_REBATE) / 10_000n > net ? g - 1n : g; })();
+  const yGross9 = grossUp((ASK9 * MID) / (PP * 100n));
   check(`W9d book leg sized to the ask's capacity (gross-cap ${yGross9}, dust at most)`, field(r9d.raw, "jing-in"), (j) => j >= yGross9 - MIN_STX && j <= yGross9);
 
   // W17
   const jin17a = field(r17a.raw, "jing-in");
   check(`W17a book leg == the hint's gross-cap ${gross17hi} (dust at most)`, jin17a, (j) => j >= gross17hi - MIN_SBTC && j <= gross17hi);
-  check("W17a sBTC delta == 40000", ha0s.value - ha1s.value, (d) => d === 40_000n);
+  check(`W17a sBTC delta == ${SELL9}`, ha0s.value - ha1s.value, (d) => d === SELL9);
   check("W17a STX grew by out", ha1x.value - ha0x.value, (d) => d === field(r17a.raw, "out") && d > 0n);
   legPriceOk("W17a", r17a, limit17hi, true);
-  check("W17b sBTC delta == 40000 (all AMMs)", hb0s.value - hb1s.value, (d) => d === 40_000n);
+  check(`W17b sBTC delta == ${SELL9} (all AMMs)`, hb0s.value - hb1s.value, (d) => d === SELL9);
   check("W17b STX grew by out", hb1x.value - hb0x.value, (d) => d === field(r17b.raw, "out") && d > 0n);
-  check("W17b AMM legs sum to 40000", ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r17b.raw, k), 0n), (t) => t === 40_000n);
+  check(`W17b AMM legs sum to ${SELL9}`, ["dlmm-in", "xyk-in", "velar-in"].reduce((t, k) => t + field(r17b.raw, k), 0n), (t) => t === SELL9);
   legPriceOk("W17b", r17b, limit17lo, true);
 
   console.log(`\n${checks - failures}/${checks} checks green`);

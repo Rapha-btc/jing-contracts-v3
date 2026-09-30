@@ -40,16 +40,17 @@ real mainnet DLMM / XYK / Velar pools and log the pools' depth at the fork
 (e.g. `377132c3`: DLMM active bin 431, 50 bps fee per side, 312,029 STX and
 4.31 BTC; XYK 126,556 STX / 0.474 BTC; Velar 199,609 STX / 0.745 BTC).
 
-Not counted: the older router suite `verify-swap-router-v3-lazer.js` rerun
-with `V6=1` on the current sources,
-[ea0dd3555e7f0f7f782a84d3fb3ae8eb](https://stxer.xyz/simulations/mainnet/ea0dd3555e7f0f7f782a84d3fb3ae8eb),
-passes 280 / 284. No contract call failed; the four failing checks are the
-suite's own expectations: W8 and W9g model `gross-up` at the 70 bps maximum
-rebate with the old formula, while the market grosses up at 20 bps since
-`0d6ae85` and with the exact inverse since `34bbe18`; W18a assumes Velar still
-has room 4% under the mid after W9f, which it no longer has on today's pools
-(the router correctly sized Velar at 0 and left the rest unsold). That suite
-was left unchanged; its paths are covered by the two new suites.
+The older router suite `verify-swap-router-v3-lazer.js`, run with `V6=1`,
+passes 287 / 287 on two mids
+([f93fd2b6](https://stxer.xyz/simulations/mainnet/f93fd2b69a051c3129e0600f42075483),
+[1b0d36cf](https://stxer.xyz/simulations/mainnet/1b0d36cf5959ff8bb66ca76e87a0fd12)).
+Its expectations were updated to the current market and to live pool state,
+test side only: W8 / W9g / W9a / W9d / W13 / W17 gross up at 20 bps with the
+exact inverse (`0d6ae85`, `34bbe18`); W9a / W9g / W17 sell 1.5x the bid's
+live capacity instead of a fixed 40000 sats (100 STX now holds more); W18p
+sells the DLMM's live capacity to 5.5% under the mid (u3001 when it already
+sits there) instead of a fixed 1.2 BTC; W18a sets its limit 1% under the
+lower pool's live spot and first proves the DLMM has no room there.
 
 ### `verify-ladder-v1-admin-seats.js`
 
