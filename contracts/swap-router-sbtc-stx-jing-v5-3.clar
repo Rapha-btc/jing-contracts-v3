@@ -741,7 +741,7 @@
           amount
           cap
         ))
-        (net (- size (/ (* size u20) BPS)))
+        (net (/ (* size BPS) (+ BPS u20)))
         (mins (contract-call? JING_MARKET get-min-deposits))
         (min-dep (if sell-sbtc
           (get min-token-x mins)

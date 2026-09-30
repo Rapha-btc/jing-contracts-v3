@@ -89,6 +89,62 @@ funds at risk. Fixed in `e338e27`: `set-treasury` refuses it with
 `ERR_BAD_TREASURY` u1033 (all three v6-3 copies); the swap-walk sim asserts the
 refusal ([60b21233](https://stxer.xyz/simulations/mainnet/60b2123325bfce65a3de83e96a361e4c)).
 
+## Found after the review: swap rebate sized on the gross amount
+
+Checking whether the Void Kael #8 allowance was needed showed where the
+rebate crumbs come from. `swap` took the rebate pot as `amount x bps` and put
+`net = amount - pot` on the book, but fills pay makers `traded x bps` on the
+net. So `amount x bps^2` of the pot was never used and went back to the
+taker, growing with the amount: 49 sats on 1,000,000 at 69 bps, 4,762 on
+1 BTC. Nothing was lost (the taker got it back), but a vault's router
+re-sells it, so it had to fit the allowance.
+
+Fork proof, juice vault against a test-only copy with the old allowance
+`amount + min-x` ([e13f2871](https://stxer.xyz/simulations/mainnet/e13f287170461773de5106aa0aa596d3)):
+
+| chunk | rebate | crumbs | old allowance | current vault |
+|---|---|---|---|---|
+| 1,000,000 | 20 bps | 5 | ok | ok |
+| 1,000,000 | 69 bps | 49 | ok | ok |
+| 100,000,000 | 20 bps | 401 | ok | ok |
+| 100,000,000 | 69 bps | 4,762 | `(err u0)` | ok |
+
+**Market fix** (`34bbe18`, all three v6-3 copies). The pot is sized on the
+net, so it equals what the fills pay:
+
+    net    = amount x BPS / (BPS + bps)      (rounded down)
+    rebate = amount - net
+
+Example, 1,000,000 at 70 bps: net 993,048, pot 6,952, fills pay 6,951, 1 sat
+back. The taker still sends exactly `amount`. Rounding net down rounds the
+pot up, so the pot always covers the fills. What comes back is only rounding,
+under 1 sat per step: 1 for net, 1 for the batch share (`ride`), 1 per walked
+maker. A maker is either cleared in the batch or walked, and a side holds 50,
+so at most 51 sats, whatever the amount. `gross-up` (the `gross-cap` of
+`get-taker-capacity`) is now its exact inverse at 20 bps: the largest gross
+whose net fits `net-cap`,
+
+    gross-cap = ((net-cap + 1) x (BPS + 20) - 1) / BPS   (0 when net-cap is 0)
+
+e.g. net-cap 100 gives 101 (101 puts 100 on the book, 102 would put 101).
+`reprice-or-swap-token-x/y` are unchanged: they charge `amount x bps` on top of
+an amount already on the book, which was exact.
+
+**Router fix** (`swap-router-sbtc-stx-jing-v5-3`, `jing-size`). The router
+estimates the book leg's net before trying Jing (skipped under `min-dep` or a
+full side's `min-taker`). It used the old formula `size - size x 20 / BPS`; it
+now uses `size x BPS / (BPS + 20)`, the market's. The old estimate was about
+4 sats per 1,000,000 low, so it could skip Jing when a minimum fell in that
+gap; nothing else changes.
+
+**Vault allowance** (juice, fastpool, ccd016 v2). With the exact pot the
+extra room is a constant, `amount + min-x + JING_REBATE_DUST_SATS` (u51),
+instead of `amount x 70 / BPS`: `min-x` for the re-sold rest, 51 for the
+rebate dust. The vault-sbtc-stx-v6 native vault is not affected: it calls
+`swap` directly and nothing it gets back is sent out again.
+
+Sims: to rerun on the new sources (market, router, rungs, vaults).
+
 ## Submissions and verdicts
 
 | Submitter | Finding | Holds | Rating | Decision |
@@ -938,5 +994,8 @@ of `amount`. So the allowance is now
 with `JING_REBATE_MAX_BPS` u70, the market's `TAKER_REBATE_MAX_BPS`, as a
 vault constant (no contract call). That holds for any book, print age and number of fills.
 A tighter `+9` or `+57` does not: per-fill rounding and the rebate crumbs grow
-with the number of makers and the chunk size. Only the vault's own router
+with the number of makers and the chunk size.
+(Superseded: the market now sizes the pot on the net, so the crumbs no longer
+grow with the chunk; the extra is the constant 51 sats. See "swap rebate sized
+on the gross amount".) Only the vault's own router
 call can use the extra room.
