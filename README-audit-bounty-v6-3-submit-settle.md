@@ -9,6 +9,40 @@ what we decided, and what changed in the repo.
 
 Review is complete: every submission below has a decision.
 
+## 2026-09-29 follow-up: core-spread v1 proceeds
+
+**Rescale follow-up repaired:** the original regression confirmed
+that fractional old shares in `earned-step` exceeded the floored total-shares
+denominator, overstating two claims by 9 micro-STX. Both core-spread v1
+mirrors now use `carried`'s whole shares in every proceeds segment. The safety
+assertions remain unchanged; both members must claim and exit with zero
+residue. The simulation record below contains the invariant argument,
+randomized conservation tests and final verification results.
+
+Validation: 88/88 integration tests and all three Stxer reruns pass; every
+final-drain test requires zero residue. The separate coverage gate still
+fails its unchanged 99% line/branch requirements (buy 97.32%/98.71%, sell
+97.10%/98.06%). The complete npm command therefore is not green. No threshold
+was lowered or additional contract change made to conceal that failure.
+
+A later [report from the earlier rung bounty](https://github.com/itzroberl/startup-credits/blob/aibtc-jing-v6-3-audit-2026-09-26/REPORT-small-proceeds.md)
+identified positive receipts lost to proceeds-index truncation. Reproduced on
+sell core-spread v1 after a real rescale/top-up: an actual swap pays 1,001 sats
+while the old index increment is zero. Credit that report as a known lead.
+
+The two deploy-scope core-spread templates now separate proceeds precision,
+cap shares, carry scaled division remainders, and track exact unpaid proceeds
+per epoch. Their final member receives all remaining input and proceeds;
+tail-rolled reserves stay isolated from later epochs. Carry at ownership or
+scale changes stays backed and becomes that epoch's last-member rounding
+payout. This replaces the old reserve-dust release to a later pool.
+
+The 20-rung fork verifies exactly zero remaining sats and micro-STX after
+all exits. Complete formulas, regression coverage, source hashes and final
+verification status: [core-spread v1 simulation record](simulations/README-v1-core-spread-rungs.md#2026-09-29-proceeds-precision-and-exact-epoch-payouts).
+Other rung variants are unchanged. This work does not post a new bounty or
+change historical awards/payment status. Rapha authorized committing and pushing this repair after verification.
+
 ## Likely winner
 
 ARION (Eternal Harp) is the winner. He found the only HIGH (the ghost

@@ -103,8 +103,8 @@ for(const spec of specs)describe(`${spec.label} v1 controls and held funds`,()=>
   expect(r.position(alice)[spec.x?'sbtc':'stx']).toBe(spec.amount+input);
   const before=balance(!spec.x,alice);
   ok(call(r.rung,'claim',[],alice));
-  expect(balance(!spec.x,alice)-before).toBeGreaterThanOrEqual(output-1n);
-  expect(balance(!spec.x,r.principal)).toBeLessThanOrEqual(1n);
+  expect(balance(!spec.x,alice)-before).toBe(output);
+  expect(balance(!spec.x,r.principal)).toBe(0n);
   r.withdraw(alice,spec.amount+input);
   expect(r.held()).toBe(0n);expect(r.equity()).toBe(0n);
  });
@@ -124,7 +124,7 @@ for(const spec of specs)describe(`${spec.label} v1 controls and held funds`,()=>
   // Direct unit calls to unchanged production helpers. Public withdraw guards
   // prevent these contexts; they are not public-path reachability witnesses.
   expect(simnet.callPrivateFn(r.rung,'settle-escrow',[Cl.none()],owner).result).toEqual(Cl.ok(Cl.bool(true)));
-  expect(simnet.callPrivateFn(r.rung,'count-reserve-claim',[U(99),U(0)],owner).result).toEqual(Cl.bool(true));
+  expect(simnet.callPrivateFn(r.rung,'count-reserve-claim',[U(99),U(0),U(0)],owner).result).toEqual(Cl.bool(true));
   expect(simnet.callPrivateFn(r.rung,spec.x?'pull-to-held-sats':'pull-to-held-ustx',[U(1)],owner).result).toEqual(Cl.error(U(7007)));
   expect(r.state()).toEqual(before);expect(r.held()).toBe(0n);expect(r.equity()).toBe(0n);
  });

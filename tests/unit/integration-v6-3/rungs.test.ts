@@ -71,7 +71,7 @@ for(const spec of specs)describe(`real ${spec.label} core-spread v1 rung`,()=>{
    expect(r.position(who).shares).toBe(0n);
   }
   expect(r.equity()).toBe(0n);expect(balance(spec.x,`${owner}.market`)).toBe(0n);
-  expect(r.held()).toBeLessThanOrEqual(2n);
+  expect(r.held()).toBe(0n);expect(balance(!spec.x,r.principal)).toBe(0n);
  });
  it('retiring a seat preserves the member claim and paused exit',()=>{
   const r=setup(spec),before=balance(spec.x,alice);r.deposit(alice);

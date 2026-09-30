@@ -15,6 +15,30 @@ changes were committed separately as `dc8e324` while verification ran.
 Historical submissions refer to earlier revisions; their findings are not automatically findings
 against the current tree. Contract edits are limited to the six rungs.
 
+## 2026-09-29 follow-up to the historical review
+
+**Rescale follow-up repaired:** the original regression confirmed
+that fractional old shares in `earned-step` exceeded the floored total-shares
+denominator, overstating two claims by 9 micro-STX. Both core-spread v1
+mirrors now use `carried`'s whole shares in every proceeds segment. The safety
+assertions remain unchanged; both members must claim and exit with zero
+residue. The simulation record below contains the invariant argument,
+randomized conservation tests and final verification results.
+
+Validation: 88/88 integration tests and all three Stxer reruns pass; every
+final-drain test requires zero residue. The separate coverage gate still
+fails its unchanged 99% line/branch requirements (buy 97.32%/98.71%, sell
+97.10%/98.06%). The complete npm command therefore is not green. No threshold
+was lowered or additional contract change made to conceal that failure.
+
+The later [small-proceeds submission](https://github.com/itzroberl/startup-credits/blob/aibtc-jing-v6-3-audit-2026-09-26/REPORT-small-proceeds.md)
+is a useful known lead for the current two core-spread v1 templates. Its
+zero-index receipt issue was reproduced after v1 rescaling and a large
+top-up. The repair also pays both input/proceeds rounding to the
+final member of the same epoch, including tail-rolled reserves. See the
+[formulas, tests and fork results](../simulations/README-v1-core-spread-rungs.md#2026-09-29-proceeds-precision-and-exact-epoch-payouts).
+The historical award/payment record below is unchanged; no new bounty was posted.
+
 ## Result and payment
 
 **Winner: Diamond Lance (Nilo)** — first to report the HIGH, with an

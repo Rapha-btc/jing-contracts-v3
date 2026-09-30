@@ -19,7 +19,7 @@ for(const spec of specs)describe(`${spec.label} v1 epochs and rescale`,()=>{
   expect(r.state().epoch).toBe(1n);expect(r.state().resting).toBe(0n);
   expect(r.equity()).toBe(0n);
   const reserve=value(simnet.getDataVar(r.rung,spec.x?'reserved-sats':'reserved-ustx'));
-  expect(reserve).toBeLessThan(live);
+  expect(reserve).toBe(live);
   expect(balance(spec.x,r.principal)).toBe(live);
   for(const who of [alice,bob]){
    const claim=r.position(who)[spec.x?'sbtc':'stx'],before=balance(spec.x,who);
@@ -47,6 +47,7 @@ for(const spec of specs)describe(`${spec.label} v1 epochs and rescale`,()=>{
   const claims=[r.position(alice),r.position(bob)];
   expect(claims[0][inputKey]).toBe(claims[1][inputKey]);
   ok(call(r.rung,'claim',[],alice));
+  claims[1]=r.position(bob); // Final claimer owns both exact reserve remainders.
   // Old-epoch withdraw pays the historical payout even though no live shares remain.
   ok(call(r.rung,'withdraw',[U(amount),Cl.none()],bob));
   for(const [i,who] of [alice,bob].entries()){
@@ -55,8 +56,10 @@ for(const spec of specs)describe(`${spec.label} v1 epochs and rescale`,()=>{
    expect(r.position(who).shares).toBe(0n);
   }
   expect(value(simnet.getDataVar(r.rung,spec.x?'reserved-sats':'reserved-ustx'))).toBe(0n);
-  expect(balance(spec.x,r.principal)).toBe(rest-claims[0][inputKey]-claims[1][inputKey]);
-  expect(balance(!spec.x,r.principal)).toBe(proceeds-claims[0][outputKey]-claims[1][outputKey]);
+  expect(claims[0][inputKey]+claims[1][inputKey]).toBe(rest);
+  expect(balance(spec.x,r.principal)).toBe(0n);
+  expect(claims[0][outputKey]+claims[1][outputKey]).toBe(proceeds);
+  expect(balance(!spec.x,r.principal)).toBe(0n);
   r.deposit(alice,amount);r.withdraw(alice,amount+rest);
   expect(r.state().members).toBe(0n);expect(r.held()).toBe(0n);expect(r.equity()).toBe(0n);
  });
@@ -99,7 +102,8 @@ for(const spec of specs)describe(`${spec.label} v1 epochs and rescale`,()=>{
   expect(r.state().members).toBe(0n);expect(r.state()['total-shares']).toBe(0n);
   expect(r.equity()).toBe(0n);expect(balance(spec.x,`${owner}.market`)).toBe(0n);
   const paid=(balance(!spec.x,alice)-initialOutput[0])+(balance(!spec.x,bob)-initialOutput[1]);
-  expect(paid+balance(!spec.x,r.principal)).toBe(totalProceeds);
+  expect(paid).toBe(totalProceeds);
+  expect(balance(true,r.principal)).toBe(0n);expect(balance(false,r.principal)).toBe(0n);
  },120000);
 
  it('prevents re-locking timeout refunds during cooldown, then permits a push after 24 hours',()=>{

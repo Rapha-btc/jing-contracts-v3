@@ -116,6 +116,7 @@ function sweep(s:Side,members=1n){
 }
 function drained(s:Side){
  for(const r of rungs(s)){
+  expect(wallets(principal(r))).toEqual({sbtc:0n,stx:0n});
   expect(state(r).members).toBe(0n);expect(state(r)['total-shares']).toBe(0n);
   expect(state(r).resting).toBe(0n);
   expect(read('market',`get-token-${s.side}-pending-deposit`,[Cl.principal(principal(r))])).toBe(null);
@@ -172,7 +173,12 @@ describe('real dispatch with ten buy and ten sell core-spread v1 rungs',()=>{
   for(const s of specs){
    const bobsClaims=rungs(s).map(r=>position(r,bob));
    withdraw(s,alice);
-   expect(rungs(s).map(r=>position(r,bob))).toEqual(bobsClaims);
+   for(const [i,r] of rungs(s).entries()){
+    const p=position(r,bob),cash=wallets(principal(r));
+    expect(p.shares).toBe(bobsClaims[i].shares);
+    expect(p[s.x?'sbtc':'stx']).toBe(cash[s.x?'sbtc':'stx']+state(r).resting);
+    expect(p[s.x?'stx':'sbtc']).toBe(cash[s.x?'stx':'sbtc']);
+   }
    withdraw(s,bob);drained(s);
   }
   expect(wallets(`${owner}.market`)).toEqual({sbtc:0n,stx:0n});expect(supply()).toEqual(originalSupply);
@@ -220,7 +226,12 @@ describe('dispatch exits using only buy/sell core-spread v1',()=>{
   success('jing-core-v6','pause');success('market','set-paused',[Cl.bool(true)]);
   // No top-up: all ten positions, including five closed epochs, pay normally.
   withdraw(s,alice);
-  expect(rs.map(r=>position(r,bob))).toEqual(beforeClaims);
+  for(const [i,r] of rs.entries()){
+   const p=position(r,bob),cash=wallets(principal(r));
+   expect(p.shares).toBe(beforeClaims[i].shares);
+   expect(p[s.x?'sbtc':'stx']).toBe(cash[s.x?'sbtc':'stx']+state(r).resting);
+   expect(p[s.x?'stx':'sbtc']).toBe(cash[s.x?'stx':'sbtc']);
+  }
   for(const r of rs.slice(0,5)){
    const owed=position(r,bob),before=wallets(bob);
    const paid=success(r,'claim',[],bob);

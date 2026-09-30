@@ -1,18 +1,22 @@
 # Core-spread v1 Clarinet tests
 
-After the market's net-based rebate change (`34bbe18`), the focused
-`epochs.test.ts` rerun passes **8/8 tests**. Its gross-input helper now uses
-`ceil(net * 10020 / 10000)` at 20 bps. This run uses market SHA-256
-`5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
-It does not regenerate full-suite coverage.
+This revision uses whole carried shares in every proceeds
+segment, a scaled carry, and exact epoch balances with final-member payouts.
+The original 9-micro-STX rescale shortfall was reproduced before the fix; its
+custody/solvency expectations are unchanged. See the [accounting proof and
+fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The preceding full run passed **69/69 tests: 52 mirrored rung tests plus 17 dispatch scenarios**,
-against market SHA-256 `d1e3bbad46de1ba752507502b1caaca87b03e0b0abb344028636a57fc350cca9`.
-Each rung had **100% function coverage,
-99.05% line coverage and 99.28% branch coverage**. See the generated
-[source-matched coverage report](COVERAGE.md) for counts, hashes and unhit points.
-The original 16 scenarios measured 70.92% lines and 60.14% branches once the
-rungs were included in Clarinet's instrumentation.
+The full integration suite passed **88/88 tests**, with no skips. Its six
+seeded campaigns completed 396 invariant checkpoints, 52 randomized
+withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
+
+**The npm command still exits 1 at the coverage gate:** buy line/branch
+coverage is 97.32%/98.71%; sell is 97.10%/98.06%, below the unchanged 99%
+thresholds. Both reach 100% function coverage (36/36). See the current
+[coverage report](COVERAGE.md) for source hashes and specific unhit points.
+The reporter saved `.build/coverage.json` before rejecting the gate; the
+Markdown record was rendered from that data and explicitly preserves the
+failure status. Earlier 69-test/80-test reports describe older revisions.
 
 Scope is only `jing-buy-stx-core-spread-v1.clar` and
 `jing-sell-stx-core-spread-v1.clar`, using the buy rung as reference. These
@@ -32,14 +36,16 @@ The full command runs Vitest and then generates `COVERAGE.md` and
 `.build/coverage.json`. It refuses a release coverage report if any test fails
 or is skipped, checks that production sources are unchanged since the build,
 and enforces 100% functions / 99% lines / 99% branches independently for each
-rung. No unhit instrumentation points are removed from the denominator.
+rung. Raw instrumentation and every source-anchored exception are reported
+separately; see [coverage exceptions](#coverage-exceptions). The numeric
+thresholds are unchanged.
 
 The rung sources are loaded by the manifest under their valid deployed names
 at spreads 0 and 25, plus 10/20/…/100 for the twenty-rung dispatch scenarios.
 Unlike dynamic test deployments, these are included in
 Clarinet's LCOV output. The reporter merges records by source and instrumentation
 location, counts all deployment names only once per source location, and checks that all
-34 functions in each actual source are represented.
+functions in each actual source are represented.
 
 ## What executes
 
@@ -62,9 +68,16 @@ location, counts all deployment names only once per source location, and checks 
   public production calls. Burn blocks advance the escrow timeout.
 - Two explicitly labeled private-helper unit cases (one per rung) check absent
   escrow, absent reserve bookkeeping and rejection of an unfunded pull. They
-  call unchanged helpers directly, move no money and leave state unchanged.
+  call the production helpers directly, move no money and leave state unchanged.
   These are unit boundaries, not evidence those contexts arise through public
-  `withdraw`, which guards them. Every other scenario uses public calls.
+  `withdraw`, which guards them. Four additional `epoch-helper` units cover
+  the missing-reserve read-only fallback and private positive `close-epoch`
+  transfers/snapshots/idempotent payouts on both assets. The latter use publicly
+  funded and synchronized balances, then invoke the close component directly;
+  they do not claim to simulate a full member exit or establish public-path
+  reachability of this defensive payout. No storage is injected. The sell share
+  cap fixture explicitly mints native test STX, just as the buy fixture mints
+  test sBTC; both rejection tests verify wallet and state rollback.
 
 ## Tested scenarios
 
@@ -74,21 +87,26 @@ location, counts all deployment names only once per source location, and checks 
 | `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
 | `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
 | `dispatch.test.ts` | 17 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
+| `proceeds-precision.test.ts` | 6 | Real 1,001-sat receipt after rescale/top-up, late membership, share ceiling, all supported carried-share segments |
+| `proceeds-conservation.test.ts` | 6 | Carry across receipts, ownership changes, repeated claims/fills, isolated old epochs and exact final balances |
+| `epoch-helper.test.ts` | 4 | Isolated close-epoch transfers, snapshots and no duplicate payout; absent-old-reserve read-only fallback, both mirrors |
+| `rescale-solvency.test.ts` | 2 | Original 9-micro-STX shortfall and sell mirror; both members claim successfully and fully drain input/proceeds |
+| `rescale-fuzz.test.ts` | 6 | Seeds 12648430, 1592594996 and 305419896 on each side; randomized public operations, at least four rescales and two tail rolls per seed; per-epoch receipt/payout/custody invariants after each action |
 
-The rescale test fills approximately half the book and refills it through real
-transfers until four scale transitions occur. Alice stays inactive while Bob
-refills. It checks the index floor, uninterrupted epoch, membership, rescale
-prints, an independent per-fill allocation of Alice's proceeds (with a bounded
-rounding difference), eventual payout, removal of her zero-valued shares and
-final recovery. Total paid proceeds plus remaining custody equals actual maker
-proceeds received. Tests exercise both STX and sBTC accounting directions.
+The original rescale test fills/refills through four scales while Alice stays
+inactive. Its bounded comparison with an independent per-fill allocation,
+zero-valued position removal and final recovery assertions remain intact.
+The randomized tests additionally maintain an independent per-epoch cash
+ledger, reconcile receipt prints with actual wallet movements, and assert
+that claims fit unpaid balances and effective shares never exceed total
+shares. Every campaign ends with exact zero balances; payouts plus input
+consumed by fills equal receipts for each epoch.
 
 ## Twenty-rung dispatch scenarios
 
-**Result: all 17 dispatch scenarios pass; no new contract bug was found
-in these scenarios.** The complete 69-test suite passes on the source hashes
-in `COVERAGE.md`. No production contract changes were needed. The expected
-no-match and invalid-batch refusals below are passing checks, not test failures.
+The 17 dispatch scenarios check the two amended production templates.
+Expected no-match and invalid-batch refusals below are passing checks, not
+test failures. Final-member claims include all remaining epoch rounding.
 
 Every dispatch scenario initializes ten buy and ten sell core-spread v1 rungs
 at spreads 10 through 100 bps, approved through the real ladder's code-hash
@@ -108,8 +126,8 @@ The two-sided scenario repeats the allocations for Alice and Bob on all twenty
 rungs. A keeper `settle-with-refresh` correctly returns `u1009` without changes:
 positive-spread asks and bids do not cross at the oracle midpoint. Trades then
 settle through real taker swaps walking each side. Both members top up through
-dispatch and receive proceeds. Alice's batch exits leave Bob's claims unchanged;
-Bob then exits. Receipts are compared to exact wallet changes and per-rung
+dispatch and receive proceeds. After Alice exits, Bob's final-member claims include the exact remainders;
+Bob then exits with no token residue. Receipts are compared to exact wallet changes and per-rung
 payout sums. Core equity equals live plus parked inventory, market custody
 equals live plus parked plus pending claims, book totals match the rung orders,
 dispatch owns no shares or tokens, and aggregate asset balances are conserved.
@@ -132,7 +150,7 @@ These ten scenarios are mirrored on **only the two core-spread v1 templates**:
 
 | Scenario per side | Assertions |
 | --- | --- |
-| Sold-out and partially filled positions, no top-up | Alice batch-withdraws all ten positions, including five unclaimed closed epochs, while paused. Bob's claims remain unchanged. Bob directly claims the closed positions; another claim returns `u7006`. A batch with five valid positions followed by an already-removed one rolls back completely. Exiting the five remaining positions succeeds. |
+| Sold-out and partially filled positions, no top-up | Alice batch-withdraws all ten positions, including five unclaimed closed epochs, while paused. Bob's final-member claims include the epoch remainders. Bob directly claims the closed positions; another claim returns `u7006`. A batch with five valid positions followed by an already-removed one rolls back completely. Exiting the five remaining positions succeeds. |
 | Retired and replaced seats after fills | Retire the partially filled 60-bps rung, replace the 70-bps rung with identical code deployed by another account, and verify old claims and funds remain intact. New deposits to historical seats refuse with `u7104`. The old ten-position exit succeeds while paused, and replacement funds remain independently withdrawable. |
 | Another member's young pending top-ups | Alice's half-sized ten-rung exit succeeds with `none` while paused, leaving Bob's pending entries and claims intact. Her full exit also preserves his claims; all members then recover their funds. |
 | Exit actually needs young escrow | Nine funded withdrawals precede a tenth pending-only position. Without an update, `u7012` rolls back every earlier transfer. The same batch succeeds with `some update`, returning the exact input balance. |
@@ -150,20 +168,38 @@ position pays through either `withdraw` or `claim`; after payout removes it,
 another attempt returns `u7006`. Older dispatcher comments describing every
 sold-out withdrawal as an error do not describe these two v1 implementations.
 
-## Remaining gaps
+## Coverage exceptions
 
-All 34 functions execute on both rungs. Four instrumented lines and one branch
-per rung remain unhit; they remain included in the reported percentages:
+The numeric gate remains **100% functions / 99% lines / 99% branches**.
+`coverage-exclusions.mjs` introduces a narrow, explicit exception list; the
+older reporter had no exclusion mechanism. `COVERAGE.md` and the JSON retain
+**raw metrics alongside the executable/reachable metrics used by the gate**.
+There is no general "ignore uncovered" rule:
 
-| Buy lines | Sell lines | Classification |
-| --- | --- | --- |
-| 139, 366, 368 | 113, 339, 341 | Callee-name lines inside the multiline calls to `get-min-deposits`, `get-token-*-deposit` and `get-current-cycle`. The enclosing calls/read helpers are exercised, but the SDK reports these individual name lines as unhit. |
-| 791 | 750 | The `back > reserve` zero clamp in `count-reserve-claim`. Public payouts use computed epoch entitlements; no funded scenario produced a claim exceeding the remaining reserve. This guard protects inconsistent accounting or an overreported helper argument. Reachability under every possible history has not been formally proven impossible. |
+- Ten static principal/function-name lines per rung are not evaluated Clarity
+  expressions. The SDK nevertheless lists them as unhit after `clarinet format`
+  splits the literal `contract-call?` syntax over lines. Their enclosing calls
+  must be executed. Exact principal, method, syntax and count are checked.
+- Two defensive overpay arms, and their two `u0` lines, in
+  `count-reserve-claim` are excluded. The per-epoch invariant bounds each
+  ordinary payout by remaining input/proceeds; the last claimer takes those
+  remainders exactly. See the [share-bound proof](../../../simulations/README-v1-core-spread-rungs.md#why-the-bound-is-preserved).
+  The fixed source fragments and function location must match; each normal
+  subtraction arm must be hit, and each overpay arm must remain unhit. An
+  unexpected hit makes the reporter fail. No contract state or excessive
+  claim is manufactured to execute those arms.
 
-No artificial over-claim or corrupted storage was introduced solely to hit that
-last branch. Coverage is not a claim that all arithmetic inputs, errors or
-possible trading histories have been proven safe. The report is close to full
-unit execution coverage, **not 100% coverage**.
+The clamps protect these two map subtractions only. They do not make arbitrary
+overpayments solvent: preceding transfers and global accounting debits can
+still reject a claim. Public-call fuzz and conservation tests continue to
+assert payouts <= receipts, effective shares <= total shares, and exact final
+zero balances. Both Stxer models also assert payment <= the remaining epoch
+balances **before** applying the matching clamps.
+
+Private-helper execution is labeled separately from public reachability,
+as in the existing market/router coverage documentation. Coverage percentages
+are not a proof over all possible transaction histories; the invariant argument
+and seeded public-call campaigns provide separate evidence.
 
 ## Regression history and Stxer boundary
 
@@ -174,28 +210,15 @@ recovery after 24 hours. The buy reference passed immediately. The sell port
 `ef91b659…` then passed the same successful-exit expectation; it was not relaxed
 or converted into an expected-error test. Both still pass that regression.
 
-The [sell port note](../../../contracts/README-core-spread-v1-port.md) documents
-that change and the historical Stxer timeout reference. The new
-[buy/sell Stxer report](../../../simulations/README-v1-core-spread-rungs.md)
-records **991/991 passing checks** on these same rung hashes, with the other
-workstream's additional core logger (`d45f1bff…1bce`). Clarinet's release run
-uses the committed core below. Its successful post-cooldown push also covers
-the scenario limited by miner-price data after time advances on the Stxer fork.
-This expansion changed test infrastructure and documentation only, not the
-production rungs.
+The [sell port note](../../../contracts/README-core-spread-v1-port.md) records
+that earlier fix. The current [Stxer record](../../../simulations/README-v1-core-spread-rungs.md)
+has 998/998 rung checks, 391/391 dispatch checks and 77/77 small-proceeds checks
+on the recorded contract hashes, including exact zero final balances.
 
 ## Validation provenance
 
-`COVERAGE.md` records the 69-test release run against committed market, core,
-ladder, dispatch, trait and rung sources. During development, the shared core
-changed while a focused test was running; the source-stability hook rejected
-that run even though its scenario passed. The release run therefore used an
-isolated checkout of committed contracts with these test files. The temporary
-checkout used a local SDK setup-file path; contract and test bodies were
-unchanged. The final run uses the committed core from `ac23d0a` (hash
-`88a689af…0697`), including the other workstream's native-vault integration.
-This change only adds tests and documentation for the two core-spread v1 rungs.
-
-Release log: `/tmp/rungs-dispatch-exits-release.log`. Raw LCOV, test JSON and build
-substitutions are in the release checkout's `.build/`, separate from
-market-only coverage. A normal rerun regenerates them in this suite's `.build/`.
+The release command regenerates `.build/results.json`, `lcov.info`, source
+substitutions and `COVERAGE.md`. Contract hashes and complete generated bodies
+are checked against the working tree. Current run log: `/tmp/jing-clamp-full.log`.
+The former 69-test coverage report described a historical committed revision;
+it must not be treated as coverage of these accounting changes.

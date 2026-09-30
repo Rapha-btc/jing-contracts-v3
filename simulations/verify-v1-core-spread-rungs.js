@@ -26,9 +26,9 @@
 //      paid, exits with 0); rounding per position < 1 unit at every rescale;
 //      F-8 partial->full exit; partial exit from the market
 //  b   last-member close with leftover rescale shares (members 0, shares > 0),
-//      the leftover goes to the next depositor as orphan
+//      all remaining input and proceeds go to the final member
 //  c   tail roll by one fill under 1e6 with 3 members: rounded claims, the last
-//      one releases the exact leftover reserve to held; dust tail roll
+//      one receives both exact remaining reserves; dust tail roll
 //  d   escrow and pushes (both rungs on the book): 1-unit grief pending does
 //      not block exits; dust roll with a pending on the book; a refused push
 //      holds; an exit that needs the pending settles it (u7012 without update,
@@ -36,6 +36,7 @@
 //      pause; after the cooldown the push reaches the miner band (u7008: the
 //      fork's synthetic tenures carry no miner spend)
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
   noneCV, someCV, boolCV, deserializeCV, cvToString, getAddressFromPrivateKey,
@@ -59,7 +60,12 @@ const P_ = (s) => s.includes('.') ? contractPrincipalCV(...s.split('.')) : stand
 const T = { x: P_(SBTC), y: P_(WSTX) };
 const A = { x: stringAsciiCV('sbtc-token'), y: stringAsciiCV('wstx') };
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + '01', 'mainnet');
-const src = (f) => fs.readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
+const sources = new Map();
+const src = (f) => {
+  const body = fs.readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
+  sources.set(f, body); return body;
+};
+const Q = 10n ** 18n; // proceeds precision and total-share ceiling
 const S = 10n ** 12n, MINT_FLOOR = 10n ** 9n, RESCALE = 1000n, DAY = 86400n;
 const BIG = 10n ** 15n;
 const keeper = mk(871), stranger = mk(872), poor = mk(873);
@@ -180,7 +186,7 @@ const qBal = (r, who) => r.buy ? `(stx-get-balance '${who})` : `(unwrap-panic (c
 
 function newModel() {
   return {
-    ts: 0n, mem: 0n, sc: 0n, ui: S, pi: 0n, held: 0n, res: 0n, acc: 0n, ep: 0n, cat: 0n, paused: false, guard: 0n, init: false,
+    ts: 0n, mem: 0n, sc: 0n, ui: S, pi: 0n, held: 0n, res: 0n, acc: 0n, cp: 0n, carry: 0n, ep: 0n, cat: 0n, paused: false, guard: 0n, init: false,
     scaleStart: new Map(), finalP: new Map(), finalU: new Map(), finalS: new Map(), eres: new Map(), pos: new Map(),
     live: 0n, parked: 0n, pend: 0n, pendAt: 0n, pbal: 0n, qbal: 0n, w: new Map(),
     // externals, refreshed from the chain
@@ -202,7 +208,7 @@ class Model {
       const segStart = step === 0n ? paid : (m.scaleStart.get(j) ?? 0n);
       const segEnd = j === to ? upto : (m.scaleStart.get(j + 1n) ?? 0n);
       if (segEnd < segStart) throw new Error(`model: earned underflow (${segStart} > ${segEnd})`);
-      owed += sh * (segEnd - segStart) / (S * RESCALE ** step);
+      owed += (sh / RESCALE ** step) * (segEnd - segStart) / Q;
     }
     return owed;
   }
@@ -214,7 +220,10 @@ class Model {
     if (!p) return { shares: 0n, [r.pKey]: 0n, [r.qKey]: 0n };
     const cur = p.epoch === m.ep, to = cur ? m.sc : this.finalScale(p.epoch);
     const sh = this.carried(p.shares, p.scale, to);
-    return { shares: sh, [r.pKey]: sh * (cur ? m.ui : this.finalUnfilled(p.epoch)) / S, [r.qKey]: this.earned(p.shares, p.scale, to, p.paid, cur ? m.pi : this.finalIndex(p.epoch)) };
+    const reserve = m.eres.get(p.epoch), last = !cur && reserve?.left === 1n;
+    return { shares: sh,
+      [r.pKey]: last ? reserve.reserve : cur && m.mem === 1n ? msize(m) + m.held : sh * (cur ? m.ui : this.finalUnfilled(p.epoch)) / S,
+      [r.qKey]: last ? reserve.proceeds : cur && m.mem === 1n ? m.cp : this.earned(p.shares, p.scale, to, p.paid, cur ? m.pi : this.finalIndex(p.epoch)) };
   }
   // ---- rung internals ----
   sync(ev) {
@@ -225,8 +234,8 @@ class Model {
     m.held = local;
     if (shares === 0n) return;
     const ni = (actual < recorded && recorded > 0n) ? m.ui * actual / recorded : m.ui;
-    const np = gained > 0n ? m.pi + gained * S / shares : m.pi;
-    m.pi = np; m.acc = m.qbal;
+    const scaled = gained * Q + m.carry, np = m.pi + scaled / shares;
+    m.pi = np; m.acc = m.qbal; m.cp += gained; m.carry = scaled % shares;
     if (actual < r.DUST || ni < MINT_FLOOR / RESCALE) { m.ui = ni; this.rollTail(ev, actual < r.DUST ? 'dust' : 'index'); }
     else if (ni < MINT_FLOOR) {
       // rounding per position at this rescale: what each loses is (carried mod 1000) * index / SCALE
@@ -237,7 +246,7 @@ class Model {
         const lossScaled = pre * ni - post * RESCALE * ni; // x SCALE
         losses.push({ who, pre, post, lossScaled, preValue: pre * ni / S, postValue: post * (ni * RESCALE) / S });
       }
-      m.ui = ni * RESCALE; m.ts = shares / RESCALE; m.sc = next; m.scaleStart.set(next, np);
+      m.ui = ni * RESCALE; m.carry = 0n; m.ts = shares / RESCALE; m.sc = next; m.scaleStart.set(next, np);
       this.rescaleLog.push({ epoch: m.ep, scale: next, np, newIndex: ni, ui: m.ui, ts: m.ts, sharesBefore: shares, losses });
       ev.push({ event: 'rung-rescale', epoch: m.ep, scale: next, 'proceeds-index': np, 'unfilled-index': m.ui, 'total-shares': m.ts });
     } else m.ui = ni;
@@ -246,33 +255,37 @@ class Model {
     const m = this.m, epo = m.ep;
     const hadMarket = msize(m) > 0n;
     if (hadMarket) { m.pbal += msize(m); m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; }
-    const free = m.pbal - m.res, owed = m.ts * m.ui / S, reserve = owed < free ? owed : free;
+    const free = m.pbal - m.res, owed = m.ts * m.ui / S, reserve = free;
     m.finalP.set(epo, m.pi); m.finalU.set(epo, m.ui); m.finalS.set(epo, m.sc);
     m.res += reserve; m.held = free - reserve;
-    m.eres.set(epo, { left: m.mem, reserve });
+    m.eres.set(epo, { left: m.mem, reserve, proceeds: m.cp });
+    m.cp = 0n; m.carry = 0n;
     ev.push({ event: 'rung-epoch-closed', epoch: epo, 'final-proceeds-index': m.pi });
     this.lastRoll = { epoch: epo, why, hadMarket, owed, free, reserve, members: m.mem, ui: m.ui };
     m.ep = epo + 1n; m.ts = 0n; m.mem = 0n; m.ui = S;
   }
-  countReserveClaim(e, back) {
-    const m = this.m, r = m.eres.get(e);
-    if (!r) return;
-    const rest = back > r.reserve ? 0n : r.reserve - back;
-    if (r.left <= 1n) { m.eres.delete(e); m.res -= rest; m.held += rest; this.lastRelease = { epoch: e, rest }; }
-    else m.eres.set(e, { left: r.left - 1n, reserve: rest });
+  countReserveClaim(e, back, paid) {
+    const m = this.m, rr = m.eres.get(e);
+    if (!rr) return;
+    if (back > rr.reserve || paid > rr.proceeds) throw new Error('Epoch payout exceeds remaining receipts');
+    if (rr.left === 1n) { m.eres.delete(e); this.lastRelease = { epoch: e, input: back, proceeds: paid }; }
+    else m.eres.set(e, { left: rr.left - 1n, reserve: back > rr.reserve ? 0n : rr.reserve - back, proceeds: paid > rr.proceeds ? 0n : rr.proceeds - paid });
   }
   settle(who, ev) {
     const m = this.m, pos = m.pos.get(who);
     if (!pos) return { owed: 0n, back: 0n };
     const cur = pos.epoch === m.ep, to = cur ? m.sc : this.finalScale(pos.epoch), upto = cur ? m.pi : this.finalIndex(pos.epoch);
-    const owed = this.earned(pos.shares, pos.scale, to, pos.paid, upto), cs = this.carried(pos.shares, pos.scale, to);
-    const back = cur ? 0n : cs * this.finalUnfilled(pos.epoch) / S;
+    const rr = m.eres.get(pos.epoch), last = !cur && rr?.left === 1n;
+    const owed = last ? rr.proceeds : cur && m.mem === 1n ? m.cp : this.earned(pos.shares, pos.scale, to, pos.paid, upto);
+    const cs = this.carried(pos.shares, pos.scale, to);
+    const back = cur ? 0n : last ? rr.reserve : cs * this.finalUnfilled(pos.epoch) / S;
+    if (cur) { m.cp -= owed; if (m.mem === 1n) m.carry = 0n; }
     if (owed > 0n) { m.qbal -= owed; wallet(m, who).q += owed; }
     m.acc -= owed;
     if (back > 0n) { m.pbal -= back; wallet(m, who).p += back; }
     m.res -= back;
     if (m.acc < 0n || m.res < 0n || m.qbal < 0n || m.pbal < 0n) throw new Error('model: settle underflow');
-    if (!cur) this.countReserveClaim(pos.epoch, back);
+    if (!cur) this.countReserveClaim(pos.epoch, back, owed);
     if (cur) m.pos.set(who, { ...pos, scale: to, shares: cs, paid: upto }); else m.pos.delete(who);
     if (owed > 0n || back > 0n) ev.push({ event: 'rung-payout', member: who, proceeds: owed, back, epoch: pos.epoch });
     return { owed, back };
@@ -304,6 +317,7 @@ class Model {
     const toPush = amount + m.held;
     const orphan = m.ts === 0n ? msize(m) + m.held : 0n;
     const shares = (amount + orphan) * S / m.ui;
+    if (m.ts + shares > Q) throw new CErr(7016);
     const pos = m.pos.get(who) ?? { epoch: m.ep, scale: m.sc, shares: 0n, paid: m.pi };
     const joining = !m.pos.has(who), epo = m.ep;
     let outcome = 'under-min';
@@ -311,7 +325,7 @@ class Model {
     m.held = (outcome === 'direct' || outcome === 'pending') ? 0n : toPush;
     this.lastPush = outcome;
     m.pos.set(who, { epoch: epo, scale: m.sc, shares: pos.shares + shares, paid: m.pi });
-    m.ts += shares; if (joining) m.mem += 1n;
+    m.carry = 0n; m.ts += shares; if (joining) m.mem += 1n;
     ev.push({ event: 'rung-deposit', member: who, amount, shares, epoch: epo, pushed: m.held === 0n, held: m.held });
     const pt = this.paidTuple(paid);
     return { amount, shares, epoch: epo, 'stx-paid': pt.stx, 'sbtc-paid': pt.sbtc, orphan };
@@ -364,7 +378,7 @@ class Model {
     const fi = m.ui, ms = m.pos.get(who).shares, mine = ms * fi / S, partial = (amount * S + fi - 1n) / fi;
     const byRest = !(amount >= mine) && (ms - partial) * fi / S === 0n;
     const full = amount >= mine || byRest;
-    const sharesOut = full ? ms : partial, take = full ? mine : amount, epo = m.ep;
+    const sharesOut = full ? ms : partial, take = full && m.mem === 1n ? msize(m) + m.held : full ? mine : amount, epo = m.ep;
     Object.assign(this.lastExit, { full, f8: byRest, take });
     if (take > 0n) {
       if (take > m.held + onBook(m)) { this.lastExit.escrow = this.settleEscrow(update); this.sync(ev); }
@@ -372,16 +386,20 @@ class Model {
       m.pbal -= take; wallet(m, who).p += take; m.held -= take;
     }
     if (full) m.pos.delete(who); else m.pos.set(who, { epoch: epo, scale: m.sc, shares: ms - sharesOut, paid: m.pi });
-    m.ts -= sharesOut;
+    m.carry = 0n; m.ts -= sharesOut;
     if (full) m.mem -= 1n;
+    let dust = 0n;
     if (m.mem === 0n) {
+      dust = m.cp; m.cp = 0n; m.carry = 0n; m.acc -= dust; m.qbal -= dust;
+      wallet(m, who).q += dust;
+      if (dust > 0n) ev.push({ event: 'rung-payout', member: who, proceeds: dust, back: 0n, epoch: epo });
       this.lastExit.close = true; this.lastExit.leftoverShares = m.ts;
       m.finalP.set(epo, m.pi); m.finalS.set(epo, m.sc);
       ev.push({ event: 'rung-epoch-closed', epoch: epo, 'final-proceeds-index': m.pi });
       m.ep = epo + 1n; m.ts = 0n; m.ui = S;
     }
     ev.push({ event: 'rung-withdraw', member: who, amount: take, shares: sharesOut, epoch: epo, held: m.held });
-    return r.buy ? { stx: paid.owed, sbtc: take } : { stx: take, sbtc: paid.owed };
+    return r.buy ? { stx: paid.owed + dust, sbtc: take } : { stx: take, sbtc: paid.owed + dust };
   }
   claim(who, ev) {
     if (!this.m.pos.has(who)) throw new CErr(7006);
@@ -396,7 +414,7 @@ function snapCode(r, mdl) {
   const L = (xs) => xs.length ? `(list ${xs.join(' ')})` : '(list)';
   const eps = [...Array(Number(m.ep)).keys()];
   return `{ ts: (var-get total-shares), mem: (var-get members), sc: (var-get scale), ui: (var-get unfilled-index), pi: (var-get proceeds-index),
-    held: (var-get ${r.heldVar}), res: (var-get ${r.resVar}), acc: (var-get ${r.accVar}), ep: (var-get epoch), cat: (var-get escrow-cancelled-at),
+    held: (var-get ${r.heldVar}), res: (var-get ${r.resVar}), acc: (var-get ${r.accVar}), cp: (var-get current-proceeds), carry: (var-get proceeds-carry), ep: (var-get epoch), cat: (var-get escrow-cancelled-at),
     paused: (var-get push-paused), guard: (var-get ${r.guardVar}), init: (var-get initialized),
     live: (contract-call? ${M} get-token-${r.side}-deposit (contract-call? ${M} get-current-cycle) '${r.id}),
     parked: (contract-call? ${M} get-token-${r.side}-parked '${r.id}),
@@ -415,7 +433,7 @@ function snapCode(r, mdl) {
 function modelView(r, mdl) {
   const m = mdl.m, ppl = [...r.ppl], eps = [...Array(Number(m.ep)).keys()].map(BigInt);
   return {
-    ts: m.ts, mem: m.mem, sc: m.sc, ui: m.ui, pi: m.pi, held: m.held, res: m.res, acc: m.acc, ep: m.ep, cat: m.cat, paused: m.paused, guard: m.guard, init: m.init,
+    ts: m.ts, mem: m.mem, sc: m.sc, ui: m.ui, pi: m.pi, held: m.held, res: m.res, acc: m.acc, cp: m.cp, carry: m.carry, ep: m.ep, cat: m.cat, paused: m.paused, guard: m.guard, init: m.init,
     live: m.live, parked: m.parked, pbal: m.pbal, qbal: m.qbal,
     pos: ppl.map((p) => { const x = m.pos.get(p); return x ? { epoch: x.epoch, scale: x.scale, shares: x.shares, 'paid-index': x.paid } : null; }),
     gp: ppl.map((p) => mdl.getPosition(p)),
@@ -434,13 +452,18 @@ function absorbExternals(r, mdl, o, { wallets = true } = {}) {
 }
 // compare every rung-owned value; market / balance / wallet values too unless `external`
 async function verify(r, mdl, label, { external = false } = {}) {
-  const o = await snap(r, mdl), want = modelView(r, mdl);
+  const o = await snap(r, mdl);
+  if (external) absorbExternals(r, mdl, o);
+  const want = modelView(r, mdl);
   if (external) for (const k of ['live', 'parked', 'pbal', 'qbal', 'wp', 'wq']) delete want[k];
   else {
     const pa = o.pend ? o.pend.amount : 0n, pt = o.pend ? o.pend['submitted-at'] : 0n;
     check(`${r.name} ${label}: market pending as modelled`, pa === mdl.m.pend && pt === mdl.m.pendAt, `pending ${pa}@${pt} model ${mdl.m.pend}@${mdl.m.pendAt}`);
   }
   const d = diff(o, want);
+  const reservedQ = [...mdl.m.eres.values()].reduce((n, e) => n + e.proceeds, 0n);
+  if (o.acc !== o.cp + reservedQ || o.acc > o.qbal) d.push('exact epoch proceeds ledger');
+  if (!(o.ts === 0n ? o.carry === 0n : o.carry < o.ts)) d.push('carry bound');
   check(`${r.name} ${label}: rung state${external ? '' : ', market position, balances, wallets'} exact`, d.length === 0, d.length ? d.join(' | ') : `ts ${o.ts} ui ${o.ui} sc ${o.sc} pi ${o.pi} held ${o.held} res ${o.res} ep ${o.ep} mem ${o.mem}`);
   absorbExternals(r, mdl, o);
   return o;
@@ -472,12 +495,10 @@ let MID = 0n, UPD;
 const upd = () => bufferCV(Buffer.from(UPD.hex.replace(/^0x/, ''), 'hex'));
 const ceilDiv = (a, b) => (a + b - 1n) / b;
 function grossFor(net) {
-  // swap withholds rebate = floor(amount * 20 / 10000) (age 0): smallest amount whose net is `net`
-  let a = net * 10000n / 9980n - 2n; if (a < net) a = net;
-  while (a - a * 20n / 10000n < net) a++;
-  if (a - a * 20n / 10000n !== net) throw new Error(`no gross for ${net}`);
-  return a;
+  // v6-3 charges rebate on net: net = floor(gross * 10000 / 10020).
+  return ceilDiv(net * 10020n, 10000n);
 }
+
 const takerFor = (r) => r.buy ? mk(961) : mk(962);
 // real swap against the rung's resting order, leaving `keep` units of its live position
 async function fill(r, mdl, keep, label) {
@@ -521,7 +542,7 @@ const probeSrc = (rs) => rs.map((r) => `
     fs: (contract-call? .${r.name} final-scale e),
     c2: (contract-call? .${r.name} carried u123456789 u0 u2),
     c4: (contract-call? .${r.name} carried u123456789 u0 u4),
-    ea: (contract-call? .${r.name} earned u1000000 u0 u0 u0 u5000000000000),
+    ea: (contract-call? .${r.name} earned u1000000 u0 u0 u0 u5000000000000000000),
     es: (contract-call? .${r.name} earned-step u1 { shares: u7, from: u0, to: u0, paid: u0, upto: u0, owed: u3 }),
     ms: (contract-call? .${r.name} market-size),
     pl: (contract-call? .${r.name} ${r.pooledFn}),
@@ -703,8 +724,8 @@ async function scenarioABC(r, mdl, base) {
   const orphanUnits = msize(m) + m.held;
   // ---- c: tail roll by one fill under 1e6, 3 members ----
   console.log(`\n=== ${r.name}: c tail roll (index) with 3 members ===`);
-  const e1 = await dep('E deposits first: takes the leftover as orphan', E, P / 3n);
-  check(`${r.name} orphan ${orphanUnits} counted in E's shares`, e1.want.ok.orphan === orphanUnits && orphanUnits > 0n, `orphan ${e1.want.ok.orphan}`);
+  const e1 = await dep('E deposits first: prior epoch left no funds', E, P / 3n);
+  check(`${r.name} orphan ${orphanUnits} counted in E's shares`, e1.want.ok.orphan === orphanUnits && orphanUnits === 0n && m.qbal === 0n, `orphan ${e1.want.ok.orphan}`);
   await dep('F deposits', F, P / 3n);
   await dep('G deposits', G, P / 3n);
   await fill(r, mdl, m.live * 15n / 1000n, 'c pre-fill');
@@ -719,11 +740,11 @@ async function scenarioABC(r, mdl, base) {
   await probe(r, mdl, E, epRoll, 'old-epoch position');
   await claim('E claims its rounded reserve share', E);
   const resBefore = m.res, heldBefore = m.held;
-  await wd('F, the last old member, withdraws: paid, and the rounding left in the reserve goes to held', F, BIG);
-  check(`${r.name} last claim released exactly ${mdl.lastRelease?.rest} to held (reserved ${resBefore} -> ${m.res}, held ${heldBefore} -> ${m.held})`, mdl.lastExit.old && mdl.lastRelease?.epoch === epRoll && mdl.lastRelease.rest > 0n && !m.eres.has(epRoll));
+  await wd('F, the last old member, withdraws both exact reserve remainders', F, BIG);
+  check(`${r.name} last old claim pays all epoch input and proceeds`, mdl.lastExit.old && mdl.lastRelease?.epoch === epRoll && !m.eres.has(epRoll) && m.res === 0n && m.pbal === 0n && m.qbal === 0n);
   // ---- c': dust tail roll ----
   console.log(`\n=== ${r.name}: c dust tail roll ===`);
-  await dep('H deposits into the next epoch (orphan: the released dust)', H, P / 2n);
+  await dep('H deposits into the next epoch with no prior dust', H, P / 2n);
   await dep('I deposits', I, P / 2n);
   await fill(r, mdl, r.buy ? 5n : 4000n, 'dust fill');
   const epDust = m.ep;
@@ -896,6 +917,17 @@ async function main() {
   await refresh(Sl, MS, 'before the sell scenarios');
   await scenarioABC(Sl, MS, 920);
   await scenarioD();
+  for (const mdl of [MB, MS]) {
+    const m = mdl.m;
+    check(`${mdl.r.name}: all members paid, both token balances exactly zero`,
+      m.pos.size === 0 && m.eres.size === 0 && msize(m) === 0n &&
+      m.pbal === 0n && m.qbal === 0n && m.cp === 0n && m.res === 0n);
+  }
+  for (const [file, body] of sources) {
+    const current = fs.readFileSync(new URL(`../contracts/${file}.clar`, import.meta.url), 'utf8');
+    check(`${file}: deployed source unchanged`, current === body,
+      crypto.createHash('sha256').update(body).digest('hex'));
+  }
   console.log(`\n${passed}/${checks} checks green`);
   console.log(`https://stxer.xyz/simulations/mainnet/${sid}`);
 }
