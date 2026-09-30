@@ -80,6 +80,38 @@ Fixture minimum errors are `u4003`; insufficient-balance errors are actual
 native-STX/strict-FT `u1`, and router errors are the production `u3001`–`u3007`.
 These expected refusals are passing tests.
 
+## Callers with existing orders
+
+`existing-orders.test.ts` adds 46 cases across both directions and both router
+entrypoint families. Both resting positions are created and admitted through
+public market calls. The market correctly refuses a new swap on a side where
+the caller already has a resting position (`u1018`). The router catches that
+refusal: it either leaves the new input in the wallet or routes it to a funded
+AMM while preserving both orders, market custody and core equity.
+
+After the caller cancels the selling-side order, the remaining opposite-side
+order can participate in midpoint settlement. Tests cover sub-minimum refunds,
+valid remainders rolled forward and later cancelled, proceeds shared with a
+second maker, and refusal to walk the caller's own off-mid quote. They also
+verify that a later AMM rejection or a wallet minimum one unit too high restores
+the original order, its escrow, all earlier transfers and core accounting.
+
+The receipt has two distinctions when the caller is also a maker:
+
+- `jing-in` is the input consumed by the swap leg. Maker proceeds paid back in
+  that same asset reduce the net wallet debit; they are not `unsold` funds to
+  send through fallback again.
+- `out` and the overall minimum measure the bought-asset wallet gain, including
+  any refund of the caller's old opposite-side order. `jing-out` records the
+  swap payout alone in these cases.
+
+For example, selling 10,000 sats after cancelling the selling-side position,
+against the caller's own 1,000,000 microSTX midpoint order, produces
+`jing-in = 10,000`, `jing-out = 997,002`, an old-order refund of 2,000 microSTX,
+and `out = 999,002`. Maker proceeds return 9,991 sats, so the net input-wallet
+debit is 9 sats. All positions and market custody end at zero. The test accepts
+`min-out = 999,002` and verifies full rollback at 999,003.
+
 ## Coverage gaps and interpretation
 
 All router tests call public or read-only entrypoints. No private helper is
@@ -97,5 +129,5 @@ called directly to inflate the coverage percentage.
 No production bug was found by these cases. The metrics measure executed
 instrumentation, not every possible state or a proof of fund safety. In
 particular, the external venue models do not establish mainnet AMM compatibility,
-and the suite does not yet combine routing with a caller who already owns
-orders on both book sides or exercise production post-conditions.
+and the suite does not yet exercise production post-conditions or the full
+range of pending/parked-order combinations with router calls.

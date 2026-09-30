@@ -74,8 +74,9 @@ unhit paths described below; they exclude mocked dependencies and older versions
 The separate [router v5-3 Clarinet suite](../router-v5-3/README.md) executes the
 real router against this v6-3 market and core, with funded external-venue fixtures.
 It covers manual/smart sizing, exact payouts and refunds, fallback routing and
-transaction rollback. Its [router-only coverage](../router-v5-3/COVERAGE.md) is
-reported separately; it does not rerun or change the in-progress rung suite.
+transaction rollback, including callers with orders on both sides and maker
+proceeds paid during their own swap. Its
+[router-only coverage](../router-v5-3/COVERAGE.md) is reported separately; it does not rerun or change the in-progress rung suite.
 
 A separate [real core-spread v1 rung integration suite](../integration-v6-3/README.md)
 previously passed **69/69**, with **100% functions, 99.05% lines and 99.28% branches**
