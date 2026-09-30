@@ -363,7 +363,7 @@ async function evalOnlyGetters(upd, u, stamp, keeper) {
   await ev('ms: X1 on the book', MS, dep('x', X1), `u${X1AMT}`);
   await fund('y', TK, Number(G));
   // model (settlement-edges.js phase a): age 0 -> 20 bps rebate; y binding
-  const rebate = G * REBATE_BPS / BPS, net = G - rebate;
+  const net = G * BPS / (BPS + REBATE_BPS), rebate = G - net;
   const Ty = net, Tx = X1AMT;
   const yvx = Tx * Pm / S, xb = yvx <= Ty;
   const yc = xb ? yvx : Ty, xc = xb ? Tx : Ty * S / Pm;

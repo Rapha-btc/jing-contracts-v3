@@ -44,9 +44,9 @@
 //         0 (net-cap 0), min-taker = smallest + 1; a swap netting exactly the
 //         smallest is refused u1010, smallest + 1 enters and fails u1017.
 //
-// gross-up's `(> n net)` arm is unreachable: g = floor(net*10000/9980)
-// gives g*0.998 <= net, and n = g - floor(g*20/10000) < 0.998*g + 1 <= net + 1,
-// so n <= net always (checked below by brute force as a model check).
+// swap puts net = floor(gross * 10000 / (10000 + bps)) on the book; gross-up
+// is its exact inverse at 20 bps: the largest gross whose net fits (checked
+// below by brute force as a model check).
 import fs from 'node:fs';
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV,
@@ -156,11 +156,9 @@ const peggedBid = (P, s, cap) => { const p = s < BPS ? P * (BPS - s) / BPS : 0n;
 const pxAt = (side, m, P) => m.spread == null ? m.limit : side === 'y' ? peggedBid(P, m.spread, m.limit) : peggedAsk(P, m.spread, m.limit);
 const inRange = (side, m, P) => side === 'y' ? pxAt('y', m, P) >= P : pxAt('x', m, P) <= P;
 const rebateBps = (age) => age <= 30n ? 20n : age >= 80n ? 70n : 20n + (age - 30n);
-const netOf = (gross, bps = REBATE) => gross - gross * bps / BPS;
+const netOf = (gross, bps = REBATE) => gross * BPS / (BPS + bps);
 function grossUp(net) {
-  const g = net * BPS / (BPS - REBATE);
-  const n = g - g * REBATE / BPS;
-  return n > net ? g - 1n : g;
+  return net === 0n ? 0n : ((net + 1n) * (BPS + REBATE) - 1n) / BPS;
 }
 function grossFor(net, bps = REBATE) {
   for (let a = net; a < net + net / 100n + 10n; a++) if (netOf(a, bps) === net) return a;
@@ -205,7 +203,7 @@ const capString = (c) => `(ok (tuple (gross-cap u${c.gross}) (mid-cap u${c.midCa
 // list order (the taker is appended at the end). opp: the other side.
 function swapModel({ ts, P, gross, bps = REBATE, limit, taker, opp, own, minX = MIN_X, minY = MIN_Y }) {
   const ms = ts === 'y' ? 'x' : 'y';
-  const rebate = gross * bps / BPS, net = gross - rebate;
+  const net = gross * BPS / (BPS + bps), rebate = gross - net;
   const book = { [ts]: [...own.map((m) => ({ ...m })), { who: taker, amt: net, limit, spread: null }], [ms]: opp.map((m) => ({ ...m })) };
   if (sum(book.y) < minY || sum(book.x) < minX) return { err: '(err u1009)' };
   const next = { x: [], y: [] }, kept = { x: [], y: [] };
@@ -346,12 +344,15 @@ async function swapCheck(label, cid, { ts, P, U, gross, limit, taker, opp, own, 
 }
 
 async function main() {
-  // model self-checks: gross-up's n > net arm is unreachable
+  // model self-checks: gross-up is the largest gross whose net fits
   {
     let hits = 0;
-    for (let n = 0n; n < 200_000n; n++) { const g = n * BPS / (BPS - REBATE); if (g - g * REBATE / BPS > n) hits++; if (netOf(grossUp(n)) !== n) hits += 1000000; }
-    for (let n = 10n ** 15n; n < 10n ** 15n + 50_000n; n++) { const g = n * BPS / (BPS - REBATE); if (g - g * REBATE / BPS > n) hits++; if (netOf(grossUp(n)) !== n) hits += 1000000; }
-    check('model: gross-up never takes the (> n net) arm, and net(gross-up(n)) = n', String(hits), '0');
+    // net-cap 0 means no swap: gross-up returns 0 (the guard), not the 1 that also nets 0
+    const probe = (n) => { const g = grossUp(n); if (netOf(g) !== n) hits++; if (n > 0n && netOf(g + 1n) <= n) hits++; };
+    for (let n = 0n; n < 200_000n; n++) probe(n);
+    for (let n = 10n ** 15n; n < 10n ** 15n + 50_000n; n++) probe(n);
+    check('model: net(gross-up(n)) = n and, for n > 0, net(gross-up(n) + 1) > n', String(hits), '0');
+    check('model: gross-up(0) = 0', String(grossUp(0n)), '0');
   }
   // ---- fork + deploys --------------------------------------------------
   const kinds = ['mix', 'own', 'ownbig', 'edge', 'foff', 'ftop', 'fin', 'fout'];

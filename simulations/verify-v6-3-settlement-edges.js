@@ -158,9 +158,9 @@ function notPrinted(label, r, name) {
 const S = 10_000_000_000n, BPS = 10_000n, FEE = 10n;
 const MIN_X = 1000n, MIN_Y = 1_000_000n;
 const at = (P, k) => P * BigInt(k) / 1000n;
-const rebateOf = (g, bps) => g * bps / BPS;
+const rebateOf = (g, bps) => g - g * BPS / (BPS + bps);
 function grossFor(net, bps) {
-  for (let a = net; a < net + net / 100n + 10n; a++) if (a - a * bps / BPS === net) return a;
+  for (let a = net; a < net + net / 100n + 10n; a++) if (a * BPS / (BPS + bps) === net) return a;
   return null;
 }
 // One settle-with-refresh over the books that survive the filters (no walk).

@@ -143,7 +143,17 @@ instead of `amount x 70 / BPS`: `min-x` for the re-sold rest, 51 for the
 rebate dust. The vault-sbtc-stx-v6 native vault is not affected: it calls
 `swap` directly and nothing it gets back is sent out again.
 
-Sims: to rerun on the new sources (market, router, rungs, vaults).
+Sims on the new sources:
+- **v6-3 market:** 17 suites green, 5,982 / 5,982 checks, 72.2% of
+  expressions, 292 / 299 branch nodes, 156 / 286 error paths
+  (`simulations/README-v6-3-coverage.md`).
+- **Vaults:** all green.
+  - juicestx `cbfb7e2`: at the tip, the vault and pool deployed as `-v1`
+    since the real names are taken. The allowance proof shows 1 to 2 sats
+    refunded in every case, including 1 BTC at 69 bps.
+  - fastpool `2ffd028`.
+  - ccd016 v2 `cd15973`.
+- **Rungs:** to rerun once the small-proceeds fix lands.
 
 ## Submissions and verdicts
 

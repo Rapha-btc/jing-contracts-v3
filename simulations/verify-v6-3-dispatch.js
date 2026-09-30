@@ -196,21 +196,16 @@ async function main() {
   const out=await withdraw(f,f.a,f.initial,noneCV());
   for(let i=0;i<3;i++) {
    const rung=f.rungs[i];
-   // rung 0: with escrow-for (buy core-spread-v1 only, for now) A's exit is
-   // paid from what the pool holds here, so its 24h-old escrow stays pending;
-   // the sell -v1 rungs still settle-escrow up front and cancel it
-   await ev('rung 0 escrow per rung version, others withdraw live exact',MARKET,i===0
-    ? (f.dir==='buy'
-      ? `(and (is-eq (get amount (unwrap-panic ${pending(f.side,rung)})) u${f.initial[0]}) (is-eq ${live(f.side,rung)} u0) (is-eq ${parked(f.side,rung)} u0))`
-      : `(and (is-none ${pending(f.side,rung)}) (is-eq ${live(f.side,rung)} u0) (is-eq ${parked(f.side,rung)} u0))`)
+   // rung 0: with escrow-for (both core-spread-v1 rungs) A's exit is paid
+   // from what the pool holds here, so its 24h-old escrow stays pending
+   await ev('rung 0 escrow stays pending, others withdraw live exact',MARKET,i===0
+    ? `(and (is-eq (get amount (unwrap-panic ${pending(f.side,rung)})) u${f.initial[0]}) (is-eq ${live(f.side,rung)} u0) (is-eq ${parked(f.side,rung)} u0))`
     : `(and (is-none ${pending(f.side,rung)}) (is-eq ${live(f.side,rung)} u${f.second[i]}) (is-eq ${parked(f.side,rung)} u0))`,'true');
    await ev('other member exact shares and claim',rung,`(and (is-eq (get shares (get-position '${f.memberB})) u${f.second[i]}) (is-eq (get ${f.side==='x'?'sbtc':'stx'} (get-position '${f.memberB})) u${f.second[i]}))`,'true');
   }
-  // buy (escrow-for): B's exit needs rung 0's escrow and takes the 24h cancel;
-  // sell (old rung): A's exit already took it
-  if(f.dir!=='buy')event('timeout cancel logged',out.receipt,f.side,'pending-refund',{reason:'"cancel"'});
+  // escrow-for: B's exit needs rung 0's escrow and takes the 24h cancel
   const outB=await withdraw(f,f.memberB,f.second,noneCV());
-  if(f.dir==='buy')event('timeout cancel logged',outB.receipt,f.side,'pending-refund',{reason:'"cancel"'});
+  event('timeout cancel logged',outB.receipt,f.side,'pending-refund',{reason:'"cancel"'});
   await ev('dispatcher has no custody',MARKET,balance(f.side,DISPATCH),'u0');
  }
  console.log(`${passed}/${checks} checks green`);

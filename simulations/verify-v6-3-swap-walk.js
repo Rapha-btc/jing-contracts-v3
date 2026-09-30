@@ -287,9 +287,9 @@ function checkMatches(label, receipt, mdl, taker) {
   });
   return prints;
 }
-// Pick the gross swap amount whose net (after the floor rebate) is `net`.
+// Pick the gross swap amount whose net (gross * BPS / (BPS + bps)) is `net`.
 function grossFor(net, bps) {
-  for (let a = net; a < net + net / 100n + 10n; a++) if (a - a * bps / BPS === net) return a;
+  for (let a = net; a < net + net / 100n + 10n; a++) if (a * BPS / (BPS + bps) === net) return a;
   throw new Error(`no gross for net ${net}`);
 }
 
@@ -477,7 +477,7 @@ async function main() {
     for (const m of [H, V]) await place(cid, 'y', m);
     const limit = at(900);
     const gross = 5000n;
-    const mdl = model({ ts: 'x', P, net: gross - gross * bps / BPS, rebate: gross * bps / BPS, bps, limit, taker, book: [H, V] });
+    const mdl = model({ ts: 'x', P, net: gross * BPS / (BPS + bps), rebate: gross - gross * BPS / (BPS + bps), bps, limit, taker, book: [H, V] });
     check('xc model: remainder over minimum', String(mdl.partial), 'true');
     await fund('x', taker, gross);
     const whos = [taker, H.who, V.who, DEP, cid];

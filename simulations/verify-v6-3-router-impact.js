@@ -109,7 +109,12 @@ async function deploy(name, file) {
  check(`deploy ${name}`,decode({Result:out.steps[0]}),ok); finishPhase();
 }
 async function main() {
- const baseline=execFileSync('git',['show','f6a6d3a:contracts/markets-sbtc-stx-jing-v6-3.clar'],{encoding:'utf8'});
+ // The baseline gets 34bbe18's swap rebate sizing (net = amount * BPS / (BPS + bps))
+ // so the comparison still isolates the submit/settle refactor.
+ const baselineOld=execFileSync('git',['show','f6a6d3a:contracts/markets-sbtc-stx-jing-v6-3.clar'],{encoding:'utf8'});
+ const oldSizing='(rebate (/ (* amount (rebate-bps-for-age (get age aged))) BPS_PRECISION))\n(net (- amount rebate))';
+ if(baselineOld.split(oldSizing).length!==2)throw new Error('baseline swap sizing not found exactly once');
+ const baseline=baselineOld.replace(oldSizing,'(net (/ (* amount BPS_PRECISION)\n(+ BPS_PRECISION (rebate-bps-for-age (get age aged)))\n))\n(rebate (- amount net))');
  const router=`${DEP}.swap-router-sbtc-stx-jing-v5-3`,zero=tupleCV({dlmm:uintCV(0),xyk:uintCV(0),velar:uintCV(0)});
  let height,u,mid;const snapshots={},links={},differences=[];
  for(const side of ['x','y'])for(const version of ['baseline','current']) {
