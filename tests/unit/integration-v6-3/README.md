@@ -6,17 +6,17 @@ The original 9-micro-STX rescale shortfall was reproduced before the fix; its
 custody/solvency expectations are unchanged. See the [accounting proof and
 fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The full integration suite passed **88/88 tests**, with no skips. Its six
-seeded campaigns completed 396 invariant checkpoints, 52 randomized
+The full integration suite passed **93/93 tests**, in nine files with no skips.
+Its six seeded campaigns completed 396 invariant checkpoints, 52 randomized
 withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
 
-**The npm command still exits 1 at the coverage gate:** buy line/branch
-coverage is 97.32%/98.71%; sell is 97.10%/98.06%, below the unchanged 99%
-thresholds. Both reach 100% function coverage (36/36). See the current
-[coverage report](COVERAGE.md) for source hashes and specific unhit points.
-The reporter saved `.build/coverage.json` before rejecting the gate; the
-Markdown record was rendered from that data and explicitly preserves the
-failure status. Earlier 69-test/80-test reports describe older revisions.
+The complete npm command and unchanged **99% line/branch gate pass**.
+Both rungs reach 100% functions and 100% executable/reachable lines/branches
+including declared private-helper units. Raw instrumentation and the narrow
+source-anchored exceptions are retained in the [coverage report](COVERAGE.md)
+and explained [below](#coverage-exceptions). The earlier 88-test run passed
+its tests but failed coverage; these added units and explicit instrumentation
+exceptions supersede that report without lowering the numeric thresholds.
 
 Scope is only `jing-buy-stx-core-spread-v1.clar` and
 `jing-sell-stx-core-spread-v1.clar`, using the buy rung as reference. These

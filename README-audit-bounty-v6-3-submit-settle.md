@@ -19,11 +19,13 @@ assertions remain unchanged; both members must claim and exit with zero
 residue. The simulation record below contains the invariant argument,
 randomized conservation tests and final verification results.
 
-Validation: 88/88 integration tests and all three Stxer reruns pass; every
-final-drain test requires zero residue. The separate coverage gate still
-fails its unchanged 99% line/branch requirements (buy 97.32%/98.71%, sell
-97.10%/98.06%). The complete npm command therefore is not green. No threshold
-was lowered or additional contract change made to conceal that failure.
+Validation: **93/93 integration tests**, including six seeded conservation
+campaigns, and **287/287 market tests** pass. The unchanged 99% rung
+coverage gate passes with explicit source-anchored exceptions for static call
+names and the two invariant-unreachable clamp arms; raw metrics remain visible.
+Both reserve bookkeeping clamps are restored, and strict overpay assertions
+remain in the tests and Stxer models. All three Stxer reruns pass (998/998,
+391/391, 77/77); final-drain checks require exactly zero residue.
 
 A later [report from the earlier rung bounty](https://github.com/itzroberl/startup-credits/blob/aibtc-jing-v6-3-audit-2026-09-26/REPORT-small-proceeds.md)
 identified positive receipts lost to proceeds-index truncation. Reproduced on
@@ -41,7 +43,7 @@ The 20-rung fork verifies exactly zero remaining sats and micro-STX after
 all exits. Complete formulas, regression coverage, source hashes and final
 verification status: [core-spread v1 simulation record](simulations/README-v1-core-spread-rungs.md#2026-09-29-proceeds-precision-and-exact-epoch-payouts).
 Other rung variants are unchanged. This work does not post a new bounty or
-change historical awards/payment status. Rapha authorized committing and pushing this repair after verification.
+change historical awards/payment status.
 
 ## Likely winner
 

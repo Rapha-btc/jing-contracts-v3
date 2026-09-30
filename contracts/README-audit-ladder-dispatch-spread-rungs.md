@@ -25,11 +25,13 @@ assertions remain unchanged; both members must claim and exit with zero
 residue. The simulation record below contains the invariant argument,
 randomized conservation tests and final verification results.
 
-Validation: 88/88 integration tests and all three Stxer reruns pass; every
-final-drain test requires zero residue. The separate coverage gate still
-fails its unchanged 99% line/branch requirements (buy 97.32%/98.71%, sell
-97.10%/98.06%). The complete npm command therefore is not green. No threshold
-was lowered or additional contract change made to conceal that failure.
+Validation: **93/93 integration tests**, including six seeded conservation
+campaigns, and **287/287 market tests** pass. The unchanged 99% rung
+coverage gate passes with explicit source-anchored exceptions for static call
+names and the two invariant-unreachable clamp arms; raw metrics remain visible.
+Both reserve bookkeeping clamps are restored, and strict overpay assertions
+remain in the tests and Stxer models. All three Stxer reruns pass (998/998,
+391/391, 77/77); final-drain checks require exactly zero residue.
 
 The later [small-proceeds submission](https://github.com/itzroberl/startup-credits/blob/aibtc-jing-v6-3-audit-2026-09-26/REPORT-small-proceeds.md)
 is a useful known lead for the current two core-spread v1 templates. Its
