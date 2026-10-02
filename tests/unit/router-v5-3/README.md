@@ -176,12 +176,12 @@ boundaries are checked through the market's read-only capacity getter.
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Line 1233: the opening line of the `plan` tuple in `cp-stage` (dust legs
+- Line 1254: the opening line of the `plan` tuple in `cp-stage` (dust legs
   dropped, c2b046a). Both `dust-left` arms of each leg are hit (a zero split
   leg is dust); the SDK reports the tuple's opening line unhit. A non-zero
   dust leg (a few units of room left in a pool) is exercised on the fork:
   stxer smart suite S3 and S11.
-- Lines 1399–1400: the literal principal and function name inside the read-only
+- Lines 1420–1421: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.
