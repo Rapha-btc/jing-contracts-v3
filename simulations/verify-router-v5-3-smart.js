@@ -60,7 +60,12 @@ const sims = [];
 const minB = (a, b) => (a < b ? a : b);
 const limitMin = (leg, limit, sellX) => { const base = leg > 2n ? leg - 2n : 0n; return sellX ? base * limit / SCALE : base * SCALE / limit; };
 const dust = (left, limit, sellX) => left === 0n || limitMin(left, limit, sellX) <= 1n;
-const cpSplit = (r, cx, cv) => { const t = cx + cv; if (r <= t) { const x = t > 0n ? r * cx / t : 0n; return { x, v: r - x }; } return { x: cx, v: cv }; };
+const cpSplitRaw = (r, cx, cv) => { const t = cx + cv; if (r <= t) { const x = t > 0n ? r * cx / t : 0n; return { x, v: r - x }; } return { x: cx, v: cv }; };
+// working-tree dust fix: a DLMM plan or a CP leg that is dust at the limit is
+// not sent (it would fetch nothing and the venue would revert the swap); it
+// stays unsold. `limit` null = the raw split (fixtures that size legs).
+const cpSplit = (r, cx, cv, limit = null, sellX = null) => { const sp = cpSplitRaw(r, cx, cv); if (limit == null) return sp; return { x: dust(sp.x, limit, sellX) ? 0n : sp.x, v: dust(sp.v, limit, sellX) ? 0n : sp.v, rawX: sp.x, rawV: sp.v }; };
+const dlmmPlan = (cap, left, limit, sellX) => { const pl = minB(cap, left); return dust(pl, limit, sellX) ? 0n : pl; };
 
 // the router's sizing on the fork, as the caller
 async function sizing(sellX, taker, { amount, limit, u, mid }) {
@@ -88,9 +93,9 @@ async function smart(label, sellX, taker, o, want = null) {
   let quote = null;
   if (pre.j === 0n) {
     const l1 = o.amount;
-    const dIn = dust(l1, o.limit, sellX) ? 0n : minB(pre.d, l1);
+    const dIn = dust(l1, o.limit, sellX) ? 0n : dlmmPlan(pre.d, l1, o.limit, sellX);
     const l2 = l1 - dIn;
-    const sp = dust(l2, o.limit, sellX) ? { x: 0n, v: 0n } : cpSplit(l2, pre.x, pre.v);
+    const sp = dust(l2, o.limit, sellX) ? { x: 0n, v: 0n } : cpSplit(l2, pre.x, pre.v, o.limit, sellX);
     quote = { dIn, x: sp.x, v: sp.v, xo: sp.x > 0n ? await xykQuote(sellX, sp.x) : 0n, vo: sp.v > 0n ? await velarQuote(sellX, sp.v) : 0n, unsold: l2 - sp.x - sp.v };
   }
   const w0 = await wallet(taker);
@@ -117,7 +122,7 @@ async function smart(label, sellX, taker, o, want = null) {
     const dWant = l1 === o.amount - minB(pre.j, o.amount) ? pre.d : l1 === o.amount ? pre.d0 : null;
     if (dWant != null) check(`${label}: dlmm-cap == dlmm-capacity of dlmm-pick(left ${l1}) read before the call`, String(p['dlmm-cap']), String(dWant));
     else check(`${label}: dlmm-cap is one pool's capacity (left ${l1}: partial book fill)`, String([pre.c1, pre.c2, pre.c3].includes(p['dlmm-cap'])), 'true');
-    check(`${label}: dlmm-in == min(cap ${p['dlmm-cap']}, left ${l1})`, String(f['dlmm-in']), String(minB(p['dlmm-cap'], l1)));
+    check(`${label}: dlmm-in == min(cap ${p['dlmm-cap']}, left ${l1}), u0 if that plan is dust`, String(f['dlmm-in']), String(dlmmPlan(p['dlmm-cap'], l1, o.limit, sellX)));
   }
   // stage 3
   const l2 = l1 - f['dlmm-in'];
@@ -125,8 +130,9 @@ async function smart(label, sellX, taker, o, want = null) {
     check(`${label}: CP stage skipped (left ${l2} is dust): caps u0, unsold == left`, `${p['xyk-cap']} ${p['velar-cap']} ${f['xyk-in']} ${f['velar-in']} ${f.unsold}`, `0 0 0 0 ${l2}`);
   } else {
     check(`${label}: xyk-cap / velar-cap == cp-capacity read before the call`, `${p['xyk-cap']} ${p['velar-cap']}`, `${pre.x} ${pre.v}`);
-    const sp = cpSplit(l2, pre.x, pre.v);
-    check(`${label}: cp-split(${l2}, ${pre.x}, ${pre.v}) -> xyk-in / velar-in / unsold`, `${f['xyk-in']} ${f['velar-in']} ${f.unsold}`, `${sp.x} ${sp.v} ${l2 - sp.x - sp.v}`);
+    const sp = cpSplit(l2, pre.x, pre.v, o.limit, sellX);
+    if (sp.x !== sp.rawX || sp.v !== sp.rawV) console.log(`  ${label}: dust CP leg dropped (split ${sp.rawX} / ${sp.rawV} -> ${sp.x} / ${sp.v})`);
+    check(`${label}: cp-split(${l2}, ${pre.x}, ${pre.v}), dust legs dropped -> xyk-in / velar-in / unsold`, `${f['xyk-in']} ${f['velar-in']} ${f.unsold}`, `${sp.x} ${sp.v} ${l2 - sp.x - sp.v}`);
   }
   if (quote) {
     check(`${label}: exact prediction (dlmm-in, xyk-in/out, velar-in/out, unsold)`, `${f['dlmm-in']} ${f['xyk-in']} ${f['xyk-out']} ${f['velar-in']} ${f['velar-out']} ${f.unsold}`,
@@ -142,6 +148,80 @@ async function smart(label, sellX, taker, o, want = null) {
   check(`${label}: out == jing-out + dlmm-out + xyk-out + velar-out; amount == legs + unsold`, `${f.out} ${o.amount}`,
     `${f['jing-out'] + f['dlmm-out'] + f['xyk-out'] + f['velar-out']} ${f['jing-in'] + f['dlmm-in'] + f['xyk-in'] + f['velar-in'] + f.unsold}`);
   return { r, f, p, pre };
+}
+
+// S11 (working-tree dust fix): a limit where one venue has a few units of
+// room (dust at the limit). Velar: bisect the limit until Velar's room is
+// > 0 and dust; the call must not revert, velar-in u0, the room stays
+// unsold. DLMM: a manual DLMM sale leaves the picked pool's active bin with
+// a remainder of a few units, then a limit at that bin's price leaves a
+// dust capacity; the DLMM plan must be dropped. Logged as not reached when
+// the fork's rounding gives no dust capacity.
+async function dustLegs(sellX, taker, lim, P) {
+  console.log('S11 dust legs');
+  const s = sellX ? 'x' : 'y';
+  // Velar room as a function of the limit is monotone; find a dust room
+  const room = async (L) => (await sizing(sellX, taker, { amount: 1n, limit: L, mid: P })).v;
+  let lo = lim, hi = sellX ? lim * 2n : lim / 2n; // lo: some room or none, hi: the other side
+  let rLo = await room(lo), rHi = await room(hi);
+  if ((rLo > 0n) === (rHi > 0n)) { hi = sellX ? lim / 2n : lim * 2n; rHi = await room(hi); }
+  let found = null;
+  for (let i = 0; i < 80 && !found; i++) {
+    if ((rLo > 0n) === (rHi > 0n)) break;
+    const mid = (lo + hi) / 2n;
+    if (mid === lo || mid === hi) break;
+    const r = await room(mid);
+    if (r > 0n && dust(r, mid, sellX)) found = { L: mid, r };
+    else if ((r > 0n) === (rLo > 0n)) { lo = mid; rLo = r; } else { hi = mid; rHi = r; }
+  }
+  if (!found) { console.log('  S11 Velar: no limit with a dust Velar room on this fork (not reached)'); }
+  else {
+    const z = await sizing(sellX, taker, { amount: 1n, limit: found.L, mid: P });
+    console.log(`  S11 Velar: limit ${found.L}: rooms dlmm ${z.d}, xyk ${z.x}, velar ${z.v} (dust)`);
+    const amt = sellX ? 50_000n : 50_000_000n;
+    const have = (await wallet(taker))[s];
+    if (have < amt) await fund(s, taker, amt - have);
+    const x = await smart(`S11 Velar room ${found.r} is dust at limit ${found.L}: no revert`, sellX, taker, { amount: amt, limit: found.L, mid: P });
+    check('S11 velar-in u0, its room stays unsold', `${x.f['velar-in']} ${x.f.unsold >= found.r}`, '0 true');
+  }
+  // DLMM: leave the picked pool's active bin with a few units of the bought asset
+  const pk = await dlmmPick(sellX, 1n, 'S11 DLMM');
+  const info = fields(await evRaw(ROUTER, `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool)))) { ab: (to-uint (+ (get active-bin-id p) 500)), ip: (get initial-price p), fee: (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)) })`));
+  const bal = fields(await evRaw(ROUTER, `(unwrap-panic (contract-call? '${pk.pool} get-bin-balances u${info.ab}))`));
+  const price = uint(await evRaw(ROUTER, `(unwrap-panic (contract-call? '${DLMM_CORE} get-bin-price u${info.ip} u15 ${Number(info.ab) - 500}))`));
+  const avail = sellX ? bal['x-balance'] : bal['y-balance'];
+  const S8 = 100_000_000n;
+  let done = false;
+  for (const keep of [1n, 2n, 3n, 5n]) {
+    if (avail <= keep || done) continue;
+    const take = avail - keep;
+    const net = sellX ? (take * price + S8 - 1n) / S8 : (take * S8 + price - 1n) / price;
+    const gross = info.fee > 0n ? (net * 10_000n + (10_000n - info.fee) - 1n) / (10_000n - info.fee) : net;
+    const have = (await wallet(taker))[s];
+    if (have < gross) await fund(s, taker, gross - have);
+    const r = await tx(`S11 DLMM fixture: manual DLMM sale ${gross} to leave ~${keep} in the active bin`, taker, ROUTER, manualFn(sellX), manualArgs({ amount: gross, a: [gross, 0n, 0n] }), (v) => String(v).startsWith('(ok'));
+    const b2 = fields(await evRaw(ROUTER, `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool)))) (merge (unwrap-panic (contract-call? '${pk.pool} get-bin-balances (to-uint (+ (get active-bin-id p) 500)))) { ab: (to-uint (+ (get active-bin-id p) 500)) }))`));
+    const left = sellX ? b2['x-balance'] : b2['y-balance'];
+    console.log(`  S11 DLMM: sale in ${r.f['dlmm-in']}, active bin ${Number(b2.ab) - 500} keeps ${left}`);
+    if (b2.ab !== info.ab || left === 0n) break;
+    // a limit exactly at the active bin's price net of fee: only that bin fits
+    const Lbin = sellX ? 10_000_000_000n * S8 / price * (10_000n - info.fee) / 10_000n : 10_000_000_000n * S8 / price * 10_000n / (10_000n - info.fee);
+    for (const L of [Lbin, sellX ? Lbin - 1n : Lbin + 1n, sellX ? Lbin * 999n / 1000n : Lbin * 1001n / 1000n]) {
+      const pk2 = await dlmmPick(sellX, sellX ? 50_000n : 50_000_000n, 'S11 DLMM dust');
+      const c = uint(await evRaw(ROUTER, `(dlmm-capacity u${L} ${sellX} u${pk2.n})`, taker));
+      if (c > 0n && dust(c, L, sellX)) {
+        const amt = sellX ? 50_000n : 50_000_000n;
+        const have2 = (await wallet(taker))[s];
+        if (have2 < amt) await fund(s, taker, amt - have2);
+        const x = await smart(`S11 DLMM capacity ${c} is dust at limit ${L}: plan dropped, no revert`, sellX, taker, { amount: amt, limit: L, mid: P });
+        check('S11 dlmm-cap printed, dlmm-in u0', `${x.p['dlmm-cap']} ${x.f['dlmm-in']}`, `${c} 0`);
+        done = true; break;
+      }
+      console.log(`  S11 DLMM: limit ${L} capacity ${c} (${c > 0n ? 'not dust' : 'none'})`);
+    }
+    break;
+  }
+  if (!done) console.log('  S11 DLMM: no dust DLMM capacity reached on this fork');
 }
 
 // ============================================================ session 1 ==
@@ -227,7 +307,12 @@ async function routes() {
     const available3 = (await wallet(taker))[s];
     if (available3 < a3) await fund(s, taker, a3 - available3);
     x = await smart('S3 amount = every room + extra', sellX, taker, { amount: a3, limit: lim, mid: P });
-    check('S3 each pool to its cap, the extra stays home', `${x.f['xyk-in'] === x.pre.x} ${x.f['velar-in'] === x.pre.v} ${x.f.unsold}`, `true true ${extra + (x.pre.d - x.f['dlmm-in'])}`);
+    // each pool to its cap; a cap that is dust at the limit (a few units of
+    // room left by S2) is not sent and stays unsold with the extra
+    const xWant = dust(x.pre.x, lim, sellX) ? 0n : x.pre.x, vWant = dust(x.pre.v, lim, sellX) ? 0n : x.pre.v;
+    console.log(`  S3 rooms: dlmm ${x.pre.d}, xyk ${x.pre.x}${xWant ? '' : ' (dust)'}, velar ${x.pre.v}${vWant ? '' : ' (dust)'}`);
+    check('S3 each pool to its cap (u0 for a dust cap), the rest stays home, no revert', `${x.f['xyk-in']} ${x.f['velar-in']} ${x.f.unsold}`, `${xWant} ${vWant} ${a3 - x.f['dlmm-in'] - xWant - vWant}`);
+    await dustLegs(sellX, taker, lim, P);
 
     console.log('S4 a limit nobody respects');
     const hard = sellX ? P * 3n : P / 3n;
