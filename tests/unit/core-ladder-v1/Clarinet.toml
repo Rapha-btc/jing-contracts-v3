@@ -1,0 +1,25 @@
+[project]
+name = "unit-core-ladder-v1"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.jing-core-v6]
+path = "../../../contracts/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = "../../../contracts/jing-ladder-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.probe]
+path = ".build/probe.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.probe-alt]
+path = ".build/probe-alt.clar"
+clarity_version = 5
+epoch = "3.4"
