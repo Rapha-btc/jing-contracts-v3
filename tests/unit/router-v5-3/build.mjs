@@ -18,11 +18,11 @@ const deps = {
     '"sbtc-token"': '"token"',
     "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2": local('asset-stx'),
     "'SP1Y5YSTAHZ88XYK1VPDH24GY0HPX5J4JECTMY4A1.wstx": local('asset-stx'),
-    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2": local('dlmm'),
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2": local('dlmm-router'),
     "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15": local('dlmm'),
-    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15": local('dlmm'),
-    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-3-bps-15": local('dlmm'),
-    "'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1": local('dlmm'),
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15": local('dlmm-2'),
+    "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-3-bps-15": local('dlmm-3'),
+    "'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1": local('dlmm-router'),
     "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2": local('xyk'),
     "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1": local('xyk'),
     "'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070": local('velar'),
@@ -40,7 +40,7 @@ for (const [name,path] of Object.entries(paths)) {
   fs.writeFileSync(`${out}/${name}.clar`,generated);
   sources[name] = {path,sha256:sha(source),generatedSha256:sha(generated),substitutions:deps[name]};
 }
-const fixtures = ['tests/rv/sip-010-trait.clar','tests/rv/mock-wstx.clar','tests/rv/mock-jing-ladder.clar','tests/unit/v6-3/token.clar','tests/unit/v6-3/oracle.clar',`${dir}/venues.clar`];
+const fixtures = ['tests/rv/sip-010-trait.clar','tests/rv/mock-wstx.clar','tests/rv/mock-jing-ladder.clar','tests/unit/v6-3/token.clar','tests/unit/v6-3/oracle.clar',`${dir}/venues.clar`,`${dir}/dlmm-router.clar`];
 fs.writeFileSync(`${out}/source.json`,JSON.stringify({sources,fixtures:Object.fromEntries(fixtures.map(p=>[p,sha(fs.readFileSync(p))]))},null,2)+'\n');
 fs.mkdirSync(`${dir}/settings`,{recursive:true});
 fs.copyFileSync('settings/Devnet.toml',`${dir}/settings/Devnet.toml`);

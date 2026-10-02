@@ -10,6 +10,9 @@ export const P = 1_000_000_000_000n, SCALE = 10_000_000_000n;
 // Placeholder EVM envelope and payload; the local oracle controls decoded feeds.
 export const U = Cl.uint, N = Cl.none(), UPDATE = Cl.some(Cl.bufferFromHex('00'.repeat(72)));
 export const venues = ['dlmm','xyk','velar'] as const;
+// DLMM pool fixtures: v-1 = dlmm, v-2 = dlmm-2, v-3 = dlmm-3 (all venues.clar).
+export const pools = ['dlmm','dlmm-2','dlmm-3'] as const;
+const fixtures = [...venues,'dlmm-2','dlmm-3'];
 export const principal = (c:string) => `${owner}.${c}`;
 export const token = Cl.principal(principal('token')), stx = Cl.principal(principal('asset-stx'));
 export function value(cv:any):any {
@@ -75,9 +78,9 @@ export const wallet = (s:Side) => ({sold:balance(s),bought:balance(other(s))});
 // Snapshot every variable plus book history/maps and core equity for all test
 // accounts. A rejected transaction advances the clock but must restore state.
 export function state() {
-  const sources:Record<string,string>={market:'contracts/markets-sbtc-stx-jing-v6-3.clar','jing-core-v6':'contracts/jing-core-v6.clar',...Object.fromEntries(venues.map(v=>[v,'tests/unit/router-v5-3/venues.clar']))};
+  const sources:Record<string,string>={market:'contracts/markets-sbtc-stx-jing-v6-3.clar','jing-core-v6':'contracts/jing-core-v6.clar',...Object.fromEntries(fixtures.map(v=>[v,'tests/unit/router-v5-3/venues.clar']))};
   const variables=Object.fromEntries(Object.entries(sources).map(([c,p])=>[c,Object.fromEntries([...fs.readFileSync(p,'utf8').matchAll(/\(define-data-var\s+([^\s]+)/g)].map(m=>[m[1],simnet.getDataVar(c,m[1])]))]));
-  const people=[...accounts.values(),...['market','router',...venues].map(principal)];
+  const people=[...accounts.values(),...['market','router',...fixtures].map(principal)];
   const maps:Record<string,unknown>={};
   const read=(name:string,key:ClarityValue)=>{try{return simnet.getMapEntry('market',name,key);}catch(e){if(String(e)==='value not found')return N;throw e;}};
   const cycle=Number(ro('market','get-current-cycle'));

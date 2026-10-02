@@ -44,6 +44,21 @@ path = "venues.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.dlmm-2]
+path = "venues.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm-3]
+path = "venues.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm-router]
+path = "dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.xyk]
 path = "venues.clar"
 clarity_version = 5

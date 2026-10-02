@@ -16,7 +16,7 @@ it is separate from the [320 market tests](../v6-3/README.md),
 [RV campaigns](../../rv/v6-3/README.md), and Stxer integration checks.
 
 The isolated `clarinet check --manifest-path tests/unit/router-v5-3/Clarinet.toml`
-also passes: **11 contracts checked**, with unused-binding/analysis warnings
+also passes: **14 contracts checked**, with unused-binding/analysis warnings
 and no errors.
 
 ## What runs
@@ -41,7 +41,13 @@ External dependencies are controlled fixtures:
   The actual market performs price validation, rebate calculation and execution.
 - The ladder supplies membership/seat information; no rung executes here.
 - DLMM, XYK and Velar are **external venue fixtures**, not their production
-  contracts. Each has its own balances and state. CP swaps use constant-product
+  contracts. Each has its own balances and state. The router's three DLMM
+  pools map to three separate `venues.clar` deployments (`dlmm-pool-stx-sbtc-v-1-bps-15`
+  = `dlmm`, `-v-2-` = `dlmm-2`, `-v-3-` = `dlmm-3`), each with its own bins,
+  quote and funded ledger. `dlmm-router.clar` stands in for the DLMM swap
+  router and core: it forwards a swap to the pool the router names (no
+  as-contract, so the caller stays tx-sender) and prices bins with the
+  `venues.clar` formula. CP swaps use constant-product
   reserve arithmetic, including fees and integer rounding; DLMM uses the
   configured bin price, fee and partial-input cap. Neither prices a swap from
   the router's requested minimum. The minimum only accepts or rejects the
@@ -58,6 +64,20 @@ records current-source checks against those dependencies and their fixture limit
 
 ## Cases checked in both directions
 
+`dlmm-pick.test.ts` adds 38 cases for the deepest-pool pick (`df091b8`). Each
+pool quotes its own bin price, so the output, the printed `dlmm-cap` and each
+pool's swap counter show which pool ran. Depth is the pool's real ledger
+balance of the asset the leg buys (STX when selling sBTC, sBTC when selling
+STX). Per direction, both the manual leg and the smart capacity walk + swap
+cover: pool 1, 2 and 3 strictly deepest; ties 1 = 2, 2 = 3, 1 = 3 and a
+three-way tie (each to the lower number); a one-sided pool holding only the
+sold asset skipped in favour of the only pool holding the bought asset, and
+the same pool used from its full side; and a wallet-minimum rollback after
+the picked pool swapped. Negative controls on a local copy (reverted after,
+never committed): always pool 2 (the pre-`df091b8` behaviour) fails 24/38,
+ties to the higher number fails 16/38, depth read on the sold asset fails
+20/38, capacity read from pool 1 regardless of the pick fails 10/38.
+
 `rebate-age.test.ts` adds 24 cases for the September 30 age-sizing fix:
 capacity-capped fills with independent BTC/STX feed ages of 0, 30, 31 and 79
 seconds, and input budgets just below/at the true aged minimum on both sides.
@@ -65,8 +85,8 @@ The market now grosses up its `net-cap` using the older configured feed's age
 and returns `rebate-bps` with `gross-cap`. The router passes the update and
 uses both returned values. Eight quote/negative cases cover failed timestamp
 hints, future timestamps and stale-feed fallback through the public market
-getter; the router has no private timestamp parser. The full suite passes **185/185**, with unchanged
-coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
+getter; the router has no private timestamp parser. The full suite then passed **185/185**; with the
+pool-pick cases it passes **223/223**, with unchanged coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
 
 Manual routes cover the real book's net input, maker-price output, fees, rebates,
 sub-minimum refunds, all three fallback destinations, pro-rata fallback minimums,
@@ -132,11 +152,11 @@ debit is 9 sats. All positions and market custody end at zero. The test accepts
 All router-suite cases call public or read-only entrypoints. Timestamp-hint
 boundaries are checked through the market's read-only capacity getter.
 
-- Line 774 / branch `774,0,1`: `cp-split`'s zero-total division guard. Taking it
+- Line 804 / branch `804,0,1`: `cp-split`'s zero-total division guard. Taking it
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Lines 1141–1142: the literal principal and function name inside the read-only
+- Lines 1227–1228: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.
