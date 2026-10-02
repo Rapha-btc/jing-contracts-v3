@@ -15,16 +15,10 @@ control for `ee2edde` (on a local copy, reverted, never committed): with
 cases fail here and 13 of the 24 router `rebate-age` cases fail.
 
 Mirror check: `npm run check:v6-3-mirrors` compares the token streams of the
-deploy copy and its `-formatted` / `-followAll` mirrors (comments, whitespace
-and tuple trailing commas ignored). `-formatted` is in sync. **`-followAll`
-is not**: the first difference is at deploy line 1212 (the y-side
-admission helper: the mirror asserts the minimum on `existing + carry +
-amount` up front; the deploy copy checks `existing + parked + amount` later),
-and the copies also differ in the queue-full handling of `deposit-token-x/y`
-and in the pending-withdrawal paths. The token streams first differ at
-`19ef603` (2026-09-23); later market commits edited the mirror without
-restoring parity. Clarinet tests run only the deploy copy. The check is a separate
-script, not part of the `npm test` gate, until the mirror is resynced.
+deploy copy and its `-formatted` mirror (comments, whitespace and tuple
+trailing commas ignored); it is in sync. The `-followAll` copy had drifted
+since `19ef603` (2026-09-23) and was deleted on 2026-10-02: only the deploy
+copy and `-formatted` are kept. Clarinet tests run only the deploy copy.
 
 On 2026-09-30, `npm test` passed **320/320 tests** against the
 market-owned age-aware capacity quote. The 33 new cases in

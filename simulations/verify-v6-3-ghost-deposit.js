@@ -25,7 +25,7 @@
 //          patched/followAll: asserted correct (no ghost, parked kept, solvent)
 // Modes: prefix = git 24f3e23 markets-sbtc-stx-jing-v6-3.clar;
 //        patched = working-tree markets-sbtc-stx-jing-v6-3.clar;
-//        followAll = working-tree markets-sbtc-stx-jing-v6-3-followAll.clar.
+//        followAll = markets-sbtc-stx-jing-v6-3-followAll.clar at cdbdec4 (since deleted).
 // followAll is the pre-wave-1 baseline copy: its settle uses try! (no u1010
 // catch, so no ghost is possible) and its cancel ignores pending escrow, so
 // the "ghost" phase is EXPECTED to fail there (settle errs u1010, escrow stays
@@ -66,7 +66,8 @@ const FILL = { y: 2 * U.y, x: 2 * U.x };
 const SOURCES = {
   prefix: () => execFileSync('git', ['show', '24f3e23:contracts/markets-sbtc-stx-jing-v6-3.clar'], { cwd: new URL('..', import.meta.url) }).toString(),
   patched: () => fs.readFileSync(new URL('../contracts/markets-sbtc-stx-jing-v6-3.clar', import.meta.url), 'utf8'),
-  followAll: () => fs.readFileSync(new URL('../contracts/markets-sbtc-stx-jing-v6-3-followAll.clar', import.meta.url), 'utf8'),
+  // deleted from the tree on 2026-10-02; read from the last commit that had it
+  followAll: () => execFileSync('git', ['show', 'cdbdec4:contracts/markets-sbtc-stx-jing-v6-3-followAll.clar'], { cwd: new URL('..', import.meta.url) }).toString(),
 };
 // Deploy payloads cap at 100 KB: an oversize source (followAll) is sent with
 // full-line comments and indentation stripped; the code itself is unchanged.

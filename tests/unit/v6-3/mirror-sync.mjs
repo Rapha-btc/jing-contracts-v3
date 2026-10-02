@@ -1,5 +1,5 @@
 // The deployed market is the de-indented markets-sbtc-stx-jing-v6-3.clar.
-// Its -formatted and -followAll copies must be the same program: same token
+// Its -formatted copy must be the same program: same token
 // stream once comments, whitespace and tuple trailing commas are ignored.
 // Prints the first divergence per copy (with line numbers) and exits 1 if any.
 //   node tests/unit/v6-3/mirror-sync.mjs
@@ -24,7 +24,7 @@ function tokens(path) {
 }
 const reference = tokens(`${base}.clar`);
 let failed = false;
-for (const copy of ['-formatted', '-followAll']) {
+for (const copy of ['-formatted']) {
   const other = tokens(`${base}${copy}.clar`);
   const n = Math.min(reference.length, other.length);
   let k = 0; while (k < n && reference[k][0] === other[k][0]) k++;
