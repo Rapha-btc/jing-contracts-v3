@@ -916,19 +916,39 @@
       ))
     )
     (if (is-eq (get bin-step info) DLMM_BIN_STEP)
+      (let (
+          ;; only the factors of the bins the walk can reach ride in the
+          ;; fold: carrying all 1001 through 30 steps costs more than the walk
+          (aid (to-uint (+ (get active-bin-id info) DLMM_CENTER_BIN)))
+          (lo (if sell-sbtc
+            aid
+            (if (>= aid u29)
+              (- aid u29)
+              u0
+            )
+          ))
+          (hi (if sell-sbtc
+            (if (<= (+ aid u30) u1001)
+              (+ aid u30)
+              u1001
+            )
+            (+ aid u1)
+          ))
+        )
       (get out
         (fold dlmm-out-step DLMM_WALK_BINS {
           pool: pool,
           bin: (get active-bin-id info),
           up: sell-sbtc,
           initial-price: (get initial-price info),
-          factors: factors,
+          factors: (unwrap-panic (slice? factors lo hi)),
+          base: lo,
           fee: fee,
           left: amount,
           out: u0,
           done: false,
         })
-      )
+      ))
       u0
     )
   )
@@ -942,6 +962,7 @@
       up: bool,
       initial-price: uint,
       factors: (list 1001 uint),
+      base: uint,
       fee: uint,
       left: uint,
       out: uint,
@@ -953,7 +974,7 @@
     (let (
         (id (to-uint (+ (get bin acc) DLMM_CENTER_BIN)))
         (price (/ (* (get initial-price acc)
-          (unwrap-panic (element-at? (get factors acc) id))
+          (unwrap-panic (element-at? (get factors acc) (- id (get base acc))))
         ) DLMM_PRICE_SCALE))
         (bal (dlmm-bin-balances (get pool acc) id))
         ;; up = selling sBTC (y) for STX (x); down = selling STX for sBTC
