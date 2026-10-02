@@ -30,7 +30,11 @@
 //     dispatch holds nothing; conservation per asset (in - out = held + fees)
 //  6. refusals through the dispatch: wrong side (deposit u7104 / exit u7108),
 //     duplicate legs (u7105), 11 legs (the (list 10) type), an intermediary
-//     contract (u7106), zero / total mismatch / empty; each moves nothing
+//     contract (u7106), zero / total mismatch / empty; each moves nothing.
+//     Also an error on a first leg (the next leg re-raises it), a leg over
+//     the total, a zero total, a rung's own deposit / withdraw refusal, an
+//     unregistered rung on exit, and get-position of a sole member read
+//     through a probe transaction
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {
@@ -58,7 +62,14 @@ const tupleCV = (f) => rawTupleCV(Object.fromEntries(Object.entries(f).sort(([a]
 const T = { x: P_(SBTC), y: P_(WSTX) };
 const A = { x: stringAsciiCV('sbtc-token'), y: stringAsciiCV('wstx') };
 const mk = (n) => getAddressFromPrivateKey(String(n).repeat(64).slice(0, 64) + '01', 'mainnet');
-const src = (f) => fs.readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
+// --templates: deploy the faktory-dao deploy templates (comment-stripped,
+// formatted) instead of the repository sources.
+const TEMPLATES = process.argv.includes('--templates');
+const src = (f) => {
+  if (!TEMPLATES) return fs.readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
+  const t = fs.readFileSync(new URL(`../../faktory-dao/backend/server/utils/${f}-template.ts`, import.meta.url), 'utf8');
+  return t.slice(t.indexOf('= `') + 3, t.lastIndexOf('`'));
+};
 const Q = 10n ** 18n; // proceeds precision and total-share ceiling
 const S = 10n ** 12n, MINT_FLOOR = 10n ** 9n, RESCALE = 1000n, DAY = 86400n, BIG = 10n ** 15n;
 const PX = 10n ** 10n; // PRICE_PRECISION * DECIMAL_FACTOR
@@ -886,6 +897,30 @@ async function main() {
     catch (e) { outcome = `rejected: ${String(e.message).slice(0, 300)}`; }
     check('deposit-buy with 11 legs: refused by the (list 10) argument type before any code runs', /^rejected/.test(outcome) || (/^included/.test(outcome) && !/vm undefined|vm null/.test(outcome)), outcome);
     await checkpoint('11-leg batch (nothing moved)');
+  }
+  // Failure arms the refusals above never took (stxer failure-arms on the
+  // final bytes): an error on a leg that is NOT the last, so the next leg's
+  // (try! acc) re-raises it; a leg over the remaining total; a zero total;
+  // a rung's own deposit refusal; an unregistered rung on exit; a zero or
+  // empty exit; a rung's own withdraw refusal on the first leg.
+  await refused('deposit-buy naming a sell rung on the FIRST leg (the second leg re-raises it)', UA, DISPATCH, 'deposit-buy', [uintCV(2000), entries([{ r: SELL[1], amt: 1000n }, { r: BUY[1], amt: 1000n }])], 7104);
+  await refused('deposit-buy whose first leg is over the total', UA, DISPATCH, 'deposit-buy', [uintCV(1000), entries([{ r: BUY[1], amt: 1500n }, { r: BUY[2], amt: 1000n }])], 7102);
+  await refused('deposit-buy with a zero total', UA, DISPATCH, 'deposit-buy', [uintCV(0), entries([{ r: BUY[1], amt: 1000n }])], 7102);
+  await refused('deposit-buy whose first rung refuses the deposit (50 sats < the rung MIN_DEPOSIT 100: ERR_TOO_SMALL)', UA, DISPATCH, 'deposit-buy', [uintCV(1050), entries([{ r: BUY[1], amt: 50n }, { r: BUY[2], amt: 1000n }])], 7005);
+  await refused('withdraw-buy naming a contract the ladder never registered (the intermediary)', UA, DISPATCH, 'withdraw-buy', [entries([{ r: { id: PROXY }, amt: 100n }]), noneCV()], 7108);
+  await refused('withdraw-buy with a zero leg', UA, DISPATCH, 'withdraw-buy', [entries([{ r: BUY[5], amt: 0n }]), noneCV()], 7103);
+  await refused('withdraw-buy with a zero FIRST leg (the second leg re-raises it in validation)', UA, DISPATCH, 'withdraw-buy', [entries([{ r: BUY[5], amt: 0n }, { r: BUY[6], amt: 100n }]), noneCV()], 7103);
+  await refused('withdraw-buy with no legs', UA, DISPATCH, 'withdraw-buy', [listCV([]), noneCV()], 7101);
+  await refused('withdraw-buy by a member with no buy position: the first rung refuses (ERR_NO_POSITION), the second leg re-raises it', UB, DISPATCH, 'withdraw-buy', [entries([{ r: BUY[5], amt: 100n }, { r: BUY[6], amt: 100n }]), noneCV()], 7006);
+  // get-position for a sole member of the current epoch (the rung reports
+  // all of its input: market size + held), read inside a transaction
+  for (const [rs, who, k] of [[BUY, UA, 9], [SELL, UB, 9]]) {
+    const r = rs[k], mdl = md(r);
+    check(`${r.name}: fixture: one member, current epoch`, mdl.m.mem === 1n && mdl.m.pos.get(who)?.epoch === mdl.m.ep, `members ${mdl.m.mem}`);
+    const probe = `${DEP}.posprobe-${r.side}-${r.bps}`;
+    await deploy(`posprobe-${r.side}-${r.bps}`, `(define-public (pos (who principal)) (ok (contract-call? '${r.id} get-position who)))`);
+    await txExpect(`${r.name}: get-position of its sole member through a probe tx == model (market size + held)`, who, probe, 'pos', [P_(who)], { ok: mdl.getPosition(who) });
+    await checkpoint(`${r.name} get-position probe (nothing moved)`);
   }
 
   // ---- 3. settlement ----

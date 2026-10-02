@@ -208,11 +208,66 @@ with real signed Lazer prices; no injected storage or contract substitutions.
 Models follow the formulas above and compare exact payouts, reserves,
 positions, custody, wallet movements and ladder events.
 
-| Harness | Checks | Simulation |
-|---|---:|---|
-| `verify-v1-core-spread-rungs.js` | 998 / 998 | [rungs](https://stxer.xyz/simulations/mainnet/36a2994e688608a9c9ad0924c23bd2da) |
-| `verify-v1-core-spread-ladder-dispatch.js` | 391 / 391 | [twenty rungs and dispatch](https://stxer.xyz/simulations/mainnet/2869b71b738b552a870810d1b55691d4) |
-| `verify-v1-small-proceeds.js` | 77 / 77 | [small fill after rescale/top-up](https://stxer.xyz/simulations/mainnet/5faf7670c9b602444f7d1229209dca76) |
+| Harness | Checks | Simulation (rerun 2026-10-01) | Previous run (same hashes) |
+|---|---:|---|---|
+| `verify-v1-core-spread-rungs.js` | 998 / 998 | [rungs](https://stxer.xyz/simulations/mainnet/c30cf48c20d11a81b6267c3a641bab13) | [36a2994e](https://stxer.xyz/simulations/mainnet/36a2994e688608a9c9ad0924c23bd2da) |
+| `verify-v1-core-spread-ladder-dispatch.js` | 461 / 461 | [twenty rungs and dispatch](https://stxer.xyz/simulations/mainnet/9dfe971744f8e79b7302a637bded10df) (391 / 391 before the new refusals: [eae80668](https://stxer.xyz/simulations/mainnet/eae80668f54c9f5c1d3aff3984ad5af8)) | [2869b71b](https://stxer.xyz/simulations/mainnet/2869b71b738b552a870810d1b55691d4) |
+| `verify-v1-small-proceeds.js` | 77 / 77 | [small fill after rescale/top-up](https://stxer.xyz/simulations/mainnet/57267ce2ef8bf3580f8e2d51dd5bd768) | [5faf7670](https://stxer.xyz/simulations/mainnet/5faf7670c9b602444f7d1229209dca76) |
+
+The 2026-10-01 rerun used the final deploy bytes listed below (rungs from
+`d8b01e4`, market from `ee2edde`). No expectation changed. The dispatch
+harness ran in its default mode (repository sources).
+
+New in the dispatch harness (section 6, 70 checks): failure arms no earlier
+refusal took. Each refusal returns the exact code and moves nothing:
+- a sell rung on the FIRST `deposit-buy` leg (u7104; the next leg's
+  `(try! acc)` re-raises it), a first leg over the total (u7102), a zero
+  total (u7102), a first rung refusing its own deposit (50 sats < the rung
+  minimum, u7005: dispatch's `try!` on the rung call and the fold);
+- `withdraw-buy` naming a contract the ladder never registered (u7108), a
+  zero leg alone and as the first of two (u7103), no legs (u7101), a member
+  with no buy position on the first of two legs (u7006: the rung refuses,
+  the next leg re-raises);
+- `get-position` of the sole member of a current epoch (buy-90 / sell-90,
+  through a probe transaction) equals the model: that branch reports all
+  of the rung's input (market size + held).
+
+### Coverage on the final bytes (before / after)
+
+"Before" = the earlier runs on these bytes (`36a2994e`, `2869b71b`,
+`5faf7670`); "after" = the 51 runs of the 2026-10-01 rerun (listed in
+[README-v6-3-coverage.md](README-v6-3-coverage.md) section 0). `--by-source`.
+
+| contract | expressions | lines (function bodies) | branch nodes full / partial / never | failure arms |
+|---|---|---|---|---|
+| `jing-buy-stx-core-spread-v1` before | 647 / 928 (69.7%) | 374 / 494 | 56 / 6 / 0 of 62 | 26 / 51 |
+| `jing-buy-stx-core-spread-v1` after | 650 / 928 (70.0%) | 375 / 494 | 57 / 5 / 0 of 62 | 26 / 51 |
+| `jing-sell-stx-core-spread-v1` before | 646 / 929 (69.5%) | 372 / 492 | 56 / 6 / 0 of 62 | 26 / 51 |
+| `jing-sell-stx-core-spread-v1` after | 649 / 929 (69.9%) | 373 / 492 | 57 / 5 / 0 of 62 | 26 / 51 |
+| `jing-ladder-dispatch` before | 166 / 267 (62.2%) | 76 / 92 | 15 / 0 / 0 of 15 | 11 / 28 |
+| `jing-ladder-dispatch` after | 166 / 267 (62.2%) | 76 / 92 | 15 / 0 / 0 of 15 | 24 / 28 |
+
+Remaining, all classified (buy line numbers; the sell rung mirrors them):
+- Partial branches (5): `epoch-payout` (L319) and `count-reserve-claim`
+  (L876) with no reserve row, the two defensive clamps (L881, L885), and
+  `settle-escrow` with no pending (L1020). Provably unreachable, as in
+  section 4 below; the clamps are the Clarinet coverage exceptions.
+- Failure arms (25 per rung): the 24 of section 4 below (sync /
+  settle-proceeds failing inside deposit, push, withdraw or claim; transfers
+  of held funds; `sync-seat` after a seated register; `pull-to-held-sats`
+  `ERR_INSUFFICIENT` or a market withdraw / cancel error), plus
+  `ERR_TOO_MANY_SHARES` (L613): total shares above 1e18 need a deposit of
+  at least 1e15 base units (shares = amount x 1e12 / index, and `sync`
+  keeps the index at or above 1e9), i.e. 10M BTC or 1B STX; no wallet on
+  the fork holds that. The Clarinet integration suite covers it with
+  minted test funds.
+- Dispatch failure arms (4): the `as-max-len?` `ERR_TOTAL` fallbacks
+  (L54, L76, L150, L175). Every list is `(list 10)` and appends at most one
+  entry per element of a `(list 10)` argument: provably unreachable.
+
+Detail: [TRACE-COVERAGE-jing-buy-stx-core-spread-v1.md](TRACE-COVERAGE-jing-buy-stx-core-spread-v1.md),
+[TRACE-COVERAGE-jing-sell-stx-core-spread-v1.md](TRACE-COVERAGE-jing-sell-stx-core-spread-v1.md),
+[TRACE-COVERAGE-jing-ladder-dispatch.md](TRACE-COVERAGE-jing-ladder-dispatch.md).
 
 The dispatch run asserts **0 sats and 0 micro-STX ownerless** across all 20
 rungs; the earlier precision-only version left 4 sats and 7 micro-STX.
