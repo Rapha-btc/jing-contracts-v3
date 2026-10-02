@@ -26,13 +26,16 @@
 //     under); fallback none (unsold == book leg, out u0, min-out u0 ok,
 //     min-out u1 -> u3002); all four legs at once; min-out one over the
 //     measured out after every leg ran -> u3002, nothing moved.
-//  P  (df091b8) the DLMM leg uses the deepest of the three Bitflow STX/sBTC
-//     pools for the asset it buys (STX when selling sBTC, sBTC when selling
-//     STX; ties to the lower number). Before each DLMM-only call the model
-//     reads the three pools, picks, and checks the router's `dlmm-pick`
-//     agrees; after it, only the picked pool moved and it paid out exactly
-//     dlmm-out of the bought asset. At the 2026-10-01 tip this picks v-1 for
-//     sBTC sales while v-2 (bin +500, one-sided) is skipped.
+//  P  (1063add) the DLMM leg uses, among the three Bitflow STX/sBTC pools
+//     holding >= 1% of the deepest pool's balance of the asset it buys (STX
+//     when selling sBTC, sBTC when selling STX), the best active-bin price for
+//     the taker; ties to the lower number. Before each DLMM-only call the
+//     model reads the pools' balances, records and the core's bin factors,
+//     picks, and checks the router's `dlmm-pick` agrees; after it, only the
+//     picked pool moved and it paid out exactly dlmm-out of the bought asset.
+//     At the 2026-10-02 tip this picks v-1 in both directions (v-2 at bin
+//     +500 is below the 1% floor for sBTC sales and quotes worse for STX
+//     sales).
 //  Every successful call: the receipt's in / out / unsold against the wallet
 //  deltas exactly, and the print equals the ok tuple plus topic / user / amount.
 import {

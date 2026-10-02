@@ -5,13 +5,16 @@ import fs from 'node:fs';
 import {isDeepStrictEqual} from 'node:util';
 import {createSimulationSession,getSimulationResult,submitSimulationSteps,callContract} from 'stxer';
 import {uintCV,noneCV,cvToString,deserializeCV} from '@stacks/transactions';
+import {dlmmPickModel,dlmmPickInputs} from './_router-v5-3-harness.js';
 const ORIGINAL='1ac1ad538ad102792f868d918b1c4fd9';
 const DEP='SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
 const ROUTER=`${DEP}.swap-router-sbtc-stx-jing-v5-3`;
 const USER='SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2';
 // The replayed failure walked dlmm-pool-stx-sbtc-v-2-bps-15 at bin +500. Since
-// df091b8 the router picks the deepest of v-1/v-2/v-3 for the asset bought;
-// the edge-step units below name pool u2 (the boundary pool) explicitly.
+// 1063add the router picks, among the pools holding >= 1% of the deepest
+// pool's balance of the asset bought, the best active-bin price for the taker
+// (modelled by the shared harness's dlmmPickModel); the edge-step units below
+// name pool u2 (the boundary pool) explicitly.
 const POOLS=[1,2,3].map(i=>`SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-${i}-bps-15`);
 const EDGE_POOL=POOLS[1];
 let sid,checks=0,passed=0;
@@ -47,10 +50,12 @@ async function main(){
  const patched=await submitSimulationSteps(sid,{steps:[{SetContractCode:[ROUTER,fs.readFileSync(new URL('../contracts/swap-router-sbtc-stx-jing-v5-3.clar',import.meta.url),'utf8'),5]}]});
  check('install amended router in fork',JSON.stringify(patched.steps[0]),v=>!v.includes('"Err"'));
  await ev('exact boundary state',`(get active-bin-id (unwrap-panic (contract-call? '${EDGE_POOL} get-pool)))`,'500');
- // Model the pick for an sBTC sale: most STX, ties to the lower number.
- const depths=(await ev('pool STX depths',`(list ${POOLS.map(p=>`(stx-get-balance '${p})`).join(' ')})`,v=>v.startsWith('(list'))).match(/u\d+/g).map(x=>BigInt(x.slice(1)));
- const pick=depths[0]>=depths[1]&&depths[0]>=depths[2]?1:depths[1]>=depths[2]?2:3;
- await ev(`router dlmm-pick for an sBTC sale == model (STX ${depths.join(' / ')})`,'(dlmm-pick true)',`u${pick}`);
+ // Model the pick for an sBTC sale from the pools' STX, their active bins and
+ // the core's factor list (1063add rule), checked against the router.
+ const evv=async code=>{const r=await submitSimulationSteps(sid,{steps:[{Eval:[DEP,'',ROUTER,code]}]});return r.steps[0].Eval?.Ok?cvToString(deserializeCV(r.steps[0].Eval.Ok)):JSON.stringify(r.steps[0]);};
+ const {depths,quotes}=await dlmmPickInputs(evv,true,check,'pick inputs');
+ const pm=dlmmPickModel(true,depths,quotes);const pick=pm.n;
+ await ev(`router dlmm-pick for an sBTC sale == model (STX ${depths.join(' / ')}; quotes ${quotes.join(' / ')}; eligible ${pm.e.join(',')})`,'(dlmm-pick true)',`u${pick}`);
  const before=await ev('wallet before reported call',wallet,v=>v.startsWith('(tuple'));
  const args=[uintCV(1000),uintCV(20000000000000n),noneCV(),uintCV(27000000000000n),uintCV(1)];
  const tx=await callContract(sid,{sender:USER,contract:ROUTER,functionName:'smart-swap-sbtc-for-stx',functionArgs:args,fee:0});

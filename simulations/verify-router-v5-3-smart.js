@@ -339,8 +339,9 @@ async function edges() {
   check('E1 DLMM took it at fee 0', String(x.f['dlmm-in']), '20000000');
 
   console.log('E2 push the picked pool to bin +500 with manual DLMM legs (sBTC sales)');
-  // Each sale drains the picked pool's STX; once another pool holds more STX
-  // the router moves to it. Keep selling until the pool it picks sits at +500.
+  // Each sale drains the picked pool's STX and raises its active-bin price;
+  // once another eligible pool (>= 1% of the deepest STX balance) quotes
+  // lower, the router moves to it. Keep selling until the pool it picks sits at +500.
   let partial = 0, pk = await dlmmPick(true, 'E2 start');
   for (let i = 0; i < 40 && (await activeOf(pk.pool)) < 500; i++) {
     const amount = 200_000_000n;

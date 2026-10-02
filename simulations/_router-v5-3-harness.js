@@ -22,8 +22,10 @@ export const ROUTER = `${DEP}.swap-router-sbtc-stx-jing-v5-3`;
 export const PROBE = `${DEP}.rtrprobe-v1`;
 export const SBTC = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
 export const WSTX = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2';
-// df091b8: each DLMM leg uses the pool holding the most of the asset it buys
-// (STX when selling sBTC, sBTC when selling STX), ties to the lower number.
+// 1063add: each DLMM leg uses, among the pools holding at least 1% of the
+// deepest pool's balance of the asset it buys (STX when selling sBTC, sBTC
+// when selling STX), the one whose active bin quotes the taker best; ties to
+// the lower number (`dlmm-pick`, modelled by `dlmmPickModel` below).
 export const DLMM_POOLS = [1, 2, 3].map((i) => `SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-${i}-bps-15`);
 export const XYK_POOL = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1';
 export const VELAR_POOL = 'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070';
@@ -168,16 +170,46 @@ export async function printAfter(stamp) {
   }
   throw new Error(`no newer signed feed after ${stamp}`);
 }
-// The DLMM pool a leg will use, modelled from the three pools' balances of
-// the asset the leg buys (ties to the lower number), checked against the
-// router's own `dlmm-pick`. -> { n, pool, depths }
-export async function dlmmPick(sellSbtc, label = 'DLMM pick') {
+// The DLMM pool a leg will use (router `dlmm-pick` since 1063add), modelled
+// from fork reads: each pool's balance of the asset the leg buys (`depths`),
+// its `get-pool-for-swap` record and the core's bin-factor list for step 15.
+// Eligible: balance > 0 and >= max / 100. Fewer than two eligible: the
+// eligible one (v-2, then v-3, else u1). Otherwise the best active-bin price
+// for the taker, price = initial-price * factor[active-bin + 500] / 1e8 (only
+// for bin-step 15; another step has no quote and never wins): an sBTC sale
+// wants the lowest, an STX sale the highest; ties to the lower number.
+export function dlmmPickModel(sellSbtc, depths, quotes) {
+  const max = depths.reduce((a, b) => (b > a ? b : a), 0n), floor = max / 100n;
+  const e = depths.map((d) => d > 0n && d >= floor);
+  const nElig = e.filter(Boolean).length;
+  if (nElig < 2) return { n: e[1] ? 2 : e[2] ? 3 : 1, e, priced: false };
+  const q = quotes.map((x, j) => (e[j] ? x : null));
+  const better = (a, b) => (a == null ? false : b == null ? true : sellSbtc ? a < b : a > b);
+  const n = !better(q[1], q[0]) && !better(q[2], q[0]) ? 1 : !better(q[2], q[1]) ? 2 : 3;
+  return { n, e, priced: true };
+}
+// Read what the router reads for a pick. `evalFn(code)` evaluates Clarity on
+// the fork. Each pool's factor-based price is checked against the core's own
+// `get-bin-price` (the router inlines it). -> { depths, quotes, pools }
+export const DLMM_CORE_ID = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
+export async function dlmmPickInputs(evalFn, sellSbtc, checkFn = check, label = 'DLMM pick') {
   const depth = (d) => sellSbtc ? `(stx-get-balance '${d})` : `(unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`;
-  const depths = [...String(await evRaw(MARKET, `(list ${DLMM_POOLS.map(depth).join(' ')})`)).matchAll(/u(\d+)/g)].map((m) => BigInt(m[1]));
-  let n = 1;
-  if (!(depths[0] >= depths[1] && depths[0] >= depths[2])) n = depths[1] >= depths[2] ? 2 : 3;
-  check(`${label}: router dlmm-pick (${sellSbtc ? 'sBTC sale, STX depth' : 'STX sale, sBTC depth'} ${depths.join(' / ')}) == model`, await evRaw(ROUTER, `(dlmm-pick ${sellSbtc})`), `u${n}`);
-  return { n, pool: DLMM_POOLS[n - 1], depths };
+  const v = String(await evalFn(`(let ((f (unwrap-panic (unwrap-panic (contract-call? '${DLMM_CORE_ID} get-bin-factors-by-step u15)))))
+    (list ${DLMM_POOLS.map((d) => `(let ((p (unwrap-panic (contract-call? '${d} get-pool-for-swap ${!sellSbtc})))) { depth: ${depth(d)}, ip: (get initial-price p), bs: (get bin-step p), ab: (get active-bin-id p), f: (default-to u0 (element-at? f (to-uint (+ (get active-bin-id p) 500)))), core: (unwrap-panic (contract-call? '${DLMM_CORE_ID} get-bin-price (get initial-price p) (get bin-step p) (get active-bin-id p))) })`).join(' ')}))`));
+  const pools = [...v.matchAll(/\(tuple \(ab (-?\d+)\) \(bs u(\d+)\) \(core u(\d+)\) \(depth u(\d+)\) \(f u(\d+)\) \(ip u(\d+)\)\)/g)]
+    .map((m) => ({ ab: Number(m[1]), bs: BigInt(m[2]), core: BigInt(m[3]), depth: BigInt(m[4]), f: BigInt(m[5]), ip: BigInt(m[6]) }));
+  if (pools.length !== 3) throw new Error(`${label}: unexpected pick read ${v.slice(0, 400)}`);
+  for (const p of pools) p.price = p.bs === 15n ? p.ip * p.f / 100_000_000n : null;
+  checkFn(`${label}: factor-list price == core get-bin-price for every bps-15 pool (${pools.map((p) => `bin ${p.ab} ${p.price}`).join(' / ')})`,
+    pools.every((p) => p.price == null || p.price === p.core), true);
+  return { depths: pools.map((p) => p.depth), quotes: pools.map((p) => p.price), pools };
+}
+// The model checked against the router's own `dlmm-pick`. -> { n, pool, depths, quotes, e, priced }
+export async function dlmmPick(sellSbtc, label = 'DLMM pick') {
+  const { depths, quotes, pools } = await dlmmPickInputs((code) => evRaw(MARKET, code), sellSbtc, check, label);
+  const m = dlmmPickModel(sellSbtc, depths, quotes);
+  check(`${label}: router dlmm-pick (${sellSbtc ? 'sBTC sale, STX depth' : 'STX sale, sBTC depth'} ${depths.join(' / ')}; eligible ${m.e.map((x, j) => (x ? `v-${j + 1}` : '')).filter(Boolean).join(',') || 'none'}${m.priced ? `; quotes ${quotes.join(' / ')}` : ''}) == model`, await evRaw(ROUTER, `(dlmm-pick ${sellSbtc})`), `u${m.n}`);
+  return { n: m.n, pool: DLMM_POOLS[m.n - 1], depths, quotes, e: m.e, priced: m.priced, pools };
 }
 export async function forkClock() { return Number(uint(await evRaw(MARKET, 'stacks-block-time'))); }
 
