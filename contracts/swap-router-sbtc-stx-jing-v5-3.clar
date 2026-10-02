@@ -83,8 +83,9 @@
 ;;            between them: on 2026-09-04 v-1 held ~0.007 BTC and v-2 ~0.86 BTC
 ;;            and 1.25M STX; on 2026-10-01 v-1 held 465k STX and 5.9 BTC while
 ;;            v-2 had 0.0008 STX left (price out of its range, one-sided). Each
-;;            DLMM leg uses the pool holding the most of the asset it buys
-;;            (`dlmm-pick`), so a one-sided pool is skipped on its empty side.
+;;            DLMM leg uses the pool that pays the most for the leg's amount,
+;;            from its bins near the active one (`dlmm-pick`), so neither a
+;;            one-sided pool nor an empty active bin can win the leg.
 ;;   u2 XYK   core   SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2
 ;;            pool   .xyk-pool-sbtc-stx-v-1-1 (~0.45 BTC, 136k STX); called
 ;;            direct, not via xyk-swap-helper (aggregator fee, see xyk-swap)
@@ -255,27 +256,51 @@
 ;; when the bins run out inside DLMM_MAX_STEPS); XYK and Velar are all or
 ;; nothing, so `in` is `amount`.
 
+;; One DLMM sale on the given pool (u1/u2/u3): selling sBTC is y for x,
+;; selling STX is x for y (x = STX, y = sBTC).
+(define-private (dlmm-sell
+    (pool uint)
+    (sell-sbtc bool)
+    (amount uint)
+    (min-received uint)
+  )
+  (if sell-sbtc
+    (if (is-eq pool u2)
+      (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_2
+        WSTX SBTC amount min-received DLMM_MAX_STEPS none
+      )
+      (if (is-eq pool u3)
+        (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_3
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+        (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_1
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+      )
+    )
+    (if (is-eq pool u2)
+      (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_2
+        WSTX SBTC amount min-received DLMM_MAX_STEPS none
+      )
+      (if (is-eq pool u3)
+        (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_3
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+        (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_1
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+      )
+    )
+  )
+)
+
 (define-private (amm-sell-sbtc
     (amount uint)
     (min-received uint)
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (let ((pool (dlmm-pick true)))
-      (if (is-eq pool u2)
-        (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_2
-          WSTX SBTC amount min-received DLMM_MAX_STEPS none
-        )
-        (if (is-eq pool u3)
-          (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_3
-            WSTX SBTC amount min-received DLMM_MAX_STEPS none
-          )
-          (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_1
-            WSTX SBTC amount min-received DLMM_MAX_STEPS none
-          )
-        )
-      )
-    )
+    (dlmm-sell (dlmm-pick true amount) true amount min-received)
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
@@ -299,21 +324,7 @@
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (let ((pool (dlmm-pick false)))
-      (if (is-eq pool u2)
-        (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_2
-          WSTX SBTC amount min-received DLMM_MAX_STEPS none
-        )
-        (if (is-eq pool u3)
-          (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_3
-            WSTX SBTC amount min-received DLMM_MAX_STEPS none
-          )
-          (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_1
-            WSTX SBTC amount min-received DLMM_MAX_STEPS none
-          )
-        )
-      )
-    )
+    (dlmm-sell (dlmm-pick false amount) false amount min-received)
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
@@ -835,14 +846,17 @@
 ))
 
 ;; The DLMM pool for a leg: among the pools holding a fair share of the asset
-;; the leg buys (at least 1% of the deepest pool's balance, so a dust remainder
-;; cannot win on price alone), the one whose active bin quotes the taker best
-;; (selling sBTC buys STX: the fewest sats per STX; selling STX buys sBTC: the
-;; most). A pool's balance says nothing about its price: an out-of-range pool
-;; can hold the most of an asset while quoting far off the market. With a
-;; single eligible pool no price is read. Ties go to the lower number; with no
-;; pool holding the asset, u1 (the leg then fills nothing, as before).
-(define-private (dlmm-pick (sell-sbtc bool))
+;; the leg buys (at least 1% of the deepest pool's balance, so a dust pool is
+;; not walked), the one that pays the most for `amount`. Each candidate's bins
+;; are walked from its active bin (`dlmm-out`), so the comparison is on what
+;; the pool actually holds near its price: an empty active bin, or a pool
+;; that is out of range, cannot win on a quote it cannot fill. With a single
+;; eligible pool nothing is walked. Ties go to the lower number; with no pool
+;; holding the asset, u1 (the leg then fills nothing).
+(define-private (dlmm-pick
+    (sell-sbtc bool)
+    (amount uint)
+  )
   (let (
       (d1 (dlmm-depth DLMM_POOL_1 sell-sbtc))
       (d2 (dlmm-depth DLMM_POOL_2 sell-sbtc))
@@ -856,17 +870,17 @@
       (if e2 u2 (if e3 u3 u1))
       (let (
           ;; all three pools are bps-15: one read of the core's factor list
-          ;; prices every active bin locally (core get-bin-price, inlined)
+          ;; prices every bin locally (core get-bin-price, inlined)
           (factors (unwrap-panic (unwrap-panic
             (contract-call? DLMM_CORE get-bin-factors-by-step DLMM_BIN_STEP)
           )))
-          (q1 (if e1 (dlmm-quote (unwrap-panic (contract-call? DLMM_POOL_1 get-pool-for-swap (not sell-sbtc))) factors) none))
-          (q2 (if e2 (dlmm-quote (unwrap-panic (contract-call? DLMM_POOL_2 get-pool-for-swap (not sell-sbtc))) factors) none))
-          (q3 (if e3 (dlmm-quote (unwrap-panic (contract-call? DLMM_POOL_3 get-pool-for-swap (not sell-sbtc))) factors) none))
+          (o1 (if e1 (dlmm-out u1 amount sell-sbtc factors) u0))
+          (o2 (if e2 (dlmm-out u2 amount sell-sbtc factors) u0))
+          (o3 (if e3 (dlmm-out u3 amount sell-sbtc factors) u0))
         )
-        (if (and (not (dlmm-better q2 q1 sell-sbtc)) (not (dlmm-better q3 q1 sell-sbtc)))
+        (if (and (>= o1 o2) (>= o1 o3))
           u1
-          (if (not (dlmm-better q3 q2 sell-sbtc))
+          (if (>= o2 o3)
             u2
             u3
           )
@@ -878,47 +892,111 @@
 
 (define-constant DLMM_BIN_STEP u15)
 
-;; active-bin price of a pool, as core get-bin-price computes it
-(define-private (dlmm-quote
-    (p {
-      pool-id: uint,
-      pool-name: (string-ascii 32),
-      core-address: principal,
-      fee-address: principal,
-      x-token: principal,
-      y-token: principal,
-      bin-step: uint,
-      initial-price: uint,
-      active-bin-id: int,
-      protocol-fee: uint,
-      provider-fee: uint,
-      variable-fee: uint,
-    })
+;; What `amount` buys in `pool`, walking its bins from the active one (at most
+;; DLMM_WALK_BINS, as the capacity walk): each bin pays out what it holds of
+;; the bought asset for its input (fee included); the bin that runs the input
+;; out pays the rest at its own price. An estimate for ranking pools; the
+;; swap itself keeps the caller's minimum. A pool with another bin step is not
+;; priced (u0).
+(define-private (dlmm-out
+    (pool uint)
+    (amount uint)
+    (sell-sbtc bool)
     (factors (list 1001 uint))
   )
-  (if (is-eq (get bin-step p) DLMM_BIN_STEP)
-    (some (/ (* (get initial-price p)
-      (unwrap-panic (element-at? factors (to-uint (+ (get active-bin-id p) DLMM_CENTER_BIN))))
-    ) DLMM_PRICE_SCALE))
-    none
+  (let (
+      (info (dlmm-pool-info pool))
+      (fee (if sell-sbtc
+        (+ (get y-protocol-fee info) (get y-provider-fee info)
+          (get y-variable-fee info)
+        )
+        (+ (get x-protocol-fee info) (get x-provider-fee info)
+          (get x-variable-fee info)
+        )
+      ))
+    )
+    (if (is-eq (get bin-step info) DLMM_BIN_STEP)
+      (get out
+        (fold dlmm-out-step DLMM_WALK_BINS {
+          pool: pool,
+          bin: (get active-bin-id info),
+          up: sell-sbtc,
+          initial-price: (get initial-price info),
+          factors: factors,
+          fee: fee,
+          left: amount,
+          out: u0,
+          done: false,
+        })
+      )
+      u0
+    )
   )
 )
 
-;; is quote a strictly better than quote b for the taker
-(define-private (dlmm-better
-    (a (optional uint))
-    (b (optional uint))
-    (sell-sbtc bool)
+(define-private (dlmm-out-step
+    (i uint)
+    (acc {
+      pool: uint,
+      bin: int,
+      up: bool,
+      initial-price: uint,
+      factors: (list 1001 uint),
+      fee: uint,
+      left: uint,
+      out: uint,
+      done: bool,
+    })
   )
-  (match a
-    pa (match b
-      pb (if sell-sbtc
-        (< pa pb)
-        (> pa pb)
+  (if (or (get done acc) (is-eq (get left acc) u0))
+    acc
+    (let (
+        (id (to-uint (+ (get bin acc) DLMM_CENTER_BIN)))
+        (price (/ (* (get initial-price acc)
+          (unwrap-panic (element-at? (get factors acc) id))
+        ) DLMM_PRICE_SCALE))
+        (bal (dlmm-bin-balances (get pool acc) id))
+        ;; up = selling sBTC (y) for STX (x); down = selling STX for sBTC
+        (avail (if (get up acc)
+          (get x-balance bal)
+          (get y-balance bal)
+        ))
+        ;; the input that empties the bin, before and after fees (core's ceil)
+        (raw (if (get up acc)
+          (/ (+ (* avail price) (- DLMM_PRICE_SCALE u1)) DLMM_PRICE_SCALE)
+          (/ (+ (* avail DLMM_PRICE_SCALE) (- price u1)) price)
+        ))
+        (grossed (if (> (get fee acc) u0)
+          (/ (* raw BPS) (- BPS (get fee acc)))
+          raw
+        ))
+        (edge (is-eq (get bin acc) (if (get up acc) 500 -500)))
       )
-      true
+      (if (>= (get left acc) grossed)
+        (merge acc {
+          out: (+ (get out acc) avail),
+          left: (- (get left acc) grossed),
+          bin: (if edge (get bin acc)
+            (if (get up acc)
+              (+ (get bin acc) 1)
+              (- (get bin acc) 1)
+            )
+          ),
+          done: edge,
+        })
+        (let ((net (/ (* (get left acc) (- BPS (get fee acc))) BPS)))
+          (merge acc {
+            out: (+ (get out acc)
+              (if (get up acc)
+                (/ (* net DLMM_PRICE_SCALE) price)
+                (/ (* net price) DLMM_PRICE_SCALE)
+              )),
+            left: u0,
+            done: true,
+          })
+        )
+      )
     )
-    false
   )
 )
 
@@ -1017,9 +1095,9 @@
 (define-private (dlmm-capacity
     (limit uint)
     (sell-sbtc bool)
+    (pick uint)
   )
   (let (
-      (pick (dlmm-pick sell-sbtc))
       (pool (dlmm-pool-info pick))
       (fee (if sell-sbtc
         (+ (get y-protocol-fee pool) (get y-provider-fee pool)
@@ -1098,12 +1176,23 @@
       out: u0,
     })
     (let (
-        (cap (dlmm-capacity limit sell-sbtc))
+        ;; one pick for the stage: the capacity walk and the sale use the
+        ;; same pool
+        (pick (dlmm-pick sell-sbtc left))
+        (cap (dlmm-capacity limit sell-sbtc pick))
         (plan (if (> cap left)
           left
           cap
         ))
-        (leg (try! (amm-leg plan limit sell-sbtc VENUE_DLMM)))
+        (leg (if (> plan u0)
+          (try! (dlmm-sell pick sell-sbtc plan
+            (amm-floor (limit-min plan limit sell-sbtc))
+          ))
+          {
+            in: u0,
+            out: u0,
+          }
+        ))
       )
       (ok {
         cap: cap,
