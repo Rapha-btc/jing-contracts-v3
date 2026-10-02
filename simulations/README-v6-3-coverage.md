@@ -9,6 +9,136 @@ only in the History section at the end. Separate current-source evidence: the
 [full-book refund integration](README-v6-3-refund-costs.md) (291 checks against
 real sBTC).
 
+## 0. Rerun on the final deploy bytes (2026-10-01)
+
+Every suite of section 2 except `oracle-feeds` and `deploy-bytes` was rerun
+on the final deploy set: market `ee2edde` (sha256 `ed046155…1848`,
+`get-taker-capacity` takes the update and quotes at its rebate rate),
+router `df091b8` (`dc355d44…f839`, DLMM legs on the deepest of three
+pools), core-v6 `88a689af…`, ladder-v1 `0f1e08b0…`, core-spread v1 rungs
+from `d8b01e4`. The core-v6 admin suite (section 7) was rerun too.
+**6,055 / 6,055 checks, 0 unexpected failures** (6,022 rerun + 33 new).
+
+| Suite | Passed / total | Unexpected failures | stxer |
+|---|---|---|---|
+| `verify-v6-3-submit-settle-lazer.js` | 898 / 898 | 0 | [ab168657](https://stxer.xyz/simulations/mainnet/ab168657c7b61edce715a7b96add3ca5) |
+| `verify-v6-3-ghost-deposit.js patched` | 343 / 343 | 0 | [93fad242](https://stxer.xyz/simulations/mainnet/93fad2429c93f09a48b3d5780fc7cb28) |
+| `verify-v6-3-switched-off-ask.js patched` | 221 / 221 | 0 | [7e018a44](https://stxer.xyz/simulations/mainnet/7e018a44bea47560e8a659d4422572d5) |
+| `verify-v6-3-cancel-orphan-pending.js patched` | 225 / 225 | 0 | [d9bb7bc9](https://stxer.xyz/simulations/mainnet/d9bb7bc97b92c95727613067965ce33e) |
+| `verify-v6-3-router-impact.js` | 398 / 398 | 0 | [4584e116](https://stxer.xyz/simulations/mainnet/4584e116cd8d21d529bac93910ba8417), [30d1544e](https://stxer.xyz/simulations/mainnet/30d1544e875a7f82b8ba8e15be2c7ebc), [b180bda2](https://stxer.xyz/simulations/mainnet/b180bda289bf483cb8398e942cf2bb32), [343f608e](https://stxer.xyz/simulations/mainnet/343f608ecc8cb31c8d567497a5abe140) |
+| `verify-v6-3-caller-impact.js` | 198 / 198 | 0 | [46e07863](https://stxer.xyz/simulations/mainnet/46e078637f965bd827e957694669186f) |
+| `verify-v6-3-dispatch.js` | 194 / 194 | 0 | [c881a35d](https://stxer.xyz/simulations/mainnet/c881a35dbda5f2e4b7e19852e854e664) |
+| `verify-v6-3-gate-blind-band.js` | 332 / 332 | 0 | [d3d3140f](https://stxer.xyz/simulations/mainnet/d3d3140fe4828e637fdd66d053d05ec1) |
+| `verify-v6-3-router-bin-boundary.js` | 26 / 26 | 0 | [d2e2f058](https://stxer.xyz/simulations/mainnet/d2e2f058ba94430dc36e1e0789513ce8) |
+| `verify-v6-3-swap-walk.js` | 383 / 383 | 0 | [61f875f1](https://stxer.xyz/simulations/mainnet/61f875f1b37d384b94eecd3bcb549f99) |
+| `verify-v6-3-capacity.js` | 473 / 473 | 0 | [39ca7d96](https://stxer.xyz/simulations/mainnet/39ca7d9618ef3e23e65fe364396234be) |
+| `verify-v6-3-settlement-edges.js` | 365 / 365 | 0 | [b9ed7d25](https://stxer.xyz/simulations/mainnet/b9ed7d25e19dc66e3d5d531144b609bc) |
+| `verify-v6-3-errors-admin.js` | 514 / 514 | 0 | [943409e5](https://stxer.xyz/simulations/mainnet/943409e57fba77a58262650bc9007f41) |
+| `verify-v6-3-full-side.js` | 921 / 921 | 0 | [6cad6dbd](https://stxer.xyz/simulations/mainnet/6cad6dbd4c1e63e16272566f4cec6de4) |
+| `verify-v6-3-reachable-gaps.js` | 382 / 382 | 0 | [b0991314](https://stxer.xyz/simulations/mainnet/b09913142d77d59958214912cd84f5bc) |
+| `verify-core-v6-admin.js` | 149 / 149 | 0 | [d257db96](https://stxer.xyz/simulations/mainnet/d257db964695f7ea32f930fd70d30054) |
+| `verify-v6-3-capacity-hint.js` (new) | 33 / 33 | 0 | [313ba242](https://stxer.xyz/simulations/mainnet/313ba242e6b8dc8486fdb513ae40164f) |
+
+Not rerun: `verify-v6-3-oracle-feeds.js` needs a Pyth Pro key
+(`PYTH_API_KEY`, not on this machine; the keyless backend route serves only
+the BTC/STX pair, and this suite needs other feed ids). Its oracle paths do
+not touch `get-taker-capacity`. `verify-v6-3-deploy-bytes.js` is run by the
+deploy-template work, not here.
+
+Model changes for the final bytes (test side only, no contract edited):
+- `router-impact`: since `ee2edde` the router passes the update to the
+  market's 5-argument `get-taker-capacity`; the `f6a6d3a` baseline market
+  has the 4-argument form, so the current router no longer deploys next to
+  it. The baseline pair now deploys the router as of `ee2edde^` (fixed
+  20 bps sizing); the current pair deploys the final router. Same 398
+  checks.
+- `router-bin-boundary`: it replays a historical fork whose market and core
+  predate `ee2edde` / `72b60b0`, then installs the final router with
+  `SetContractCode`. The router no longer type-checks against that market,
+  and the final market not against that core, so the final core and market
+  code are installed first (the replayed call has `update none` and makes
+  no market or core call). Since `df091b8` the edge-step units name pool
+  v-2 (the boundary pool) and the public call is checked against the
+  modelled pick: at that block an sBTC sale picks v-1 (289,021 STX against
+  v-2's 14,028 STX), so the fill runs on v-1 (1000 sats -> 2,699,989 uSTX)
+  instead of the edge of v-2. 26 checks, was 22.
+- `swap-walk`: 383 checks (was 382) on the same expectations. The model
+  sizes the walk from the live signed price; a maker that still rests after
+  the walk gets two book checks (amount, order) and one that left gets one,
+  so the count moves by one with the price. No model change.
+
+New suite `verify-v6-3-capacity-hint.js`: `ee2edde`'s `capacity-rebate-hint`
+falls back to the 20 bps quote when the update is missing or undecodable.
+The existing suites pass only real, decodable updates, so its six `none`
+arms (L3940-L3946) were never taken. The suite rests one bid and reads
+`get-taker-capacity` through a probe transaction with no update (the 20 bps
+reference), a real two-week-old signed update from sim `c014c741` (u70,
+gross-cap = gross-up(net-cap, 70), every other field equal), and six hints
+built from that update's bytes: 10 bytes, garbage after the envelope,
+feed 1 or 45 renumbered, feed 1 or 45 timestamp flag 0. Each returns exactly
+the reference tuple. The hint is unverified by design (`swap` checks the
+signature), so unsigned bytes are a valid input to this read-only.
+
+### Coverage on the final bytes (before / after this rerun)
+
+"Before" = every run recorded so far (the 37 sims listed in the READMEs of
+section 2, the rung, ladder, router and core-admin READMEs) measured against
+the final market bytes `ed046155…`: only the runs made after `ee2edde`
+deploy those bytes. "After" = the 51 sims of the 2026-10-01 rerun (this
+section, the rung and router READMEs). All `--by-source`.
+
+| `markets-sbtc-stx-jing-v6-3` | before | after |
+|---|---|---|
+| expressions executed | 2,125 / 4,407 (48.2%) | 3,179 / 4,407 (72.1%) |
+| code lines touched | 1,187 / 2,597 (45.7%) | 1,732 / 2,597 (66.7%) |
+| function-body lines touched | 1,187 / 2,488 (47.7%) | 1,732 / 2,488 (69.6%) |
+| branch nodes full / partial / never | 169 / 55 / 77 of 301 | 295 / 6 / 0 of 301 |
+| error paths (failure arms) hit | 12 / 292 | 159 / 292 |
+
+The six partial branches are the ones in section 4 (walk-step `match`
+error arms L2942 / L2983, distribute total = 0 L3538 / L3542 / L3633 /
+L3637), lines shifted by `ee2edde`. The seventh partial of section 4
+(`rebate-bps-for-age` at age >= 80) is now fully taken: the rebate-age
+suite and the capacity-hint suite quote at that age. The 133 untaken error
+paths are the 130 of section 4 (same groups; line numbers +3 after L1096
+and +6 inside the oracle block for `ee2edde`) plus the three arms only
+`verify-v6-3-oracle-feeds.js` reaches (L1065 y-feed `shape-feed`, L3423
+`ERR_EXPO_MISMATCH`, L3425 ratio `ERR_ZERO_PRICE`), which was not rerun
+(Pyth Pro key; the oracle code it exercises did not change). The six new
+arms of `ee2edde` are all hit. No reachable but untested path remains.
+Detail: [TRACE-COVERAGE-markets-sbtc-stx-jing-v6-3.md](TRACE-COVERAGE-markets-sbtc-stx-jing-v6-3.md).
+
+| `jing-core-v6` | before | after |
+|---|---|---|
+| expressions executed | 310 / 1,178 (26.3%) | 362 / 1,178 (30.7%) |
+| code lines touched | 211 / 956 (22.1%) | 243 / 956 (25.4%) |
+| branch nodes full / partial / never | 45 / 3 / 34 of 82 | 51 / 3 / 28 of 82 |
+| error paths (failure arms) hit | 4 / 85 | 18 / 85 |
+
+(The section 7 admin run `9581ea76` was on the older core `67242f19…`, so
+"before" holds none of it; the rerun `d257db96` is on the final bytes.)
+The 28 never-reached and 67 untaken arms are the logs of other products
+(RFQ, reserve, SNPL, Bitflow, legacy Jing, `reconcile-vault-equity`), none
+called by the deploy set; section 7. The three partial branches,
+`credit-if-not-registered`, `debit-if-not-registered` and
+`credit-if-registered` (L148, L159, L170), take their other arm only when
+the depositor is itself a core-registered contract (a registered vault,
+`vault-sbtc-stx-v6`, out of this phase); rungs are ladder-registered, not
+core-registered, and the market cannot deposit into itself. Detail:
+[TRACE-COVERAGE-jing-core-v6.md](TRACE-COVERAGE-jing-core-v6.md).
+
+Reproduce the "after" figures (one comma-separated argument):
+
+```
+SIMS=1b7d24cc8a2fdc2e1b909cde1ac666dd,2190304536692650c142a9bdcb139d7b,3230d7340b5b915b077fe37287dd9ae3,3582479f2a84588de8704ff2cc601fba,39ca7d9618ef3e23e65fe364396234be,46e078637f965bd827e957694669186f,47a85fe1965616266054b0220af5b3b9,562290d6963e798aff2b0ac403d50698,57267ce2ef8bf3580f8e2d51dd5bd768,5c614828a85cce9fb92d45612ee5fa62,61f875f1b37d384b94eecd3bcb549f99,6978f913950d03105411414643219a0a,6cad6dbd4c1e63e16272566f4cec6de4,75c2670a6d961c18c0f0e0abd84e449f,7e018a44bea47560e8a659d4422572d5,83dc4c03c661ac700a13a1e8886002e8,93fad2429c93f09a48b3d5780fc7cb28,943409e57fba77a58262650bc9007f41,9a4f6fd6dd4315367bc0242daf933c84,9fc9abef2ebae9a1d5642fd9f594d57d,ab168657c7b61edce715a7b96add3ca5,b09913142d77d59958214912cd84f5bc,b9ed7d25e19dc66e3d5d531144b609bc,c30cf48c20d11a81b6267c3a641bab13,c881a35dbda5f2e4b7e19852e854e664,d257db964695f7ea32f930fd70d30054,d3d3140fe4828e637fdd66d053d05ec1,d9bb7bc97b92c95727613067965ce33e,e2a4d3b7cf1dc2d35f1a37b9fa9f54e1,e2ff3f33f0e19c77e392c4ab029024de,9dfe971744f8e79b7302a637bded10df,eaec8fc53c239d9fd406eeee0efdb594,1dfbde21cf06d852620b494e7dab0fce,1efca09a61e321f6405722ea4d940c56,30d1544e875a7f82b8ba8e15be2c7ebc,343f608ecc8cb31c8d567497a5abe140,39549a17d261a758d2ba8b65301cc8e4,40e456f21466ec1710fcb2edbb1bc73c,419317004991beb8d8146509d471a56a,4584e116cd8d21d529bac93910ba8417,5a4c7687679856b1a707ee00f6c48868,6ec50f055fae58d6d19b395f9cb37576,84c514ee674c5489f92173a1ec827347,9b04485c43c2c419524bb2507a156cde,b180bda289bf483cb8398e942cf2bb32,bb481e6ecbb327b4fed9b7354e4acb87,cd3a8ef6fea885e46abc0cabc02be0bc,d2e2f058ba94430dc36e1e0789513ce8,d72a3abb67f4a681eb5b273a3db2c23f,def91606d7037bb43bd5e516302bd35b,c958da67b2ddfeda04231686adaa96cc,313ba242e6b8dc8486fdb513ae40164f
+node simulations/trace-coverage.mjs --contract markets-sbtc-stx-jing-v6-3 --by-source --md --sims $SIMS
+node simulations/failure-arms.mjs $SIMS --by-source --contract markets-sbtc-stx-jing-v6-3
+```
+
+`trace-coverage.mjs` and `failure-arms.mjs` now remember a transaction
+stxer has no trace for (`<sim>-<tx>.bin.none` in the trace cache), so a
+rerun no longer retries ~600 deploy / transfer steps four times each.
+
 ## 1. Source provenance
 
 | item | value |

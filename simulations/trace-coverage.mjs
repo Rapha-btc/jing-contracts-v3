@@ -111,9 +111,13 @@ function decodeTrace(buf, out) {
 async function fetchTrace(sim, txid) {
   const f = path.join(CACHE, `${sim}-${txid}.bin`);
   if (fs.existsSync(f)) return fs.readFileSync(f);
+  // a tx stxer returned no trace for (deploys, transfers) is remembered, so
+  // reruns over the same sims do not retry it
+  if (fs.existsSync(`${f}.none`)) return null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const r = await fetch(`${API}/devtools/v2/simulations/${sim}/inspect/${txid}`);
     if (r.ok) { const b = Buffer.from(await r.arrayBuffer()); fs.writeFileSync(f, b); return b; }
+    if (r.status === 404 && attempt === 3) fs.writeFileSync(`${f}.none`, '');
     await new Promise((res) => setTimeout(res, 500 * (attempt + 1)));
   }
   return null;
