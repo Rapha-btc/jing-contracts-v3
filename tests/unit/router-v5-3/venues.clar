@@ -39,6 +39,14 @@
     active-bin-id: (var-get active), initial-price: (var-get price), bin-step: (var-get step),
     x-protocol-fee: (var-get fee-x), x-provider-fee: u0, x-variable-fee: u0,
     y-protocol-fee: (var-get fee-y), y-provider-fee: u0, y-variable-fee: u0}))
+;; DLMM pool getter with the mainnet dlmm-pool-stx-sbtc-v-N-bps-15 tuple: x =
+;; STX, y = sBTC; fees of the input side (x when is-x-for-y). Bin, initial
+;; price and bin step are the ones configure-dlmm sets for the swap and bins.
+(define-read-only (get-pool-for-swap (is-x-for-y bool))
+  (ok {pool-id: u0, pool-name: "dlmm-stub", core-address: owner, fee-address: owner,
+    x-token: .asset-stx, y-token: .token, bin-step: (var-get step),
+    initial-price: (var-get price), active-bin-id: (var-get active),
+    protocol-fee: (if is-x-for-y (var-get fee-x) (var-get fee-y)), provider-fee: u0, variable-fee: u0}))
 (define-read-only (get-fees)
   (ok {swap-fee:{num:(- u10000 (var-get fee-x)), den:u10000}}))
 (define-read-only (get-bin-price (initial uint) (bin-step uint) (bin int))
