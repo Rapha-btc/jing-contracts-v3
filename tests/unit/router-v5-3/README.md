@@ -47,15 +47,20 @@ External dependencies are controlled fixtures:
   quote and funded ledger. `dlmm-router.clar` stands in for the DLMM swap
   router and core: it forwards a swap to the pool the router names (no
   as-contract, so the caller stays tx-sender) and prices bins with the
-  `venues.clar` formula. CP swaps use constant-product
+  `venues.clar` formula. Its `get-bin-factors-by-step u15` serves that
+  formula as the factor list (mainnet factors are geometric; the stub's are
+  linear), and each pool stub has `get-pool-for-swap` with the mainnet
+  tuple. CP swaps use constant-product
   reserve arithmetic, including fees and integer rounding; DLMM uses the
   configured bin price, fee and partial-input cap. Neither prices a swap from
   the router's requested minimum. The minimum only accepts or rejects the
   independently calculated output.
 
 Venue reserves are configurable quotes; explicit ledger funding is separate.
-The DLMM fixture puts quoted liquidity in the active bin and returns empty
-surrounding bins with a linear price ladder. It exercises the router's bin walk
+By default the DLMM fixture puts quoted liquidity in the active bin and
+returns empty surrounding bins with a linear price ladder. After `set-bin`, a
+pool holds per-bin balances and its swap walks up to 30 bins with the core's
+per-bin formula (the pool-pick cases). It exercises the router's bin walk
 and stopping rules, but is not a reproduction of the production DLMM engine.
 Stxer remains responsible for integration with the real external venues,
 production sBTC, signed oracle updates and mainnet execution costs.
@@ -64,19 +69,34 @@ records current-source checks against those dependencies and their fixture limit
 
 ## Cases checked in both directions
 
-`dlmm-pick.test.ts` adds 38 cases for the deepest-pool pick (`df091b8`). Each
-pool quotes its own bin price, so the output, the printed `dlmm-cap` and each
-pool's swap counter show which pool ran. Depth is the pool's real ledger
-balance of the asset the leg buys (STX when selling sBTC, sBTC when selling
-STX). Per direction, both the manual leg and the smart capacity walk + swap
-cover: pool 1, 2 and 3 strictly deepest; ties 1 = 2, 2 = 3, 1 = 3 and a
-three-way tie (each to the lower number); a one-sided pool holding only the
-sold asset skipped in favour of the only pool holding the bought asset, and
-the same pool used from its full side; and a wallet-minimum rollback after
-the picked pool swapped. Negative controls on a local copy (reverted after,
-never committed): always pool 2 (the pre-`df091b8` behaviour) fails 24/38,
-ties to the higher number fails 16/38, depth read on the sold asset fails
-20/38, capacity read from pool 1 regardless of the pick fails 10/38.
+`dlmm-pick.test.ts` adds 136 cases for the pool pick of `280c81c`: among the
+pools holding at least 1% of the deepest pool's balance of the asset the leg
+buys, the one paying the most for the leg's amount over at most 30 bins from
+its active bin (bin step u15 only), ties to the lower number; a single
+eligible pool is used without reading the core's factor list. The pools run
+`venues.clar` in bin-walk mode (`set-bin`): each bin holds its own balances
+and a swap walks at most 30 bins with the core's per-bin formula, so each
+pool's output, capacity and swap counter show which pool ran. Every case
+first checks its expected pick against a TypeScript model of the rule, then
+runs per direction both a manual leg and the smart stage. The smart stage
+must report the picked pool's capacity, and the sale must run on that same
+pool. Cases: payout beats depth (each pool winning once); an empty active bin
+with its liquidity 25 bins away, and 1% dust in the best bin with the rest far
+away (the steering cases); liquidity past the 30th bin not counted; an amount
+larger than a pool's bins (part fill); a partial last bin, where the same
+pools rank differently at 100% and 30% of the amount; fees breaking a tie,
+beating a better price, and too small to; ties 1 = 2, 2 = 3, 1 = 3 and a
+three-way tie with the higher number deeper; the 1% floor (0.99% and 1% minus
+one base unit excluded, exactly 1% eligible, zero excluded); pool 1 or 2
+excluded with the other two compared; the walk stopping at the edge bin; bin
+step 10 on one pool or on all (pool 1). The poisoned factor list
+(`set-factors-off`) shows that one eligible pool, a one-sided pool and all
+pools empty (pool 1; the leg fills nothing) need no factor read. It also
+aborts a pick with two eligible pools. A wallet-minimum rollback after the
+picked pool swapped is checked too. Negative control on a copy (never
+committed): with the `1063add` pick (best active-bin price) restored, 32/136
+fail, and all other suites pass. The 32 are the steering, 30-bin,
+part-fill, partial-bin, fee and edge-bin cases in both routes and directions.
 
 `rebate-age.test.ts` adds 24 cases for the September 30 age-sizing fix:
 capacity-capped fills with independent BTC/STX feed ages of 0, 30, 31 and 79
@@ -86,7 +106,7 @@ and returns `rebate-bps` with `gross-cap`. The router passes the update and
 uses both returned values. Eight quote/negative cases cover failed timestamp
 hints, future timestamps and stale-feed fallback through the public market
 getter; the router has no private timestamp parser. The full suite then passed **185/185**; with the
-pool-pick cases it passes **223/223**, with unchanged coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
+pool-pick cases it now passes **321/321**, with unchanged coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
 
 Manual routes cover the real book's net input, maker-price output, fees, rebates,
 sub-minimum refunds, all three fallback destinations, pro-rata fallback minimums,
@@ -152,11 +172,11 @@ debit is 9 sats. All positions and market custody end at zero. The test accepts
 All router-suite cases call public or read-only entrypoints. Timestamp-hint
 boundaries are checked through the market's read-only capacity getter.
 
-- Line 804 / branch `804,0,1`: `cp-split`'s zero-total division guard. Taking it
+- Line 815 / branch `815,0,1`: `cp-split`'s zero-total division guard. Taking it
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Lines 1227–1228: the literal principal and function name inside the read-only
+- Lines 1384–1385: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.

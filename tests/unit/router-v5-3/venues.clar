@@ -16,6 +16,16 @@
 (define-data-var calls uint u0)
 (define-data-var last-in uint u0)
 (define-data-var last-min uint u0)
+;; DLMM bin-walk mode, off until set-bin: each bin holds its own balances
+;; (x = uSTX, y = sats) and a swap walks up to 30 bins from the active one,
+;; with the core's per-bin formula (the input that empties a bin is
+;; ceil(avail * price / 1e8) selling sBTC or ceil(avail * 1e8 / price) selling
+;; STX, grossed up by the fee; the bin that runs the input out pays
+;; net * 1e8 / price or net * price / 1e8). Prices are get-bin-price below.
+(define-map bins int {x: uint, y: uint})
+(define-data-var walk bool false)
+(define-constant WALK (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15
+  u16 u17 u18 u19 u20 u21 u22 u23 u24 u25 u26 u27 u28 u29))
 
 (define-public (configure (s uint) (y uint) (rev bool) (fx uint) (fy uint))
   (begin
@@ -27,6 +37,11 @@
     (asserts! (is-eq tx-sender owner) (err u401))
     (var-set active bin) (var-set price p) (var-set step bin-step)
     (var-set max-input cap) (ok true)))
+(define-public (set-bin (bin int) (x uint) (y uint))
+  (begin
+    (asserts! (is-eq tx-sender owner) (err u401))
+    (var-set walk true) (ok (map-set bins bin {x: x, y: y}))))
+(define-private (bin-of (bin int)) (default-to {x: u0, y: u0} (map-get? bins bin)))
 (define-public (set-inflate (n uint))
   (begin (asserts! (is-eq tx-sender owner) (err u401)) (ok (var-set inflate n))))
 (define-read-only (get-pool)
@@ -55,9 +70,11 @@
 (define-read-only (get-bin-balances (id uint))
   (begin
     (asserts! (<= id u1000) (err u4002))
-    (ok (if (is-eq id (to-uint (+ (var-get active) 500)))
+    (ok (if (var-get walk)
+      (let ((b (bin-of (- (to-int id) 500)))) {x-balance:(get x b),y-balance:(get y b)})
+      (if (is-eq id (to-uint (+ (var-get active) 500)))
       {x-balance:(var-get microstx),y-balance:(var-get sats)}
-      {x-balance:u0,y-balance:u0}))))
+      {x-balance:u0,y-balance:u0})))))
 
 (define-private (exchange (sell-sbtc bool) (amount uint) (out uint) (minimum uint))
   (let ((user tx-sender))
@@ -90,10 +107,39 @@
         (out (if sell-sbtc (/ (* net u100000000) p) (/ (* net p) u100000000)))
         (reported (try! (exchange sell-sbtc spent out minimum))))
     (ok {in:spent,out:reported})))
+(define-private (walk-step (i uint) (acc {bin: int, up: bool, fee: uint, left: uint, out: uint, done: bool}))
+  (if (or (get done acc) (is-eq (get left acc) u0))
+    acc
+    (let ((b (bin-of (get bin acc)))
+          (p (unwrap-panic (get-bin-price (var-get price) (var-get step) (get bin acc))))
+          (avail (if (get up acc) (get x b) (get y b)))
+          (raw (if (get up acc) (/ (+ (* avail p) u99999999) u100000000) (/ (+ (* avail u100000000) (- p u1)) p)))
+          (grossed (if (> (get fee acc) u0) (/ (* raw u10000) (- u10000 (get fee acc))) raw))
+          (edge (is-eq (get bin acc) (if (get up acc) 500 -500))))
+      (if (>= (get left acc) grossed)
+        (begin
+          (map-set bins (get bin acc)
+            (if (get up acc) {x: u0, y: (+ (get y b) grossed)} {x: (+ (get x b) grossed), y: u0}))
+          (merge acc {out: (+ (get out acc) avail), left: (- (get left acc) grossed),
+            bin: (if edge (get bin acc) (if (get up acc) (+ (get bin acc) 1) (- (get bin acc) 1))),
+            done: edge}))
+        (let ((net (/ (* (get left acc) (- u10000 (get fee acc))) u10000))
+              (paid (if (get up acc) (/ (* net u100000000) p) (/ (* net p) u100000000))))
+          (map-set bins (get bin acc)
+            (if (get up acc) {x: (- avail paid), y: (+ (get y b) (get left acc))}
+              {x: (+ (get x b) (get left acc)), y: (- avail paid)}))
+          (merge acc {out: (+ (get out acc) paid), left: u0, done: true}))))))
+(define-private (walk-fill (sell-sbtc bool) (amount uint) (minimum uint))
+  (let ((r (fold walk-step WALK {bin: (var-get active), up: sell-sbtc,
+          fee: (if sell-sbtc (var-get fee-y) (var-get fee-x)), left: amount, out: u0, done: false}))
+        (spent (- amount (get left r)))
+        (reported (try! (exchange sell-sbtc spent (get out r) minimum))))
+    (var-set active (get bin r))
+    (ok {in:spent,out:reported})))
 (define-public (swap-x-for-y-simple-range-multi (pool principal) (x <ft>) (y <ft>) (amount uint) (minimum uint) (steps uint) (deadline (optional uint)))
-  (dlmm-fill false amount minimum))
+  (if (var-get walk) (walk-fill false amount minimum) (dlmm-fill false amount minimum)))
 (define-public (swap-y-for-x-simple-range-multi (pool principal) (x <ft>) (y <ft>) (amount uint) (minimum uint) (steps uint) (deadline (optional uint)))
-  (dlmm-fill true amount minimum))
+  (if (var-get walk) (walk-fill true amount minimum) (dlmm-fill true amount minimum)))
 (define-public (swap-x-for-y (pool principal) (x <ft>) (y <ft>) (amount uint) (minimum uint))
   (cp (is-eq (contract-of x) .token) amount minimum (var-get fee-x)))
 (define-public (swap-y-for-x (pool principal) (x <ft>) (y <ft>) (amount uint) (minimum uint))
