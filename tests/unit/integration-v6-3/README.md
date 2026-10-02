@@ -6,7 +6,8 @@ The original 9-micro-STX rescale shortfall was reproduced before the fix; its
 custody/solvency expectations are unchanged. See the [accounting proof and
 fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The full integration suite passed **102/102 tests**, in ten files with no skips.
+The full integration suite passes **110/110 tests**, in eleven files with no
+skips (102/102 before `dispatch-guards.test.ts`).
 Its six seeded campaigns completed 396 invariant checkpoints, 52 randomized
 withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
 
@@ -23,6 +24,34 @@ Scope is only `jing-buy-stx-core-spread-v1.clar` and
 results are separate from the market unit tests and market coverage.
 The other four rung templates and old versions are excluded. The selected
 router is `swap-router-sbtc-stx-jing-v5-3`, but router tests are not included here.
+
+## Dispatch guards
+
+`dispatch-guards.test.ts` (8 cases, both directions) hits every validation
+guard of `jing-ladder-dispatch` before any transfer: empty list (u7101), zero
+total and over/under budget (u7102), zero amount (u7103), unseated or
+other-side rung on deposit (u7104), duplicate rung (u7105), a relay contract
+spending its caller's sender on deposit and withdraw (u7106), and an
+other-side or never-registered rung on withdraw (u7108). Each refusal has no
+events and leaves the wallet unchanged. `coverage.mjs` now also gates
+dispatch at the same thresholds on raw instrumentation, and lists core,
+ladder and market raw coverage for reference (their gates are in
+[core-ladder-v1](../core-ladder-v1/README.md) and [v6-3](../v6-3/README.md)).
+
+## Negative controls (2026-10-01)
+
+Run on a local copy of the rung sources, reverted afterwards, never committed:
+
+- `b41dbd6` (full exit before share math): restoring the unconditional
+  `(/ (+ (* amount SCALE) (- fi u1)) fi)` fails the four oversized-exit
+  cases (direct buy/sell, tenth dispatch leg buy/sell).
+- `d8b01e4` (epoch close inlined, no proceeds flush): reverse-applying the
+  commit fails `production oracle fee sent to rung: retained for the next
+  epoch` (buy). The sell mirror has no failing case, and none is reachable
+  through public calls: the only unexpected proceeds a final withdraw can
+  recognize are oracle fees, paid in STX, which is the sell rung's input
+  asset, not its proceeds; the commit's other hunk (`reserve` = `free`) is
+  behaviour-preserving.
 
 ## Oversized withdrawal requests
 
@@ -126,6 +155,7 @@ functions in each actual source are represented.
 | `controls.test.ts` | 28 | Initialization and authorization guards, invalid spread/name, unseated registration then seating, minimum changes, push pause/resume, miner-input outage and guard refresh, same-member top-up, unfunded deposit rollback, donated assets/proceeds, young escrow requiring an update, nonzero-spread trading, three private-helper boundaries per rung |
 | `epochs.test.ts` | 8 | Still-live escrow cancellation during extreme-fill tail roll, dust tail roll and historical payouts, reserve rounding release, reopening epochs, four successive rescales, inactive member entitlement, zero-value member exit, final recovery, timeout push cooldown |
 | `dispatch.test.ts` | 19 | Ten buy plus ten sell rungs: single-sided and two-sided weighted batches, two-member ownership, settlement refusal for non-crossing spreads, real taker fills, proceeds-paying batch top-ups, paused batch exits, oversized tenth-leg full exits, tenth-leg deposit/withdraw rollback, closed-epoch exits without top-ups, retired/replaced seats, unrelated and required pending escrow |
+| `dispatch-guards.test.ts` | 8 | Every dispatch validation guard (u7101–u7108) on deposit and withdraw, both sides, including a relay contract; no events, wallets unchanged |
 | `proceeds-precision.test.ts` | 6 | Real 1,001-sat receipt after rescale/top-up, late membership, share ceiling, all supported carried-share segments |
 | `proceeds-conservation.test.ts` | 6 | Carry across receipts, ownership changes, repeated claims/fills, isolated old epochs and exact final balances |
 | `epoch-helper.test.ts` | 2 | Absent-old-reserve read-only fallback, both mirrors |
