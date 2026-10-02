@@ -37,7 +37,7 @@ and a `rebate-bps` field. Vault and public router interfaces are unchanged.
 
 ## Submission decisions
 
-Reviewed through submission 7 of 7 (muogs6i8, 2026-09-30 18:54 UTC). Anything after it is new.
+Reviewed through submission 10 of 10 (mupyhlz1, 2026-10-01 19:57 UTC). Anything after it is new.
 
 | Submission | Claim or contribution | Current decision |
 | --- | --- | --- |
@@ -48,6 +48,9 @@ Reviewed through submission 7 of 7 (muogs6i8, 2026-09-30 18:54 UTC). Anything af
 | [Cunning Nexus, munwd5wp](https://paste.rs/SZMLP) | L-1: withdrawal overflow, including dispatch. L-2: aged-price book skip. I-1/I-2: direct-swap refunds and last-member rounding. | L-1 accepted, same class. L-2 reproduced independently; a market-owned quote and corresponding router update are implemented and verified. Informational claims are assessed below. |
 | [muob06gj — epoch-map prototype](https://gist.github.com/bodhibuurstede-sys/a9c6f857e3d354374d37b9d764d32448) | No new exploit; optional four-epoch-maps-to-one proposal with reported 93/93 tests. | Rejected for the optional 2,000-sat bonus: repackages storage without simplifying the mechanism. Not adopted or independently tested here; cost benefits are unverified. |
 | [muogs6i8 — Pure Leo](https://gist.github.com/aipd506/fd3e88078aaf9be78c6644dbb7d92910) | Medium vault allowance deficit; Low withdrawal overflow; Low aged-price router rejection; epoch-map bonus proposal. | All duplicates, no award. The Medium restates Shark's F1 with the same numbers (10,069 refund, 18 sats short) and is not established on the vault/router path: quote and swap run in one transaction and the leg is capped at the exact `gross-cap`, so the juicestx `+51` allowance stands. The two Lows are already fixed (`b41dbd6`, `ee2edde`); the bonus proposal repeats muob06gj's, already rejected. |
+| [muorqzhc — Amber Zara](https://paste.rs/JOXaR) | High: a position under `RESCALE` (1000) shares is floored to 0 at a rescale and forfeits its whole sBTC input to the last member. | Rejected; known class. The flooring is real but bounded under 1 unit: a rescale fires only when fills take the index under `MINT_FLOOR` (1e9), so each old share then backs at most index/`SCALE` = 0.001 sat, and the up-to-999 floored shares under 1 sat. The deposit's sold part was already paid as STX on full pre-rescale shares (`earned-step`, step 0). The 100-sat loss misreads per-share value. Covered by the rescale scenario in [the rung sims](../simulations/README-v1-core-spread-rungs.md) (991/991, `02e540f6`): every position loses under 1 unit per rescale; a member carried to 0 shares keeps its earned proceeds. No Clarinet or fork run was supplied. |
+| [mupmvxyc — Photon Warden](https://github.com/KEithwy1030/gamer-demo1/issues/3) | L-1: market refunds the prepaid rebate on an untraded sub-min rest, so refunds are not bounded by 51; I-1: the vault allowance's reliance on router sizing is undocumented. | Duplicate of Shark's F1, no award. Its own 120-case router fuzz shows a residual of at most 4 because `jing-size` caps the leg at `gross-cap`, which confirms the decision below. I-1 is fair as documentation: the 51-unit comment on `JING_REBATE_DUST_SATS` holds only for the capacity-capped router path. |
+| [mupyhlz1 — Super Leviathan](https://example.com/audit-report.json) | One line: "potential issues in proceed calculation and rounding". | Rejected: no finding, location or reproduction; the link is a placeholder domain. |
 
 ## Accepted: oversized withdrawal requests overflow
 
