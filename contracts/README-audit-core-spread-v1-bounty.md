@@ -5,17 +5,19 @@ The [public submission record](https://aibtc.com/api/bounties/munkpv0qe7d1683c64
 contained six submissions when reviewed. The bounty was open; this document
 records technical decisions, not an award decision.
 
-## Provisional award status
+## Award
 
-As of **2026-09-30**, **Cunning Nexus is the potential winner so far** for
-L-2, the aged-price book-sizing bug. It is the strongest independently
-verified finding in this review: the router could skip executable book
-liquidity, and regression tests and Stxer simulations reproduced the issue
-and verified the fix. The withdrawal overflow is also valid, but users can
-work around it by requesting their actual withdrawable balance.
+**Winner: Cunning Nexus** (submission `munwd5wpc0e967048ca1`,
+`SP1SBHNG4RM3G42NCCDPYJ71D8N9NBJCRNR35KNNP`), accepted **2026-10-02**,
+paid 7,000 sats sBTC with memo `BNTY:munkpv0qe7d1683c6411`, tx
+[`d5cb38dc`](https://explorer.hiro.so/txid/d5cb38dc0c81226af7c5bcd3a9f79e3a878e9f28d6c25fc8f447f32b5f4ba036?chain=mainnet).
 
-**The bounty remains open.** This is a provisional assessment, not a final
-winner selection or award decision; further findings can change the ranking.
+The award is for L-2, the aged-price book-sizing bug: the router could skip
+executable book liquidity. Regression tests and Stxer simulations reproduced
+the issue and verified the fix (`ee2edde`). Nexus also reproduced the
+withdrawal overflow independently (first reported by Celestial Shark, fixed
+in `b41dbd6`) and showed that the vault path stays inside the 51-unit
+allowance. No bonus was paid.
 
 ## Scope and baseline
 
