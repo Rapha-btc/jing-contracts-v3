@@ -78,9 +78,13 @@
 ;; VENUES (both verified on mainnet 2026-09-04)
 ;;
 ;;   u1 DLMM  router SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2
-;;            pool   .dlmm-pool-stx-sbtc-v-2-bps-15 (x = STX, y = sBTC)
-;;            the v-1 pool the vault still names holds ~0.007 BTC; v-2 holds
-;;            ~0.86 BTC and 1.25M STX.
+;;            pools  .dlmm-pool-stx-sbtc-v-1-bps-15, -v-2-bps-15, -v-3-bps-15
+;;            (x = STX, y = sBTC; byte-identical source). Liquidity moves
+;;            between them: on 2026-09-04 v-1 held ~0.007 BTC and v-2 ~0.86 BTC
+;;            and 1.25M STX; on 2026-10-01 v-1 held 465k STX and 5.9 BTC while
+;;            v-2 had 0.0008 STX left (price out of its range, one-sided). Each
+;;            DLMM leg uses the pool holding the most of the asset it buys
+;;            (`dlmm-pick`), so a one-sided pool is skipped on its empty side.
 ;;   u2 XYK   core   SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2
 ;;            pool   .xyk-pool-sbtc-stx-v-1-1 (~0.45 BTC, 136k STX); called
 ;;            direct, not via xyk-swap-helper (aggregator fee, see xyk-swap)
@@ -119,7 +123,9 @@
 (define-constant ASSET_WSTX "wstx")
 
 (define-constant DLMM_ROUTER 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2)
-(define-constant DLMM_POOL 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15)
+(define-constant DLMM_POOL_1 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15)
+(define-constant DLMM_POOL_2 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15)
+(define-constant DLMM_POOL_3 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-3-bps-15)
 (define-constant DLMM_CORE 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1)
 ;; Bins the router may walk. Bitflow's own front end uses 230.
 (define-constant DLMM_MAX_STEPS u230)
@@ -255,8 +261,20 @@
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL WSTX
-      SBTC amount min-received DLMM_MAX_STEPS none
+    (let ((pool (dlmm-pick true)))
+      (if (is-eq pool u2)
+        (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_2
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+        (if (is-eq pool u3)
+          (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_3
+            WSTX SBTC amount min-received DLMM_MAX_STEPS none
+          )
+          (contract-call? DLMM_ROUTER swap-y-for-x-simple-range-multi DLMM_POOL_1
+            WSTX SBTC amount min-received DLMM_MAX_STEPS none
+          )
+        )
+      )
     )
     (if (is-eq venue VENUE_XYK)
       (ok {
@@ -281,8 +299,20 @@
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL WSTX
-      SBTC amount min-received DLMM_MAX_STEPS none
+    (let ((pool (dlmm-pick false)))
+      (if (is-eq pool u2)
+        (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_2
+          WSTX SBTC amount min-received DLMM_MAX_STEPS none
+        )
+        (if (is-eq pool u3)
+          (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_3
+            WSTX SBTC amount min-received DLMM_MAX_STEPS none
+          )
+          (contract-call? DLMM_ROUTER swap-x-for-y-simple-range-multi DLMM_POOL_1
+            WSTX SBTC amount min-received DLMM_MAX_STEPS none
+          )
+        )
+      )
     )
     (if (is-eq venue VENUE_XYK)
       (ok {
@@ -804,9 +834,63 @@
   u21 u22 u23 u24 u25 u26 u27 u28 u29
 ))
 
+;; The DLMM pool for a leg: the one holding the most of the asset the leg
+;; buys (STX when selling sBTC, sBTC when selling STX); ties go to the lower
+;; number. Capacity and swap both call it with nothing touching the pools in
+;; between, so they agree on the pool.
+(define-private (dlmm-pick (sell-sbtc bool))
+  (let (
+      (b1 (dlmm-depth DLMM_POOL_1 sell-sbtc))
+      (b2 (dlmm-depth DLMM_POOL_2 sell-sbtc))
+      (b3 (dlmm-depth DLMM_POOL_3 sell-sbtc))
+    )
+    (if (and (>= b1 b2) (>= b1 b3))
+      u1
+      (if (>= b2 b3)
+        u2
+        u3
+      )
+    )
+  )
+)
+
+(define-private (dlmm-depth
+    (pool principal)
+    (sell-sbtc bool)
+  )
+  (if sell-sbtc
+    (stx-get-balance pool)
+    (sbtc-balance pool)
+  )
+)
+
+(define-private (dlmm-pool-info (pool uint))
+  (unwrap-panic (if (is-eq pool u2)
+    (contract-call? DLMM_POOL_2 get-pool)
+    (if (is-eq pool u3)
+      (contract-call? DLMM_POOL_3 get-pool)
+      (contract-call? DLMM_POOL_1 get-pool)
+    )
+  ))
+)
+
+(define-private (dlmm-bin-balances
+    (pool uint)
+    (id uint)
+  )
+  (unwrap-panic (if (is-eq pool u2)
+    (contract-call? DLMM_POOL_2 get-bin-balances id)
+    (if (is-eq pool u3)
+      (contract-call? DLMM_POOL_3 get-bin-balances id)
+      (contract-call? DLMM_POOL_1 get-bin-balances id)
+    )
+  ))
+)
+
 (define-private (dlmm-bin-step
     (i uint)
     (acc {
+      pool: uint,
       bin: int,
       up: bool,
       threshold: uint,
@@ -823,9 +907,9 @@
         (price (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price acc)
           (get bin-step acc) (get bin acc)
         )))
-        (bal (unwrap-panic (contract-call? DLMM_POOL get-bin-balances
+        (bal (dlmm-bin-balances (get pool acc)
           (to-uint (+ (get bin acc) DLMM_CENTER_BIN))
-        )))
+        ))
         ;; up = selling sBTC (y) for STX (x): STX must cost at most the
         ;; threshold in sats; down = selling STX: it must fetch at least it
         (ok-price (if (get up acc)
@@ -867,7 +951,8 @@
     (sell-sbtc bool)
   )
   (let (
-      (pool (unwrap-panic (contract-call? DLMM_POOL get-pool)))
+      (pick (dlmm-pick sell-sbtc))
+      (pool (dlmm-pool-info pick))
       (fee (if sell-sbtc
         (+ (get y-protocol-fee pool) (get y-provider-fee pool)
           (get y-variable-fee pool)
@@ -879,6 +964,7 @@
     )
     (get cap
       (fold dlmm-bin-step DLMM_WALK_BINS {
+        pool: pick,
         bin: (get active-bin-id pool),
         up: sell-sbtc,
         ;; the venue takes `fee` off the input before pricing the bin, so a bin
