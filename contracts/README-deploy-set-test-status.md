@@ -1,7 +1,7 @@
 # Deploy set: test status
 
-State on **2026-10-02**, jing-contracts-v3 at `df091b8` for the contract bytes
-(router v5-3 `df091b8`, market v6-3 `ee2edde`, rungs `d8b01e4`, all others
+State on **2026-10-02**, jing-contracts-v3 at `2373cec` for the contract bytes
+(router v5-3 `2373cec`, see [the router DLMM pick](README-router-v5-3-dlmm-pick.md); market v6-3 `ee2edde`, rungs `d8b01e4`, all others
 unchanged since). Not deployed. The follow-up audit is open until 2026-10-09:
 [AIBTC bounty muqchqnaa54e769598a4](https://aibtc.com/bounties/muqchqnaa54e769598a4).
 Static review: [Sentinel findings](README-sentinel-review.md) (13 LOW, no code
@@ -36,7 +36,7 @@ by `npm run check:v6-3-mirrors`.
 | Contract | Suite | Tests | Functions | Lines | Branches |
 | --- | --- | --- | --- | --- | --- |
 | markets-sbtc-stx-jing-v6-3 | `tests/unit/v6-3` | 320/320 | 139/139 | 2361/2367 (99.75%) | 837/839 (99.76%) |
-| swap-router-sbtc-stx-jing-v5-3 | `tests/unit/router-v5-3` | 223/223 | 37/37 | 531/534 (99.44%) | 165/166 (99.4%) |
+| swap-router-sbtc-stx-jing-v5-3 | `tests/unit/router-v5-3` | 321/321 | 40/40 | 625/629 (99.36%) | 237/238 (99.58%) |
 | jing-buy/sell-stx-core-spread-v1 | `tests/unit/integration-v6-3` | 110/110 | 100% | 100% | 100% (after exceptions) |
 | jing-ladder-dispatch | `tests/unit/integration-v6-3` | (same) | 10/10 | 93/93 | 30/30 |
 | jing-core-v6 | `tests/unit/core-ladder-v1` | 95/95 | 83/83 | 938/938 | 163/164 |
@@ -59,9 +59,9 @@ case cannot be reached through public calls.
 | ladder dispatch (one member across ten rungs per side) | 461/461 |
 | ladder dispatch on the template bytes | 391/391 |
 | ladder-v1 admin and seats | 334/334 |
-| router manual / smart | 366/366, 524-525 |
-| router pool pick (`df091b8`) | 158/158 |
-| rebate age / V6 router / router impact / bin boundary | 482, 304, 398, 26 |
+| router manual / smart (`2373cec`) | 368/368, 588/588 |
+| router pool pick / steering regression | 187/187, 60/60 |
+| rebate age / V6 router / router impact / bin boundary | 482, 296, 398, 26 |
 | deploy bytes from the templates | 17/17 |
 
 Trace coverage on the final bytes (`simulations/TRACE-COVERAGE-*.md`):
