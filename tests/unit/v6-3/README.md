@@ -7,6 +7,25 @@ on 2026-09-28; that revision was also merged into `master`.
 
 ## Verified result
 
+2026-10-01 rerun at `df091b8`: **320/320**, market functions 139/139,
+lines 2361/2367 (99.75%), branches 837/839 (99.76%), unchanged. Negative
+control for `ee2edde` (on a local copy, reverted, never committed): with
+`get-taker-capacity` quoting the fixed 20 bps whatever the update
+(`(bps TAKER_REBATE_BPS)`), 17 of the 47 `capacity-age`/`rebate-capacity`
+cases fail here and 13 of the 24 router `rebate-age` cases fail.
+
+Mirror check: `npm run check:v6-3-mirrors` compares the token streams of the
+deploy copy and its `-formatted` / `-followAll` mirrors (comments, whitespace
+and tuple trailing commas ignored). `-formatted` is in sync. **`-followAll`
+is not**: the first difference is at deploy line 1212 (the y-side
+admission helper: the mirror asserts the minimum on `existing + carry +
+amount` up front; the deploy copy checks `existing + parked + amount` later),
+and the copies also differ in the queue-full handling of `deposit-token-x/y`
+and in the pending-withdrawal paths. The token streams first differ at
+`19ef603` (2026-09-23); later market commits edited the mirror without
+restoring parity. Clarinet tests run only the deploy copy. The check is a separate
+script, not part of the `npm test` gate, until the mirror is resynced.
+
 On 2026-09-30, `npm test` passed **320/320 tests** against the
 market-owned age-aware capacity quote. The 33 new cases in
 `capacity-age.test.ts` cover configured feed IDs, age/rate boundaries,
@@ -256,7 +275,7 @@ No lines or branches are excluded to reach these thresholds.
 The remaining coverage must not be described as 100% raw line or branch coverage.
 Every function executes. The remaining branch sites are:
 
-- Lines **1401 and 1644**: rejecting a non-queue error returned by the parking
+- Lines **1404 and 1647**: rejecting a non-queue error returned by the parking
   helper. The old core substitute could force an arbitrary park-logger error.
   The actual core park loggers only check registration, and the market has
   already registered through initialization. Core pause does not reject these
@@ -276,8 +295,8 @@ Defensive rebate caps, empty distributions, and the already-settled guard are
 covered by the explicitly isolated private-helper cases described above.
 
 Clarinet also reports some tuple-label and continuation lines as unhit although
-the surrounding expression executes (currently 625, 667, 2428, 2476, 3100,
-and 3143). These remain in the denominator rather than being filtered away.
+the surrounding expression executes (currently 625, 667, 2431, 2479, 3103,
+and 3146). These remain in the denominator rather than being filtered away.
 
 Function execution coverage is not exhaustive behavioral coverage. Real Pyth
 signature validation, production sBTC integration, ladder authorization,
@@ -292,7 +311,7 @@ separate from LCOV branch coverage. Unattributed exits remain visible; they
 are not silently treated as covered or unreachable. Related Stxer scenario
 links are navigation only, not combined per-arm coverage evidence.
 
-The two `try!` sites at lines 3286 and 3356 propagate core refund-log
+The two `try!` sites at lines 3289 and 3359 propagate core refund-log
 errors. The actual core refund functions only explicitly reject unregistered
 callers; an initialized market has already registered, and this core provides
 no unregister operation. These error outcomes have no negative witness; we do

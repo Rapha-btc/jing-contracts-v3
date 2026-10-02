@@ -56,7 +56,8 @@
     "rv:v6-3:random": "node tests/rv/v6-3/run.mjs",
     "rv:v6-3:scenarios": "node tests/rv/v6-3/run-full-book.mjs",
     "test:router-v5-3": "vitest run --config vitest.router-v5-3.config.ts --reporter=default --reporter=json --outputFile=tests/unit/router-v5-3/.build/results.json && node tests/unit/router-v5-3/coverage.mjs",
-    "test:core-ladder-v1": "vitest run --config vitest.core-ladder-v1.config.ts --reporter=default --reporter=json --outputFile=tests/unit/core-ladder-v1/.build/results.json && node tests/unit/core-ladder-v1/coverage.mjs"
+    "test:core-ladder-v1": "vitest run --config vitest.core-ladder-v1.config.ts --reporter=default --reporter=json --outputFile=tests/unit/core-ladder-v1/.build/results.json && node tests/unit/core-ladder-v1/coverage.mjs",
+    "check:v6-3-mirrors": "node tests/unit/v6-3/mirror-sync.mjs"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",
