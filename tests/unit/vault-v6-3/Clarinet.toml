@@ -5,22 +5,22 @@ telemetry = false
 cache_dir = "../../../.cache"
 
 [contracts.sip-010-trait]
-path = "../../rv/sip-010-trait.clar"
+path = ".build/sip-010-trait.clar"
 clarity_version = 5
 epoch = "3.4"
 
 [contracts.token]
-path = "../v6-3/token.clar"
+path = ".build/token.clar"
 clarity_version = 5
 epoch = "3.4"
 
 [contracts.wrong-token]
-path = "../v6-3/token.clar"
+path = ".build/wrong-token.clar"
 clarity_version = 5
 epoch = "3.4"
 
 [contracts.oracle]
-path = "../v6-3/oracle.clar"
+path = ".build/oracle.clar"
 clarity_version = 5
 epoch = "3.4"
 
