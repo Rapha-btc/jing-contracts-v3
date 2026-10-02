@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+const repo=process.cwd();
+import pathModule from 'node:path';
 const dir='tests/unit/vault-v6-3',out=`${dir}/.build`;
 fs.mkdirSync(out,{recursive:true});fs.mkdirSync(`${dir}/settings`,{recursive:true});
 fs.copyFileSync('settings/Devnet.toml',`${dir}/settings/Devnet.toml`);
@@ -26,22 +28,42 @@ const replacements={
 let manifest='[project]\nname = "vault-v6-3"\nauthors = []\ntelemetry = false\ncache_dir = "../../../.cache"\n';
 const sources={};
 function add(name,path,patch=false){
- if(patch){const original=fs.readFileSync(path,'utf8');let source=original;
-  for(const [a,b] of Object.entries(replacements))source=source.replaceAll(a,b);
+ const sourcePath=pathModule.resolve(repo,path);
+ const original=fs.readFileSync(sourcePath,'utf8');
+ let source=original;
+
+ if(patch){
+  for(const [a,b] of Object.entries(replacements))
+    source=source.replaceAll(a,b);
+
   // Funded venue mocks pay 1% above each leg minimum plus two units so
   // per-leg rounding slack does not make a successful fixture miss min-out.
   if(['mock-dlmm-router','mock-xyk-core','mock-velar-pool'].includes(name))
     for(const n of ['min-dy','min-dx','amt-out-min'])
-      source=source.replaceAll(`(if (> ${n} u0) ${n} u1)`,`(+ ${n} (/ ${n} u100) u2)`);
-  fs.writeFileSync(`${out}/${name}.clar`,source);
-  sources[name]={path,sha256:crypto.createHash('sha256').update(original).digest('hex')};path=`.build/${name}.clar`;
+      source=source.replaceAll(
+        `(if (> ${n} u0) ${n} u1)`,
+        `(+ ${n} (/ ${n} u100) u2)`
+      );
  }
+
+ fs.writeFileSync(
+   `${out}/${name}.clar`,
+   source.replace(/\r\n/g,'\n')
+ );
+
+ sources[name]={
+   path:sourcePath,
+   sha256:crypto.createHash('sha256').update(original).digest('hex')
+ };
+
+ const buildPath=`.build/${name}.clar`;
+
  if(name==='vault'||name==='router')return;
- manifest+=`\n[contracts.${name}]\npath = "${path}"\nclarity_version = 5\nepoch = "3.4"\n`;
-}
-add('sip-010-trait','../../rv/sip-010-trait.clar');
-for(const name of ['token','wrong-token'])add(name,'../v6-3/token.clar');
-add('oracle','../v6-3/oracle.clar');
+
+ manifest+=`\n[contracts.${name}]\npath = "${buildPath}"\nclarity_version = 5\nepoch = "3.4"\n`;
+}add('sip-010-trait','tests/rv/sip-010-trait.clar');
+for(const name of ['token','wrong-token'])add(name,'tests/unit/v6-3/token.clar');
+add('oracle','tests/unit/v6-3/oracle.clar');
 for(const [name,file] of Object.entries({
  'jing-core-v6':'jing-core-v6','jing-ladder-v1':'jing-ladder-v1',
  market:'markets-sbtc-stx-jing-v6-3',router:'swap-router-sbtc-stx-jing-v5-3',
