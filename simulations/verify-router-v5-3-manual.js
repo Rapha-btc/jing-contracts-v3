@@ -26,10 +26,17 @@
 //     under); fallback none (unsold == book leg, out u0, min-out u0 ok,
 //     min-out u1 -> u3002); all four legs at once; min-out one over the
 //     measured out after every leg ran -> u3002, nothing moved.
+//  P  (df091b8) the DLMM leg uses the deepest of the three Bitflow STX/sBTC
+//     pools for the asset it buys (STX when selling sBTC, sBTC when selling
+//     STX; ties to the lower number). Before each DLMM-only call the model
+//     reads the three pools, picks, and checks the router's `dlmm-pick`
+//     agrees; after it, only the picked pool moved and it paid out exactly
+//     dlmm-out of the bought asset. At the 2026-10-01 tip this picks v-1 for
+//     sBTC sales while v-2 (bin +500, one-sided) is skipped.
 //  Every successful call: the receipt's in / out / unsold against the wallet
 //  deltas exactly, and the print equals the ok tuple plus topic / user / amount.
 import {
-  DEP, MARKET, ROUTER, PROBE, SBTC, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
+  DEP, MARKET, ROUTER, PROBE, SBTC, DLMM_POOLS, dlmmPick, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
   H, check, ev, evRaw, tx, fund, deployAll, initMarket, printAfter, forkClock, refused, wallet, printsOf,
   manualArgs, manualFn, xykQuote, velarQuote, uint, fields, mk, traits, assets, shas, done,
 } from './_router-v5-3-harness.js';
@@ -119,8 +126,16 @@ async function main() {
     for (const v of V) {
       const q = v === 'xyk' ? await xykQuote(sellX, leg) : v === 'velar' ? await velarQuote(sellX, leg) : null;
       const want = q == null ? ok2 : tupleOf({ ...zero, [`${v}-in`]: leg, [`${v}-out`]: q, out: q });
+      const poolBal = async () => [...String(await evRaw(MARKET, `(list ${DLMM_POOLS.map((d) => `(stx-get-balance '${d}) (unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`).join(' ')})`)).matchAll(/u(\d+)/g)].map((m) => BigInt(m[1]));
+      const pk = v === 'dlmm' ? await dlmmPick(sellX, 'P A dlmm') : null;
+      const pb0 = v === 'dlmm' ? await poolBal() : null;
       const res = await call(`A ${v} alone, min u0 (floored to u1)`, s, { amount: leg, a: vec(v, leg) }, want);
       if (v === 'dlmm') {
+        const pb1 = await poolBal(), i = pk.n - 1, bought = sellX ? 0 : 1, sold = 1 - bought;
+        console.log(`  DLMM pick ${pk.pool.split('.')[1]}; depths of the bought asset ${pk.depths.join(' / ')}`);
+        check('P only the picked pool moved', DLMM_POOLS.map((_, j) => j === i || (pb0[2 * j] === pb1[2 * j] && pb0[2 * j + 1] === pb1[2 * j + 1])).every(Boolean), true);
+        check('P the picked pool paid out exactly dlmm-out of the bought asset', String(pb0[2 * i + bought] - pb1[2 * i + bought]), String(res.f['dlmm-out']));
+        check('P the picked pool received the sold asset (<= dlmm-in, fees may leave)', String(pb1[2 * i + sold] > pb0[2 * i + sold] && pb1[2 * i + sold] - pb0[2 * i + sold] <= res.f['dlmm-in']), 'true');
         check('A dlmm: in == amount, out > 0, others u0', `${res.f['dlmm-in']} ${res.f['dlmm-out'] > 0n} ${res.f['xyk-in']} ${res.f['velar-in']} ${res.f['jing-ok']}`, `${leg} true 0 0 false`);
       }
     }

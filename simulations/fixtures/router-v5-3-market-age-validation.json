@@ -1,7 +1,7 @@
 {
   "date": "2026-09-30",
   "sources": {
-    "swap-router-sbtc-stx-jing-v5-3": "c8bb651f0df1417adddf7a50e0d29424218ce65db8f54c0a40238d578107113c",
+    "swap-router-sbtc-stx-jing-v5-3": "dc355d4402a42c5583776a38f08ed4feae8365443113079fb42f964bf5faf839",
     "jing-ladder-v1": "0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786",
     "markets-sbtc-stx-jing-v6-3": "ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848",
     "jing-core-v6": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697"
@@ -21,41 +21,42 @@
         {
           "side": "x",
           "version": "baseline",
-          "url": "https://stxer.xyz/simulations/mainnet/2f0b6ca395c61a1b5814a6036abd38a2"
+          "url": "https://stxer.xyz/simulations/mainnet/6ec50f055fae58d6d19b395f9cb37576"
         },
         {
           "side": "x",
           "version": "fixed",
-          "url": "https://stxer.xyz/simulations/mainnet/11bd63a9e19cdab3b45f8a0c380d0abb"
+          "url": "https://stxer.xyz/simulations/mainnet/9b04485c43c2c419524bb2507a156cde"
         },
         {
           "side": "y",
           "version": "baseline",
-          "url": "https://stxer.xyz/simulations/mainnet/242342a85cc645511f5e5ca7e4815d0b"
+          "url": "https://stxer.xyz/simulations/mainnet/1dfbde21cf06d852620b494e7dab0fce"
         },
         {
           "side": "y",
           "version": "fixed",
-          "url": "https://stxer.xyz/simulations/mainnet/8821dd9354239805794a63b256cb3b16"
+          "url": "https://stxer.xyz/simulations/mainnet/bb481e6ecbb327b4fed9b7354e4acb87"
         }
-      ]
+      ],
+      "forkHeight": 9104986
     },
     "smart": {
-      "passed": 503,
-      "checks": 503,
+      "passed": 525,
+      "checks": 525,
       "forkHeight": 9094335,
       "simulations": [
-        "https://stxer.xyz/simulations/mainnet/f2b05d80793f75b1e37c59afc383f9b1",
-        "https://stxer.xyz/simulations/mainnet/994d2cbe14b3428765bf811381a16482",
-        "https://stxer.xyz/simulations/mainnet/5164797eb1ba2c814451dc19df2bfb2a"
+        "https://stxer.xyz/simulations/mainnet/def91606d7037bb43bd5e516302bd35b",
+        "https://stxer.xyz/simulations/mainnet/d72a3abb67f4a681eb5b273a3db2c23f",
+        "https://stxer.xyz/simulations/mainnet/40e456f21466ec1710fcb2edbb1bc73c"
       ]
     },
     "v6": {
-      "passed": 290,
-      "checks": 290,
+      "passed": 304,
+      "checks": 304,
       "forkHeight": 9094335,
       "simulations": [
-        "https://stxer.xyz/simulations/mainnet/9d3c3db8d2f859fe2a9dc1ae9686b6ce"
+        "https://stxer.xyz/simulations/mainnet/cd3a8ef6fea885e46abc0cabc02be0bc"
       ],
       "deployments": {
         "markets-sbtc-stx-jing-v6-3": {
@@ -63,11 +64,12 @@
           "commentLinesRemoved": true
         },
         "swap-router-sbtc-stx-jing-v5-3": {
-          "sha256": "c8bb651f0df1417adddf7a50e0d29424218ce65db8f54c0a40238d578107113c",
+          "sha256": "dc355d4402a42c5583776a38f08ed4feae8365443113079fb42f964bf5faf839",
           "commentLinesRemoved": false
         }
       }
     },
-    "total": 1275
-  }
+    "total": 1311
+  },
+  "stxerRerun": "2026-10-01: all three suites rerun on the final router df091b8 (swap-router sha below) and the unchanged market/core/ladder; clarinet counts are from 2026-09-30 and were not rerun here"
 }

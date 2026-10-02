@@ -115,12 +115,18 @@ async function main() {
  const oldSizing='(rebate (/ (* amount (rebate-bps-for-age (get age aged))) BPS_PRECISION))\n(net (- amount rebate))';
  if(baselineOld.split(oldSizing).length!==2)throw new Error('baseline swap sizing not found exactly once');
  const baseline=baselineOld.replace(oldSizing,'(net (/ (* amount BPS_PRECISION)\n(+ BPS_PRECISION (rebate-bps-for-age (get age aged)))\n))\n(rebate (- amount net))');
+ // ee2edde: the current router passes the update to the market's 5-argument
+ // get-taker-capacity, which the baseline market does not have. The baseline
+ // pair therefore uses the router as it was before ee2edde (fixed 20 bps
+ // sizing, 4-argument quote); the current pair uses the current router.
+ const ROUTER_NAME='swap-router-sbtc-stx-jing-v5-3';
+ const baselineRouter=execFileSync('git',['show',`ee2edde^:contracts/${ROUTER_NAME}.clar`],{encoding:'utf8'});
  const router=`${DEP}.swap-router-sbtc-stx-jing-v5-3`,zero=tupleCV({dlmm:uintCV(0),xyk:uintCV(0),velar:uintCV(0)});
  let height,u,mid;const snapshots={},links={},differences=[];
  for(const side of ['x','y'])for(const version of ['baseline','current']) {
   const b=SimulationBuilder.new({stacksNodeAPI:'http://77.42.3.101/stacks-api'});if(height)b.useBlockHeight(height);
   for(const name of ['jing-core-v6','jing-ladder-v1','markets-sbtc-stx-jing-v6-3','swap-router-sbtc-stx-jing-v5-3'])
-   b.withSender(DEP).addContractDeploy({contract_name:name,source_code:name==='markets-sbtc-stx-jing-v6-3'&&version==='baseline'?baseline:source(name),clarity_version:ClarityVersion.Clarity5});
+   b.withSender(DEP).addContractDeploy({contract_name:name,source_code:version==='baseline'&&name==='markets-sbtc-stx-jing-v6-3'?baseline:version==='baseline'&&name===ROUTER_NAME?baselineRouter:source(name),clarity_version:ClarityVersion.Clarity5});
   sid=await b.run();links[`${side}/${version}`]=`https://stxer.xyz/simulations/mainnet/${sid}`;console.log(`${side}/${version}: ${links[`${side}/${version}`]}`);
   const result=await getSimulationResult(sid);height=Number(result.metadata.block_height);
   for(const st of result.steps.filter(s=>s.Result?.Transaction))check('deploy exact source',decode(st),ok);

@@ -586,17 +586,24 @@ async function main() {
   // last bin, u2003). Sell exactly its live capacity down to 5.5% under instead; if the DLMM already
   // sits below that (capacity u0) there is nothing to push and the router refuses the zero amount.
   const L_55 = (MID * 945n) / 1000n;
-  if (V6) tx("W18p T sells the DLMM's live capacity down to 5.5% under the mid on the DLMM alone (u3001 if already there), XYK + Velar stay at 2%",
-    call(T, "swap-sbtc-for-stx", [forkValue(RID, `(dlmm-capacity u${L_55} true)`), uintCV(0n), uintCV(1n), NO_VAA, NONE,
-      forkValue(RID, `{ dlmm: (dlmm-capacity u${L_55} true), xyk: u0, velar: u0 }`), ONES, uintCV(1n)], RID),
-    (v) => okPrefix(v) || String(v) === "(err u3001)");
-  else tx("W18p T sells 1.2 BTC on the DLMM alone (~25 bins): its active bin drops to ~5.5% under the mid, XYK + Velar stay at 2%", sellSbtc(T, 0n, NONE, amts(120_000_000n, 0n, 0n), ONES, 1n, NO_VAA), okPrefix);
-  const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
   // v6: the pools' spot after W9f / W9e moves with the fork, so a fixed 4% can leave them no room.
   // Put the limit 1% under the lower pool's live spot (both pools have room) and prove the DLMM has none.
   const cpRoomCode = `(let ((x (xyk-reserves true)) (v (velar-reserves true))
     (px (/ (* (get out x) PRICE_SCALE) (get in x)))
     (pv (/ (* (get out v) PRICE_SCALE) (get in v)))) (/ (* (if (< px pv) px pv) u99) u100))`;
+  // The DLMM is pushed to 5.5% under the mid or to that limit, whichever is lower.
+  const pushCode = `(let ((c ${cpRoomCode})) (if (< c u${L_55}) c u${L_55}))`;
+  // df091b8: the DLMM leg uses the pool with the most STX; draining one can
+  // hand the pick to another pool that still sits above 5.5%. Push the picked
+  // pool, round after round (the capacity walk stops at 30 bins, so one
+  // round may not reach 5.5%); once every pool sits there the rest refuse
+  // with u3001. Whichever pool is picked afterwards has no room at 5.5% under.
+  if (V6) for (let round = 1; round <= 12; round++) tx(`W18p round ${round}: T sells the picked DLMM pool's live capacity down to 5.5% under the mid (or the CP limit if lower) on the DLMM alone (u3001 if already there), XYK + Velar stay at 2%`,
+    call(T, "swap-sbtc-for-stx", [forkValue(RID, `(dlmm-capacity ${pushCode} true)`), uintCV(0n), uintCV(1n), NO_VAA, NONE,
+      forkValue(RID, `{ dlmm: (dlmm-capacity ${pushCode} true), xyk: u0, velar: u0 }`), ONES, uintCV(1n)], RID),
+    (v) => okPrefix(v) || String(v) === "(err u3001)");
+  else tx("W18p T sells 1.2 BTC on the DLMM alone (~25 bins): its active bin drops to ~5.5% under the mid, XYK + Velar stay at 2%", sellSbtc(T, 0n, NONE, amts(120_000_000n, 0n, 0n), ONES, 1n, NO_VAA), okPrefix);
+  const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
   if (V6) ev("W18a fixture: DLMM has no room at the measured limit", `(dlmm-capacity ${cpRoomCode} true)`, "u0");
   const L_4_INPUT = V6 ? forkValue(RID, cpRoomCode, (v) => { L_4 = BigInt(cvToString(v).slice(1)); }) : L_4;
   const r18a = tx(`W18a smart sell 250000 sats ${V6 ? "1% under the pools' spot" : "at 4% under"}, vaa none: no DLMM bin inside the limit, the residual split pro rata over the pools with room`, smartSbtc(T, 250_000n, L_4_INPUT, NO_VAA, 1n), okPrefix);
@@ -611,7 +618,8 @@ async function main() {
   // The deep preceding DLMM trade moves its spot by a fork-dependent amount.
   // Put the STX ceiling 5% below that real spot, and prove both CP pools have
   // room while DLMM has none. Keep exact split/wallet assertions below.
-  const stxCeilingCode = `(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool))))
+  // df091b8: the DLMM pool an STX sale uses (the router's dlmm-pick).
+  const stxCeilingCode = `(let ((p (dlmm-pool-info (dlmm-pick false))))
     (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) (unwrap-panic (contract-call? DLMM_CORE get-bin-price
       (get initial-price p) (get bin-step p) (get active-bin-id p)))) u95) u100))`;
   if(V6) {

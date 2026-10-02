@@ -1,8 +1,14 @@
 {
-  "simulation": "https://stxer.xyz/simulations/mainnet/b9a3a5a71f98e3f4040b918e94bdfd50",
+  "simulation": "https://stxer.xyz/simulations/mainnet/d2e2f058ba94430dc36e1e0789513ce8",
   "original": "1ac1ad538ad102792f868d918b1c4fd9",
-  "checks": 22,
-  "passed": 22,
-  "result": "(ok (tuple (dlmm-in u1000) (dlmm-out u2398110) (jing-in u0) (jing-ok false) (jing-out u0) (out u2398110) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+  "checks": 26,
+  "passed": 26,
+  "pick": "v-1",
+  "stxDepths": [
+    "289021194525",
+    "14028726019",
+    "22756961"
+  ],
+  "result": "(ok (tuple (dlmm-in u1000) (dlmm-out u2699989) (jing-in u0) (jing-ok false) (jing-out u0) (out u2699989) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
   "vmError": null
 }

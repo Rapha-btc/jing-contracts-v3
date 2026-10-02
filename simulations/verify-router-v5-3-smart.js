@@ -46,7 +46,7 @@
 //   the active one hold ~4.3 BTC, which ~1M STX (the largest wallet found)
 //   moves only ~60 bins (measured: 434 -> 372 for 800,000 STX).
 import {
-  DEP, MARKET, ROUTER, LADDER, SBTC, DLMM_POOL, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
+  DEP, MARKET, ROUTER, LADDER, SBTC, DLMM_POOLS, dlmmPick, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
   H, check, ev, evRaw, tx, fund, deployAll, initMarket, printAfter, forkClock, refused, wallet, printsOf,
   manualArgs, manualFn, smartArgs, smartFn, xykQuote, velarQuote, uint, fields, mk, traits, assets, principal, shas, update,
 } from './_router-v5-3-harness.js';
@@ -163,9 +163,10 @@ async function routes() {
     console.log('S1 update none, loose limit');
     let x = await smart('S1 no update, loose limit, small amount', sellX, taker, { amount: small, limit: loose, mid: P });
     check('S1 loose-limit capacity > amount, DLMM took it all', `${x.pre.d > small} ${x.f['dlmm-in']} ${x.f.unsold}`, `true ${small} 0`);
+    let pk = await dlmmPick(sellX, 'S1');
     await ev('S1 loose-limit fold advances 30 bins or stops at the pool boundary', ROUTER,
-      `(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
-        (r (fold dlmm-bin-step DLMM_WALK_BINS { bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) BPS) (- BPS fee))`},
+      `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
+        (r (fold dlmm-bin-step DLMM_WALK_BINS { pool: u${pk.n}, bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) BPS) (- BPS fee))`},
           initial-price: (get initial-price p), bin-step: (get bin-step p), fee: fee, cap: u0, done: false })))
         (let ((end (${sellX ? '+' : '-'} (get active-bin-id p) 30))
               (edge ${sellX ? '500' : '-500'}))
@@ -184,9 +185,10 @@ async function routes() {
     }
     check('S2 found a limit with room on DLMM, XYK and Velar', String(lim != null), 'true');
     console.log(`  limit ${lim}: dlmm ${pre.d}, xyk ${pre.x}, velar ${pre.v}`);
+    pk = await dlmmPick(sellX, 'S2');
     await ev('S2 at that limit the walk stops before 30 bins', ROUTER,
-      `(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
-        (r (fold dlmm-bin-step DLMM_WALK_BINS { bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) BPS) (- BPS fee))`},
+      `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
+        (r (fold dlmm-bin-step DLMM_WALK_BINS { pool: u${pk.n}, bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) BPS) (- BPS fee))`},
           initial-price: (get initial-price p), bin-step: (get bin-step p), fee: fee, cap: u0, done: false })))
         (and (get done r) (is-eq (get cap r) u${pre.d})))`, 'true');
     const a2 = pre.d + (pre.x + pre.v) / 2n;
@@ -315,38 +317,45 @@ async function edges() {
   console.log('\n######## SESSION 3: DLMM fees 0 and the +/-500 edges ########');
   await deployAll();
   sims.push(H.sid);
-  const P = uint(await evRaw(ROUTER, `(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool)))) (/ (* PRICE_SCALE DLMM_PRICE_SCALE) (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price p) (get bin-step p) (get active-bin-id p)))))`));
+  const pk0 = await dlmmPick(true, 'E0 sBTC sale');
+  const P = uint(await evRaw(ROUTER, `(let ((p (unwrap-panic (contract-call? '${pk0.pool} get-pool)))) (/ (* PRICE_SCALE DLMM_PRICE_SCALE) (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price p) (get bin-step p) (get active-bin-id p)))))`));
   console.log(`DLMM active-bin price as a router limit: ${P}`);
   const TX = mk(841), TY = TX;
   await fund('x', TX, 3_000_000_000n);
   await fund('y', TX, 100_000_000n);
   await fund('y', DLMM_ADMIN, 10n);
-  const active = async () => Number((await evRaw(ROUTER, '(get active-bin-id (unwrap-panic (contract-call? DLMM_POOL get-pool)))')));
+  const activeOf = async (pool) => Number((await evRaw(ROUTER, `(get active-bin-id (unwrap-panic (contract-call? '${pool} get-pool)))`)));
 
   console.log('E1 fees 0 (Bitflow DLMM admin, impersonated)');
-  await tx('DLMM admin sets x fees 0 / 0', DLMM_ADMIN, DLMM_CORE, 'set-x-fees', [principal(DLMM_POOL), uintCV(0n), uintCV(0n)], '(ok true)');
-  await tx('DLMM admin sets y fees 0 / 0', DLMM_ADMIN, DLMM_CORE, 'set-y-fees', [principal(DLMM_POOL), uintCV(0n), uintCV(0n)], '(ok true)');
-  await ev('pool fees now all 0', ROUTER, '(let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool)))) (list (get x-protocol-fee p) (get x-provider-fee p) (get x-variable-fee p) (get y-protocol-fee p) (get y-provider-fee p) (get y-variable-fee p)))', '(list u0 u0 u0 u0 u0 u0)');
+  // all three pools, so the fee-0 arm runs whichever pool each direction picks
+  for (const d of DLMM_POOLS) {
+    await tx(`DLMM admin sets x fees 0 / 0 on ${d.split('.')[1]}`, DLMM_ADMIN, DLMM_CORE, 'set-x-fees', [principal(d), uintCV(0n), uintCV(0n)], '(ok true)');
+    await tx(`DLMM admin sets y fees 0 / 0 on ${d.split('.')[1]}`, DLMM_ADMIN, DLMM_CORE, 'set-y-fees', [principal(d), uintCV(0n), uintCV(0n)], '(ok true)');
+    await ev(`${d.split('.')[1]} fees now all 0`, ROUTER, `(let ((p (unwrap-panic (contract-call? '${d} get-pool)))) (list (get x-protocol-fee p) (get x-provider-fee p) (get x-variable-fee p) (get y-protocol-fee p) (get y-provider-fee p) (get y-variable-fee p)))`, '(list u0 u0 u0 u0 u0 u0)');
+  }
   let x = await smart('E1 fee 0, sBTC seller, update none', true, TX, { amount: 5_000n, limit: P / 2n, mid: P });
   check('E1 DLMM took it at fee 0', String(x.f['dlmm-in']), '5000');
   x = await smart('E1 fee 0, STX seller, update none', false, TY, { amount: 20_000_000n, limit: P * 2n, mid: P });
   check('E1 DLMM took it at fee 0', String(x.f['dlmm-in']), '20000000');
 
-  console.log('E2 push the pool to bin +500 with manual DLMM legs (sBTC sales)');
-  let partial = 0;
-  for (let i = 0; i < 12 && (await active()) < 500; i++) {
-    const amount = 500_000_000n;
+  console.log('E2 push the picked pool to bin +500 with manual DLMM legs (sBTC sales)');
+  // Each sale drains the picked pool's STX; once another pool holds more STX
+  // the router moves to it. Keep selling until the pool it picks sits at +500.
+  let partial = 0, pk = await dlmmPick(true, 'E2 start');
+  for (let i = 0; i < 40 && (await activeOf(pk.pool)) < 500; i++) {
+    const amount = 200_000_000n;
     const w0 = await wallet(TX);
     const r = await tx(`E2 manual DLMM leg, ${amount} sats`, TX, ROUTER, manualFn(true), manualArgs({ amount, a: [amount, 0n, 0n] }), (v) => v.startsWith('(ok'));
     const w1 = await wallet(TX);
     check('E2 wallet: sBTC debit == dlmm-in, unsold == amount - dlmm-in, STX gain == out', `${w0.x - w1.x} ${r.f.unsold} ${w1.y - w0.y}`, `${r.f['dlmm-in']} ${amount - r.f['dlmm-in']} ${r.f.out}`);
     if (r.f['dlmm-in'] < amount) partial++;
-    console.log(`  active bin now ${await active()}`);
+    console.log(`  ${pk.pool.split('.')[1]} active bin now ${await activeOf(pk.pool)}`);
+    pk = await dlmmPick(true, `E2 after leg ${i + 1}`);
   }
-  check('E2 the pool reached bin 500', String(await active()), '500');
+  check('E2 the picked pool reached bin 500', String(await activeOf(pk.pool)), '500');
   check('E2 at least one partial DLMM fill (in < amount, the rest unsold in the wallet)', String(partial > 0), 'true');
   await ev('E2 the walk from 500 up keeps bin 500 and stops (edge)', ROUTER,
-    `(let ((r (fold dlmm-bin-step DLMM_WALK_BINS { bin: 500, up: true, threshold: u999999999999999999999, initial-price: (get initial-price (unwrap-panic (contract-call? DLMM_POOL get-pool))), bin-step: u15, fee: u0, cap: u0, done: false })))
+    `(let ((r (fold dlmm-bin-step DLMM_WALK_BINS { pool: u${pk.n}, bin: 500, up: true, threshold: u999999999999999999999, initial-price: (get initial-price (unwrap-panic (contract-call? '${pk.pool} get-pool))), bin-step: u15, fee: u0, cap: u0, done: false })))
       (and (get done r) (is-eq (get bin r) 500)))`, 'true');
   x = await smart('E2 smart sBTC sale at bin 500, loosest limit: the walk hits the +500 edge', true, TX, { amount: 10_000n, limit: P / 100n, mid: P });
   check('E2 dlmm-cap == bin 500 only', String(x.p['dlmm-cap']), String(x.pre.d));

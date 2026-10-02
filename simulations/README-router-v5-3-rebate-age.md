@@ -5,6 +5,45 @@ checks passed** for the market-owned capacity quote and corresponding router.
 The market selects the configured feeds and returns age-adjusted `gross-cap`
 and `rebate-bps`; the router passes the update and consumes that quote.
 
+## Rerun on the final deploy bytes (2026-10-01)
+
+Rerun on the final router `df091b8` (DLMM legs use the deepest of the
+three Bitflow STX/sBTC pools; sha256 `dc355d44…f839`), the unchanged market
+(`ed046155…`), core-v6 (`88a689af…`) and ladder-v1 (`0f1e08b0…`).
+**1,311/1,311 checks passed.**
+
+| Stxer suite | Checks | Simulations |
+| --- | ---: | --- |
+| Signed-update age regression (tip, fork 9104986) | 482/482 | sBTC → STX: [baseline](https://stxer.xyz/simulations/mainnet/6ec50f055fae58d6d19b395f9cb37576), [fixed](https://stxer.xyz/simulations/mainnet/9b04485c43c2c419524bb2507a156cde); STX → sBTC: [baseline](https://stxer.xyz/simulations/mainnet/1dfbde21cf06d852620b494e7dab0fce), [fixed](https://stxer.xyz/simulations/mainnet/bb481e6ecbb327b4fed9b7354e4acb87) |
+| Broad smart-router regression (fork 9094335) | 525/525 | [routes](https://stxer.xyz/simulations/mainnet/def91606d7037bb43bd5e516302bd35b), [minimum taker](https://stxer.xyz/simulations/mainnet/d72a3abb67f4a681eb5b273a3db2c23f), [fees and DLMM edge](https://stxer.xyz/simulations/mainnet/40e456f21466ec1710fcb2edbb1bc73c) |
+| V6 router suite (fork 9094335) | 304/304 | [manual and smart routes](https://stxer.xyz/simulations/mainnet/cd3a8ef6fea885e46abc0cabc02be0bc) |
+
+The "fixed" pair is now the final router; the baseline pair is still the
+`b41dbd6` market/router. Harness changes for `df091b8`, test side only:
+
+- The shared harness models the pool pick (the three pools' balance of the
+  asset bought, ties to the lower number) and checks the router's
+  `dlmm-pick` agrees before every fold it evaluates; snapshots and the AMM
+  depth log cover all three pools.
+- Smart suite: the S1/S2 folds and session 3 read the picked pool; E1 sets
+  fees 0 on all three pools; E2 sells sBTC until the pool the router picks
+  sits at bin +500. At 9094335 the pick moves as the pools drain: v-1
+  (bin -65 to 165), then v-2 (431 to +500, its STX gone), then v-1 again
+  (to +500 after four 2 BTC legs in all), where the edge arm runs.
+  525 checks, was 503 (one pick check per fold and per E2 leg, two extra
+  fee pools).
+- V6 suite (W18p): draining the picked pool can hand the pick to another
+  pool, so the DLMM-only push repeats (up to 12 rounds, u3001 once nothing
+  is left) and goes to 5.5% under the mid or the CP fixture's limit,
+  whichever is lower; W18d reads the STX-sale pool through the router's
+  `dlmm-pick`. 304 checks, was 290.
+
+At the tip the broad suites now pass without `ROUTER_FORK_HEIGHT` too
+(manual 366/366, smart 524/524; see the
+[router README](README-router-ladder-coverage.md)). Before `df091b8` they
+failed there on the drained v-2 pool (u2003). The summary JSON has the new
+links. The September 30 results below are kept for reference.
+
 Production SHA-256:
 
 - Market: `ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848`.

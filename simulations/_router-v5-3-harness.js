@@ -22,7 +22,9 @@ export const ROUTER = `${DEP}.swap-router-sbtc-stx-jing-v5-3`;
 export const PROBE = `${DEP}.rtrprobe-v1`;
 export const SBTC = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
 export const WSTX = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2';
-export const DLMM_POOL = 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15';
+// df091b8: each DLMM leg uses the pool holding the most of the asset it buys
+// (STX when selling sBTC, sBTC when selling STX), ties to the lower number.
+export const DLMM_POOLS = [1, 2, 3].map((i) => `SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-${i}-bps-15`);
 export const XYK_POOL = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1';
 export const VELAR_POOL = 'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-pool-v1_0_0-0070';
 export const WHALE_X = 'SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2'; // ~40 BTC of sBTC
@@ -142,7 +144,7 @@ export async function deployAll(extra = [], sourceOverrides = {}) {
   const setup = await retry(() => getSimulationResult(H.sid));
   for (const st of setup.steps.filter((s) => s.Result?.Transaction)) check('deploy supplied source', decode(st), ok);
   // AMM depth on this fork, logged rather than assumed
-  console.log('AMM depth at the fork:', await evRaw(ROUTER, `{ dlmm: (let ((p (unwrap-panic (contract-call? DLMM_POOL get-pool)))) { active-bin: (get active-bin-id p), bin-step: (get bin-step p), fee-x: (+ (get x-protocol-fee p) (get x-provider-fee p) (get x-variable-fee p)), fee-y: (+ (get y-protocol-fee p) (get y-provider-fee p) (get y-variable-fee p)), stx: (stx-get-balance DLMM_POOL), sbtc: (unwrap-panic (contract-call? SBTC get-balance DLMM_POOL)) }),
+  console.log('AMM depth at the fork:', await evRaw(ROUTER, `{ dlmm: (list ${DLMM_POOLS.map((d) => `(let ((p (unwrap-panic (contract-call? '${d} get-pool)))) { active-bin: (get active-bin-id p), bin-step: (get bin-step p), fee-x: (+ (get x-protocol-fee p) (get x-provider-fee p) (get x-variable-fee p)), fee-y: (+ (get y-protocol-fee p) (get y-provider-fee p) (get y-variable-fee p)), stx: (stx-get-balance '${d}), sbtc: (unwrap-panic (contract-call? SBTC get-balance '${d})) })`).join(' ')}),
     xyk: (let ((p (unwrap-panic (contract-call? XYK_POOL get-pool)))) { sbtc: (get x-balance p), stx: (get y-balance p) }),
     velar: (let ((p (unwrap-panic (contract-call? VELAR_POOL get-pool)))) { stx: (get reserve0 p), sbtc: (get reserve1 p) }) }`));
   const deployed = await evRaw(ROUTER, '(list JING_MARKET)');
@@ -166,6 +168,17 @@ export async function printAfter(stamp) {
   }
   throw new Error(`no newer signed feed after ${stamp}`);
 }
+// The DLMM pool a leg will use, modelled from the three pools' balances of
+// the asset the leg buys (ties to the lower number), checked against the
+// router's own `dlmm-pick`. -> { n, pool, depths }
+export async function dlmmPick(sellSbtc, label = 'DLMM pick') {
+  const depth = (d) => sellSbtc ? `(stx-get-balance '${d})` : `(unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`;
+  const depths = [...String(await evRaw(MARKET, `(list ${DLMM_POOLS.map(depth).join(' ')})`)).matchAll(/u(\d+)/g)].map((m) => BigInt(m[1]));
+  let n = 1;
+  if (!(depths[0] >= depths[1] && depths[0] >= depths[2])) n = depths[1] >= depths[2] ? 2 : 3;
+  check(`${label}: router dlmm-pick (${sellSbtc ? 'sBTC sale, STX depth' : 'STX sale, sBTC depth'} ${depths.join(' / ')}) == model`, await evRaw(ROUTER, `(dlmm-pick ${sellSbtc})`), `u${n}`);
+  return { n, pool: DLMM_POOLS[n - 1], depths };
+}
 export async function forkClock() { return Number(uint(await evRaw(MARKET, 'stacks-block-time'))); }
 
 // Everything a refused router call could move: the taker's and the market's
@@ -173,7 +186,7 @@ export async function forkClock() { return Number(uint(await evRaw(MARKET, 'stac
 export async function snapshot(who) {
   const bal = (p) => `{ x: (unwrap-panic (contract-call? '${SBTC} get-balance '${p})), y: (stx-get-balance '${p}) }`;
   const code = `{ w: (list ${who.map(bal).join(' ')}), m: ${bal(MARKET)},
-    d: (unwrap-panic (contract-call? '${DLMM_POOL} get-pool)), dx: ${bal(DLMM_POOL)},
+    d: (list ${DLMM_POOLS.map((d) => `(unwrap-panic (contract-call? '${d} get-pool))`).join(' ')}), dx: (list ${DLMM_POOLS.map(bal).join(' ')}),
     k: (unwrap-panic (contract-call? '${XYK_POOL} get-pool)),
     v: (contract-call? '${VELAR_POOL} get-pool), vx: ${bal(VELAR_POOL)},
     c: (var-get current-cycle) }`;

@@ -7,6 +7,85 @@ Same method as [README-v6-3-coverage.md](README-v6-3-coverage.md): every
 number comes from stxer mainnet-fork runs whose deployments are
 byte-identical to the current source, matched by sha256 (`--by-source`).
 
+## 0. Rerun on the final deploy bytes (2026-10-01)
+
+Final router `df091b8` (sha256 `dc355d4402a42c5583776a38f08ed4feae8365443113079fb42f964bf5faf839`):
+each DLMM leg uses the deepest of Bitflow's three STX/sBTC pools
+(`dlmm-pool-stx-sbtc-v-1/v-2/v-3-bps-15`) for the asset it buys, ties to the
+lower number (`dlmm-pick`). Deployed next to market `ee2edde`
+(`ed046155…1848`), core-v6 `88a689af…` and ladder-v1 `0f1e08b0…`
+(unchanged). Every suite prints the hashes at start and end.
+
+| Suite | Fork | Passed / total | stxer |
+|---|---|---|---|
+| `verify-ladder-v1-admin-seats.js` | tip | 334 / 334 | [21903045](https://stxer.xyz/simulations/mainnet/2190304536692650c142a9bdcb139d7b) |
+| `verify-router-v5-3-manual.js` | tip | 366 / 366 | [39549a17](https://stxer.xyz/simulations/mainnet/39549a17d261a758d2ba8b65301cc8e4) |
+| `verify-router-v5-3-manual.js` | 9094335 | 366 / 366 | [5a4c7687](https://stxer.xyz/simulations/mainnet/5a4c7687679856b1a707ee00f6c48868) |
+| `verify-router-v5-3-smart.js` | tip | 524 / 524 | [routes](https://stxer.xyz/simulations/mainnet/84c514ee674c5489f92173a1ec827347), [min-taker](https://stxer.xyz/simulations/mainnet/1efca09a61e321f6405722ea4d940c56), [fees / edge](https://stxer.xyz/simulations/mainnet/419317004991beb8d8146509d471a56a) |
+| `verify-router-v5-3-smart.js` | 9094335 | 525 / 525 | [routes](https://stxer.xyz/simulations/mainnet/def91606d7037bb43bd5e516302bd35b), [min-taker](https://stxer.xyz/simulations/mainnet/d72a3abb67f4a681eb5b273a3db2c23f), [fees / edge](https://stxer.xyz/simulations/mainnet/40e456f21466ec1710fcb2edbb1bc73c) |
+| `verify-router-v5-3-pool-pick.js` (new) | tip | 158 / 158 | [c958da67](https://stxer.xyz/simulations/mainnet/c958da67b2ddfeda04231686adaa96cc) |
+| `verify-swap-router-v3-lazer.js` V6=1 | 9094335 | 304 / 304 | [cd3a8ef6](https://stxer.xyz/simulations/mainnet/cd3a8ef6fea885e46abc0cabc02be0bc) |
+| `verify-router-v5-3-rebate-age.js` | tip | 482 / 482 | [README-router-v5-3-rebate-age.md](README-router-v5-3-rebate-age.md) |
+
+The ladder is unchanged; its suite was rerun on the same bytes with the
+same 334 checks. Before `df091b8` the manual and smart suites failed at the
+tip: the hardcoded v-2 pool sat at bin +500 with 766 uSTX, so every DLMM
+sBTC sale returned u2003 (manual [66597205](https://stxer.xyz/simulations/mainnet/665972053fa15e1ef2726118263b3468),
+smart [d897c3cb](https://stxer.xyz/simulations/mainnet/d897c3cb7fc1389e235eca1880eeea40), both on the `ee2edde` router).
+
+Harness changes for `df091b8` (test side only):
+- `_router-v5-3-harness.js`: `dlmmPick(sellSbtc)` models the pick from the
+  three pools' balances of the asset bought and checks the router's
+  `dlmm-pick` agrees; the refusal snapshot and the depth log cover all three
+  pools.
+- manual: phase A's DLMM call asserts the pick, that only the picked pool
+  moved, and that it paid out exactly `dlmm-out`. At the tip an sBTC sale
+  picks v-1 (STX 34,465 / 0.0008 / 22.75) and skips the one-sided v-2; an STX
+  sale picks v-2 (sBTC 2.46 / 5.56 / 0 BTC).
+- smart: the S1/S2 folds and session 3 read the picked pool; E1 sets fees 0
+  on all three pools; E2 sells until the pool the router picks sits at +500
+  (the pick moves between pools as they drain).
+- `verify-router-v5-3-pool-pick.js` (new): T the pick at the tip, both
+  directions, one manual and one smart sale each; D a drain of the
+  sBTC-sale pick to +500; L public `add-liquidity` (dlmm-core-v-1-1, STX at
+  or above the active bin, sBTC at or below) until v-3, then v-2, is the
+  deepest for an sBTC sale and v-1, then v-3, for an STX sale, with the same
+  two sales on each. Every sale: only the picked pool moves, it pays out
+  exactly `dlmm-out`, wallet deltas match, the smart `dlmm-cap` equals
+  `dlmm-capacity` read just before. A manual DLMM leg may stop short (bin
+  step cap or pool edge): `dlmm-in + unsold == amount`.
+
+### Coverage on the final bytes
+
+Router: the 19 runs on `df091b8` (the eight router suites above, router
+impact and bin boundary; `--by-source`, so only deployments byte-identical
+to `df091b8` count; bin boundary installs with `SetContractCode` and counts
+zero). 908 transactions, 358 calls to a counted router instance, all
+traced, 0 decode errors. The previous figures are on the `ee2edde` router
+(70 branch nodes; `df091b8` adds `dlmm-pick` and the per-pool arms).
+
+| `swap-router-sbtc-stx-jing-v5-3` | before (`ee2edde` bytes, 2026-09-30) | after (`df091b8`, 2026-10-01) |
+|---|---|---|
+| expressions executed | 588 / 926 (63.5%) | 635 / 990 (64.1%) |
+| code lines touched | 340 / 548 (62.0%) | 372 / 590 (63.1%) |
+| function-body lines touched | 340 / 517 (65.8%) | 372 / 557 (66.8%) |
+| branch nodes full / partial / never | 67 / 2 / 1 of 70 | 78 / 2 / 1 of 81 |
+| error paths (failure arms) hit | 35 / 35 | 35 / 35 |
+
+Every new branch is fully taken: `dlmm-pick`'s three outcomes in both
+directions, and the v-1 / v-2 / v-3 arms of both DLMM swaps,
+`dlmm-pool-info` and `dlmm-bin-balances` (the v-3 and the STX-sale v-1 arms
+only through `verify-router-v5-3-pool-pick.js`). The three remaining
+points are the ones in section 4: `xyk-swap`'s non-sBTC x-token arm (231,
+240-246) and `cp-split`'s zero-total guard (802), both provably
+unreachable. Per-line detail: [TRACE-COVERAGE-swap-router-sbtc-stx-jing-v5-3.md](TRACE-COVERAGE-swap-router-sbtc-stx-jing-v5-3.md).
+
+Ladder: unchanged bytes. Before (the 37 earlier runs, by source) and after
+(the 51 runs of the 2026-10-01 rerun) are identical: 247 / 473 expressions
+(52.2%), 141 / 300 lines, 24 / 24 branch nodes fully taken, 37 / 37 failure
+arms. No reachable but untested path remains (section 4). Detail:
+[TRACE-COVERAGE-jing-ladder-v1.md](TRACE-COVERAGE-jing-ladder-v1.md).
+
 ## 1. Source provenance
 
 | contract | last change | sha256 (start and end of this work) |
@@ -209,8 +288,8 @@ No reachable but untested path remains.
 
 | line | what | class | why |
 |---|---|---|---|
-| 227 (else arm), 236-240 | `xyk-swap` when the pool's x-token is not sBTC | provably unreachable | `XYK_POOL` is a constant; its `x-token` is sBTC and is written once, by `create-pool`, which `xyk-core-v-1-2` refuses on a created pool (`ERR_POOL_ALREADY_CREATED`) |
-| 771 (else arm) | `cp-split`'s zero-total guard | provably unreachable | taking it needs `residual <= total` with `total = 0`, i.e. residual 0; the only caller, `cp-stage`, exits on `left = 0` first (the Clarinet router suite reaches the same conclusion) |
+| 231 (else arm), 240-246 (227, 236-240 before `df091b8`) | `xyk-swap` when the pool's x-token is not sBTC | provably unreachable | `XYK_POOL` is a constant; its `x-token` is sBTC and is written once, by `create-pool`, which `xyk-core-v-1-2` refuses on a created pool (`ERR_POOL_ALREADY_CREATED`) |
+| 802 (else arm; 771 before `df091b8`) | `cp-split`'s zero-total guard | provably unreachable | taking it needs `residual <= total` with `total = 0`, i.e. residual 0; the only caller, `cp-stage`, exits on `left = 0` first (the Clarinet router suite reaches the same conclusion) |
 | 117-146, 608-610, 703, 799-801 | constants, `ERR_*`, `DLMM_WALK_BINS` | instrumentation | deploy-time definitions, not traced by stxer |
 | 411, 512, 1014, 1082 | `(user tx-sender)` | instrumentation | a `let` binding pair, not a call; the functions run |
 
