@@ -46,7 +46,7 @@
 //   the active one hold ~4.3 BTC, which ~1M STX (the largest wallet found)
 //   moves only ~60 bins (measured: 434 -> 372 for 800,000 STX).
 import {
-  DEP, MARKET, ROUTER, LADDER, SBTC, DLMM_POOLS, dlmmPick, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
+  DEP, MARKET, ROUTER, LADDER, SBTC, DLMM_POOLS, dlmmPick, logEstimate, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
   H, check, ev, evRaw, tx, fund, deployAll, initMarket, printAfter, forkClock, refused, wallet, printsOf,
   manualArgs, manualFn, smartArgs, smartFn, xykQuote, velarQuote, uint, fields, mk, traits, assets, principal, shas, update,
 } from './_router-v5-3-harness.js';
@@ -65,8 +65,17 @@ const cpSplit = (r, cx, cv) => { const t = cx + cv; if (r <= t) { const x = t > 
 // the router's sizing on the fork, as the caller
 async function sizing(sellX, taker, { amount, limit, u, mid }) {
   const b = sellX ? 'true' : 'false';
-  return fields(await evRaw(ROUTER, `{ j: (jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b}),
-    d: (dlmm-capacity u${limit} ${b}),
+  // 280c81c: the DLMM stage picks its pool for what is left after the book
+  // leg (`dlmm-pick sell left`) and walks that pool's capacity. d: the pick
+  // and capacity for left = amount - jing-size (the book leg fills in full),
+  // d0 / n0 for left = amount, c1..c3 every pool's capacity (a partial book
+  // fill leaves another left).
+  const ju = `(jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b})`;
+  return fields(await evRaw(ROUTER, `{ j: ${ju},
+    n: (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j)))),
+    d: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))))),
+    n0: (dlmm-pick ${b} u${amount}), d0: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} u${amount})),
+    c1: (dlmm-capacity u${limit} ${b} u1), c2: (dlmm-capacity u${limit} ${b} u2), c3: (dlmm-capacity u${limit} ${b} u3),
     x: (cp-capacity (xyk-reserves ${b}) (xyk-keep ${b}) u${limit} ${b}),
     v: (cp-capacity (velar-reserves ${b}) (velar-keep) u${limit} ${b}) }`, taker));
 }
@@ -103,8 +112,12 @@ async function smart(label, sellX, taker, o, want = null) {
   const l1 = o.amount - f['jing-in'];
   if (dust(l1, o.limit, sellX)) check(`${label}: DLMM stage skipped (left ${l1} is dust)`, `${p['dlmm-cap']} ${f['dlmm-in']} ${f['dlmm-out']}`, '0 0 0');
   else {
-    check(`${label}: dlmm-cap == dlmm-capacity read before the call`, String(p['dlmm-cap']), String(pre.d));
-    check(`${label}: dlmm-in == min(cap ${pre.d}, left ${l1})`, String(f['dlmm-in']), String(minB(pre.d, l1)));
+    // the pick for this left was read before the call when left is amount -
+    // jing-size or amount; otherwise the cap must be one pool's capacity
+    const dWant = l1 === o.amount - minB(pre.j, o.amount) ? pre.d : l1 === o.amount ? pre.d0 : null;
+    if (dWant != null) check(`${label}: dlmm-cap == dlmm-capacity of dlmm-pick(left ${l1}) read before the call`, String(p['dlmm-cap']), String(dWant));
+    else check(`${label}: dlmm-cap is one pool's capacity (left ${l1}: partial book fill)`, String([pre.c1, pre.c2, pre.c3].includes(p['dlmm-cap'])), 'true');
+    check(`${label}: dlmm-in == min(cap ${p['dlmm-cap']}, left ${l1})`, String(f['dlmm-in']), String(minB(p['dlmm-cap'], l1)));
   }
   // stage 3
   const l2 = l1 - f['dlmm-in'];
@@ -163,7 +176,7 @@ async function routes() {
     console.log('S1 update none, loose limit');
     let x = await smart('S1 no update, loose limit, small amount', sellX, taker, { amount: small, limit: loose, mid: P });
     check('S1 loose-limit capacity > amount, DLMM took it all', `${x.pre.d > small} ${x.f['dlmm-in']} ${x.f.unsold}`, `true ${small} 0`);
-    let pk = await dlmmPick(sellX, 'S1');
+    let pk = await dlmmPick(sellX, small, 'S1');
     await ev('S1 loose-limit fold advances 30 bins or stops at the pool boundary', ROUTER,
       `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
         (r (fold dlmm-bin-step DLMM_WALK_BINS { pool: u${pk.n}, bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${loose}) BPS) (- BPS fee))`},
@@ -172,7 +185,7 @@ async function routes() {
               (edge ${sellX ? '500' : '-500'}))
           (and (is-eq (get done r) (${sellX ? '>' : '<'} end edge))
             (is-eq (get bin r) (if (${sellX ? '>' : '<'} end edge) edge end))
-            (is-eq (get cap r) (dlmm-capacity u${loose} ${sellX})))))`, 'true');
+            (is-eq (get cap r) (dlmm-capacity u${loose} ${sellX} u${pk.n})))))`, 'true');
 
     console.log('S2 / S3 tight limit: every venue has some room');
     // Start far enough beyond the oracle mid to find a tight pool limit even
@@ -185,7 +198,7 @@ async function routes() {
     }
     check('S2 found a limit with room on DLMM, XYK and Velar', String(lim != null), 'true');
     console.log(`  limit ${lim}: dlmm ${pre.d}, xyk ${pre.x}, velar ${pre.v}`);
-    pk = await dlmmPick(sellX, 'S2');
+    pk = await dlmmPick(sellX, 1n, 'S2');
     await ev('S2 at that limit the walk stops before 30 bins', ROUTER,
       `(let ((p (unwrap-panic (contract-call? '${pk.pool} get-pool))) (fee (+ (get ${sellX ? 'y' : 'x'}-protocol-fee p) (get ${sellX ? 'y' : 'x'}-provider-fee p) (get ${sellX ? 'y' : 'x'}-variable-fee p)))
         (r (fold dlmm-bin-step DLMM_WALK_BINS { pool: u${pk.n}, bin: (get active-bin-id p), up: ${sellX}, threshold: ${sellX ? `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) (- BPS fee)) BPS)` : `(/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) u${lim}) BPS) (- BPS fee))`},
@@ -317,7 +330,7 @@ async function edges() {
   console.log('\n######## SESSION 3: DLMM fees 0 and the +/-500 edges ########');
   await deployAll();
   sims.push(H.sid);
-  const pk0 = await dlmmPick(true, 'E0 sBTC sale');
+  const pk0 = await dlmmPick(true, 5_000n, 'E0 sBTC sale');
   const P = uint(await evRaw(ROUTER, `(let ((p (unwrap-panic (contract-call? '${pk0.pool} get-pool)))) (/ (* PRICE_SCALE DLMM_PRICE_SCALE) (unwrap-panic (contract-call? DLMM_CORE get-bin-price (get initial-price p) (get bin-step p) (get active-bin-id p)))))`));
   console.log(`DLMM active-bin price as a router limit: ${P}`);
   const TX = mk(841), TY = TX;
@@ -339,10 +352,10 @@ async function edges() {
   check('E1 DLMM took it at fee 0', String(x.f['dlmm-in']), '20000000');
 
   console.log('E2 push the picked pool to bin +500 with manual DLMM legs (sBTC sales)');
-  // Each sale drains the picked pool's STX and raises its active-bin price;
-  // once another eligible pool (>= 1% of the deepest STX balance) quotes
-  // lower, the router moves to it. Keep selling until the pool it picks sits at +500.
-  let partial = 0, pk = await dlmmPick(true, 'E2 start');
+  // Each sale drains the picked pool's STX; once another eligible pool (>= 1%
+  // of the deepest STX balance) pays more for the next leg, the router moves
+  // to it. Keep selling until the pool it picks sits at +500.
+  let partial = 0, pk = await dlmmPick(true, 200_000_000n, 'E2 start');
   for (let i = 0; i < 40 && (await activeOf(pk.pool)) < 500; i++) {
     const amount = 200_000_000n;
     const w0 = await wallet(TX);
@@ -350,8 +363,9 @@ async function edges() {
     const w1 = await wallet(TX);
     check('E2 wallet: sBTC debit == dlmm-in, unsold == amount - dlmm-in, STX gain == out', `${w0.x - w1.x} ${r.f.unsold} ${w1.y - w0.y}`, `${r.f['dlmm-in']} ${amount - r.f['dlmm-in']} ${r.f.out}`);
     if (r.f['dlmm-in'] < amount) partial++;
+    logEstimate(`smart E2 leg ${i + 1}`, pk, amount, r.f['dlmm-in'], r.f['dlmm-out']);
     console.log(`  ${pk.pool.split('.')[1]} active bin now ${await activeOf(pk.pool)}`);
-    pk = await dlmmPick(true, `E2 after leg ${i + 1}`);
+    pk = await dlmmPick(true, 200_000_000n, `E2 after leg ${i + 1}`);
   }
   check('E2 the picked pool reached bin 500', String(await activeOf(pk.pool)), '500');
   check('E2 at least one partial DLMM fill (in < amount, the rest unsold in the wallet)', String(partial > 0), 'true');

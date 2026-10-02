@@ -503,7 +503,7 @@ async function main() {
   const n2s = sbtcOf(T, "W9b after"); const n2x = stxOf(T, "W9b after");
   const n3s = sbtcOf(T, "W9c before"); const n3x = stxOf(T, "W9c before");
   if (V6) ev("W9c fixture: no AMM room at the rejection limit",
-    `(list (dlmm-capacity u${L_TIGHT} true) (cp-capacity (xyk-reserves true) (xyk-keep true) u${L_TIGHT} true) (cp-capacity (velar-reserves true) (velar-keep) u${L_TIGHT} true))`, "(list u0 u0 u0)");
+    `(list (dlmm-capacity u${L_TIGHT} true (dlmm-pick true u5000)) (cp-capacity (xyk-reserves true) (xyk-keep true) u${L_TIGHT} true) (cp-capacity (velar-reserves true) (velar-keep) u${L_TIGHT} true))`, "(list u0 u0 u0)");
   tx("W9c smart sell 5000 sats, tight limit, empty book: no venue respects it -> u3002", smartSbtc(T, 5000n, L_TIGHT, VAA, 1n), "(err u3002)");
   const n4s = sbtcOf(T, "W9c after"); const n4x = stxOf(T, "W9c after");
   // W9a's mid fill left S a few uSTX of pro-rata rounding dust, rolled under
@@ -593,18 +593,20 @@ async function main() {
     (pv (/ (* (get out v) PRICE_SCALE) (get in v)))) (/ (* (if (< px pv) px pv) u99) u100))`;
   // The DLMM is pushed to 5.5% under the mid or to that limit, whichever is lower.
   const pushCode = `(let ((c ${cpRoomCode})) (if (< c u${L_55}) c u${L_55}))`;
-  // df091b8: the DLMM leg uses the pool with the most STX; draining one can
-  // hand the pick to another pool that still sits above 5.5%. Push the picked
+  // 280c81c: the DLMM leg uses the eligible pool (>= 1% of the deepest STX
+  // balance) paying the most for the leg's amount; draining one can hand the
+  // pick to another pool that still sits above 5.5%. The push sizes on the
+  // pool picked for 1 BTC (`dlmm-pick true u100000000`). Push the picked
   // pool, round after round (the capacity walk stops at 30 bins, so one
   // round may not reach 5.5%); once every pool sits there the rest refuse
   // with u3001. Whichever pool is picked afterwards has no room at 5.5% under.
   if (V6) for (let round = 1; round <= 12; round++) tx(`W18p round ${round}: T sells the picked DLMM pool's live capacity down to 5.5% under the mid (or the CP limit if lower) on the DLMM alone (u3001 if already there), XYK + Velar stay at 2%`,
-    call(T, "swap-sbtc-for-stx", [forkValue(RID, `(dlmm-capacity ${pushCode} true)`), uintCV(0n), uintCV(1n), NO_VAA, NONE,
-      forkValue(RID, `{ dlmm: (dlmm-capacity ${pushCode} true), xyk: u0, velar: u0 }`), ONES, uintCV(1n)], RID),
+    call(T, "swap-sbtc-for-stx", [forkValue(RID, `(dlmm-capacity ${pushCode} true (dlmm-pick true u100000000))`), uintCV(0n), uintCV(1n), NO_VAA, NONE,
+      forkValue(RID, `{ dlmm: (dlmm-capacity ${pushCode} true (dlmm-pick true u100000000)), xyk: u0, velar: u0 }`), ONES, uintCV(1n)], RID),
     (v) => okPrefix(v) || String(v) === "(err u3001)");
   else tx("W18p T sells 1.2 BTC on the DLMM alone (~25 bins): its active bin drops to ~5.5% under the mid, XYK + Velar stay at 2%", sellSbtc(T, 0n, NONE, amts(120_000_000n, 0n, 0n), ONES, 1n, NO_VAA), okPrefix);
   const x0s18 = sbtcOf(T, "W18a before"); const x0x18 = stxOf(T, "W18a before");
-  if (V6) ev("W18a fixture: DLMM has no room at the measured limit", `(dlmm-capacity ${cpRoomCode} true)`, "u0");
+  if (V6) ev("W18a fixture: DLMM has no room at the measured limit", `(dlmm-capacity ${cpRoomCode} true (dlmm-pick true u250000))`, "u0");
   const L_4_INPUT = V6 ? forkValue(RID, cpRoomCode, (v) => { L_4 = BigInt(cvToString(v).slice(1)); }) : L_4;
   const r18a = tx(`W18a smart sell 250000 sats ${V6 ? "1% under the pools' spot" : "at 4% under"}, vaa none: no DLMM bin inside the limit, the residual split pro rata over the pools with room`, smartSbtc(T, 250_000n, L_4_INPUT, NO_VAA, 1n), okPrefix);
   const x1s18 = sbtcOf(T, "W18a after"); const x1x18 = stxOf(T, "W18a after");
@@ -618,12 +620,12 @@ async function main() {
   // The deep preceding DLMM trade moves its spot by a fork-dependent amount.
   // Put the STX ceiling 5% below that real spot, and prove both CP pools have
   // room while DLMM has none. Keep exact split/wallet assertions below.
-  // df091b8: the DLMM pool an STX sale uses (the router's dlmm-pick).
-  const stxCeilingCode = `(let ((p (dlmm-pool-info (dlmm-pick false))))
+  // 280c81c: the DLMM pool a 300 STX sale uses (the router's dlmm-pick).
+  const stxCeilingCode = `(let ((p (dlmm-pool-info (dlmm-pick false u300000000))))
     (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) (unwrap-panic (contract-call? DLMM_CORE get-bin-price
       (get initial-price p) (get bin-step p) (get active-bin-id p)))) u95) u100))`;
   if(V6) {
-    ev("W18d fixture: DLMM has no room at measured ceiling",`(dlmm-capacity ${stxCeilingCode} false)`,"u0");
+    ev("W18d fixture: DLMM has no room at measured ceiling",`(dlmm-capacity ${stxCeilingCode} false (dlmm-pick false u300000000))`,"u0");
     for(const venue of ['xyk','velar'])ev(`W18d fixture: ${venue} room exceeds 300 STX`,
       `(cp-capacity (${venue}-reserves false) (${venue}-keep${venue==='xyk'?' false':''}) ${stxCeilingCode} false)`,v=>uintOf(v)>300000000n);
   }
@@ -644,7 +646,9 @@ async function main() {
   tx("W11 M8 asks 20000 sats at +0.5% (walkable)", call(M8, "deposit-token-x", [uintCV(20_000n), uintCV(A_IN), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
   tx("W11 M9 asks 20000 sats at +3% (outside the 2% limit)", call(M9, "deposit-token-x", [uintCV(20_000n), uintCV(A_OUT), ...SPREAD, DUMMY_VAA, sbtcTrait, sbtcAsset], CID), "(ok u20000)");
   const v0x = stxOf(S, "W11 before"); const v0s = sbtcOf(S, "W11 before"); const v8x = stxOf(M8, "W11 M8 before"); const v9x = stxOf(M9, "W11 M9 before"); const vtx = stxOf(T, "W11 T before");
-  const dlmmRoom11 = V6 ? cap("W11 actual DLMM room before the call", `(dlmm-capacity u${L_STX2} false)`, RID) : null;
+  // 280c81c: the stage picks for what the book leg leaves, so read every
+  // pool's room; the leg must match the room of one of them (below)
+  const dlmmRoom11 = V6 ? [1, 2, 3].map((k) => cap(`W11 actual DLMM room of v-${k} before the call`, `(dlmm-capacity u${L_STX2} false u${k})`, RID)) : null;
   const r11 = tx("W11 smart sell 200 STX at +2%: mid ask cleared, +0.5% walked, +3% untouched, rest AMMs", smartStx(S, 200_000_000n, L_STX2, VAA, 1n), (v) =>
     okPrefix(v) && String(v).includes("(jing-ok true)"));
   const v1x = stxOf(S, "W11 after"); const v1s = sbtcOf(S, "W11 after"); const v8x1 = stxOf(M8, "W11 M8 after"); const v9x1 = stxOf(M9, "W11 M9 after"); const vtx1 = stxOf(T, "W11 T after");
@@ -694,8 +698,8 @@ async function main() {
   // Restore a small amount of DLMM inventory through a public reverse trade:
   // earlier depth-draining scenarios may have reached bin 500 already.
   if(V6)tx("W15 replenish DLMM with a 100 STX reverse trade",sellStx(T,0n,NONE,amts(100000000n,0n,0n),ONES,1n,NO_VAA),okPrefix);
-  if(V6)ev("W15 fixture: live DLMM 30-bin capacity is positive",`(dlmm-capacity u${limit15} true)`,v=>uintOf(v)>0n);
-  const amount15Input=V6?forkValue(RID,`(+ (dlmm-capacity u${limit15} true) u300000000)`,v=>{amount15=BigInt(cvToString(v).slice(1));}):amount15;
+  if(V6)ev("W15 fixture: live DLMM 30-bin capacity is positive",`(dlmm-capacity u${limit15} true (dlmm-pick true u300000000))`,v=>uintOf(v)>0n);
+  const amount15Input=V6?forkValue(RID,`(+ (dlmm-capacity u${limit15} true (dlmm-pick true u300000000)) u300000000)`,v=>{amount15=BigInt(cvToString(v).slice(1));}):amount15;
   const f0s15 = sbtcOf(T, "W15 before"); const f0x15 = stxOf(T, "W15 before");
   const r15 = tx("W15 sell live 30-bin capacity plus 3 BTC: DLMM capped, CP spill-over", smartSbtc(T, amount15Input, limit15, NO_VAA, 1n), okPrefix);
   const f1s15 = sbtcOf(T, "W15 after"); const f1x15 = stxOf(T, "W15 after");
@@ -945,7 +949,7 @@ async function main() {
   check("W11 DLMM input matches its measured capacity and residual", field(r11.raw, "dlmm-in"), (d) => {
     if (!V6) return d > 0n;
     const residual = 200_000_000n - field(r11.raw, "jing-in");
-    return d === (dlmmRoom11.value < residual ? dlmmRoom11.value : residual);
+    return dlmmRoom11.some((c) => d === (c.value < residual ? c.value : residual));
   });
   legPriceOk("W11", r11, L_STX2, false);
   // W12

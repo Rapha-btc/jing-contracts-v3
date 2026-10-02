@@ -26,20 +26,19 @@
 //     under); fallback none (unsold == book leg, out u0, min-out u0 ok,
 //     min-out u1 -> u3002); all four legs at once; min-out one over the
 //     measured out after every leg ran -> u3002, nothing moved.
-//  P  (1063add) the DLMM leg uses, among the three Bitflow STX/sBTC pools
+//  P  (280c81c) the DLMM leg uses, among the three Bitflow STX/sBTC pools
 //     holding >= 1% of the deepest pool's balance of the asset it buys (STX
-//     when selling sBTC, sBTC when selling STX), the best active-bin price for
-//     the taker; ties to the lower number. Before each DLMM-only call the
-//     model reads the pools' balances, records and the core's bin factors,
-//     picks, and checks the router's `dlmm-pick` agrees; after it, only the
-//     picked pool moved and it paid out exactly dlmm-out of the bought asset.
-//     At the 2026-10-02 tip this picks v-1 in both directions (v-2 at bin
-//     +500 is below the 1% floor for sBTC sales and quotes worse for STX
-//     sales).
+//     when selling sBTC, sBTC when selling STX), the one whose bins pay the
+//     most for the leg's amount (`dlmm-out`, up to 30 bins); ties to the
+//     lower number. Before each DLMM-only call the model reads the pools'
+//     balances, records, bins and the core's bin factors, checks the router's
+//     `dlmm-out` for every pool and its `dlmm-pick`; after it, only the picked
+//     pool moved and it paid out exactly dlmm-out of the bought asset; the
+//     estimate is logged next to the fill.
 //  Every successful call: the receipt's in / out / unsold against the wallet
 //  deltas exactly, and the print equals the ok tuple plus topic / user / amount.
 import {
-  DEP, MARKET, ROUTER, PROBE, SBTC, DLMM_POOLS, dlmmPick, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
+  DEP, MARKET, ROUTER, PROBE, SBTC, DLMM_POOLS, dlmmPick, logEstimate, XYK_POOL, VELAR_POOL, MIN_X, MIN_Y,
   H, check, ev, evRaw, tx, fund, deployAll, initMarket, printAfter, forkClock, refused, wallet, printsOf,
   manualArgs, manualFn, xykQuote, velarQuote, uint, fields, mk, traits, assets, shas, done,
 } from './_router-v5-3-harness.js';
@@ -130,7 +129,7 @@ async function main() {
       const q = v === 'xyk' ? await xykQuote(sellX, leg) : v === 'velar' ? await velarQuote(sellX, leg) : null;
       const want = q == null ? ok2 : tupleOf({ ...zero, [`${v}-in`]: leg, [`${v}-out`]: q, out: q });
       const poolBal = async () => [...String(await evRaw(MARKET, `(list ${DLMM_POOLS.map((d) => `(stx-get-balance '${d}) (unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`).join(' ')})`)).matchAll(/u(\d+)/g)].map((m) => BigInt(m[1]));
-      const pk = v === 'dlmm' ? await dlmmPick(sellX, 'P A dlmm') : null;
+      const pk = v === 'dlmm' ? await dlmmPick(sellX, leg, 'P A dlmm') : null;
       const pb0 = v === 'dlmm' ? await poolBal() : null;
       const res = await call(`A ${v} alone, min u0 (floored to u1)`, s, { amount: leg, a: vec(v, leg) }, want);
       if (v === 'dlmm') {
@@ -139,6 +138,7 @@ async function main() {
         check('P only the picked pool moved', DLMM_POOLS.map((_, j) => j === i || (pb0[2 * j] === pb1[2 * j] && pb0[2 * j + 1] === pb1[2 * j + 1])).every(Boolean), true);
         check('P the picked pool paid out exactly dlmm-out of the bought asset', String(pb0[2 * i + bought] - pb1[2 * i + bought]), String(res.f['dlmm-out']));
         check('P the picked pool received the sold asset (<= dlmm-in, fees may leave)', String(pb1[2 * i + sold] > pb0[2 * i + sold] && pb1[2 * i + sold] - pb0[2 * i + sold] <= res.f['dlmm-in']), 'true');
+        logEstimate(`manual A ${sellX ? 'sBTC' : 'STX'} sale`, pk, leg, res.f['dlmm-in'], res.f['dlmm-out']);
         check('A dlmm: in == amount, out > 0, others u0', `${res.f['dlmm-in']} ${res.f['dlmm-out'] > 0n} ${res.f['xyk-in']} ${res.f['velar-in']} ${res.f['jing-ok']}`, `${leg} true 0 0 false`);
       }
     }
