@@ -46,10 +46,11 @@ const binLimit = async (pool) => uint(await evRaw(ROUTER, `(let ((p (unwrap-pani
 
 // one manual DLMM-only sale and one smart sale on the modelled pick
 async function sales(tag, sellX, taker, amount, expectPick) {
-  const pk = await dlmmPick(sellX, `${tag} ${sellX ? 'sBTC' : 'STX'} sale`);
-  if (expectPick) check(`${tag}: the deepest pool is ${name(DLMM_POOLS[expectPick - 1])}`, `u${pk.n}`, `u${expectPick}`);
+  const pk = await dlmmPick(sellX, amount, `${tag} ${sellX ? 'sBTC' : 'STX'} sale`);
+  if (expectPick) check(`${tag}: the best-paying pool for ${amount} is ${name(DLMM_POOLS[expectPick - 1])}`, `u${pk.n}`, `u${expectPick}`);
   console.log(`  ${tag}: pick ${name(pk.pool)}; depth of the bought asset ${pk.depths.join(' / ')}`);
-  const i = pk.n - 1, bought = sellX ? 0 : 1, sold = 1 - bought, inS = sellX ? 'x' : 'y', outS = sellX ? 'y' : 'x';
+  const i0 = pk.n - 1, bought = sellX ? 0 : 1, sold = 1 - bought, inS = sellX ? 'x' : 'y', outS = sellX ? 'y' : 'x';
+  let i = i0;
   const moved = (b0, b1) => DLMM_POOLS.map((_, j) => j === i || (b0[2 * j] === b1[2 * j] && b0[2 * j + 1] === b1[2 * j + 1])).every(Boolean);
 
   // manual: the whole amount on the DLMM, min u0 (floored to u1)
@@ -65,11 +66,11 @@ async function sales(tag, sellX, taker, amount, expectPick) {
   check(`${tag} manual: wallet -dlmm-in / +out`, `${w0[inS] - w1[inS]} ${w1[outS] - w0[outS]}`, `${r.f['dlmm-in']} ${r.f.out}`);
 
   // smart, update none, limit 20% beyond the picked pool's active bin
-  const pk2 = await dlmmPick(sellX, `${tag} smart`);
-  check(`${tag} smart: same pick after the manual sale`, `u${pk2.n}`, `u${pk.n}`);
+  const pk2 = await dlmmPick(sellX, amount, `${tag} smart`);
+  i = pk2.n - 1;
   const P = await binLimit(pk2.pool);
   const limit = sellX ? P * 8n / 10n : P * 12n / 10n;
-  const cap = uint(await evRaw(ROUTER, `(dlmm-capacity u${limit} ${sellX})`, taker));
+  const cap = uint(await evRaw(ROUTER, `(dlmm-capacity u${limit} ${sellX} u${pk2.n})`, taker));
   check(`${tag} smart: ${name(pk2.pool)} has room at the limit`, String(cap > 0n), 'true');
   const sAmt = cap < amount ? cap : amount;
   b0 = await poolBal(); w0 = await wallet(taker);
@@ -91,7 +92,11 @@ async function deepen(tag, target, sellX, lp) {
   const b = await poolBal(), k = sellX ? 0 : 1;
   const depths = [0, 1, 2].map((j) => b[2 * j + k]);
   const others = Math.max(...depths.filter((_, j) => j !== target - 1).map(Number));
-  const add = BigInt(Math.max(others, 0)) - depths[target - 1] + (sellX ? 1_000_000_000n : 1_000_000n);
+  // the target may already be the deepest yet pay less (its active bin far
+  // from the others): then it gets a fixed top-up next to its active bin
+  const base = sellX ? 1_000_000_000n : 1_000_000n;
+  const need = BigInt(Math.max(others, 0)) - depths[target - 1] + base;
+  const add = need > base ? need : base;
   const pool = DLMM_POOLS[target - 1], a = await active(pool);
   await fund(sellX ? 'y' : 'x', lp, add);
   const bin = sellX ? Math.min(a + 1, 500) : Math.max(a - 1, -500);
@@ -115,23 +120,28 @@ async function main() {
   await sales('T', false, TY, 200_000_000n);
 
   console.log('\nD drain the sBTC-sale pick to bin +500');
-  let pk = await dlmmPick(true, 'D start');
+  let pk = await dlmmPick(true, 20_000_000n, 'D start');
   for (let i = 0; i < 20 && (await active(pk.pool)) < 500; i++) {
     const w0 = await wallet(TX);
     const r = await tx(`D manual DLMM leg ${i + 1} on ${name(pk.pool)}, 20000000 sats`, TX, ROUTER, manualFn(true), manualArgs({ amount: 20_000_000n, a: [20_000_000n, 0n, 0n] }), (v) => String(v).startsWith('(ok'));
     const w1 = await wallet(TX);
     check(`D leg ${i + 1}: wallet -dlmm-in / +out, unsold == amount - dlmm-in`, `${w0.x - w1.x} ${w1.y - w0.y} ${r.f.unsold}`, `${r.f['dlmm-in']} ${r.f.out} ${20_000_000n - r.f['dlmm-in']}`);
     console.log(`  ${name(pk.pool)} active bin now ${await active(pk.pool)}`);
-    pk = await dlmmPick(true, `D after leg ${i + 1}`);
+    pk = await dlmmPick(true, 20_000_000n, `D after leg ${i + 1}`);
   }
   check('D the sBTC-sale pick sits at bin +500', String(await active(pk.pool)), '500');
 
-  console.log('\nL every other pick, through public liquidity');
+  // Public liquidity next to a pool's active bin. Since 280c81c the pick is
+  // the pool that pays the most for the amount, so added depth moves it only
+  // when that pool then pays more; the router's pick and payouts are checked
+  // against the model after each move, whichever pool wins.
+  console.log('\nL public liquidity on each pool, pick re-checked against the model');
   for (const [target, sellX] of [[3, true], [2, true], [1, false], [3, false]]) {
-    const tag = `L ${sellX ? 'sBTC' : 'STX'} sale on v-${target}`;
-    const now = (await dlmmPick(sellX, `${tag}: before`)).n;
+    const amt = sellX ? 100_000n : 200_000_000n;
+    const tag = `L ${sellX ? 'sBTC' : 'STX'} sale, liquidity on v-${target}`;
+    const now = (await dlmmPick(sellX, amt, `${tag}: before`)).n;
     if (now !== target) await deepen(tag, target, sellX, LP);
-    await sales(tag, sellX, sellX ? TX : TY, sellX ? 100_000n : 200_000_000n, target);
+    await sales(tag, sellX, sellX ? TX : TY, amt);
   }
 
   const sha1 = shas();
