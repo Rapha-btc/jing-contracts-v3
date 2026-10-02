@@ -7,17 +7,17 @@ Execution coverage of the real router with declared local dependency substitutio
 | Metric | Hit / total | Coverage |
 | --- | --- | --- |
 | functions | 40/40 | 100% |
-| lines | 606/609 | 99.51% |
-| branches | 225/226 | 99.56% |
+| lines | 612/616 | 99.35% |
+| branches | 229/230 | 99.57% |
 
 ## Source SHA-256
 
 - market: `ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848`.
-- router: `679e727307cced3e5dc074f8ee92d5d85da58788767e899f2105edf9b43e9545`.
+- router: `f996708a50934dcdee49790462c59823566bd87df06e93661ff41b609a955107`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 
 ## Remaining instrumentation points
 
 - Unhit functions: none.
-- Unhit lines: 815, 1384, 1385.
+- Unhit lines: 815, 1233, 1399, 1400.
 - Unhit branches (line, block, arm): `815,0,1`.
