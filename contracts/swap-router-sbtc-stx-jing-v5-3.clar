@@ -1184,7 +1184,9 @@
           left
           cap
         ))
-        (leg (if (> plan u0)
+        ;; a dust plan fetches nothing at the limit: the venue would refuse
+        ;; it and revert the swap, so it stays unsold (as `dust-left`)
+        (leg (if (not (dust-left plan limit sell-sbtc))
           (try! (dlmm-sell pick sell-sbtc plan
             (amm-floor (limit-min plan limit sell-sbtc))
           ))
@@ -1224,7 +1226,20 @@
           sell-sbtc
         ))
         (cap-velar (cp-capacity (velar-reserves sell-sbtc) (velar-keep) limit sell-sbtc))
-        (plan (cp-split left cap-xyk cap-velar))
+        (split (cp-split left cap-xyk cap-velar))
+        ;; a dust leg (a few units of room left in a pool) fetches nothing at
+        ;; the limit: the pool would refuse it and revert the swap, so it is
+        ;; dropped and stays unsold (as `dust-left` does for the whole rest)
+        (plan {
+          xyk: (if (dust-left (get xyk split) limit sell-sbtc)
+            u0
+            (get xyk split)
+          ),
+          velar: (if (dust-left (get velar split) limit sell-sbtc)
+            u0
+            (get velar split)
+          ),
+        })
         (xyk (try! (amm-leg (get xyk plan) limit sell-sbtc VENUE_XYK)))
         (velar (try! (amm-leg (get velar plan) limit sell-sbtc VENUE_VELAR)))
       )
