@@ -28,6 +28,13 @@
 //     equals the book; sum of members' positions <= pooled <= backing;
 //     proceeds claims <= proceeds balance; old-epoch backs <= reserve; the
 //     dispatch holds nothing; conservation per asset (in - out = held + fees)
+//  3b. claims through claim-buy / claim-sell: A across all ten buy rungs (four
+//     sold out, one partial, five untouched: proceeds paid, old-epoch positions
+//     paid out and removed, current ones and every resting order kept), a
+//     second claim of the resting six pays 0, B claims the ten sell rungs
+//     directly for a cost comparison; refusals (empty, duplicate, wrong side,
+//     unregistered, intermediary u7106, removed position u7006, an absent
+//     tenth-leg position rolling back a paid first leg)
 //  6. refusals through the dispatch: wrong side (deposit u7104 / exit u7108),
 //     duplicate legs (u7105), 11 legs (the (list 10) type), an intermediary
 //     contract (u7106), zero / total mismatch / empty; each moves nothing.
@@ -376,6 +383,11 @@ class Model {
     const refunded = msize(m);
     m.pbal += refunded; m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; m.held = have + refunded; return 'cancel';
   }
+  claim(who, ev) {
+    if (!this.m.pos.has(who)) throw new CErr(7006);
+    this.sync(ev);
+    return this.paidTuple(this.settle(who, ev));
+  }
   withdraw(who, amount, update, ev) {
     const m = this.m, r = this.r;
     if (!m.pos.has(who)) throw new CErr(7006);
@@ -598,6 +610,40 @@ async function dispatchWithdraw(label, who, dir, legs) {
   }
   await checkpoint(label);
   return { t, rows };
+}
+const targetsCV = (rs) => listCV(rs.map((r) => P_(r.id)));
+const RAW = [];
+function rawCost(label, receipt) { const ec = receipt?.execution_cost; if (ec) RAW.push({ label, ...Object.fromEntries(Object.keys(BLOCK).map((k) => [k, BigInt(ec[k])])) }); }
+async function dispatchClaim(label, who, dir, rs) {
+  const buy = dir === 'buy', saved = snapshotModels(), ev = [], rows = [], before = { ...wal(who) };
+  const kept = rs.map((r) => { const p = md(r).m.pos.get(who); return p && p.epoch === md(r).m.ep; });
+  const book = rs.map((r) => onBook(md(r).m));
+  let want;
+  try {
+    for (const r of rs) {
+      const e = [];
+      const o = md(r).claim(who, e);
+      ev.push(...e.map((x) => ({ ...x, rung: r.id, side: r.band, price: r.bps })));
+      rows.push({ rung: r.id, ...o });
+    }
+    const sum = (k) => rows.reduce((a, x) => a + x[k], 0n);
+    want = { ok: { rungs: BigInt(rs.length), claimed: BigInt(rs.length), stx: sum('stx'), sbtc: sum('sbtc'), positions: rows } };
+  } catch (e) { if (!(e instanceof CErr)) throw e; restoreModels(saved); want = { err: e.code }; ev.length = 0; }
+  const t = await send(who, DISPATCH, `claim-${dir}`, [targetsCV(rs)]);
+  noteCost(`${label} (${rs.length} rungs)`, t.receipt); rawCost(label, t.receipt);
+  check(`${label}: exact aggregate and per-rung payouts`, eq(t.res, want), `${show(t.res)}${eq(t.res, want) ? '' : ` want ${show(want)}`}`);
+  if (want.ok) {
+    checkPrints(label, t.receipt, ev);
+    const dp = dispatchPrint(t.receipt);
+    check(`${label}: dispatch print`, dp.length === 1 && eq(dp[0], { event: 'ladder-claimed', member: who, buy, rungs: BigInt(rs.length), claimed: BigInt(rs.length), stx: want.ok.stx, sbtc: want.ok.sbtc }), show(dp));
+    const after = wal(who);
+    check(`${label}: wallet delta = the receipt totals (+${after.sbtc - before.sbtc} sats, +${after.stx - before.stx} uSTX)`, after.sbtc - before.sbtc === want.ok.sbtc && after.stx - before.stx === want.ok.stx);
+    check(`${label}: current-epoch positions kept, old-epoch positions removed, every resting order unchanged`,
+      rs.every((r, i) => md(r).m.pos.has(who) === kept[i] && onBook(md(r).m) === book[i]));
+    for (const x of rows) console.log(`  ${x.rung.split('.')[1]}: stx ${x.stx} sbtc ${x.sbtc}`);
+  } else check(`${label}: refused, no events`, events(t.receipt).length === 0);
+  await checkpoint(label);
+  return { t, rows, want };
 }
 // a refusal: exact error, nothing moves (every rung / wallet / market exact against the unchanged model)
 async function refused(label, who, cid, fn, args, code) {
@@ -846,7 +892,9 @@ async function main() {
 (define-public (deposit-buy (total uint) (allocations (list 10 { rung: <rung>, amount: uint })))
   (contract-call? .jing-ladder-dispatch deposit-buy total allocations))
 (define-public (withdraw-sell (requests (list 10 { rung: <rung>, amount: uint })))
-  (contract-call? .jing-ladder-dispatch withdraw-sell requests none))`);
+  (contract-call? .jing-ladder-dispatch withdraw-sell requests none))
+(define-public (claim-sell (targets (list 10 <rung>)))
+  (contract-call? .jing-ladder-dispatch claim-sell targets))`);
   await fundAll();
   await checkpoint('baseline after funding');
 
@@ -959,15 +1007,45 @@ async function main() {
     check(`${r.name}: B / D split ${gb.sbtc} / ${gd.sbtc} sats by shares ${bAmts[k]}:${dAmts[i]}`, gb.sbtc === bAmts[k] * idx / Q && gd.sbtc === dAmts[i] * idx / Q, `rung got ${sw2.sim.fills.get(r.id).recv}`);
   }
 
+  // ---- 3b. claims ----
+  console.log('\n=== 3b. claims through the dispatch ===');
+  await refused('claim-buy with no rungs', UA, DISPATCH, 'claim-buy', [listCV([])], 7101);
+  await refused('claim-buy with a duplicate rung', UA, DISPATCH, 'claim-buy', [targetsCV([BUY[4], BUY[5], BUY[4]])], 7105);
+  await refused('claim-buy naming a sell rung', UA, DISPATCH, 'claim-buy', [targetsCV([BUY[4], SELL[4]])], 7108);
+  await refused('claim-sell naming a buy rung on the FIRST leg', UB, DISPATCH, 'claim-sell', [targetsCV([BUY[4], SELL[4]])], 7108);
+  await refused('claim-buy naming a contract the ladder never registered (the intermediary)', UA, DISPATCH, 'claim-buy', [targetsCV([{ id: PROXY }])], 7108);
+  await refused('claim-sell through an intermediary contract', UB, PROXY, 'claim-sell', [targetsCV([SELL[4]])], 7106);
+  // C holds buy-40 (paid on its own) but not buy-50: the paid first leg rolls back
+  check('fixture: C has proceeds on buy-40 and no buy-50 position', md(BUY[4]).getPosition(UC).stx > 0n && !md(BUY[5]).m.pos.has(UC));
+  await dispatchClaim('C claim-buy buy-40 + buy-50 (no position): u7006 rolls back the paid buy-40 claim', UC, 'buy', [BUY[4], BUY[5]]);
+  const claimA = await dispatchClaim('A claim-buy across all 10 buy rungs (0-30 sold out, 40 partial, 50-90 untouched)', UA, 'buy', BUY);
+  check('A claim: proceeds paid', claimA.want.ok?.stx > 0n, show(claimA.want));
+  const again = await dispatchClaim('A claim-buy again on the six resting rungs: pays 0', UA, 'buy', BUY.slice(4));
+  check('second claim pays 0', again.want.ok?.stx === 0n && again.want.ok?.sbtc === 0n, show(again.want));
+  await dispatchClaim('A claim-buy buy-0 again (old-epoch position already paid out and removed): u7006', UA, 'buy', [BUY[0]]);
+  // B claims the ten sell rungs one by one (the mirror state of A's batch): direct-claim cost
+  for (const r of SELL) {
+    const t = await rungTx('B direct claim', r, UB, 'claim', (ev) => md(r).claim(UB, ev));
+    rawCost(`B direct claim ${r.name}`, t.receipt);
+  }
+  await checkpoint('B claimed the ten sell rungs directly');
+  {
+    const batch = RAW.find((x) => x.label.startsWith('A claim-buy across')), direct = RAW.filter((x) => x.label.startsWith('B direct claim'));
+    const tot = (k) => direct.reduce((a, x) => a + x[k], 0n);
+    console.log(`  claim cost, one 10-rung batch (A, buy) vs ten direct claims (B, sell mirror):`);
+    for (const k of Object.keys(BLOCK)) console.log(`    ${k}: batch ${batch[k]} vs direct sum ${tot(k)}`);
+  }
+
   // ---- 4. exits ----
   console.log('\n=== 4. exits through the dispatch ===');
-  await dispatchWithdraw('A withdraw-buy: full exit across all 10 buy rungs', UA, 'buy', BUY.map((r) => ({ r, amt: BIG })));
+  const heldBy = (rs, who) => rs.filter((r) => md(r).m.pos.has(who));
+  await dispatchWithdraw('A withdraw-buy: full exit across every buy rung still held after the claim (40-90)', UA, 'buy', heldBy(BUY, UA).map((r) => ({ r, amt: BIG })));
   await dispatchWithdraw('B withdraw-sell: partial across sell 40/50/70/90 (half of each unsold position)', UB, 'sell',
     [4, 5, 7, 9].map((k) => ({ r: SELL[k], amt: md(SELL[k]).getPosition(UB).stx / 2n })));
   await dispatchWithdraw('D withdraw-sell: mixed, filled sell-0 / sell-30 with unfilled sell-60', UD, 'sell', [0, 3, 6].map((k) => ({ r: SELL[k], amt: BIG })));
   console.log('\n=== 4b. drain: everyone else exits ===');
   await dispatchWithdraw('C withdraw-buy: full exit of buy 0/30/40/60', UC, 'buy', SUB.map((k) => ({ r: BUY[k], amt: BIG })));
-  await dispatchWithdraw('B withdraw-sell: full exit across all 10 sell rungs', UB, 'sell', SELL.map((r) => ({ r, amt: BIG })));
+  await dispatchWithdraw('B withdraw-sell: full exit across every sell rung still held after the direct claims (40-90)', UB, 'sell', heldBy(SELL, UB).map((r) => ({ r, amt: BIG })));
   await dispatchWithdraw('D withdraw-sell: full exit of sell-40', UD, 'sell', [{ r: SELL[4], amt: BIG }]);
   const fin = await checkpoint('after every member left');
   const left = ALL.map((r) => { const m = md(r).m; return { r, mem: m.mem, ep: m.ep, ts: m.ts, pbal: m.pbal, qbal: m.qbal, res: m.res, live: msize(m) }; });

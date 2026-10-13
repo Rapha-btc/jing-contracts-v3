@@ -58,13 +58,26 @@ for(const s of specs)describe(`dispatch guards: ${s.label}`,()=>{
   refused(withdraw,[list([[rung(s,10),a],[rung(other,10),a]]),Cl.none()],7108);
   refused(withdraw,[list([[rung(s,0),a]]),Cl.none()],7108);
  });
- it('refuses an intermediary contract spending its caller sender (deposit and withdraw)',()=>{
+ it('claim: empty list, duplicate, other side, never registered',()=>{
+  setup();
+  ok(call(dispatch,deposit,[U(a),list([[rung(s,10),a]])],alice));
+  const claim=`claim-${s.label}`,targets=(rs:string[])=>Cl.list(rs.map(r=>Cl.principal(pc(r))));
+  refused(claim,[Cl.list([])],7101);
+  refused(claim,[targets([rung(s,10),rung(s,10)])],7105);
+  refused(claim,[targets([rung(s,10),rung(other,10)])],7108);
+  refused(claim,[targets([rung(s,0)])],7108);
+  // the registered unseated rung is eligible: the batch reaches its claim (no position)
+  refused(claim,[targets([rung(s,10),rung(s,25)])],7006);
+  expect(ok(call(dispatch,claim,[targets([rung(s,10)])],alice)).claimed).toBe(1n);
+ });
+ it('refuses an intermediary contract spending its caller sender (deposit, withdraw and claim)',()=>{
   setup();
   const target=`'${pc(rung(s,10))}`,dispatcher=`'${pc(dispatch)}`;
   const source=`(define-public (relay-deposit) (contract-call? ${dispatcher} ${deposit} u${a} (list {rung: ${target}, amount: u${a}})))
-(define-public (relay-withdraw) (contract-call? ${dispatcher} ${withdraw} (list {rung: ${target}, amount: u${a}}) none))`;
+(define-public (relay-withdraw) (contract-call? ${dispatcher} ${withdraw} (list {rung: ${target}, amount: u${a}}) none))
+(define-public (relay-claim) (contract-call? ${dispatcher} claim-${s.label} (list ${target})))`;
   expect(simnet.deployContract(`relay-${s.label}`,source,{clarityVersion:5},owner).result).toEqual(Cl.bool(true));
-  for(const fn of ['relay-deposit','relay-withdraw']){
+  for(const fn of ['relay-deposit','relay-withdraw','relay-claim']){
    const receipt=call(`relay-${s.label}`,fn,[],alice);
    expect(receipt.result).toEqual(Cl.error(U(7106)));
    expect(receipt.events).toEqual([]);

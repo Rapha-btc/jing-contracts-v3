@@ -4,9 +4,9 @@ Validated market/router HEAD `f231e51` and the six rung templates at `5735a97`.
 All transactions run on stxer forks. No mainnet broadcast or contract edit.
 The router bin fix is already committed as `f231e51`; the work here is tests.
 
-## Dispatch: 176/176
+## Dispatch: 228/228
 
-[Run](https://stxer.xyz/simulations/mainnet/75d643f4d54059113cfd1b9e431f8784),
+[Run](https://stxer.xyz/simulations/mainnet/c69f2c9ce96f9f4674b625854c37b387),
 [harness](verify-v6-3-dispatch.js), [result](fixtures/dispatch-v6-3-result.json).
 
 Deployment order: core-v6, ladder-v1, market v6-3, rung trait, six rung templates
@@ -32,6 +32,9 @@ Both buy and sell verify:
   live inventory. The expired pending claim clears, the live rungs retain the
   other member's exact inventory, and the caller receives the exact aggregate
   payment.
+- A `claim-buy` / `claim-sell` batch over the three rungs with nothing filled
+  (one escrow still pending) pays exactly 0 per rung; shares and escrow stay.
+  A member with no position gets u7006; a non-band rung gets u7108.
 - Other members keep exact shares and claims, then exit for exact amounts.
   Pending cancellation logs its reason; dispatch retains no funds.
 

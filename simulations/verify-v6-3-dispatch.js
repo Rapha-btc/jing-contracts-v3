@@ -181,6 +181,19 @@ async function main() {
   for(let i=0;i<3;i++)await ev('already-pending isolated; other legs go through '+i,MARKET,`(and
     (is-eq ${balance(f.side,f.rungs[i])} u${i===0?f.second[i]:0})
     (is-eq (get amount (unwrap-panic ${pending(f.side,f.rungs[i])})) u${i===0?f.initial[i]:f.second[i]}))`,'true');
+  // Claim batch with nothing filled (one rung's escrow still pending): pays
+  // 0 on every rung, positions and escrow stay; an unfunded member is refused.
+  for(const who of [f.a,f.memberB]) {
+   const wallet=await ev('wallet before claim',MARKET,balance(f.side,who),v=>/^u[0-9]+$/.test(v));
+   const claimed=await tx(`${f.dir} claim batch, nothing filled`,who,DISPATCH,`claim-${f.dir}`,[listCV(f.rungs.map(principal))],ok);
+   check('exact claim receipt',claimed.result,`(ok ${cvToString(tupleCV({rungs:uintCV(3),claimed:uintCV(3),stx:uintCV(0),sbtc:uintCV(0),positions:listCV(f.rungs.map(rung=>tupleCV({rung:principal(rung),stx:uintCV(0),sbtc:uintCV(0)})))}))})`);
+   await ev('claim moved nothing',MARKET,balance(f.side,who),wallet);
+   const mine=who===f.a?f.initial:f.second;
+   for(let i=0;i<3;i++)await ev('position kept after claim '+i,f.rungs[i],`(get shares (get-position '${who}))`,`u${mine[i]}`);
+  }
+  await ev('escrow kept after claims',MARKET,`(get amount (unwrap-panic ${pending(f.side,f.rungs[0])}))`,`u${f.initial[0]}`);
+  await tx('claim batch by a member with no position',keeper,DISPATCH,`claim-${f.dir}`,[listCV(f.rungs.map(principal))],'(err u7006)');
+  await tx('claim batch naming a non-band rung',f.a,DISPATCH,`claim-${f.dir}`,[listCV([principal(f.rungs[0]),principal(f.nonseated[0])])],'(err u7108)');
  }
  // Only the first rung retains pending escrow for the timeout exit; the
  // other two must withdraw live inventory in the same dispatch transaction.

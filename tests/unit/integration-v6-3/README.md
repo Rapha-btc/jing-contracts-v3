@@ -6,8 +6,9 @@ The original 9-micro-STX rescale shortfall was reproduced before the fix; its
 custody/solvency expectations are unchanged. See the [accounting proof and
 fork record](../../../simulations/README-v1-core-spread-rungs.md#rescale-solvency-reproduced-and-repaired).
 
-The full integration suite passes **110/110 tests**, in eleven files with no
-skips (102/102 before `dispatch-guards.test.ts`).
+The full integration suite passes **118/118 tests**, in twelve files with no
+skips (102/102 before `dispatch-guards.test.ts`, 110/110 before
+`dispatch-claim.test.ts`).
 Its six seeded campaigns completed 396 invariant checkpoints, 52 randomized
 withdrawals, 24 rescales and 12 tail rolls, and ended with zero residue.
 
@@ -32,11 +33,24 @@ guard of `jing-ladder-dispatch` before any transfer: empty list (u7101), zero
 total and over/under budget (u7102), zero amount (u7103), unseated or
 other-side rung on deposit (u7104), duplicate rung (u7105), a relay contract
 spending its caller's sender on deposit and withdraw (u7106), and an
-other-side or never-registered rung on withdraw (u7108). Each refusal has no
+other-side or never-registered rung on withdraw or claim (u7108), an empty
+or duplicate claim list (u7101 / u7105). Each refusal has no
 events and leaves the wallet unchanged. `coverage.mjs` now also gates
 dispatch at the same thresholds on raw instrumentation, and lists core,
 ladder and market raw coverage for reference (their gates are in
 [core-ladder-v1](../core-ladder-v1/README.md) and [v6-3](../v6-3/README.md)).
+
+## Dispatch claims
+
+`dispatch-claim.test.ts` (6 cases, both directions) runs `claim-buy` /
+`claim-sell` on ten real rungs: four sold out (old epoch: proceeds plus the
+reserved input are paid and the position is removed), one partial and five
+untouched (proceeds only; shares, unsold input and the resting order stay).
+Every per-rung payout equals the member's prior `get-position`; the wallet
+delta equals the totals; supply is conserved; the dispatcher holds nothing.
+A second claim of the resting rungs pays 0; a claim of a removed position
+returns the rung's u7006. An absent tenth (or middle) position rolls back
+nine paid claims with no events. Retired rungs stay claimable.
 
 ## Negative controls (2026-10-01)
 
