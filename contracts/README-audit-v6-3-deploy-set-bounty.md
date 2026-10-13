@@ -28,9 +28,9 @@ Status: not yet accepted or paid.
 | `murq0k2xe78066bc7441` | PlatinumVera | Limit-aware DLMM pick | Valid, same root cause as Nilo (later). |
 | `muqgsawqea2a0db05005` | Celestial Shark | u51 router allowance can be exceeded | Contested: Cunning Nexus reports the allowance holds. Not adopted. |
 | `muqkvdetf501d8560489` | aipd506 | Rung partial-withdraw DoS (u1009/u1004) | Does not reproduce (live and parked are never both > 0, test by Cunning Nexus). |
-| `muro8d9y7b89bf53de85`, `mus20oao6a92e3df62a0`, `muss4j0a12cb1aad7e5c` | Koisto, arion, Mini | Vaults lack a `with-stx` budget for a Lazer fee | Valid in principle, Low: the Lazer fee is u0 today. Not adopted. |
-| `mut9sgqa8b043b391e46` | Mega Grey (LMH) | Book leg bound on the maker price, gross of fee + rebate | Plausible Medium, not adopted. Open for a follow-up. |
-| `muvblxeg1a000471b54e` | Cunning Nexus | MIN_SHARE in taker capacity (u1020) and others | Valid Lows, not adopted. Won the previous bounty. |
+| `muro8d9y7b89bf53de85`, `mus20oao6a92e3df62a0`, `muss4j0a12cb1aad7e5c` | Koisto (Synced Sol), arion (Eternal Harp), Mini (Stellar Wisp) | Vaults lack a `with-stx` budget for a Lazer fee | Valid, Low (fee is u0 today). Adopted as an admin-set `pyth-fee-budget` (default 0, max 10 STX) in all three vaults. |
+| `mut9sgqa8b043b391e46` | Mega Grey (LMH) | Book leg bound on the maker price, gross of fee + rebate | **Valid Medium, fixed (`e5c58c4`)**: smart paths size and fill the book at a limit net of fee + rebate. Tip candidate. |
+| `muvblxeg1a000471b54e` | Cunning Nexus | MIN_SHARE in taker capacity (u1020), manual dust to fallback, disabled DLMM pool, hard-coded decoder | Valid Lows. L-4 (hard-coded `LAZER_DECODER`) accepted: immutable is safer, a Pyth decoder change means a market redeploy. Others pending review. Won the previous bounty. |
 | `muzikrrxfa1814a9b3f4` | (source review) | Final balance of 3-8 sats cannot be sold (`sold > 8`) | Valid Low; matches the gap noted in juicestx `README-apeir-audit.md` I-1. Admin sweep covers it. |
 | `muqrl1jj0747e35ebddd` | nicolasesanchez50 | No defect; sell-side epoch-close test | Useful test, no finding. |
 | `murp1nq80b5daf1100c8` | samgelosh | Three-rescale cutoff rounding | Tiny, intentional policy. Not adopted. |
