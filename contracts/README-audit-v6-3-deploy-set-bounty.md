@@ -7,7 +7,7 @@ vaults (juicestx `60ac298`, fastpool-pox-5 `3e9262d`, citycoins-protocol
 
 ## Award
 
-**Proposed winner: Diamond Lance (Nilo)**, submission `muqdalx67080a333d102`
+**Winner: Diamond Lance (Nilo)**, submission `muqdalx67080a333d102`
 (`SP187XMZFVN6AW5GBP1J04YEN9T4Y7475RK6YDVJZ`), first submission (02:52Z on
 day one). `dlmm-pick` in router v5-3 chose the pool holding the most of the
 asset bought, which on mainnet was a pool parked at its last bin: STX sellers
@@ -15,7 +15,7 @@ got 5.8% less, and the capacity walk returned 0 for tighter limits. Stxer fork
 repro, patch and runtime deltas included. Adopted as `1063add`, refined in
 `280c81c`; see [README-router-v5-3-dlmm-pick.md](README-router-v5-3-dlmm-pick.md).
 
-Status: not yet accepted or paid.
+Accepted 2026-10-13 and paid 7,000 sats sBTC with memo `BNTY:muqchqnaa54e769598a4`, tx [`c3572df1`](https://explorer.hiro.so/txid/c3572df1c4513d2625fd641afc4726cfcd69617ee068bd5863dd41222fea5238?chain=mainnet). No tips were paid.
 
 ## Submission decisions
 
