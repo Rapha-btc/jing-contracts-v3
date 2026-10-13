@@ -106,7 +106,26 @@ and returns `rebate-bps` with `gross-cap`. The router passes the update and
 uses both returned values. Eight quote/negative cases cover failed timestamp
 hints, future timestamps and stale-feed fallback through the public market
 getter; the router has no private timestamp parser. The full suite then passed **185/185**; with the
-pool-pick cases it now passes **321/321**, with unchanged coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
+pool-pick cases it passed **321/321**, with unchanged coverage thresholds. See [the bounty decision and parser-check limits](../../../contracts/README-audit-core-spread-v1-bounty.md#accepted-aged-price-router-sizing).
+
+`net-limit.test.ts` adds 19 cases for the smart routes' net book limit
+(audit submission `mut9sgqa8b043b391e46`). The book fills at the maker's own
+price, but the taker prepays the rebate and pays the 10 bps fee on what it
+receives, so the smart routes now run the book leg at
+`ceil(limit*(BPS+bps)/(BPS-10))` selling sBTC and
+`floor(limit*(BPS-10)/(BPS+bps))` selling STX. Per direction: the manual route
+still fills a maker at the limit under the limit net (unchanged by design);
+the smart route skips that maker and DLMM fills above the vault's
+`limit*amount` floor; with no other venue the book leg is skipped and state is
+unchanged; a maker one unit inside the limit no longer takes the chunk ahead
+of a better DLMM quote; a maker at the book limit fills with net price at or
+better than the limit; book-limit rounding at 20 and 70 bps (the most lenient
+limit sizes the book, one unit stricter skips it; 70 bps is the stale-edge
+hint, so the market then refuses and DLMM takes it). One case covers the
+`blimit = 0` guard (a 1-unit STX max price). Existing smart cases that rested
+the maker exactly at the caller's limit (or the mid) now pass the net-limit
+equivalent limit, so they still exercise the same fills. The suite passes
+**340/340**.
 
 Manual routes cover the real book's net input, maker-price output, fees, rebates,
 sub-minimum refunds, all three fallback destinations, pro-rata fallback minimums,
@@ -172,16 +191,16 @@ debit is 9 sats. All positions and market custody end at zero. The test accepts
 All router-suite cases call public or read-only entrypoints. Timestamp-hint
 boundaries are checked through the market's read-only capacity getter.
 
-- Line 815 / branch `815,0,1`: `cp-split`'s zero-total division guard. Taking it
+- Line 851 / branch `851,0,1`: `cp-split`'s zero-total division guard. Taking it
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Line 1254: the opening line of the `plan` tuple in `cp-stage` (dust legs
+- Line 1290: the opening line of the `plan` tuple in `cp-stage` (dust legs
   dropped, c2b046a). Both `dust-left` arms of each leg are hit (a zero split
   leg is dust); the SDK reports the tuple's opening line unhit. A non-zero
   dust leg (a few units of room left in a pool) is exercised on the fork:
   stxer smart suite S3 and S11.
-- Lines 1420–1421: the literal principal and function name inside the read-only
+- Lines 1458–1459: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.

@@ -75,7 +75,7 @@ async function sizing(sellX, taker, { amount, limit, u, mid }) {
   // and capacity for left = amount - jing-size (the book leg fills in full),
   // d0 / n0 for left = amount, c1..c3 every pool's capacity (a partial book
   // fill leaves another left).
-  const ju = `(jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b})`;
+  const ju = `(get size (jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b}))`;
   return fields(await evRaw(ROUTER, `{ j: ${ju},
     n: (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j)))),
     d: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))))),
@@ -371,7 +371,11 @@ async function routes() {
     const a9 = sellX ? 30_000n : 80_000_000n;
     check('S9 fixture: the wrong hint doubles the capacity, the real one cannot fill it', String(gcWrong > gcRight && minB(gcWrong, a9) > gcRight), 'true');
     x = await smart('S9 wrong mid hint: book leg over the real capacity, FOK refused, all on the AMMs', sellX, taker, { amount: a9, limit: loose, u, mid: wrongMid });
-    check('S9 jing-cap = min(amount, hinted cap) > 0, jing-ok false, maker untouched', `${x.p['jing-cap']} ${x.f['jing-ok']}`, `${minB(gcWrong, a9)} false`);
+    // The book limit is now net of fee + rebate (stricter than `loose`), and
+    // here the wrong hint equals `loose`: the net limit sits past the hinted
+    // mid, so the router sizes no book leg at all. Same safe outcome as the
+    // old FOK refusal: no fill, maker untouched, all on the AMMs.
+    check('S9 wrong hint at the net book limit: jing-cap 0, jing-ok false, maker untouched', `${x.p['jing-cap']} ${x.f['jing-ok']}`, `0 false`);
     await ev('S9 the maker rests unchanged', MARKET, `(get-token-${ms}-deposit (var-get current-cycle) '${maker})`, `u${worth(sellX ? 10_000n : 25_000_000n)}`);
     await clear();
   }

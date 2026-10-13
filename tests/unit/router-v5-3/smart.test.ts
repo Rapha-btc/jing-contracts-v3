@@ -13,7 +13,10 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     const q=h.ro('market','get-taker-capacity',[h.U(h.P),h.U(h.quote(s)),Cl.bool(s==='x'),Cl.principal(h.user),Cl.none()]);
     const cap=q['net-cap'],grossCap=((cap+1n)*10020n-1n)/10000n;
     expect(q['gross-cap']).toBe(grossCap);expect(h.net(grossCap)).toBe(cap);expect(h.net(grossCap+1n)).toBe(cap+1n);
-    const n=grossCap+above,before=h.wallet(s),receipt=h.smart(s,n),r=h.ok(receipt);
+    // Net-limit rule: the maker sits at quote(s), so the caller's limit is the
+    // one whose book limit is exactly quote(s) (a limit at quote(s) nets under it).
+    const limit=h.netLimit(s,h.quote(s));expect(h.bookLimit(s,limit)).toBe(h.quote(s));
+    const n=grossCap+above,before=h.wallet(s),receipt=h.smart(s,n,limit),r=h.ok(receipt);
     expect(h.routerPrint(receipt)['jing-cap']).toBe(grossCap);
     expect(r['jing-ok']).toBe(true);
     expect(r['jing-in']).toBe(cap+cap*20n/10000n);
@@ -25,7 +28,8 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
   for(const enough of [false,true]) it(`new net formula at minimum deposit: ${enough?'accepted':'skipped'}`,()=>{
     h.book(s);const minimum=s==='x'?100n:10000n,n=h.gross(minimum)-(enough?0n:1n),before=h.wallet(s);
     expect(h.net(n)).toBe(minimum-(enough?0n:1n));
-    const receipt=h.smart(s,n),r=h.ok(receipt);
+    // Net-limit rule: caller limit whose book limit reaches the maker's quote.
+    const receipt=h.smart(s,n,h.netLimit(s,h.quote(s))),r=h.ok(receipt);
     expect(h.routerPrint(receipt)['jing-cap']).toBe(enough?n:0n);
     expect(r['jing-ok']).toBe(enough);
     // Minimum x net is 100: its one-unit pot pays floor(100*20/10000)=0,
@@ -44,7 +48,10 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     h.book(s);h.fund('dlmm');h.config('dlmm');
     if(reason==='stale') h.ok(h.call('oracle','configure',[h.U(0),h.U(80),h.U(80)]));
     else h.ok(h.call('market','set-paused',[Cl.bool(true)]));
-    const n=h.amount(s),before=h.wallet(s),receipt=h.smart(s,n),r=h.ok(receipt);
+    // Net-limit rule: the sizing hint reads 70 bps for the stale (age 80)
+    // update and 20 for the paused one; size the book at the maker's quote.
+    const limit=h.netLimit(s,h.quote(s),reason==='stale'?70n:20n);
+    const n=h.amount(s),before=h.wallet(s),receipt=h.smart(s,n,limit),r=h.ok(receipt);
     expect(h.routerPrint(receipt)['jing-cap']).toBe(n);
     expect(r['jing-ok']).toBe(false);expect(r['dlmm-in']).toBe(n);
     expect(h.ro('market','get-current-cycle')).toBe(0n);
@@ -54,7 +61,8 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     h.book(s);h.ok(h.call('oracle','configure',[h.U(0),h.U(age),h.U(age)]));
     const n=h.amount(s),bps=BigInt(20+age-30),net=h.net(n,bps);
     const traded=s==='x'?net:net/200n*200n,rawOut=s==='x'?traded*50n:traded/200n;
-    const spent=traded+traded*bps/10000n,before=h.wallet(s),r=h.ok(h.smart(s,n));
+    // Net-limit rule at the aged rate: limit whose book limit reaches quote(s).
+    const spent=traded+traded*bps/10000n,before=h.wallet(s),r=h.ok(h.smart(s,n,h.netLimit(s,h.quote(s),bps)));
     expect(r['jing-ok']).toBe(true);expect(r['jing-in']).toBe(spent);
     expect(r['jing-out']).toBe(rawOut-rawOut/1000n);expect(r.unsold).toBe(n-spent);
     h.conservation(s,before,r,n);
@@ -98,7 +106,8 @@ for(const s of ['x','y'] as const) describe(`smart ${s}`,()=>{
     // This fixture price would make get-bin-price fail if called. The book
     // consumes the whole request, so the later stage must exit first.
     h.ok(h.call('dlmm','configure-dlmm',[Cl.int(0),h.U(0),h.U(15),h.U(n)]));
-    const before=h.wallet(s),r=h.ok(h.smart(s,n));expect(r['jing-ok']).toBe(true);expect(r.unsold).toBe(0n);
+    // Net-limit rule: limit whose book limit reaches the maker's quote.
+    const before=h.wallet(s),r=h.ok(h.smart(s,n,h.netLimit(s,h.quote(s))));expect(r['jing-ok']).toBe(true);expect(r.unsold).toBe(0n);
     h.conservation(s,before,r,n);
   });
   it('leaves untradeable dust without reading invalid downstream quotes',()=>{

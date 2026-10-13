@@ -65,6 +65,16 @@ export function routerPrint(r:ReturnType<typeof call>) {
 }
 export const net = (gross:bigint,bps=20n) => gross*10000n/(10000n+bps);
 export const gross = (n:bigint,bps=20n) => (n*(10000n+bps)+9999n)/10000n;
+// Router book-limit (net-limit rule, audit mut9sgqa8b043b391e46): the taker
+// prepays the rebate (gross = net*(BPS+bps)/BPS) and pays the 10 bps fee on
+// what it receives, so the book leg runs at a limit whose NET price meets the
+// caller's: x (min price) ceil(L*(BPS+bps)/(BPS-10)), y (max) floor(L*(BPS-10)/(BPS+bps)).
+export const bookLimit = (s:Side,limit:bigint,bps=20n) => s==='x'
+  ? (limit*(10000n+bps)+9989n)/9990n : limit*9990n/(10000n+bps);
+// The most lenient caller limit whose book limit still reaches a maker price:
+// x the largest L with bookLimit(L) <= price, y the smallest with >= price.
+export const netLimit = (s:Side,price:bigint,bps=20n) => s==='x'
+  ? price*9990n/(10000n+bps) : (price*(10000n+bps)+9989n)/9990n;
 export const cpOut = (n:bigint,rin:bigint,rout:bigint,fee=0n) => {const a=n*(10000n-fee)/10000n;return rout*a/(rin+a);};
 export function conservation(s:Side,before:{sold:bigint,bought:bigint},r:any,total:bigint) {
   const spent=['jing','dlmm','xyk','velar'].reduce((a,v)=>a+r[`${v}-in`],0n);

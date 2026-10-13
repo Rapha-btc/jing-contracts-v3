@@ -35,7 +35,9 @@ for(const s of ['x','y'] as const) describe(`existing orders ${s}`,()=>{
   });
   for(const smart of [false,true]) it(`${smart?'smart':'manual'} catches the refusal without modifying either order`,()=>{
     bothSides(s);const before=h.state(),n=h.amount(s);
-    const receipt=smart?h.smart(s,n,h.P):h.manual(s,{jing:n,limit:h.P}),r=h.ok(receipt);
+    // Net-limit rule: a smart limit at the mid nets under it and skips the
+    // book; this limit's book limit is the mid, so the refusal is reached.
+    const receipt=smart?h.smart(s,n,h.netLimit(s,h.P)):h.manual(s,{jing:n,limit:h.P}),r=h.ok(receipt);
     if(smart) expect(h.routerPrint(receipt)['jing-cap']).toBe(n);
     expect(r).toMatchObject({'jing-ok':false,'jing-in':0n,'jing-out':0n,out:0n,unsold:n});
     expect(h.state()).toBe(before);
@@ -57,7 +59,8 @@ for(const s of ['x','y'] as const) describe(`existing orders ${s}`,()=>{
     const n=h.amount(s),net=h.net(n),tradedOutput=s==='x'?net*100n:net/100n;
     const inputFee=net/1000n,received=tradedOutput-tradedOutput/1000n;
     const rest=opposite-tradedOutput,refunded=carry?0n:rest;
-    const before=h.wallet(s),receipt=smart?h.smart(s,n,h.P,h.UPDATE,h.P,received+refunded)
+    // Net-limit rule: smart limit whose book limit is the mid (see above).
+    const before=h.wallet(s),receipt=smart?h.smart(s,n,h.netLimit(s,h.P),h.UPDATE,h.P,received+refunded)
       :h.manual(s,{jing:n,limit:h.P,fallback:3,minOut:received+refunded}),r=h.ok(receipt);
     // Full midpoint clearing distributes the full prepaid rebate pot pro
     // rata; the bilateral walk's per-fill floor formula does not apply.
@@ -79,7 +82,8 @@ for(const s of ['x','y'] as const) describe(`existing orders ${s}`,()=>{
     const n=h.amount(s),net=h.net(n),traded=s==='x'?net*100n:net/100n;
     const payout=traded-traded/1000n,makerProceeds=(n-net/1000n)/2n,rest=(2n*deposit-traded)/2n;
     const before=h.wallet(s),makerBefore=h.balance(s,h.maker);
-    const r=h.ok(smart?h.smart(s,n,h.P):h.manual(s,{jing:n,limit:h.P}));
+    // Net-limit rule: smart limit whose book limit is the mid (see above).
+    const r=h.ok(smart?h.smart(s,n,h.netLimit(s,h.P)):h.manual(s,{jing:n,limit:h.P}));
     expect(r).toMatchObject({'jing-ok':true,'jing-in':n,'jing-out':payout,out:payout,unsold:0n});
     expect(before.sold-h.balance(s)).toBe(n-makerProceeds);
     expect(h.balance(s,h.maker)-makerBefore).toBe(makerProceeds);

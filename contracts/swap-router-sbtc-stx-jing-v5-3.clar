@@ -757,7 +757,32 @@
   )
 )
 
-;; book leg size: min(amount, capacity), u0 when under min deposit or no vaa
+;; The market's taker fee (markets FEE_BPS): the taker receives traded - fee.
+(define-constant JING_FEE_BPS u10)
+
+;; The book fills at the maker's own price, but the taker pays the rebate up
+;; front (gross = net * (BPS + bps) / BPS) and the 10 bps fee on what it
+;; receives. Book limit so the taker's NET price still meets `limit`:
+;;   selling sBTC (min price): ceil(limit * (BPS + bps) / (BPS - fee))
+;;   selling STX (max price):  floor(limit * (BPS - fee) / (BPS + bps))
+;; Without it a resting bid at the limit fills the book leg under the
+;; caller's limit net (audit submission mut9sgqa8b043b391e46).
+(define-private (book-limit
+    (limit uint)
+    (bps uint)
+    (sell-sbtc bool)
+  )
+  (if sell-sbtc
+    (/ (- (+ (* limit (+ BPS bps)) (- BPS JING_FEE_BPS)) u1)
+      (- BPS JING_FEE_BPS)
+    )
+    (/ (* limit (- BPS JING_FEE_BPS)) (+ BPS bps))
+  )
+)
+
+;; book leg: size min(amount, capacity) at the net-adjusted book limit, u0
+;; when under min deposit or no vaa. Two capacity reads: the first gives the
+;; update's rebate rate, the second sizes the book at the adjusted limit.
 (define-private (jing-size
     (amount uint)
     (limit uint)
@@ -771,19 +796,23 @@
   ;; A wrong hint only mis-sizes the book leg (refused fill-or-kill, or short
   ;; with the rest going to the AMMs). This saves the second oracle
   ;; verification the v2 router paid through refresh-mid. Nothing here can
-  ;; fail (the public already refused a zero mid), so it returns a plain uint.
+  ;; fail (the public already refused a zero mid), so it returns plain uints.
   (match update
     v (let (
-        (quote (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc
+        (bps (get rebate-bps
+          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc
+            tx-sender (some v)
+          )))
+        (blimit (book-limit limit bps sell-sbtc))
+        (quote (contract-call? JING_MARKET get-taker-capacity mid blimit sell-sbtc
           tx-sender (some v)
         ))
-        (bps (get rebate-bps quote))
         (cap (get gross-cap quote))
         (size (if (> cap amount)
           amount
           cap
         ))
-        (net (/ (* size BPS) (+ BPS bps)))
+        (net (/ (* size BPS) (+ BPS (get rebate-bps quote))))
         (mins (contract-call? JING_MARKET get-min-deposits))
         (min-dep (if sell-sbtc
           (get min-token-x mins)
@@ -791,13 +820,20 @@
         ))
       )
       ;; under the market minimum, or under the bar a full side sets for a
-      ;; newcomer (min-taker, net terms): no book leg, the AMMs take it
-      (if (and (>= net min-dep) (>= net (get min-taker quote)))
-        size
-        u0
-      )
+      ;; newcomer (min-taker, net terms), or no positive book limit: no book
+      ;; leg, the AMMs take it
+      {
+        size: (if (and (> blimit u0) (>= net min-dep) (>= net (get min-taker quote)))
+          size
+          u0
+        ),
+        limit: blimit,
+      }
     )
-    u0
+    {
+      size: u0,
+      limit: limit,
+    }
   )
 )
 
@@ -1294,9 +1330,10 @@
         (user tx-sender)
         (stx-before (stx-get-balance user))
         ;; stage 1: the book
-        (jing-amount (jing-size amount limit-price update mid true))
+        (book (jing-size amount limit-price update mid true))
+        (jing-amount (get size book))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap-panic update) true)
+          (jing-swap jing-amount (get limit book) (unwrap-panic update) true)
           none
         ))
         (jing-in (jing-spent jing))
@@ -1362,9 +1399,10 @@
         (user tx-sender)
         (sbtc-before (sbtc-balance user))
         ;; stage 1: the book
-        (jing-amount (jing-size amount limit-price update mid false))
+        (book (jing-size amount limit-price update mid false))
+        (jing-amount (get size book))
         (jing (if (> jing-amount u0)
-          (jing-swap jing-amount limit-price (unwrap-panic update) false)
+          (jing-swap jing-amount (get limit book) (unwrap-panic update) false)
           none
         ))
         (jing-in (jing-spent jing))
