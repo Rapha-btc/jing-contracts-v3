@@ -81,7 +81,7 @@ async function sizing(sellX, taker, { amount, limit, u, mid }) {
     d: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))))),
     n0: (dlmm-pick ${b} u${amount}), d0: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} u${amount})),
     c1: (dlmm-capacity u${limit} ${b} u1), c2: (dlmm-capacity u${limit} ${b} u2), c3: (dlmm-capacity u${limit} ${b} u3),
-    x: (cp-capacity (xyk-reserves ${b}) (xyk-keep ${b}) u${limit} ${b}),
+    x: (let ((q (xyk-quote ${b}))) (cp-capacity (get reserves q) (get keep q) u${limit} ${b})),
     v: (cp-capacity (velar-reserves ${b}) (velar-keep) u${limit} ${b}) }`, taker));
 }
 

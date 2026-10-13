@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
+import {XYK_REF} from './xyk-ref.mjs';
 const dir = 'tests/unit/router-v5-3';
 const out = `${dir}/.build`;
 export const owner = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM';
@@ -29,18 +30,22 @@ const deps = {
     "'SP20X3DC5R091J8B6YPQT638J8NR1W83KN6TN5BJY.univ2-fees-v1_0_0-0070": local('velar')},
   'jing-core-v6': {},
 };
-const paths = {market:'contracts/markets-sbtc-stx-jing-v6-3.clar',router:'contracts/swap-router-sbtc-stx-jing-v5-3.clar','jing-core-v6':'contracts/jing-core-v6.clar'};
+// router-ref: the same router with the XYK pool-snapshot change reversed
+// (xyk-ref.mjs), for the differential suite xyk-snapshot.test.ts
+deps['router-ref'] = {...Object.fromEntries(XYK_REF), ...deps.router};
+const paths = {market:'contracts/markets-sbtc-stx-jing-v6-3.clar',router:'contracts/swap-router-sbtc-stx-jing-v5-3.clar','router-ref':'contracts/swap-router-sbtc-stx-jing-v5-3.clar','jing-core-v6':'contracts/jing-core-v6.clar'};
 const sources = {};
 for (const [name,path] of Object.entries(paths)) {
   const source = fs.readFileSync(path,'utf8'); let generated = source;
   for (const [from,to] of Object.entries(deps[name])) {
     if (!generated.includes(from)) throw Error(`Missing substitution: ${from}`);
+    if (name === 'router-ref' && generated.split(from).length !== 2 && !from.startsWith("'") && !from.startsWith('"')) throw Error(`Ambiguous xyk-ref hunk: ${from.slice(0,80)}`);
     generated = generated.replaceAll(from,to);
   }
   fs.writeFileSync(`${out}/${name}.clar`,generated);
   sources[name] = {path,sha256:sha(source),generatedSha256:sha(generated),substitutions:deps[name]};
 }
-const fixtures = ['tests/rv/sip-010-trait.clar','tests/rv/mock-wstx.clar','tests/rv/mock-jing-ladder.clar','tests/unit/v6-3/token.clar','tests/unit/v6-3/oracle.clar',`${dir}/venues.clar`,`${dir}/dlmm-router.clar`];
+const fixtures = ['tests/unit/router-v5-3/xyk-ref.mjs','tests/rv/sip-010-trait.clar','tests/rv/mock-wstx.clar','tests/rv/mock-jing-ladder.clar','tests/unit/v6-3/token.clar','tests/unit/v6-3/oracle.clar',`${dir}/venues.clar`,`${dir}/dlmm-router.clar`];
 fs.writeFileSync(`${out}/source.json`,JSON.stringify({sources,fixtures:Object.fromEntries(fixtures.map(p=>[p,sha(fs.readFileSync(p))]))},null,2)+'\n');
 fs.mkdirSync(`${dir}/settings`,{recursive:true});
 fs.copyFileSync('settings/Devnet.toml',`${dir}/settings/Devnet.toml`);

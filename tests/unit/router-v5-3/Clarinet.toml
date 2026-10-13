@@ -73,3 +73,8 @@ epoch = "3.4"
 path = ".build/router.clar"
 clarity_version = 5
 epoch = "3.4"
+
+[contracts.router-ref]
+path = ".build/router-ref.clar"
+clarity_version = 5
+epoch = "3.4"

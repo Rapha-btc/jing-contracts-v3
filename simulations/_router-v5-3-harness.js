@@ -181,6 +181,10 @@ export async function printAfter(stamp) {
 // counts u0), ties to the lower number.
 export const DLMM_CORE_ID = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
 export const DLMM_WALK = 30;
+// The pools' ids in the core's `pools` map (router DLMM_POOL_ID_1..3). The
+// router counts a pool whose entry is disabled (or names another contract)
+// as empty (L-3); dlmmPickInputs reads the same entry and zeroes its depth.
+export const DLMM_POOL_IDS = [6n, 15n, 16n];
 export function dlmmPickModel(sellSbtc, depths, outs) {
   const max = depths.reduce((a, b) => (b > a ? b : a), 0n), floor = max / 100n;
   const e = depths.map((d) => d > 0n && d >= floor);
@@ -218,9 +222,10 @@ export function dlmmOutModel(pool, amount, sellSbtc) {
 export async function dlmmPickInputs(evalFn, sellSbtc, label = 'DLMM pick') {
   const depth = (d) => sellSbtc ? `(stx-get-balance '${d})` : `(unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`;
   const side = sellSbtc ? 'y' : 'x';
-  const v = String(await evalFn(`(list ${DLMM_POOLS.map((d) => `(let ((p (unwrap-panic (contract-call? '${d} get-pool)))) { depth: ${depth(d)}, ip: (get initial-price p), bs: (get bin-step p), ab: (get active-bin-id p), fee: (+ (get ${side}-protocol-fee p) (get ${side}-provider-fee p) (get ${side}-variable-fee p)) })`).join(' ')})`));
-  const pools = [...v.matchAll(/\(tuple \(ab (-?\d+)\) \(bs u(\d+)\) \(depth u(\d+)\) \(fee u(\d+)\) \(ip u(\d+)\)\)/g)]
-    .map((m) => ({ ab: Number(m[1]), bs: BigInt(m[2]), depth: BigInt(m[3]), fee: BigInt(m[4]), ip: BigInt(m[5]), bins: new Map() }));
+  const on = (d, j) => `(match (unwrap-panic (contract-call? '${DLMM_CORE_ID} get-pool-by-id u${DLMM_POOL_IDS[j]})) e (and (get status e) (is-eq (get pool-contract e) '${d})) false)`;
+  const v = String(await evalFn(`(list ${DLMM_POOLS.map((d, j) => `(let ((p (unwrap-panic (contract-call? '${d} get-pool)))) { depth: ${depth(d)}, ip: (get initial-price p), bs: (get bin-step p), ab: (get active-bin-id p), fee: (+ (get ${side}-protocol-fee p) (get ${side}-provider-fee p) (get ${side}-variable-fee p)), on: ${on(d, j)} })`).join(' ')})`));
+  const pools = [...v.matchAll(/\(tuple \(ab (-?\d+)\) \(bs u(\d+)\) \(depth u(\d+)\) \(fee u(\d+)\) \(ip u(\d+)\) \(on (true|false)\)\)/g)]
+    .map((m) => ({ ab: Number(m[1]), bs: BigInt(m[2]), depth: m[6] === 'true' ? BigInt(m[3]) : 0n, ledger: BigInt(m[3]), on: m[6] === 'true', fee: BigInt(m[4]), ip: BigInt(m[5]), bins: new Map() }));
   if (pools.length !== 3) throw new Error(`${label}: unexpected pick read ${v.slice(0, 400)}`);
   for (const [j, p] of pools.entries()) {
     const ids = [];

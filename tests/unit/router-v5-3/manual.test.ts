@@ -94,3 +94,89 @@ for(const s of ['x','y'] as const) describe(`manual ${s}`,()=>{
   it('rejects a split not equal to the signed total',()=>h.reject(()=>h.manual(s,{total:10n,jing:11n}),3004));
   for(const fallback of [0,4]) it(`rejects unknown fallback ${fallback}`,()=>h.reject(()=>h.manual(s,{jing:h.amount(s),fallback}),3003));
 });
+
+// Audit L-2 (Cunning Nexus): the book's residual goes to the fallback venue
+// only when it is worth more than one unit of the other token at the book's
+// own fill price (dust-left, as the smart stages); dust stays unsold. Selling
+// STX the book fills at 200 uSTX per sat, so a residual of up to ~400 uSTX
+// (plus ROUND_SLACK) is dust. The fixture venues price 100 uSTX per sat: a
+// ~50 uSTX residual buys 0 sats there and the venue refuses (u4003), which
+// reverted the whole swap before the fix (negative control on a copy).
+// Selling sBTC only ROUND_SLACK (2 sats) can be dust at these prices.
+describe('manual fallback dust residual (L-2)',()=>{
+  // the book holds exactly what 1,000,000 uSTX buys (5,000 sats); `rest`
+  // uSTX more (net) find no maker and come back as the residual with the
+  // rebate crumbs (sub-minimum, refunded), as in the crumbs case above
+  const run = (rest:bigint,fallback:number) => {
+    h.book('y',5_000n);
+    const v=h.venues[fallback-1];h.fund(v);h.config(v);
+    const n=h.gross(1_000_000n+rest),before=h.wallet('y');
+    const r=h.ok(h.manual('y',{jing:n,fallback}));
+    return {r,n,before,v,residual:n-r['jing-in']};
+  };
+  for (const fallback of [1,2,3]) {
+    it(`dust residual stays unsold, fallback ${fallback} is not called`,()=>{
+      const {r,n,before,v,residual}=run(50n,fallback);
+      expect(r['jing-ok']).toBe(true);
+      expect(residual).toBeGreaterThan(0n);
+      // worth at most one sat at the fill price
+      expect((residual-2n)*r['jing-out']/r['jing-in']).toBeLessThanOrEqual(1n);
+      expect(r[`${v}-in`]).toBe(0n);
+      expect(h.value(simnet.getDataVar(v,'calls'))).toBe(0n);
+      expect(r.unsold).toBe(residual);
+      h.conservation('y',before,r,n);
+    });
+    it(`non-dust residual still goes to fallback ${fallback}`,()=>{
+      const {r,n,before,v,residual}=run(9_999n,fallback);
+      expect(r['jing-ok']).toBe(true);
+      expect((residual-2n)*r['jing-out']/r['jing-in']).toBeGreaterThan(1n);
+      expect(r[`${v}-in`]).toBe(residual);
+      expect(h.value(simnet.getDataVar(v,'calls'))).toBe(1n);
+      expect(r.unsold).toBe(0n);
+      h.conservation('y',before,r,n);
+    });
+  }
+  // the residual rides with a planned leg on the fallback venue when not
+  // dust; a dust one is left out of it (the planned leg runs unchanged)
+  it('dust residual is not added to a planned fallback leg',()=>{
+    h.book('y',5_000n);h.fund('xyk');h.config('xyk');
+    const a=h.amount('y'),n=h.gross(1_000_000n+50n),before=h.wallet('y');
+    const r=h.ok(h.manual('y',{jing:n,amms:[0n,a,0n],fallback:2}));
+    const residual=n-r['jing-in'];
+    expect(r['xyk-in']).toBe(a);
+    expect(r.unsold).toBe(residual);
+    h.conservation('y',before,r,n+a);
+  });
+  // selling sBTC: dust-left keeps ROUND_SLACK (2 units) off the residual, so
+  // up to 2 sats stay unsold (as in the smart stages); 5 sats (~250 uSTX)
+  // are not dust and go on
+  for (const [rest,dust] of [[1n,true],[5n,false]] as const) it(`selling sBTC: ${rest} sat(s) more than the book holds ${dust?'stay unsold':'go to the fallback'}`,()=>{
+    // the book holds what 10,000 sats buy
+    h.book('x',500_000n);h.fund('xyk');h.config('xyk');
+    const n=h.gross(10_000n+rest),before=h.wallet('x');
+    const r=h.ok(h.manual('x',{jing:n,fallback:2}));
+    const residual=n-r['jing-in'];
+    expect(residual).toBeGreaterThan(0n);
+    if (dust) {
+      expect(residual).toBeLessThanOrEqual(2n);
+      expect(r['xyk-in']).toBe(0n);
+      expect(r.unsold).toBe(residual);
+      h.conservation('x',before,r,n);
+      return;
+    }
+    expect(r['xyk-in']).toBe(residual);
+    expect(r.unsold).toBe(0n);
+    h.conservation('x',before,r,n);
+  });
+  // the book refuses (capacity): the whole jing-amount goes to the fallback,
+  // dust test not applied
+  it('book refused: the whole jing amount goes to the fallback',()=>{
+    h.book('y');h.fund('xyk');h.config('xyk');
+    const n=h.amount('y')*10n,before=h.wallet('y');
+    const r=h.ok(h.manual('y',{jing:n,fallback:2}));
+    expect(r['jing-ok']).toBe(false);
+    expect(r['xyk-in']).toBe(n);
+    expect(r.unsold).toBe(0n);
+    h.conservation('y',before,r,n);
+  });
+});

@@ -26,6 +26,15 @@
 //     under); fallback none (unsold == book leg, out u0, min-out u0 ok,
 //     min-out u1 -> u3002); all four legs at once; min-out one over the
 //     measured out after every leg ran -> u3002, nothing moved.
+//  D  (audit L-2) the book's dust residual: a full fill measures what the
+//     maker's side gives for the leg, the maker then rests one sat's worth
+//     less and the same leg runs with fallback XYK (planned u0). The
+//     residual (rest + rebate crumbs) is worth at most one unit of the other
+//     token at the book's own fill price (dust-left, ROUND_SLACK 2): it stays
+//     unsold, XYK is not called, the swap succeeds (selling sBTC the
+//     residual is a few sats, routed by the same rule). Selling STX a
+//     sub-satoshi residual made XYK pay 0 and refuse (u1019), reverting the
+//     whole swap. Non-dust residuals still reach the fallback (C2).
 //  P  (280c81c) the DLMM leg uses, among the three Bitflow STX/sBTC pools
 //     holding >= 1% of the deepest pool's balance of the asset it buys (STX
 //     when selling sBTC, sBTC when selling STX), the one whose bins pay the
@@ -231,6 +240,43 @@ async function main() {
       await call(`C7 XYK alone, min-out = its exact output (${qx}) -> fills`, s, { amount: leg, a: [0n, leg, 0n], m: [0n, qx, 0n], minOut: qx }, tupleOf({ ...zero, 'xyk-in': leg, 'xyk-out': qx, out: qx }));
     }
     await clear();
+
+    // ------------------------------------------------------------- D ----
+    console.log('PHASE D: dust residual of the book leg (L-2)');
+    {
+      const m0 = await wallet(maker);
+      await place(worth(4n * leg));
+      const full = await call('D full fill measures what the maker side gives for the leg', s, { amount: leg, jing: leg, limit: lim, u }, ok2);
+      check('D full fill: jing-in == leg, unsold u0', `${full.f['jing-ok']} ${full.f['jing-in']} ${full.f.unsold}`, `true ${leg} 0`);
+      await clear();
+      const m1 = await wallet(maker);
+      const given = m0[ms] - m1[ms];
+      // one sat's worth less on the maker's side
+      const oneSat = ms === 'x' ? 1n : (P + 9_999_999_999n) / 10_000_000_000n;
+      await place(given - oneSat);
+      const x0 = await evRaw(MARKET, `(unwrap-panic (contract-call? '${XYK_POOL} get-pool))`);
+      const d = await call('D maker one sat short, fallback XYK planned u0: ok', s, { amount: leg, jing: leg, limit: lim, u, fallback: VENUE.xyk }, ok2);
+      const x1 = await evRaw(MARKET, `(unwrap-panic (contract-call? '${XYK_POOL} get-pool))`);
+      const residual = leg - d.f['jing-in'];
+      const spent = d.f['jing-in'], got = d.f['jing-out'];
+      const price = sellX ? got * 10_000_000_000n / spent : spent * 10_000_000_000n / got;
+      const base = residual > 2n ? residual - 2n : 0n;
+      const worthOut = sellX ? base * price / 10_000_000_000n : base * 10_000_000_000n / price;
+      console.log(`  D residual ${residual} (${sellX ? 'sats' : 'uSTX'}), fill price ${price}, worth ${worthOut} of the other token after ROUND_SLACK`);
+      check('D the book filled and left a residual', `${d.f['jing-ok']} ${residual > 0n}`, 'true true');
+      const dust = worthOut <= 1n;
+      // selling STX one sat short leaves a sub-satoshi residual: dust by
+      // design of the case; selling sBTC it leaves a few sats (rest +
+      // rebate crumbs), which may or may not be dust: the rule decides
+      if (!sellX) check('D selling STX: the residual is dust at the fill price (<= 1 sat)', String(dust), 'true');
+      if (dust) {
+        check('D dust residual: xyk-in u0, unsold == residual, out == jing-out', `${d.f['xyk-in']} ${d.f.unsold} ${d.f.out === got}`, `0 ${residual} true`);
+        check('D dust residual: XYK pool untouched', x1, x0);
+      } else {
+        check('D residual over dust: xyk-in == residual, unsold u0', `${d.f['xyk-in']} ${d.f.unsold}`, `${residual} 0`);
+      }
+      await clear();
+    }
   }
   const sha1 = shas();
   console.log('sha256 at end:', JSON.stringify(sha1));

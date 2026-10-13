@@ -128,6 +128,12 @@
 (define-constant DLMM_POOL_2 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15)
 (define-constant DLMM_POOL_3 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-3-bps-15)
 (define-constant DLMM_CORE 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1)
+;; The pools' ids in the core's `pools` map (set once at pool creation; read
+;; on mainnet 2026-10-13). The core refuses a swap on a pool whose `status`
+;; there is false (u1010, check-pool-validity) while the pool keeps its bins.
+(define-constant DLMM_POOL_ID_1 u6)
+(define-constant DLMM_POOL_ID_2 u15)
+(define-constant DLMM_POOL_ID_3 u16)
 ;; Bins the router may walk. Bitflow's own front end uses 230.
 (define-constant DLMM_MAX_STEPS u230)
 
@@ -222,13 +228,19 @@
 ;; XYK straight through xyk-core with the pool, no swap-helper: the helper
 ;; routes every call through aggregator-core, which skims a per-contract
 ;; fee off the input unless the caller is exempt. The pool's x may be
-;; either token, so the side is read at call time.
+;; either token, so the side is read at call time: by `xyk-x-is-sbtc` on a
+;; manual leg, from the stage's one pool read (`xyk-quote`) on a smart one.
+(define-private (xyk-x-is-sbtc)
+  (is-eq (get x-token (unwrap-panic (contract-call? XYK_POOL get-pool))) SBTC)
+)
+
 (define-private (xyk-swap
     (sell-sbtc bool)
     (amount uint)
     (min-received uint)
+    (x-is-sbtc bool)
   )
-  (let ((x-is-sbtc (is-eq (get x-token (unwrap-panic (contract-call? XYK_POOL get-pool))) SBTC)))
+  (begin
     (if x-is-sbtc
       (if sell-sbtc
         (contract-call? XYK_CORE swap-x-for-y XYK_POOL SBTC WSTX amount
@@ -304,7 +316,7 @@
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (xyk-swap true amount min-received)),
+        out: (try! (xyk-swap true amount min-received (xyk-x-is-sbtc))),
       })
       (ok {
         in: amount,
@@ -328,7 +340,7 @@
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
-        out: (try! (xyk-swap false amount min-received)),
+        out: (try! (xyk-swap false amount min-received (xyk-x-is-sbtc))),
       })
       (ok {
         in: amount,
@@ -391,6 +403,40 @@
   (if (is-eq (some venue) fallback)
     (+ planned residual)
     planned
+  )
+)
+
+;; The Jing residual the fallback venue gets. When the book filled, a residual
+;; worth at most one unit of the other token at the book's own fill price
+;; (`dust-left`, as the smart stages) stays unsold: the venue would pay 0 and
+;; refuse it, reverting the swap (audit L-2). The fill price, not the
+;; caller's limit, judges it: a loose limit makes every amount look like
+;; dust. A book that filled nothing (or was skipped) leaves the whole
+;; jing-amount, which goes to the fallback as before.
+(define-private (fallback-residual
+    (residual uint)
+    (jing (optional {
+      spent: uint,
+      out: uint,
+    }))
+    (sell-sbtc bool)
+  )
+  (match jing
+    j (if (and
+        (> (get spent j) u0)
+        (> (get out j) u0)
+        (dust-left residual
+          (if sell-sbtc
+            (/ (* (get out j) PRICE_SCALE) (get spent j))
+            (/ (* (get spent j) PRICE_SCALE) (get out j))
+          )
+          sell-sbtc
+        )
+      )
+      u0
+      residual
+    )
+    residual
   )
 )
 
@@ -457,9 +503,10 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
-        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
-        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (routed (fallback-residual residual jing true))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
         (dlmm (try! (leg-sbtc dlmm-in
           (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
           VENUE_DLMM
@@ -490,7 +537,7 @@
         velar-out: (get out velar),
         unsold: (+ (if (is-none fallback)
           residual
-          u0
+          (- residual routed)
         )
           (- dlmm-in (get in dlmm))
         ),
@@ -508,7 +555,7 @@
         velar-out: (get out velar),
         unsold: (+ (if (is-none fallback)
           residual
-          u0
+          (- residual routed)
         )
           (- dlmm-in (get in dlmm))
         ),
@@ -558,9 +605,10 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback residual))
-        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback residual))
-        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback residual))
+        (routed (fallback-residual residual jing false))
+        (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
+        (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
+        (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
         (dlmm (try! (leg-stx dlmm-in
           (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
           VENUE_DLMM
@@ -591,7 +639,7 @@
         velar-out: (get out velar),
         unsold: (+ (if (is-none fallback)
           residual
-          u0
+          (- residual routed)
         )
           (- dlmm-in (get in dlmm))
         ),
@@ -609,7 +657,7 @@
         velar-out: (get out velar),
         unsold: (+ (if (is-none fallback)
           residual
-          u0
+          (- residual routed)
         )
           (- dlmm-in (get in dlmm))
         ),
@@ -648,20 +696,40 @@
 (define-constant BPS u10000)
 (define-constant CP_SAFETY u9980) ;; constant-product legs stop 20 bps short of the limit
 
-;; k = 1 - f as num/den for the token being sold
-(define-private (xyk-keep (sell-sbtc bool))
-  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
-    ;; the pool's x may be either token; fees are per side of the pool
-    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
-      {
-        num: (- BPS (+ (get x-protocol-fee pool) (get x-provider-fee pool))),
-        den: BPS,
-      }
-      {
-        num: (- BPS (+ (get y-protocol-fee pool) (get y-provider-fee pool))),
-        den: BPS,
-      }
+;; One read of the XYK pool for a smart stage (Blazing Haven's efficiency
+;; proposal): reserves as {in, out} for the direction being traded, k = 1 - f
+;; as num/den for the token being sold, and the pool's side for the swap.
+;; The pool's x may be either token; fees are per side of the pool. Nothing
+;; moves the pool between this read and the stage's XYK swap.
+(define-private (xyk-quote (sell-sbtc bool))
+  (let (
+      (pool (unwrap-panic (contract-call? XYK_POOL get-pool)))
+      (x-is-sbtc (is-eq (get x-token pool) SBTC))
+      (x-in (is-eq x-is-sbtc sell-sbtc))
     )
+    {
+      reserves: (if x-in
+        {
+          in: (get x-balance pool),
+          out: (get y-balance pool),
+        }
+        {
+          in: (get y-balance pool),
+          out: (get x-balance pool),
+        }
+      ),
+      keep: (if x-in
+        {
+          num: (- BPS (+ (get x-protocol-fee pool) (get x-provider-fee pool))),
+          den: BPS,
+        }
+        {
+          num: (- BPS (+ (get y-protocol-fee pool) (get y-provider-fee pool))),
+          den: BPS,
+        }
+      ),
+      x-is-sbtc: x-is-sbtc,
+    }
   )
 )
 
@@ -671,22 +739,6 @@
       num: (get num (get swap-fee fees)),
       den: (get den (get swap-fee fees)),
     }
-  )
-)
-
-;; reserves as {in, out} for the direction being traded
-(define-private (xyk-reserves (sell-sbtc bool))
-  (let ((pool (unwrap-panic (contract-call? XYK_POOL get-pool))))
-    (if (is-eq (is-eq (get x-token pool) SBTC) sell-sbtc)
-      {
-        in: (get x-balance pool),
-        out: (get y-balance pool),
-      }
-      {
-        in: (get y-balance pool),
-        out: (get x-balance pool),
-      }
-    )
   )
 )
 
@@ -886,17 +938,19 @@
 ;; not walked), the one that pays the most for `amount`. Each candidate's bins
 ;; are walked from its active bin (`dlmm-out`), so the comparison is on what
 ;; the pool actually holds near its price: an empty active bin, or a pool
-;; that is out of range, cannot win on a quote it cannot fill. With a single
-;; eligible pool nothing is walked. Ties go to the lower number; with no pool
-;; holding the asset, u1 (the leg then fills nothing).
+;; that is out of range, cannot win on a quote it cannot fill. A pool the
+;; core has disabled counts as empty (`dlmm-depth`): it would refuse the
+;; swap. With a single eligible pool nothing is walked. Ties go to the lower
+;; number; with no pool holding the asset, u1 (the leg then fills nothing,
+;; and the smart stage skips a disabled pool 1, `dlmm-stage`).
 (define-private (dlmm-pick
     (sell-sbtc bool)
     (amount uint)
   )
   (let (
-      (d1 (dlmm-depth DLMM_POOL_1 sell-sbtc))
-      (d2 (dlmm-depth DLMM_POOL_2 sell-sbtc))
-      (d3 (dlmm-depth DLMM_POOL_3 sell-sbtc))
+      (d1 (dlmm-depth DLMM_POOL_1 DLMM_POOL_ID_1 sell-sbtc))
+      (d2 (dlmm-depth DLMM_POOL_2 DLMM_POOL_ID_2 sell-sbtc))
+      (d3 (dlmm-depth DLMM_POOL_3 DLMM_POOL_ID_3 sell-sbtc))
       (floor (/ (if (> d1 d2) (if (> d1 d3) d1 d3) (if (> d2 d3) d2 d3)) u100))
       (e1 (and (> d1 u0) (>= d1 floor)))
       (e2 (and (> d2 u0) (>= d2 floor)))
@@ -1059,11 +1113,31 @@
 
 (define-private (dlmm-depth
     (pool principal)
+    (id uint)
     (sell-sbtc bool)
   )
-  (if sell-sbtc
-    (stx-get-balance pool)
-    (sbtc-balance pool)
+  (let ((bal (if sell-sbtc
+      (stx-get-balance pool)
+      (sbtc-balance pool)
+    )))
+    ;; a disabled pool is u0, so it neither wins nor sets the 1% floor; the
+    ;; core is only read for a pool that holds the asset (`and` stops early)
+    (if (and (> bal u0) (dlmm-enabled pool id))
+      bal
+      u0
+    )
+  )
+)
+
+;; The core's entry for pool `id` is this pool and is enabled (what the
+;; core's check-pool-validity asserts before a swap). No entry: false.
+(define-private (dlmm-enabled
+    (pool principal)
+    (id uint)
+  )
+  (match (unwrap-panic (contract-call? DLMM_CORE get-pool-by-id id))
+    entry (and (get status entry) (is-eq (get pool-contract entry) pool))
+    false
   )
 )
 
@@ -1236,7 +1310,13 @@
         ;; one pick for the stage: the capacity walk and the sale use the
         ;; same pool
         (pick (dlmm-pick sell-sbtc left))
-        (cap (dlmm-capacity limit sell-sbtc pick))
+        ;; a u1 pick may be the no-eligible-pool fallback: a disabled pool 1
+        ;; would refuse the sale (u1010), so it gets no capacity and the
+        ;; stage passes the order on. u2 and u3 are only picked when eligible.
+        (cap (if (or (> pick u1) (dlmm-enabled DLMM_POOL_1 DLMM_POOL_ID_1))
+          (dlmm-capacity limit sell-sbtc pick)
+          u0
+        ))
         (plan (if (> cap left)
           left
           cap
@@ -1279,9 +1359,8 @@
       unsold: left,
     })
     (let (
-        (cap-xyk (cp-capacity (xyk-reserves sell-sbtc) (xyk-keep sell-sbtc) limit
-          sell-sbtc
-        ))
+        (q (xyk-quote sell-sbtc))
+        (cap-xyk (cp-capacity (get reserves q) (get keep q) limit sell-sbtc))
         (cap-velar (cp-capacity (velar-reserves sell-sbtc) (velar-keep) limit sell-sbtc))
         (split (cp-split left cap-xyk cap-velar))
         ;; a dust leg (a few units of room left in a pool) fetches nothing at
@@ -1297,7 +1376,19 @@
             (get velar split)
           ),
         })
-        (xyk (try! (amm-leg (get xyk plan) limit sell-sbtc VENUE_XYK)))
+        ;; amm-leg's XYK path, with the pool side from `q`
+        (xyk (if (> (get xyk plan) u0)
+          {
+            in: (get xyk plan),
+            out: (try! (xyk-swap sell-sbtc (get xyk plan)
+              (amm-floor (limit-min (get xyk plan) limit sell-sbtc)) (get x-is-sbtc q)
+            )),
+          }
+          {
+            in: u0,
+            out: u0,
+          }
+        ))
         (velar (try! (amm-leg (get velar plan) limit sell-sbtc VENUE_VELAR)))
       )
       (ok {

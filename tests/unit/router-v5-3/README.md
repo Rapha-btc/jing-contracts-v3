@@ -16,7 +16,7 @@ it is separate from the [320 market tests](../v6-3/README.md),
 [RV campaigns](../../rv/v6-3/README.md), and Stxer integration checks.
 
 The isolated `clarinet check --manifest-path tests/unit/router-v5-3/Clarinet.toml`
-also passes: **14 contracts checked**, with unused-binding/analysis warnings
+also passes: **15 contracts checked**, with unused-binding/analysis warnings
 and no errors.
 
 ## What runs
@@ -127,6 +127,47 @@ the maker exactly at the caller's limit (or the mid) now pass the net-limit
 equivalent limit, so they still exercise the same fills. The suite passes
 **340/340**.
 
+`dlmm-pick.test.ts` adds 40 cases for audit L-3 (Cunning Nexus, disabled
+DLMM pool): the core refuses a swap on a pool whose `status` is false
+(u1010) while the pool keeps its bins, so the pick now reads the core's entry
+for each pool holding the bought asset (`get-pool-by-id` at the mainnet ids
+6, 15, 16) and counts a disabled pool, or one whose entry is missing or names
+another contract, as empty. The stub core (`dlmm-router.clar`) keeps those
+entries, `set-pool-status` / `set-pool-entry`, and refuses a swap on a
+disabled pool with u2001 (on mainnet the core's u1010 comes back through the
+swap router's fold as ERR_NO_RESULT_DATA). Cases, both routes and
+directions: the best pool disabled (each of 1, 2, 3) loses to the next; the
+deepest pool disabled sets no 1% floor; two disabled, the third used without
+a factor read. All three disabled: the pick falls back to u1 as today, the
+smart stage sees pool 1 disabled, sizes nothing and does not revert (XYK
+takes the order when it can); a manual DLMM leg is refused (u2001) and rolls
+back. 380/380.
+
+`manual.test.ts` adds 10 cases for audit L-2 (Cunning Nexus, manual dust to
+fallback): the book's residual goes to the fallback venue only when it is
+worth more than one unit of the other token at the book's own fill price
+(`dust-left`, as the smart stages); dust stays unsold. Selling STX a ~50 uSTX
+residual (the book fills at 200 uSTX per sat, the venues pay 100) made each
+fallback venue pay 0 and refuse; it is now left unsold on all three, and a
+9,999 uSTX residual still reaches each. A dust residual is not added to a
+planned fallback leg. Selling sBTC up to 2 sats (ROUND_SLACK) stay unsold, 5
+go on. A refused book still sends the whole book leg to the fallback.
+Negative control on a copy (residual always routed): 5/10 fail, the three
+dust cases with the venue's refusal.
+
+`xyk-snapshot.test.ts` adds 56 differential cases for Blazing Haven's
+efficiency proposal (one XYK pool read per smart CP stage, `xyk-quote`,
+shared by the capacity and the swap). `router-ref` is the same router with
+that change reversed (`xyk-ref.mjs`, applied by `build.mjs`; every hunk must
+match exactly once). Fourteen scenarios per direction run on both routers,
+each on a fresh simnet: smart sales at loose, tight and no-room limits, a
+reversed XYK pool with asymmetric fees, uneven depths, XYK or Velar alone, a
+dust XYK leg, a dust amount, a wallet-minimum refusal, manual XYK legs and a
+refused book on fallback XYK. Result, every event (router principal
+normalised), the user's and router's balances and every XYK / Velar fixture
+variable must match exactly. Negative control: inverting the reference's
+pool side fails 18 of them. The suite passes **446/446**.
+
 Manual routes cover the real book's net input, maker-price output, fees, rebates,
 sub-minimum refunds, all three fallback destinations, pro-rata fallback minimums,
 all four legs together, both CP token orientations, partial DLMM fills, missing
@@ -191,16 +232,16 @@ debit is 9 sats. All positions and market custody end at zero. The test accepts
 All router-suite cases call public or read-only entrypoints. Timestamp-hint
 boundaries are checked through the market's read-only capacity getter.
 
-- Line 851 / branch `851,0,1`: `cp-split`'s zero-total division guard. Taking it
+- Line 903 / branch `903,0,1`: `cp-split`'s zero-total division guard. Taking it
   requires `residual <= cap-xyk + cap-velar` and a zero total, hence residual
   zero. The sole caller, `cp-stage`, exits on zero/dust before calling
   `cp-split`. This arm is unreachable through the current public routes.
-- Line 1290: the opening line of the `plan` tuple in `cp-stage` (dust legs
+- Line 1369: the opening line of the `plan` tuple in `cp-stage` (dust legs
   dropped, c2b046a). Both `dust-left` arms of each leg are hit (a zero split
   leg is dust); the SDK reports the tuple's opening line unhit. A non-zero
   dust leg (a few units of room left in a pool) is exercised on the fork:
   stxer smart suite S3 and S11.
-- Lines 1458–1459: the literal principal and function name inside the read-only
+- Lines 1549–1550: the literal principal and function name inside the read-only
   `get-jing-min-deposits` call. The getter's returned tuple is asserted and its
   function is marked hit, but the SDK reports these operand lines unhit. They
   remain in the denominator.

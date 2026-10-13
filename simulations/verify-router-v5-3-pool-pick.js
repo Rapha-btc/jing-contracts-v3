@@ -22,19 +22,31 @@
 //     sales run on each new pick. Together with T this runs every pick arm
 //     and every pool arm of the DLMM swap, `dlmm-pool-info` and
 //     `dlmm-bin-balances` in both directions.
+//  X  disabled pools (audit L-3): Bitflow's core admin disables pools through
+//     dlmm-core-v-1-1 `set-pool-status` (the core then refuses their swaps,
+//     u1010, while their bins stay). Per direction the current pick is
+//     disabled: the router's pick moves to the model's next pool (the model
+//     reads the core entry too) and both sales run there. Then all three are
+//     disabled: the smart sale (update none) does not revert, no DLMM pool
+//     moves and dlmm-cap is u0; a manual DLMM leg is refused (the core's
+//     u1010 at the first bin step, which dlmm-swap-router-v-1-2's fold
+//     reports as ERR_NO_RESULT_DATA u2001) and nothing moves. Pools are re-enabled after each direction.
 //  Every sale: only the picked pool's balances move; it pays out exactly
 //  dlmm-out of the bought asset; the wallet loses dlmm-in of the sold asset
 //  and gains out; the smart sale's dlmm-cap equals `dlmm-capacity` read just
 //  before it, as the caller.
 import {
   DEP, ROUTER, MARKET, SBTC, WSTX, DLMM_POOLS, dlmmPick,
-  H, check, ev, evRaw, tx, fund, deployAll, wallet, manualArgs, manualFn, smartArgs, smartFn,
+  H, check, ev, evRaw, tx, fund, deployAll, wallet, manualArgs, manualFn, smartArgs, smartFn, refused,
   fields, mk, principal, shas, uint, printsOf,
 } from './_router-v5-3-harness.js';
-import { uintCV, intCV } from '@stacks/transactions';
+import { uintCV, intCV, boolCV } from '@stacks/transactions';
 
 process.env.ROUTER_RENEW_TENURE = '1';
 const DLMM_CORE = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
+// the core's admin (get-admins on mainnet), who may call set-pool-status
+const DLMM_ADMIN = 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD';
+const setStatus = (j, on) => tx(`X core admin sets ${name(DLMM_POOLS[j])} status ${on}`, DLMM_ADMIN, DLMM_CORE, 'set-pool-status', [principal(DLMM_POOLS[j]), boolCV(on)], '(ok true)');
 const name = (p) => p.split('.')[1];
 const poolBal = async () => {
   const v = await evRaw(MARKET, `(list ${DLMM_POOLS.map((d) => `(stx-get-balance '${d}) (unwrap-panic (contract-call? '${SBTC} get-balance '${d}))`).join(' ')})`);
@@ -142,6 +154,35 @@ async function main() {
     const now = (await dlmmPick(sellX, amt, `${tag}: before`)).n;
     if (now !== target) await deepen(tag, target, sellX, LP);
     await sales(tag, sellX, sellX ? TX : TY, amt);
+  }
+
+  console.log('\nX disabled pools (L-3)');
+  for (const sellX of [true, false]) {
+    const amt = sellX ? 100_000n : 200_000_000n, taker = sellX ? TX : TY, dir = sellX ? 'sBTC' : 'STX';
+    const tag = `X ${dir} sale`;
+    const first = await dlmmPick(sellX, amt, `${tag}: before`);
+    await setStatus(first.n - 1, false);
+    const next = await dlmmPick(sellX, amt, `${tag}: ${name(first.pool)} disabled`);
+    check(`${tag}: the pick left the disabled ${name(first.pool)}`, String(next.n !== first.n), 'true');
+    await sales(`${tag}, ${name(first.pool)} disabled`, sellX, taker, amt);
+    for (const j of [0, 1, 2]) if (j !== first.n - 1) await setStatus(j, false);
+    const none = await dlmmPick(sellX, amt, `${tag}: all disabled`);
+    check(`${tag}: all disabled -> fallback u1`, `u${none.n}`, 'u1');
+    // smart, update none, a loose limit: DLMM sizes nothing and never swaps;
+    // XYK / Velar may take the order at that limit
+    const P = sellX ? 1n : 1_000_000_000_000_000n;
+    const b0 = await poolBal(), w0 = await wallet(taker);
+    const s = await tx(`${tag}: all disabled, smart sale of ${amt}`, taker, ROUTER, smartFn(sellX), smartArgs({ amount: amt, limit: P, mid: 1_000_000_000_000n }), (v) => String(v).startsWith('(ok'));
+    const b1 = await poolBal(), w1 = await wallet(taker);
+    const pr = fields(printsOf(s, ROUTER)[0]);
+    check(`${tag}: all disabled, smart: dlmm-cap / dlmm-in / dlmm-out u0`, `${pr['dlmm-cap']} ${s.f['dlmm-in']} ${s.f['dlmm-out']}`, '0 0 0');
+    check(`${tag}: all disabled, smart: no DLMM pool moved`, JSON.stringify(b1.map(String)), JSON.stringify(b0.map(String)));
+    const inS = sellX ? 'x' : 'y', outS = sellX ? 'y' : 'x';
+    check(`${tag}: all disabled, smart: wallet -legs in / +out, spent + unsold == amount`, `${w0[inS] - w1[inS]} ${w1[outS] - w0[outS]} ${s.f['jing-in'] + s.f['xyk-in'] + s.f['velar-in'] + s.f.unsold}`, `${s.f['jing-in'] + s.f['xyk-in'] + s.f['velar-in']} ${s.f.out} ${amt}`);
+    await refused(`${tag}: all disabled, manual DLMM leg refused (core u1010 -> router u2001)`, taker, ROUTER, manualFn(sellX), manualArgs({ amount: amt, a: [amt, 0n, 0n] }), '(err u2001)', [taker]);
+    for (const j of [0, 1, 2]) await setStatus(j, true);
+    const back = await dlmmPick(sellX, amt, `${tag}: re-enabled`);
+    check(`${tag}: re-enabled, the pick is back on ${name(first.pool)}`, `u${back.n}`, `u${first.n}`);
   }
 
   const sha1 = shas();

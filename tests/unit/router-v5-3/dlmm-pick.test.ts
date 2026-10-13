@@ -16,6 +16,15 @@ import * as h from './helpers';
 // The pools run venues.clar in bin-walk mode: each bin holds its own
 // balances and a swap walks at most 30 bins with the core's per-bin formula,
 // so each pool's output, capacity and swap counter show which pool ran.
+//
+// Disabled pools (audit L-3, Cunning Nexus): the core refuses a swap on a pool
+// whose status is false (u1010) while the pool keeps its bins. The pick reads
+// the core's entry for each pool holding the bought asset and counts a
+// disabled pool (or one whose entry is missing or names another contract) as
+// empty: it cannot win, and it does not set the 1% floor. The stub core
+// (dlmm-router.clar) keeps the mainnet ids 6, 15, 16 and refuses a swap on a
+// disabled pool with u2001, as mainnet does (the core's u1010 at the first
+// bin step, reported by the swap router's fold as ERR_NO_RESULT_DATA).
 
 type Side = h.Side;
 // One pool: active-bin offset `a` (taker-worse direction: up selling sBTC,
@@ -23,7 +32,7 @@ type Side = h.Side;
 // bin in the walk direction, liquidity] and the ledger depth. Liquidity and
 // depth are in percent of what the reference amount buys at price 1e6;
 // `minus` takes base units off the depth; `iy` is the initial price selling STX.
-type Pool = {a:number,step?:number,fee?:number,initial?:bigint,iy?:bigint,bins:[number,bigint][],depth?:bigint,minus?:bigint,sold?:bigint};
+type Pool = {a:number,step?:number,fee?:number,initial?:bigint,iy?:bigint,bins:[number,bigint][],depth?:bigint,minus?:bigint,sold?:bigint,off?:boolean};
 type Case = {name:string,pools:Pool[],pick:number,amount?:bigint,noFactorRead?:boolean};
 const MAX = 340282366920938463463374607431768211455n;
 const up = (s:Side) => s==='x';
@@ -65,7 +74,7 @@ function capacity(s:Side,p:Pool,limit:bigint) {
 const depth = (s:Side,p:Pool) => (p.depth??sum(p.bins))*pct(s)-(p.minus??0n);
 // The rule itself, to keep each case's expected pick honest.
 function model(s:Side,pools:Pool[],amount:bigint) {
-  const d=pools.map(p=>depth(s,p)),floor=d.reduce((m,x)=>x>m?x:m,0n)/100n;
+  const d=pools.map(p=>p.off?0n:depth(s,p)),floor=d.reduce((m,x)=>x>m?x:m,0n)/100n;
   const e=d.map(x=>x>0n&&x>=floor);
   if (e.filter(Boolean).length<2) return e[1]?2:e[2]?3:1;
   const o=pools.map((p,i)=>e[i]&&(p.step??15)===15?walk(s,p,amount).out:0n);
@@ -86,8 +95,12 @@ function setup(s:Side,pools:Pool[]) {
     const bought=depth(s,p),sold=(p.sold??0n)*pct(h.other(s));
     // x sells sBTC and buys STX; y sells STX and buys sBTC.
     if (s==='x') h.fund(name,sold,bought); else h.fund(name,bought,sold);
+    if (p.off) disable(i);
   });
 }
+// The core's pool ids on mainnet (router DLMM_POOL_ID_1..3).
+const IDS = [6,15,16];
+const disable = (i:number) => h.ok(h.call('dlmm-router','set-pool-status',[h.U(IDS[i]),Cl.bool(false)]));
 // Core factor read returns (ok none): a router that reads it panics.
 const poison = () => h.ok(h.call('dlmm-router','set-factors-off',[Cl.bool(true)]));
 const calls = () => h.pools.map(p=>h.value(simnet.getDataVar(p,'calls')));
@@ -165,6 +178,16 @@ const cases:Case[] = [
   // side and used from its full side
   {name:'skips a one-sided pool on its empty side',pools:[{a:0,bins:[]},{a:0,bins:[],sold:100000n},one(20)],pick:3,noFactorRead:true},
   {name:'uses a one-sided pool on its full side',pools:[{a:0,bins:[]},one(20,200n,{depth:100000n}),{a:0,bins:[],sold:200n}],pick:2,noFactorRead:true},
+  // disabled in the core (L-3): the best-paying pool is passed over for the
+  // next best, which the sale then uses
+  {name:'disabled best pool 1 loses to pool 2',pools:[one(0,200n,{off:true}),one(10),one(20)],pick:2},
+  {name:'disabled best pool 2 loses to pool 1',pools:[one(10),one(0,200n,{off:true}),one(20)],pick:1},
+  {name:'disabled best pool 3 loses to pool 2',pools:[one(20),one(10),one(0,200n,{off:true})],pick:2},
+  {name:'disabled best and deepest pool 1: pools 2 and 3 compared',pools:[one(0,200n,{depth:10000n,off:true}),one(20),one(10)],pick:3},
+  // a disabled pool does not set the floor: pool 3 is under 1% of pool 2's
+  // depth, but pool 2 is disabled, so pool 3 is the only eligible pool
+  {name:'disabled deepest pool sets no floor',pools:[one(0,200n,{depth:0n}),one(0,200n,{depth:10000n,off:true}),{a:10,bins:[[0,99n]]}],pick:3,noFactorRead:true},
+  {name:'two pools disabled: the third is used without a factor read',pools:[one(0,200n,{off:true}),one(10),one(5,200n,{off:true})],pick:2,noFactorRead:true},
 ];
 
 for (const s of ['x','y'] as const) describe(`dlmm-pick ${s==='x'?'selling sBTC':'selling STX'}`,()=>{
@@ -200,6 +223,57 @@ for (const s of ['x','y'] as const) describe(`dlmm-pick ${s==='x'?'selling sBTC'
     expect(r.unsold).toBe(n);
     h.conservation(s,before,r,n);
   });
+  // All three pools disabled, all holding liquidity: none is eligible and the
+  // pick falls back to u1, as with no liquidity. The smart stage sees pool 1
+  // disabled, sizes nothing and passes the order on: no pool is called and
+  // the swap does not revert. A manual DLMM leg has nowhere else to go: the
+  // core refuses it (u1010, reported as u2001) and the swap rolls back.
+  const allOff = () => {setup(s,[one(0),one(10),one(20)]);[0,1,2].forEach(disable);};
+  it('smart: all three pools disabled picks pool 1, sizes nothing, no revert',()=>{
+    allOff();
+    poison();
+    const n=h.amount(s),before=h.wallet(s);
+    const receipt=h.smart(s,n,h.quote(s),h.N),r=h.ok(receipt);
+    expect(h.routerPrint(receipt)['dlmm-cap']).toBe(0n);
+    expect(calls()).toEqual([0n,0n,0n]);
+    expect(r['dlmm-in']).toBe(0n);
+    expect(r.unsold).toBe(n);
+    h.conservation(s,before,r,n);
+  });
+  it('smart: all disabled, XYK takes the order',()=>{
+    allOff();
+    h.config('xyk');h.fund('xyk');
+    const n=h.amount(s),before=h.wallet(s);
+    const r=h.ok(h.smart(s,n,h.quote(s),h.N));
+    expect(calls()).toEqual([0n,0n,0n]);
+    expect(r['dlmm-in']).toBe(0n);
+    expect(r['xyk-in']).toBeGreaterThan(0n);
+    h.conservation(s,before,r,n);
+  });
+  it('manual: all three pools disabled is refused (u2001) and rolls back',()=>{
+    allOff();
+    h.reject(()=>h.manual(s,{amms:[h.amount(s)],update:h.N}),2001);
+  });
+  // Control for the stub: a disabled pool 1 that still wins the pick (the
+  // pre-fix router) would be refused. Here only pool 1 holds liquidity and is
+  // disabled: the smart stage skips it, the manual leg is refused.
+  it('smart: only pool 1 holds liquidity and is disabled: no revert',()=>{
+    setup(s,[one(0,200n,{off:true}),{a:0,bins:[]},{a:0,bins:[]}]);
+    const n=h.amount(s),before=h.wallet(s);
+    const r=h.ok(h.smart(s,n,h.quote(s),h.N));
+    expect(calls()).toEqual([0n,0n,0n]);
+    expect(r.unsold).toBe(n);
+    h.conservation(s,before,r,n);
+  });
+  // The core entry must name the pool: an id pointing at another contract, or
+  // no entry, makes the pool ineligible, as a disabled one.
+  for (const [label,entry] of [['names another contract',Cl.some(Cl.principal(h.principal('xyk')))],['is missing',Cl.none()]] as const)
+    for (const route of ['manual','smart'] as const) it(`${route}: pool 1 whose core entry ${label} loses to pool 2`,()=>{
+      const c:Case={name:label,pools:[one(0),one(10),one(20)],pick:2};
+      setup(s,c.pools);
+      h.ok(h.call('dlmm-router','set-pool-entry',[h.U(IDS[0]),entry]));
+      if (route==='manual') manualLeg(s,c,2); else smartLeg(s,c,2);
+    });
   it('rolls back the picked pool when the wallet minimum fails',()=>{
     setup(s,[one(10),one(0),one(20)]);
     h.reject(()=>h.manual(s,{amms:[h.amount(s)],update:h.N,minOut:MAX}),3002);
