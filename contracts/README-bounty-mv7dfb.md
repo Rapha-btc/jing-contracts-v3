@@ -130,7 +130,7 @@ definition sorter, and `clarinet check` on Clarity 5 then fails with
   `verify-router-v5-3-smart.js` sizing reads `dlmm-pick` with the limit.
 - Deploy bytes (comment-stripped, `clarinet format`, as the faktory-dao
   template): 32,304 before (matches the `f342615` template, SHA-256
-  `55927837...`), 32,949 after (+645).
+  `55927837...`), 33,216 after (+645).
 
 ### Follow-ups
 
