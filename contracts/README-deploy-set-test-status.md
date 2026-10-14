@@ -98,14 +98,20 @@ for every partner deployment**:
 |---|---|---|
 | `ccd015-redemption-book-mia-stx` | `a9a6bd6` | Loaded as the real book in the CityCoins vault harness, but no separate full book coverage gate is reported. |
 | `ccd016-swap-vault-mia-v2` | `8bfbb5f` | `npm run test:vault`: 313 checks; 450/473 lines (95.14%), 118/119 branches (99.16%). The remaining branch is a vault floor guard the mock router rejects before the vault receives a result. |
-| `fastpool-swap-vault` | `b719e87` | Existing `npm test` suite is 49/49 green, but a passing source-anchored `tests/vault-stx` report is not available. Its local fixture builder still references the sibling `stacking-juice` checkout. |
-| `signer-manager-vault-stx-rewards` | `3f82a93` | Included in the same FastPool limitation; no separate coverage totals are recorded. |
+| `fastpool-swap-vault` | `b719e87` | `tests/vault-stx/run-fastpool.mjs`, 85 assertions green; fixture builder verifies raw source SHA-256 before compiling. No line/branch/function coverage report. |
+| `signer-manager-vault-stx-rewards` | `3f82a93` | Same source-pinned suite and result. Test scenarios cover the lifecycle, fee snapshots, late claims, recovery, mixed-asset payouts and vault rotation; public-function coverage is not exhaustive. |
+
+FastPool's focused Clarinet harness instructions, source pins and limits are in
+`fastpool-pox-5/tests/vault-stx/README.md`.
+Its isolated builder uses the current Jing v6-3 test market/Core interface
+instead of the stale CityCoins fixture, and keeps generated files under the
+FastPool `.build/fastpool-only` directory. This updates the earlier report:
+the FastPool scenario harness is green, but full function/branch coverage is
+still not established.
 
 The CityCoins run pins both source hashes in its
 [`runtime.json`](https://github.com/Rapha-btc/citycoins-protocol/blob/feat/ccd015-redemption-book/tests/vault/results/runtime.json).
-Its SDK/epoch plumbing fix is pushed as `8e05c13`. FastPool has untracked
-fixture work in the shared checkout; this report does not claim it is
-committed or green.
+Its SDK/epoch plumbing fix is pushed as `8e05c13`.
 
 ## Source pins and interpretation
 
