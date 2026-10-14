@@ -6,6 +6,216 @@ For the current **v6-3 submit/settle/cancel recovery** target, see the
 direction, and 3,000 native RV trials (988 passed, 2012 discarded,
 zero failures). Its results are separate from the historical v6 runs below.
 
+## Final deploy set (2026-10-14): ladder-v1 stack and router v5-3
+
+Two RV stacks fuzz the FINAL sources, through RV's own `checkInvariants` /
+`checkProperties` (seeded, shrinking intact) on a simnet initialised by
+public calls only. Production `contracts/*.clar` and the root
+`Clarinet.toml` are untouched; generated copies live in `tests/rv/.build/`.
+
+| stack | final sources (sha256 in `.build/*/sources.json`, checked again by `--summarize`) |
+|---|---|
+| `ladder-v1/` | `jing-buy-stx-core-spread-v1`, `jing-sell-stx-core-spread-v1` (each deployed twice, spreads 20 and 50), `jing-ladder-v1`, `jing-ladder-dispatch`, `jing-rung-deposit-trait`, `markets-sbtc-stx-jing-v6-3` (ada49d8), `jing-core-v6` |
+| `router-v5-3/` | `swap-router-sbtc-stx-jing-v5-3` (15aef66 = HEAD for this file), `markets-sbtc-stx-jing-v6-3`, `jing-core-v6` |
+
+```sh
+npm run rv:ladder-v1      # build, 2 invariant seeds x 1500 runs, 2 property seeds x 3000
+npm run rv:router-v5-3    # build, 2 invariant seeds x 1000 runs, 2 property seeds x 3000
+node tests/rv/<stack>/run.mjs invariant|test <runs> <seed>   # one job
+node tests/rv/<stack>/run.mjs --summarize                    # re-check logs -> results.json
+```
+
+Market v6-3 on its own (cycle totals, solvency, core equity, recovery) is
+the existing [v6-3 suite](v6-3/README.md), rerun on the final bytes the same
+day: 12,000 native trials and 600 guided episodes, all green.
+
+The jobs are independent; run them in parallel for wall time (each job
+writes `tests/rv/.build/results/<stack>/<mode>-<seed>.log`).
+
+### What is real and what is a fixture
+
+Real, byte-identical: `jing-core-v6`, `jing-ladder-v1` (the canonical hash
+gate runs for real: each rung's own deploy is blessed with `set-canonical`
+and `initialize` registers and seats it), `jing-rung-deposit-trait`.
+Real with dependency identities only (the substitution table of
+`tests/unit/integration-v6-3/build.mjs` / `tests/unit/router-v5-3/build.mjs`):
+the market, the four rungs, the dispatcher, the router. Fixtures: the
+strict SIP-010 `tests/unit/v6-3/token.clar` (owner-only mint, so a transfer
+can never hide a deficit), the Lazer oracle `mock-lazer-oracle.clar` (fresh
+feeds at a settable mid), the RFQ native price `tests/unit/integration-v6-3/
+miner-oracle.clar`, and for the router the venue fixtures of the unit suite
+(`venues.clar` as DLMM v-1/v-2/v-3, XYK and Velar, `dlmm-router.clar`,
+`mock-wstx.clar`, `mock-jing-ladder.clar`).
+
+Test-only code, appended, never patched in:
+- each rung build gets three read-onlys after the production text
+  (`rv-raw`, `rv-reserve`, `rv-vars`) so invariants can sum its private
+  positions map; the build asserts the production prefix is intact;
+- the RV target is a separate generated contract (`rv-ladder-harness`,
+  `rv-router-harness`, from `harness.mjs`), so every rung / dispatcher /
+  market / router call sits behind a `contract-call?` boundary and a refused
+  action rolls back. Dispatcher batches run through `as-contract?`: the
+  harness is itself a pooled member, which also satisfies the dispatcher's
+  `tx-sender == contract-caller` gate.
+
+### Why a JS monitor
+
+A contract read into the 4,200-line market costs 25-175 ms in simnet, so a
+Clarity invariant summing `get-position` over every member of four rungs
+took seconds per step. `ladder-v1/monitor.mjs` reads raw storage instead
+(`getDataVar` / `getMapEntry`, under 0.5 ms) after EVERY public call,
+rejected ones included, with an independent model of the rung's
+`get-position` (carried / earned / epoch-payout). Every 100 calls and at the
+end, `crossCheck` compares the model with the on-chain `get-position` of
+every member of every rung and with the Clarity `rv-check-rung-*` /
+`rv-check-market-solvent` read-onlys. RV's own `invariant-all` (one exported
+invariant: RV checks ONE random invariant per step) keeps the cheap checks:
+property latch, `sync` never fails, dispatcher holds nothing, ladder seat
+counts, proceeds conservation per rung.
+
+### ladder-v1: invariants (after every call) and properties
+
+Per rung (b20, b50, s20, s50):
+- **shares**: total shares >= the open epoch's member shares carried to the
+  current scale, equal in an epoch with no rescale, at most one ownerless
+  share per possible member per rescale otherwise, zero with no member;
+  `members` == open-epoch rows;
+- **input solvency**: every member's input claim (open epoch by the indices,
+  closed epochs from the reserve) <= on the market + held; closed-epoch
+  claims <= reserved <= balance; the pool the indices imply <= what is there;
+- **exact proceeds ledger**: `accounted` == `current-proceeds` + every open
+  reserve's proceeds; `reserved` == every open reserve's input; each reserve's
+  `left` == its live positions and it covers their claims; a reserve never
+  outlives its last claimant; a sole member's claim is all of
+  `current-proceeds`; no member, no current proceeds; claims <= accounted <=
+  balance;
+- **conservation**: proceeds that arrived (booked by every market wrapper) ==
+  proceeds still held + proceeds paid to members (booked from receipts that
+  are themselves checked against wallet deltas);
+- **no over-withdrawal**: per (rung, member), input taken out <= input put in;
+- **indices**: `unfilled-index` in [MINT_FLOOR, SCALE] while shares exist; no
+  paid mark ahead of the proceeds index;
+- **core ledger**: the rung's jing-core-v6 equity == its live + parked size;
+  its resting order carries its own spread;
+- **fill price**: in every market action, input that left a rung was paid at
+  least its peg at that mid (ask mid*(1+s), bid mid*(1-s)) net of the 10 bps
+  fee, within 4 base units.
+Global: market sBTC / STX balance >= every owner's live + parked + pending;
+core total equity == sum of live + parked; the dispatcher never holds funds;
+ladder band counts == seated rungs, within the cap.
+
+Properties (each a `test-*`, aliased `rv-*` for invariant mode): deposit,
+withdraw (partial / full / with and without an update), claim (pays exactly
+`get-position`, a second claim pays nothing), push, sync idempotent,
+refresh-guard; dispatcher `deposit-buy/sell`, `withdraw-buy/sell`,
+`claim-buy/claim-sell` over one or both rungs of a side: receipt totals ==
+sum of rows == wallet deltas, withdrawals never above what `get-position`
+showed, claims exactly what it showed. Around them: market makers and
+takers, a rung-sized taker (a third of the time 99.9-100% of a rung: the
+rescale and tail-roll closes), batch settlement, readmits, cancels, the
+Lazer mid, the miner price (pegs switch off on either side, or the oracle is
+absent), ladder retire / seat and push-pause (owner only: they apply when RV
+picks the deployer), and `test-wait`, which the runtime turns into 1-150
+empty blocks (600 s each) so the 24 h escrow cancel and push cooldown run.
+
+Harness lessons (not contract findings), each re-checked by replaying the
+failing trace under the corrected check (`ladder-v1/replay.mjs`; a trace
+records RV's own block advances and replays exactly on the build that made
+it; on a later harness build execution costs differ, so a few heavy calls can
+flip between refused and accepted):
+- "stranded proceeds <= 4 x positions + 1" was wrong by design: every payout
+  floors and the remainder stays for the epoch's final member, so the gap
+  grows with payouts (RV reached 17 against 13). Replaced by the exact
+  ledger above.
+- "ownerless shares < members" was wrong too: a rescale floors each member
+  and the total separately (documented in the rung), and the ownerless
+  shares stay when a member later exits (RV: 3 with 3 members, 2 with 2).
+  Replaced by: 0 in an epoch with no rescale, at most one per possible
+  member per rescale, none once nobody is a member.
+
+### router-v5-3: properties
+
+Manual (random four-way split, fallback venue incl. an invalid one, AMM
+minimums incl. impossible ones, min-out incl. impossible ones, missing
+update) and smart (limit, mid hint right or 1% off, missing update), both
+directions, from accounts that hold no market position, plus makers on the
+book, admits, cancels, the mid and owner-only venue changes (reserves, fees,
+venues over-reporting their output). Per successful call: the wallet's
+bought delta == `out` >= `min-out`; sold delta == the four legs; legs +
+`unsold` == `amount`; the router and the harness hold nothing; an invalid
+fallback or a book leg without an update never succeeds; smart: the average
+price over all legs respects `limit-price` (see the finding below).
+Invariant: `rv-valid` and the router holds nothing.
+
+Harness lesson: a user who also rests on the book is paid as a maker by the
+batch the swap settles, in the very balances the router measures (3 sats
+seen); such users are discarded, and five accounts make the book while four
+stay clean takers.
+
+### Results (2026-10-14, final sources; `results.json` in each stack dir)
+
+ladder-v1 (logs checked by `--summarize`: complete, no `[FAIL]`, no runtime
+error, latch valid, `sync` never failed, final cross-check clean):
+
+| mode | seed | runs | passed / discarded / failed | public calls | monitor checks | positions cross-checked |
+|---|---|---|---|---|---|---|
+| invariant | 241014 | 1500 | 1500 / 0 / 0 | 18,753 | 18,754 | 7,560 (in 189 cross-checks) |
+| invariant | 241015 | 1500 | 1500 / 0 / 0 | 18,737 | 18,738 | 7,560 (in 189 cross-checks) |
+| test | 241016 | 3000 | 1424 / 1576 / 0 | 3,012 | 3,013 | 1,280 |
+| test | 241017 | 3000 | 1369 / 1631 / 0 | 3,012 | 3,013 | 1,280 |
+
+Successful state changes (rv-success prints, summed over the two invariant
+seeds; property seeds in `results.json`): rung deposits 821, partial
+withdrawals 205, full withdrawals 226, claims paying proceeds 130 (283 that
+paid nothing), dispatcher batch deposits 303, batch withdrawals 193, batch
+claims paying 39 (148 zero), fills booked on a rung 380, pushes 58, batch
+settlements 4, owner retire 48 / seat 44, time jumps 793. Deepest state
+reached: rescale steps up to 9 on one rung (past MAX_SCALE_STEPS, carried
+shares go to 0), epochs closed up to 6, up to 7 closed-epoch positions
+waiting on a reserve, the 24 h escrow cancel on all four rungs in seed 241015
+and on both sell rungs in 241014, up to 9 members per rung.
+
+Observation (by design, not a finding): the remainder a rung keeps for an
+epoch's final member (its `current-proceeds` beyond the open claims) reached
+13,876 uSTX on a buy rung after several rescales: after a rescale each
+member's shares are floored (`carried`), so up to about one share per member
+per rescale stops earning and its proceeds accrue to the last member out.
+The exact ledger holds throughout; nothing is lost or stranded.
+
+router-v5-3:
+
+| mode | seed | runs | passed / discarded / failed | public calls | swaps ok (with book leg) | DLMM / CP legs | min-out refusals | 1-unit cases |
+|---|---|---|---|---|---|---|---|---|
+| invariant | 241024 | 1000 | 1000 / 0 / 0 | 12,352 | 475 (87) | 275 / 32 | 263 | 0 |
+| invariant | 241025 | 1000 | 1000 / 0 / 0 | 12,468 | 484 (102) | 291 / 28 | 287 | 2 |
+| test | 241026 | 3000 | 1035 / 1965 / 0 | 3,009 | 241 (53) | 150 / 7 | 149 | 0 |
+| test | 241027 | 3000 | 1053 / 1947 / 0 | 3,009 | 241 (38) | 125 / 21 | 115 | 0 |
+
+**Finding (LOW, rounding): a smart swap can net up to one base unit of the
+sold asset under `limit-price`.** RV invariant seed 241025 (property u9620,
+first run, before the bound was relaxed): a 207-sat
+`smart-swap-sbtc-for-stx`, all on the book, crossed at the mid and returned
+642,325 uSTX for a limit of 3106.84 uSTX/sat (needs 643,116): 12 bps under.
+The router's net-limit rule (`book-limit`,
+`swap-router-sbtc-stx-jing-v5-3.clar:822`, sized in `jing-size` :838-890)
+assumes the taker's rebate is `bps` of net, but the market floors the net
+(`net (/ (* amount BPS_PRECISION) ...)`, `markets-sbtc-stx-jing-v6-3.clar:2729`),
+so the rebate is the ceiling: 1 whole sat on 207 (48 bps). In the walk path
+the unspent crumb is refunded (`unsold` 1), in a mid cross it goes to the
+makers. Plain reproduction: `tests/rv-repro-router-smart-limit.test.ts`
+(`npx vitest run --config vitest.rv-repro.config.ts`): 207 sats against a y
+bid resting above the mid, limit `netLimit(P)`; out 20,580 vs 20,638
+promised (58 uSTX, 28 bps). Bounded by one sat: 12-28 bps at the 200-sat
+end, under 0.1 bps at 100k sats; `min-out` still binds. The property now
+allows exactly that one unit and counts each use (2 of 1,057 successful smart
+swaps).
+Not fixed (out of scope here).
+
+Not covered here: Pyth signatures and staleness (the oracle fixture is
+always fresh), real sBTC / wSTX, ladder ownership handover, rung
+`initialize` failure paths, and dispatcher batches above two rungs per side
+(the unit suite covers ten-rung batches).
+
 For the September 21 **v6-2 band-rung, ladder, and dispatcher** runs, see the
 [ladder README](../../contracts/README-jing-ladder-dispatch.md#historical-rendezvous-fuzz-results--before-receipt-responses).
 Run `npm run rv:ladder-suite` to build the isolated targets and reproduce all
