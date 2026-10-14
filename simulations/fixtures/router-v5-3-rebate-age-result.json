@@ -3,127 +3,127 @@
   "baselineRouterSha256": "882374f40bfdf8270b3ea18ba2d7e68fce4431ee17c60f70b00bb2670240fe58",
   "baselineMarketSha256": "5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb",
   "sources": {
-    "swap-router-sbtc-stx-jing-v5-3": "55239afe46852df5bcc6d4c00b3b668c49336b099dfc494dc2e98ba78645961c",
+    "swap-router-sbtc-stx-jing-v5-3": "a33f8692d3f0c9f54d19f47cd71cf2b8a93fe1494bd11e672bfa59b6cc8a9382",
     "jing-ladder-v1": "0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786",
-    "markets-sbtc-stx-jing-v6-3": "ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848",
+    "markets-sbtc-stx-jing-v6-3": "65a8dc9aed179a3cc440306e31aff7da5bcecb99872423ca50b8ba417abbb6c0",
     "jing-core-v6": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697"
   },
   "runs": [
     {
       "side": "x",
       "version": "baseline",
-      "simulation": "https://stxer.xyz/simulations/mainnet/aceec5b52f6025bb83f62d64dec4c281",
-      "signedUpdateHex": "2a22999aaef7f34487ae30d8844a0d4ad045eca17a4889ee08594ae77883f360d4035eae4ae1436acaddc7b06a89d9f4d58dd3b30b579b03c76c1937235b37a22faa85b300005c93c7d37500065dc0a93216800402000000010500000007972b50679404fff80500000001a4af220a03001b0c0100065dc0a93216800000002d050000000000029291c104fff80500000000000086bd0300110c0100065dc0a9321680",
-      "oldestFeedTime": 1791931914,
-      "mid": "19336997109457",
+      "simulation": "https://stxer.xyz/simulations/mainnet/e5f5766a2daac38e41a80cbcdb064362",
+      "signedUpdateHex": "2a22999a71d39d8a6c377d54e5c380e88f1f3ed125e8b3cb9834f4575d5698c55d4bb504096c3c206546e73eb8014946908e6a1f4358f777fd1da9cbafc78bca2c167ee901005c93c7d37500065dc16d97cc400402000000010500000007906f7ee90104fff805000000011ceaf23f03001b0c0100065dc16d97cc400000002d0500000000000295417f04fff80500000000000050fd0300110c0100065dc16d97cc40",
+      "oldestFeedTime": 1791935209,
+      "mid": "19191700162557",
       "netCapacity": "10000",
       "cases": [
         {
           "label": "age 0: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u1) (dlmm-out u1869) (jing-in u10021) (jing-ok true) (jing-out u19317661) (out u38680691) (unsold u0) (velar-in u6164) (velar-out u11975612) (xyk-in u3814) (xyk-out u7385549)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u1) (dlmm-in u1) (dlmm-out u1869) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38680691) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u89103160) (velar-in u6164) (velar-out u11975612) (xyk-cap u55133345) (xyk-in u3814) (xyk-out u7385549))",
+          "result": "(ok (tuple (dlmm-in u1) (dlmm-out u1869) (jing-in u10021) (jing-ok true) (jing-out u19172509) (out u38165628) (unsold u0) (velar-in u6127) (velar-out u11629248) (xyk-in u3851) (xyk-out u7362002)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u1) (dlmm-in u1) (dlmm-out u1869) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38165628) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87341889) (velar-in u6127) (velar-out u11629248) (xyk-cap u54900733) (xyk-in u3851) (xyk-out u7362002))",
           "before": {
             "x": "10000000",
             "y": "0"
           },
           "after": {
             "x": "9980000",
-            "y": "38680691"
+            "y": "38165628"
           }
         },
         {
           "label": "age 30: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10021) (jing-ok true) (jing-out u19317661) (out u38678075) (unsold u0) (velar-in u6165) (velar-out u11975889) (xyk-in u3814) (xyk-out u7384525)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38678075) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u89084633) (velar-in u6165) (velar-out u11975889) (xyk-cap u55121900) (xyk-in u3814) (xyk-out u7384525))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10021) (jing-ok true) (jing-out u19172509) (out u38163044) (unsold u0) (velar-in u6128) (velar-out u11629557) (xyk-in u3851) (xyk-out u7360978)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38163044) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87323665) (velar-in u6128) (velar-out u11629557) (xyk-cap u54889216) (xyk-in u3851) (xyk-out u7360978))",
           "before": {
             "x": "9980000",
-            "y": "38680691"
+            "y": "38165628"
           },
           "after": {
             "x": "9960000",
-            "y": "77358766"
+            "y": "76328672"
           }
         },
         {
           "label": "age 31: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10021) (jing-ok true) (jing-out u19317661) (out u38675378) (unsold u0) (velar-in u6165) (velar-out u11974217) (xyk-in u3814) (xyk-out u7383500)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38675378) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u89066103) (velar-in u6165) (velar-out u11974217) (xyk-cap u55110454) (xyk-in u3814) (xyk-out u7383500))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10021) (jing-ok true) (jing-out u19172509) (out u38160424) (unsold u0) (velar-in u6128) (velar-out u11627962) (xyk-in u3851) (xyk-out u7359953)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38160424) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87305440) (velar-in u6128) (velar-out u11627962) (xyk-cap u54877701) (xyk-in u3851) (xyk-out u7359953))",
           "before": {
             "x": "9960000",
-            "y": "77358766"
+            "y": "76328672"
           },
           "after": {
             "x": "9940000",
-            "y": "116034144"
+            "y": "114489096"
           }
         },
         {
           "label": "age 55: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38787160) (unsold u0) (velar-in u12356) (velar-out u23994062) (xyk-in u7644) (xyk-out u14793098)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9668498554728) (out u38787160) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u89047577) (velar-in u12356) (velar-out u23994062) (xyk-cap u55099011) (xyk-in u7644) (xyk-out u14793098))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38048166) (unsold u0) (velar-in u12281) (velar-out u23300616) (xyk-in u7719) (xyk-out u14747550)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9595850081278) (out u38048166) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87287217) (velar-in u12281) (velar-out u23300616) (xyk-cap u54866187) (xyk-in u7719) (xyk-out u14747550))",
           "before": {
             "x": "9940000",
-            "y": "116034144"
+            "y": "114489096"
           },
           "after": {
             "x": "9920000",
-            "y": "154821304"
+            "y": "152537262"
           }
         },
         {
           "label": "age 79: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38776339) (unsold u0) (velar-in u12356) (velar-out u23987352) (xyk-in u7644) (xyk-out u14788987)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9668498554728) (out u38776339) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u89010449) (velar-in u12356) (velar-out u23987352) (xyk-cap u55076081) (xyk-in u7644) (xyk-out u14788987))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38037652) (unsold u0) (velar-in u12281) (velar-out u23294214) (xyk-in u7719) (xyk-out u14743438)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9595850081278) (out u38037652) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87250699) (velar-in u12281) (velar-out u23294214) (xyk-cap u54843114) (xyk-in u7719) (xyk-out u14743438))",
           "before": {
             "x": "9920000",
-            "y": "154821304"
+            "y": "152537262"
           },
           "after": {
             "x": "9900000",
-            "y": "193597643"
+            "y": "190574914"
           }
         },
         {
           "label": "age 80: baseline router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38765523) (unsold u0) (velar-in u12356) (velar-out u23980644) (xyk-in u7644) (xyk-out u14784879)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9668498554728) (out u38765523) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u88973330) (velar-in u12356) (velar-out u23980644) (xyk-cap u55053155) (xyk-in u7644) (xyk-out u14784879))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u0) (jing-ok false) (jing-out u0) (out u38027144) (unsold u0) (velar-in u12281) (velar-out u23287815) (xyk-in u7719) (xyk-out u14739329)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10021) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9595850081278) (out u38027144) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u87214187) (velar-in u12281) (velar-out u23287815) (xyk-cap u54820044) (xyk-in u7719) (xyk-out u14739329))",
           "before": {
             "x": "9900000",
-            "y": "193597643"
+            "y": "190574914"
           },
           "after": {
             "x": "9880000",
-            "y": "232363166"
+            "y": "228602058"
           }
         }
       ],
       "fork": {
-        "block_hash": "2839b465af951fc6c1a033c204d0f5b4e37ce4743219237d3ff23f24174600ac",
-        "block_height": 9200732,
-        "burn_block_hash": "000000000000000000020da591aeee5f5a633631802109f6824bf1cbb518c52b",
-        "burn_block_height": 971315,
-        "consensus_hash": "cafe39b15f52291565a40c863ea6a01be4d259a4",
+        "block_hash": "7641a5601dc6db6466e09f32c01e12a93f41552944dcb75e0153d60de80902e1",
+        "block_height": 9201027,
+        "burn_block_hash": "00000000000000000000414484a2bef1ebba0d0b5975d15b5cbe0d04f488f2dd",
+        "burn_block_height": 971317,
+        "consensus_hash": "de92069a7ca5ce4a111e49b9c84ccf1fbe560cdf",
         "epoch": "4.0",
-        "index_block_hash": "a8eb1cc82efe29847ad7f3e32c65a41242027671c0b3461fe28f2a0d92607909",
+        "index_block_hash": "1830ecfda0afd09ab4eaed98dcdb5f4eef55fdea9b13039bfd93403e728538a4",
         "skip_tracing": false,
-        "sortition_id": "edcaabd633fdfdb0e3e47cfc49d6338f6d68e38d080d08dcf8a5706087c288a4"
+        "sortition_id": "f2d0ef1ec136f34e6ee79bf0a2ca13dd1c04025a599b4a6af4bc11da9b6c7060"
       },
       "transactions": 26,
       "smartSwapCosts": [
         {
-          "txid": "d40943c78e8deb811357a096e76f572ef5765bd871aa3e496fa6298467592337",
+          "txid": "3f759916fd839bce8b7ab25e7a14b10f02548f2c52fb3946e45c1d051859f05d",
           "cost": {
             "read_count": 528,
             "read_length": 1251374,
@@ -133,7 +133,7 @@
           }
         },
         {
-          "txid": "64b300249a48f54ae4fda805c27e043caffe7c16b516e97d826e3e546ea6f744",
+          "txid": "5f1cb79d7814f45dc3b2beb8dffdcabfb125dc921ff8ba5c08e675385c5c4001",
           "cost": {
             "read_count": 482,
             "read_length": 997614,
@@ -143,7 +143,7 @@
           }
         },
         {
-          "txid": "be93e4644d22cda370616f5365039890dbfe09e5a6d8a59862477e56347e2c53",
+          "txid": "b70faac3cf7dbe980ed4ce3af45ff88387d3ed86ebe0189de92e9f2f88f8c248",
           "cost": {
             "read_count": 482,
             "read_length": 997614,
@@ -153,7 +153,7 @@
           }
         },
         {
-          "txid": "22f8b2048da2aed67ff53d35dd7febe049feed23321ea1124fafe3bbb7121148",
+          "txid": "52246657db50e8feb04dcb399b4634230a61b18eedc39d5f43f1985d3b1457ce",
           "cost": {
             "read_count": 229,
             "read_length": 697081,
@@ -163,7 +163,7 @@
           }
         },
         {
-          "txid": "d3ebb8bcd3e9bef3be691fc19d8d7a4012a94a7d7d223d03ee4d3e25ed5e4693",
+          "txid": "32b07cecfa61fdf1579559a382acddb80671691a5bf069d77c5d59246dd944be",
           "cost": {
             "read_count": 229,
             "read_length": 697081,
@@ -173,7 +173,7 @@
           }
         },
         {
-          "txid": "67114ee0f792346f8f92b05464873875486ce317b8cc69939db01dd6854343a0",
+          "txid": "af71fb3fcf0bc8e255d6540c3db3e31e1b93f9c4866a6e475d5f7cadcc8cad0b",
           "cost": {
             "read_count": 220,
             "read_length": 696915,
@@ -187,234 +187,234 @@
     {
       "side": "x",
       "version": "fixed",
-      "simulation": "https://stxer.xyz/simulations/mainnet/0a801219591aa828fd536ab39394b6dd",
-      "signedUpdateHex": "2a22999aaef7f34487ae30d8844a0d4ad045eca17a4889ee08594ae77883f360d4035eae4ae1436acaddc7b06a89d9f4d58dd3b30b579b03c76c1937235b37a22faa85b300005c93c7d37500065dc0a93216800402000000010500000007972b50679404fff80500000001a4af220a03001b0c0100065dc0a93216800000002d050000000000029291c104fff80500000000000086bd0300110c0100065dc0a9321680",
-      "oldestFeedTime": 1791931914,
-      "mid": "19336997109457",
+      "simulation": "https://stxer.xyz/simulations/mainnet/88417e9d8c4daf539a8c862e85b41d82",
+      "signedUpdateHex": "2a22999a71d39d8a6c377d54e5c380e88f1f3ed125e8b3cb9834f4575d5698c55d4bb504096c3c206546e73eb8014946908e6a1f4358f777fd1da9cbafc78bca2c167ee901005c93c7d37500065dc16d97cc400402000000010500000007906f7ee90104fff805000000011ceaf23f03001b0c0100065dc16d97cc400000002d0500000000000295417f04fff80500000000000050fd0300110c0100065dc16d97cc40",
+      "oldestFeedTime": 1791935209,
+      "mid": "19191700162557",
       "netCapacity": "10000",
       "cases": [
         {
           "label": "age 0: fixed router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u9979) (dlmm-out u19193398) (jing-in u10021) (jing-ok true) (jing-out u19317661) (out u38511059) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37405208) (dlmm-in u9979) (dlmm-out u19193398) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38511059) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u9979) (dlmm-out u19059866) (jing-in u10021) (jing-ok true) (jing-out u19172509) (out u38232375) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u634044) (dlmm-in u9979) (dlmm-out u19059866) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38232375) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "10000000",
             "y": "0"
           },
           "after": {
             "x": "9980000",
-            "y": "38511059"
+            "y": "38232375"
           }
         },
         {
           "label": "age 30: fixed router",
           "amount": "20000",
           "expectedCap": "10021",
-          "result": "(ok (tuple (dlmm-in u9979) (dlmm-out u19174326) (jing-in u10021) (jing-ok true) (jing-out u19317661) (out u38491987) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37421581) (dlmm-in u9979) (dlmm-out u19174326) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38491987) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u9979) (dlmm-out u19037534) (jing-in u10021) (jing-ok true) (jing-out u19172509) (out u38210043) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u624064) (dlmm-in u9979) (dlmm-out u19037534) (jing-cap u10021) (jing-in u10021) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38210043) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9980000",
-            "y": "38511059"
+            "y": "38232375"
           },
           "after": {
             "x": "9960000",
-            "y": "77003046"
+            "y": "76442418"
           }
         },
         {
           "label": "age 31: fixed router",
           "amount": "20000",
           "expectedCap": "10022",
-          "result": "(ok (tuple (dlmm-in u9978) (dlmm-out u19172395) (jing-in u10022) (jing-ok true) (jing-out u19317661) (out u38490056) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37411602) (dlmm-in u9978) (dlmm-out u19172395) (jing-cap u10022) (jing-in u10022) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38490056) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u9978) (dlmm-out u19019609) (jing-in u10022) (jing-ok true) (jing-out u19172509) (out u38192118) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u643009) (dlmm-in u9978) (dlmm-out u19019609) (jing-cap u10022) (jing-in u10022) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38192118) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9960000",
-            "y": "77003046"
+            "y": "76442418"
           },
           "after": {
             "x": "9940000",
-            "y": "115493102"
+            "y": "114634536"
           }
         },
         {
           "label": "age 55: fixed router",
           "amount": "20000",
           "expectedCap": "10046",
-          "result": "(ok (tuple (dlmm-in u9954) (dlmm-out u19126052) (jing-in u10046) (jing-ok true) (jing-out u19317661) (out u38443713) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37401623) (dlmm-in u9954) (dlmm-out u19126052) (jing-cap u10046) (jing-in u10046) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38443713) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u9954) (dlmm-out u18954761) (jing-in u10046) (jing-ok true) (jing-out u19172509) (out u38127270) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u662473) (dlmm-in u9954) (dlmm-out u18954761) (jing-cap u10046) (jing-in u10046) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38127270) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9940000",
-            "y": "115493102"
+            "y": "114634536"
           },
           "after": {
             "x": "9920000",
-            "y": "153936815"
+            "y": "152761806"
           }
         },
         {
           "label": "age 79: below true minimum skips Jing",
           "amount": "10068",
           "expectedCap": "0",
-          "result": "(ok (tuple (dlmm-in u10068) (dlmm-out u19344249) (jing-in u0) (jing-ok false) (jing-out u0) (out u19344249) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u10068) (dlmm-cap u37391668) (dlmm-in u10068) (dlmm-out u19344249) (jing-cap u0) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9668498554728) (out u19344249) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u10068) (dlmm-out u19148679) (jing-in u0) (jing-ok false) (jing-out u0) (out u19148679) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u10068) (dlmm-cap u652519) (dlmm-in u10068) (dlmm-out u19148679) (jing-cap u0) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9595850081278) (out u19148679) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9920000",
-            "y": "153936815"
+            "y": "152761806"
           },
           "after": {
             "x": "9909932",
-            "y": "173281064"
+            "y": "171910485"
           }
         },
         {
           "label": "age 79: exact true minimum fills Jing",
           "amount": "10069",
           "expectedCap": "10069",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10069) (jing-ok true) (jing-out u19317661) (out u19317661) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u10069) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10069) (jing-in u10069) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u19317661) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u10069) (jing-ok true) (jing-out u19172509) (out u19172509) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u10069) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u10069) (jing-in u10069) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u19172509) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9909932",
-            "y": "173281064"
+            "y": "171910485"
           },
           "after": {
             "x": "9899863",
-            "y": "192598725"
+            "y": "191082994"
           }
         },
         {
           "label": "age 79: fixed router",
           "amount": "20000",
           "expectedCap": "10070",
-          "result": "(ok (tuple (dlmm-in u9930) (dlmm-out u19079709) (jing-in u10070) (jing-ok true) (jing-out u19317661) (out u38397370) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37381600) (dlmm-in u9930) (dlmm-out u19079709) (jing-cap u10070) (jing-in u10070) (jing-ok true) (jing-out u19317661) (limit-price u9668498554728) (out u38397370) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u9930) (dlmm-out u18873321) (jing-in u10070) (jing-ok true) (jing-out u19172509) (out u38045830) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u672412) (dlmm-in u9930) (dlmm-out u18873321) (jing-cap u10070) (jing-in u10070) (jing-ok true) (jing-out u19172509) (limit-price u9595850081278) (out u38045830) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9899863",
-            "y": "192598725"
+            "y": "191082994"
           },
           "after": {
             "x": "9879863",
-            "y": "230996095"
+            "y": "229128824"
           }
         },
         {
           "label": "age 80: fixed router",
           "amount": "20000",
           "expectedCap": "10071",
-          "result": "(ok (tuple (dlmm-in u20000) (dlmm-out u38425890) (jing-in u0) (jing-ok false) (jing-out u0) (out u38425890) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u20000) (dlmm-cap u37371669) (dlmm-in u20000) (dlmm-out u38425890) (jing-cap u10071) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9668498554728) (out u38425890) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u20000) (dlmm-out u37952097) (jing-in u0) (jing-ok false) (jing-out u0) (out u37952097) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u20000) (dlmm-cap u692965) (dlmm-in u20000) (dlmm-out u37952097) (jing-cap u10071) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u9595850081278) (out u37952097) (topic \"smart-swap-sbtc-for-stx\") (unsold u0) (user SP1HBEYEREPNDQTERSZG3G6250QSXVP8HBQY17YJE) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "9879863",
-            "y": "230996095"
+            "y": "229128824"
           },
           "after": {
             "x": "9859863",
-            "y": "269421985"
+            "y": "267080921"
           }
         }
       ],
       "fork": {
-        "block_hash": "2839b465af951fc6c1a033c204d0f5b4e37ce4743219237d3ff23f24174600ac",
-        "block_height": 9200732,
-        "burn_block_hash": "000000000000000000020da591aeee5f5a633631802109f6824bf1cbb518c52b",
-        "burn_block_height": 971315,
-        "consensus_hash": "cafe39b15f52291565a40c863ea6a01be4d259a4",
+        "block_hash": "7641a5601dc6db6466e09f32c01e12a93f41552944dcb75e0153d60de80902e1",
+        "block_height": 9201027,
+        "burn_block_hash": "00000000000000000000414484a2bef1ebba0d0b5975d15b5cbe0d04f488f2dd",
+        "burn_block_height": 971317,
+        "consensus_hash": "de92069a7ca5ce4a111e49b9c84ccf1fbe560cdf",
         "epoch": "4.0",
-        "index_block_hash": "a8eb1cc82efe29847ad7f3e32c65a41242027671c0b3461fe28f2a0d92607909",
+        "index_block_hash": "1830ecfda0afd09ab4eaed98dcdb5f4eef55fdea9b13039bfd93403e728538a4",
         "skip_tracing": false,
-        "sortition_id": "edcaabd633fdfdb0e3e47cfc49d6338f6d68e38d080d08dcf8a5706087c288a4"
+        "sortition_id": "f2d0ef1ec136f34e6ee79bf0a2ca13dd1c04025a599b4a6af4bc11da9b6c7060"
       },
       "transactions": 28,
       "smartSwapCosts": [
         {
-          "txid": "d40943c78e8deb811357a096e76f572ef5765bd871aa3e496fa6298467592337",
+          "txid": "3f759916fd839bce8b7ab25e7a14b10f02548f2c52fb3946e45c1d051859f05d",
           "cost": {
-            "read_count": 694,
-            "read_length": 5161730,
-            "runtime": 13090308,
+            "read_count": 638,
+            "read_length": 5212620,
+            "runtime": 12308750,
+            "write_count": 72,
+            "write_length": 2153
+          }
+        },
+        {
+          "txid": "5f1cb79d7814f45dc3b2beb8dffdcabfb125dc921ff8ba5c08e675385c5c4001",
+          "cost": {
+            "read_count": 689,
+            "read_length": 5466772,
+            "runtime": 12713652,
             "write_count": 79,
             "write_length": 2367
           }
         },
         {
-          "txid": "64b300249a48f54ae4fda805c27e043caffe7c16b516e97d826e3e546ea6f744",
+          "txid": "b70faac3cf7dbe980ed4ce3af45ff88387d3ed86ebe0189de92e9f2f88f8c248",
           "cost": {
-            "read_count": 643,
-            "read_length": 4907652,
-            "runtime": 12685406,
+            "read_count": 689,
+            "read_length": 5466772,
+            "runtime": 12715264,
+            "write_count": 79,
+            "write_length": 2367
+          }
+        },
+        {
+          "txid": "52246657db50e8feb04dcb399b4634230a61b18eedc39d5f43f1985d3b1457ce",
+          "cost": {
+            "read_count": 638,
+            "read_length": 5212657,
+            "runtime": 12310362,
             "write_count": 72,
             "write_length": 2153
           }
         },
         {
-          "txid": "be93e4644d22cda370616f5365039890dbfe09e5a6d8a59862477e56347e2c53",
+          "txid": "818ad1b13032e5dfe894ce7c4354c8850a3b728f1752952842c9562a4b51183b",
           "cost": {
-            "read_count": 643,
-            "read_length": 4907652,
-            "runtime": 12687018,
-            "write_count": 72,
-            "write_length": 2153
+            "read_count": 423,
+            "read_length": 5066910,
+            "runtime": 11264834,
+            "write_count": 12,
+            "write_length": 392
           }
         },
         {
-          "txid": "22f8b2048da2aed67ff53d35dd7febe049feed23321ea1124fafe3bbb7121148",
+          "txid": "b183517fc7173a6510623ea474210c11d94a13b858fd6e94c505362ba2dba47e",
           "cost": {
-            "read_count": 643,
-            "read_length": 4907652,
-            "runtime": 12687018,
-            "write_count": 72,
-            "write_length": 2153
-          }
-        },
-        {
-          "txid": "1419980858589b747b67ddb96aa59fe3b666d0a9b4235fd633c72bb4ee4ce27b",
-          "cost": {
-            "read_count": 356,
-            "read_length": 4461376,
-            "runtime": 10495732,
-            "write_count": 5,
-            "write_length": 178
-          }
-        },
-        {
-          "txid": "365e79d6ef613ef2262782667bd4a9f35ae26c17bdd8de8ceaffc47b0f807b95",
-          "cost": {
-            "read_count": 339,
-            "read_length": 834129,
-            "runtime": 4028674,
+            "read_count": 318,
+            "read_length": 795062,
+            "runtime": 3295165,
             "write_count": 67,
             "write_length": 1975
           }
         },
         {
-          "txid": "4d35c2ee4b71f2a81566d2389b00f0fb1118478e474f6f7afe55c2945a1a0cb7",
+          "txid": "62f2e0381ec93e3a68f26682c3d7d14e0c4a83f95a4880296ecf0806c8d4d3cb",
           "cost": {
-            "read_count": 643,
-            "read_length": 4907652,
-            "runtime": 12677006,
-            "write_count": 72,
-            "write_length": 2153
+            "read_count": 689,
+            "read_length": 5466772,
+            "runtime": 12705252,
+            "write_count": 79,
+            "write_length": 2367
           }
         },
         {
-          "txid": "60f2a971daee88f89890605958362a1e9837b86c3a441b53e0c3accfc68070af",
+          "txid": "519e93ce9cb84eaa6dce2149fd7cc865a3c248ac6882c05fa1a912c3dcfacc79",
           "cost": {
-            "read_count": 643,
-            "read_length": 4907652,
-            "runtime": 12687018,
-            "write_count": 72,
-            "write_length": 2153
+            "read_count": 689,
+            "read_length": 5466772,
+            "runtime": 12715264,
+            "write_count": 79,
+            "write_length": 2367
           }
         },
         {
-          "txid": "2ac6b62ddb080874014cad1f8d9513b6df6e51f438ee4bf2549ed72d784db593",
+          "txid": "60a270e8e3ac730c38f9d051b477e965296c9db0f675eec7bf83486b7252ec36",
           "cost": {
-            "read_count": 381,
-            "read_length": 4606953,
-            "runtime": 11346233,
-            "write_count": 5,
-            "write_length": 178
+            "read_count": 448,
+            "read_length": 5213807,
+            "runtime": 12117076,
+            "write_count": 12,
+            "write_length": 392
           }
         }
       ]
@@ -422,118 +422,118 @@
     {
       "side": "y",
       "version": "baseline",
-      "simulation": "https://stxer.xyz/simulations/mainnet/a61652c4013557816102e4a7658b7c61",
-      "signedUpdateHex": "2a22999aaef7f34487ae30d8844a0d4ad045eca17a4889ee08594ae77883f360d4035eae4ae1436acaddc7b06a89d9f4d58dd3b30b579b03c76c1937235b37a22faa85b300005c93c7d37500065dc0a93216800402000000010500000007972b50679404fff80500000001a4af220a03001b0c0100065dc0a93216800000002d050000000000029291c104fff80500000000000086bd0300110c0100065dc0a9321680",
-      "oldestFeedTime": 1791931914,
-      "mid": "19336997109457",
-      "netCapacity": "1933699",
+      "simulation": "https://stxer.xyz/simulations/mainnet/be5d0824a2b370ad7270cb83670d571c",
+      "signedUpdateHex": "2a22999a71d39d8a6c377d54e5c380e88f1f3ed125e8b3cb9834f4575d5698c55d4bb504096c3c206546e73eb8014946908e6a1f4358f777fd1da9cbafc78bca2c167ee901005c93c7d37500065dc16d97cc400402000000010500000007906f7ee90104fff805000000011ceaf23f03001b0c0100065dc16d97cc400000002d0500000000000295417f04fff80500000000000050fd0300110c0100065dc16d97cc40",
+      "oldestFeedTime": 1791935209,
+      "mid": "19191700162557",
+      "netCapacity": "1919170",
       "cases": [
         {
           "label": "age 0: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u1929831) (dlmm-out u796) (jing-in u1937567) (jing-ok true) (jing-out u999) (out u1795) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9744381426) (dlmm-in u1929831) (dlmm-out u796) (jing-cap u1937567) (jing-in u1937567) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1795) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u1915331) (dlmm-out u790) (jing-in u1923009) (jing-ok true) (jing-out u999) (out u1789) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9744381426) (dlmm-in u1915331) (dlmm-out u790) (jing-cap u1923009) (jing-in u1923009) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1789) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "0",
             "y": "100000000000"
           },
           "after": {
-            "x": "1795",
-            "y": "99996132602"
+            "x": "1789",
+            "y": "99996161660"
           }
         },
         {
           "label": "age 30: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u1929831) (dlmm-out u796) (jing-in u1937567) (jing-ok true) (jing-out u999) (out u1795) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9742453296) (dlmm-in u1929831) (dlmm-out u796) (jing-cap u1937567) (jing-in u1937567) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1795) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u1915331) (dlmm-out u790) (jing-in u1923009) (jing-ok true) (jing-out u999) (out u1789) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9742467830) (dlmm-in u1915331) (dlmm-out u790) (jing-cap u1923009) (jing-in u1923009) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1789) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "1795",
-            "y": "99996132602"
+            "x": "1789",
+            "y": "99996161660"
           },
           "after": {
-            "x": "3590",
-            "y": "99992265204"
+            "x": "3578",
+            "y": "99992323320"
           }
         },
         {
           "label": "age 31: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u3867398) (dlmm-out u1596) (jing-in u0) (jing-ok false) (jing-out u0) (out u1596) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9740525167) (dlmm-in u3867398) (dlmm-out u1596) (jing-cap u1937567) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1596) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u3838340) (dlmm-out u1584) (jing-in u0) (jing-ok false) (jing-out u0) (out u1584) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9740554235) (dlmm-in u3838340) (dlmm-out u1584) (jing-cap u1923009) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1584) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "3590",
-            "y": "99992265204"
+            "x": "3578",
+            "y": "99992323320"
           },
           "after": {
-            "x": "5186",
-            "y": "99988397806"
+            "x": "5162",
+            "y": "99988484980"
           }
         },
         {
           "label": "age 55: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u3867398) (dlmm-out u1596) (jing-in u0) (jing-ok false) (jing-out u0) (out u1596) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9736659221) (dlmm-in u3867398) (dlmm-out u1596) (jing-cap u1937567) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1596) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u3838340) (dlmm-out u1584) (jing-in u0) (jing-ok false) (jing-out u0) (out u1584) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9736717355) (dlmm-in u3838340) (dlmm-out u1584) (jing-cap u1923009) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1584) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "5186",
-            "y": "99988397806"
+            "x": "5162",
+            "y": "99988484980"
           },
           "after": {
-            "x": "6782",
-            "y": "99984530408"
+            "x": "6746",
+            "y": "99984646640"
           }
         },
         {
           "label": "age 79: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u3867398) (dlmm-out u1596) (jing-in u0) (jing-ok false) (jing-out u0) (out u1596) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9732793273) (dlmm-in u3867398) (dlmm-out u1596) (jing-cap u1937567) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1596) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u3838340) (dlmm-out u1584) (jing-in u0) (jing-ok false) (jing-out u0) (out u1584) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9732880475) (dlmm-in u3838340) (dlmm-out u1584) (jing-cap u1923009) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1584) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "6782",
-            "y": "99984530408"
+            "x": "6746",
+            "y": "99984646640"
           },
           "after": {
-            "x": "8378",
-            "y": "99980663010"
+            "x": "8330",
+            "y": "99980808300"
           }
         },
         {
           "label": "age 80: baseline router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u3867398) (dlmm-out u1596) (jing-in u0) (jing-ok false) (jing-out u0) (out u1596) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u9728927326) (dlmm-in u3867398) (dlmm-out u1596) (jing-cap u1937567) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1596) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u3838340) (dlmm-out u1584) (jing-in u0) (jing-ok false) (jing-out u0) (out u1584) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u9729043595) (dlmm-in u3838340) (dlmm-out u1584) (jing-cap u1923009) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1584) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "8378",
-            "y": "99980663010"
+            "x": "8330",
+            "y": "99980808300"
           },
           "after": {
-            "x": "9974",
-            "y": "99976795612"
+            "x": "9914",
+            "y": "99976969960"
           }
         }
       ],
       "fork": {
-        "block_hash": "2839b465af951fc6c1a033c204d0f5b4e37ce4743219237d3ff23f24174600ac",
-        "block_height": 9200732,
-        "burn_block_hash": "000000000000000000020da591aeee5f5a633631802109f6824bf1cbb518c52b",
-        "burn_block_height": 971315,
-        "consensus_hash": "cafe39b15f52291565a40c863ea6a01be4d259a4",
+        "block_hash": "7641a5601dc6db6466e09f32c01e12a93f41552944dcb75e0153d60de80902e1",
+        "block_height": 9201027,
+        "burn_block_hash": "00000000000000000000414484a2bef1ebba0d0b5975d15b5cbe0d04f488f2dd",
+        "burn_block_height": 971317,
+        "consensus_hash": "de92069a7ca5ce4a111e49b9c84ccf1fbe560cdf",
         "epoch": "4.0",
-        "index_block_hash": "a8eb1cc82efe29847ad7f3e32c65a41242027671c0b3461fe28f2a0d92607909",
+        "index_block_hash": "1830ecfda0afd09ab4eaed98dcdb5f4eef55fdea9b13039bfd93403e728538a4",
         "skip_tracing": false,
-        "sortition_id": "edcaabd633fdfdb0e3e47cfc49d6338f6d68e38d080d08dcf8a5706087c288a4"
+        "sortition_id": "f2d0ef1ec136f34e6ee79bf0a2ca13dd1c04025a599b4a6af4bc11da9b6c7060"
       },
       "transactions": 27,
       "smartSwapCosts": [
         {
-          "txid": "612f1a73003a419ef4da2fd3906195dcb5c02af254ce8502bfe4d7f32bcab933",
+          "txid": "ac7e175a6bdd0245582d23f81a579d7f0645cdc36ddb7995620c128ae3d052a1",
           "cost": {
             "read_count": 596,
             "read_length": 4714194,
@@ -543,7 +543,7 @@
           }
         },
         {
-          "txid": "76f630eced493346f0585a4b19099dd5dab66de3f2acaa2093bad88205e602e9",
+          "txid": "05b91033c256c5ef08c5f4cbc220ef717bcf5cfdd19a3537d4db244de4eb9315",
           "cost": {
             "read_count": 596,
             "read_length": 4714231,
@@ -553,7 +553,7 @@
           }
         },
         {
-          "txid": "7cac0065dd72cf3336444e142cbfccf60c897d3c792a247b920e97b15c22f0fe",
+          "txid": "f26774474501f15502e3de1a861e451cf5c0c7852d373e116163e611715bafad",
           "cost": {
             "read_count": 367,
             "read_length": 4461826,
@@ -563,7 +563,7 @@
           }
         },
         {
-          "txid": "57a2cb02a40bd159d147e8bdf01712fdc12874fb50dfd6fbfd542b2378a19c43",
+          "txid": "08a7d55443a4b9dfe4622ca22c413a55bf97b16edb0db48d14fbc5577e4e2f22",
           "cost": {
             "read_count": 367,
             "read_length": 4461826,
@@ -573,7 +573,7 @@
           }
         },
         {
-          "txid": "cab52f855c5d45127d4ba33d2eeb0e9021f18ce9e6b8b3df48fc9e7e41a632be",
+          "txid": "325945fec42361e699f80f62002704e1f7d24add94bcfbb13847185efebfa3a0",
           "cost": {
             "read_count": 367,
             "read_length": 4461826,
@@ -583,7 +583,7 @@
           }
         },
         {
-          "txid": "509e1fc2ec653cd816e4c2cebb9f9f2ad20e1257462cc64223b1631b8a5fd53e",
+          "txid": "8f93a569b18e9412e8c4087c0955acc95238ec9e26568f9f09913db5e5f40702",
           "cost": {
             "read_count": 358,
             "read_length": 4461660,
@@ -597,234 +597,234 @@
     {
       "side": "y",
       "version": "fixed",
-      "simulation": "https://stxer.xyz/simulations/mainnet/2bf2aa605435ccad6157045d66dc6b13",
-      "signedUpdateHex": "2a22999aaef7f34487ae30d8844a0d4ad045eca17a4889ee08594ae77883f360d4035eae4ae1436acaddc7b06a89d9f4d58dd3b30b579b03c76c1937235b37a22faa85b300005c93c7d37500065dc0a93216800402000000010500000007972b50679404fff80500000001a4af220a03001b0c0100065dc0a93216800000002d050000000000029291c104fff80500000000000086bd0300110c0100065dc0a9321680",
-      "oldestFeedTime": 1791931914,
-      "mid": "19336997109457",
-      "netCapacity": "1933699",
+      "simulation": "https://stxer.xyz/simulations/mainnet/fa7652c7e5bb331788363ddc2b10f9d4",
+      "signedUpdateHex": "2a22999a71d39d8a6c377d54e5c380e88f1f3ed125e8b3cb9834f4575d5698c55d4bb504096c3c206546e73eb8014946908e6a1f4358f777fd1da9cbafc78bca2c167ee901005c93c7d37500065dc16d97cc400402000000010500000007906f7ee90104fff805000000011ceaf23f03001b0c0100065dc16d97cc400000002d0500000000000295417f04fff80500000000000050fd0300110c0100065dc16d97cc40",
+      "oldestFeedTime": 1791935209,
+      "mid": "19191700162557",
+      "netCapacity": "1919170",
       "cases": [
         {
           "label": "age 0: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u1929831) (dlmm-out u992) (jing-in u1937567) (jing-ok true) (jing-out u999) (out u1991) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48626995300) (dlmm-in u1929831) (dlmm-out u992) (jing-cap u1937567) (jing-in u1937567) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1991) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u1915331) (dlmm-out u992) (jing-in u1923009) (jing-ok true) (jing-out u999) (out u1991) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u976668364) (dlmm-in u1915331) (dlmm-out u992) (jing-cap u1923009) (jing-in u1923009) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1991) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "0",
             "y": "100000000000"
           },
           "after": {
             "x": "1991",
-            "y": "99996132602"
+            "y": "99996161660"
           }
         },
         {
           "label": "age 30: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1937567",
-          "result": "(ok (tuple (dlmm-in u1929831) (dlmm-out u992) (jing-in u1937567) (jing-ok true) (jing-out u999) (out u1991) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48625067269) (dlmm-in u1929831) (dlmm-out u992) (jing-cap u1937567) (jing-in u1937567) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1991) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923009",
+          "result": "(ok (tuple (dlmm-in u1915331) (dlmm-out u992) (jing-in u1923009) (jing-ok true) (jing-out u999) (out u1991) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u974754728) (dlmm-in u1915331) (dlmm-out u992) (jing-cap u1923009) (jing-in u1923009) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1991) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "1991",
-            "y": "99996132602"
+            "y": "99996161660"
           },
           "after": {
             "x": "3982",
-            "y": "99992265204"
+            "y": "99992323320"
           }
         },
         {
           "label": "age 31: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1937760",
-          "result": "(ok (tuple (dlmm-in u1929638) (dlmm-out u992) (jing-in u1937760) (jing-ok true) (jing-out u999) (out u1991) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48623139238) (dlmm-in u1929638) (dlmm-out u992) (jing-cap u1937760) (jing-in u1937760) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1991) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1923201",
+          "result": "(ok (tuple (dlmm-in u1915139) (dlmm-out u991) (jing-in u1923201) (jing-ok true) (jing-out u999) (out u1990) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u972841093) (dlmm-in u1915139) (dlmm-out u991) (jing-cap u1923201) (jing-in u1923201) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1990) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
             "x": "3982",
-            "y": "99992265204"
+            "y": "99992323320"
           },
           "after": {
-            "x": "5973",
-            "y": "99988397806"
+            "x": "5972",
+            "y": "99988484980"
           }
         },
         {
           "label": "age 55: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1942401",
-          "result": "(ok (tuple (dlmm-in u1924997) (dlmm-out u990) (jing-in u1942401) (jing-ok true) (jing-out u999) (out u1989) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48621211206) (dlmm-in u1924997) (dlmm-out u990) (jing-cap u1942401) (jing-in u1942401) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1989) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1927807",
+          "result": "(ok (tuple (dlmm-in u1910533) (dlmm-out u988) (jing-in u1927807) (jing-ok true) (jing-out u999) (out u1987) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u1023832001) (dlmm-in u1910533) (dlmm-out u988) (jing-cap u1927807) (jing-in u1927807) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1987) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "5973",
-            "y": "99988397806"
+            "x": "5972",
+            "y": "99988484980"
           },
           "after": {
-            "x": "7962",
-            "y": "99984530408"
+            "x": "7959",
+            "y": "99984646640"
           }
         },
         {
           "label": "age 79: below true minimum skips Jing",
-          "amount": "1947041",
+          "amount": "1932412",
           "expectedCap": "0",
-          "result": "(ok (tuple (dlmm-in u1947041) (dlmm-out u1001) (jing-in u0) (jing-ok false) (jing-out u0) (out u1001) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u1947041) (dlmm-cap u48619287062) (dlmm-in u1947041) (dlmm-out u1001) (jing-cap u0) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1001) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "result": "(ok (tuple (dlmm-in u1932412) (dlmm-out u1000) (jing-in u0) (jing-ok false) (jing-out u0) (out u1000) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u1932412) (dlmm-cap u1021923224) (dlmm-in u1932412) (dlmm-out u1000) (jing-cap u0) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1000) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "7962",
-            "y": "99984530408"
+            "x": "7959",
+            "y": "99984646640"
           },
           "after": {
-            "x": "8963",
-            "y": "99982583367"
+            "x": "8959",
+            "y": "99982714228"
           }
         },
         {
           "label": "age 79: exact true minimum fills Jing",
-          "amount": "1947042",
-          "expectedCap": "1947042",
-          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1947042) (jing-ok true) (jing-out u999) (out u999) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u1947042) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u1947042) (jing-in u1947042) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u999) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "1932413",
+          "expectedCap": "1932413",
+          "result": "(ok (tuple (dlmm-in u0) (dlmm-out u0) (jing-in u1932413) (jing-ok true) (jing-out u999) (out u999) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u1932413) (dlmm-cap u0) (dlmm-in u0) (dlmm-out u0) (jing-cap u1932413) (jing-in u1932413) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u999) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "8963",
-            "y": "99982583367"
+            "x": "8959",
+            "y": "99982714228"
           },
           "after": {
-            "x": "9962",
-            "y": "99980636325"
+            "x": "9958",
+            "y": "99980781815"
           }
         },
         {
           "label": "age 79: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1947042",
-          "result": "(ok (tuple (dlmm-in u1920356) (dlmm-out u988) (jing-in u1947042) (jing-ok true) (jing-out u999) (out u1987) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48617341539) (dlmm-in u1920356) (dlmm-out u988) (jing-cap u1947042) (jing-in u1947042) (jing-ok true) (jing-out u999) (limit-price u38673994218914) (out u1987) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1932413",
+          "result": "(ok (tuple (dlmm-in u1905927) (dlmm-out u986) (jing-in u1932413) (jing-ok true) (jing-out u999) (out u1985) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u1019991264) (dlmm-in u1905927) (dlmm-out u986) (jing-cap u1932413) (jing-in u1932413) (jing-ok true) (jing-out u999) (limit-price u38383400325114) (out u1985) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "9962",
-            "y": "99980636325"
+            "x": "9958",
+            "y": "99980781815"
           },
           "after": {
-            "x": "11949",
-            "y": "99976768927"
+            "x": "11943",
+            "y": "99976943475"
           }
         },
         {
           "label": "age 80: fixed router",
-          "amount": "3867398",
-          "expectedCap": "1947235",
-          "result": "(ok (tuple (dlmm-in u3867398) (dlmm-out u1987) (jing-in u0) (jing-ok false) (jing-out u0) (out u1987) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
-          "print": "(tuple (amount u3867398) (dlmm-cap u48615421282) (dlmm-in u3867398) (dlmm-out u1987) (jing-cap u1947235) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38673994218914) (out u1987) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
+          "amount": "3838340",
+          "expectedCap": "1932605",
+          "result": "(ok (tuple (dlmm-in u3838340) (dlmm-out u1986) (jing-in u0) (jing-ok false) (jing-out u0) (out u1986) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+          "print": "(tuple (amount u3838340) (dlmm-cap u1018086351) (dlmm-in u3838340) (dlmm-out u1986) (jing-cap u1932605) (jing-in u0) (jing-ok false) (jing-out u0) (limit-price u38383400325114) (out u1986) (topic \"smart-swap-stx-for-sbtc\") (unsold u0) (user SPWBRJQ8DHWG5GVM91ZQ592ASQK896MRFCJA6YV) (velar-cap u0) (velar-in u0) (velar-out u0) (xyk-cap u0) (xyk-in u0) (xyk-out u0))",
           "before": {
-            "x": "11949",
-            "y": "99976768927"
+            "x": "11943",
+            "y": "99976943475"
           },
           "after": {
-            "x": "13936",
-            "y": "99972901529"
+            "x": "13929",
+            "y": "99973105135"
           }
         }
       ],
       "fork": {
-        "block_hash": "2839b465af951fc6c1a033c204d0f5b4e37ce4743219237d3ff23f24174600ac",
-        "block_height": 9200732,
-        "burn_block_hash": "000000000000000000020da591aeee5f5a633631802109f6824bf1cbb518c52b",
-        "burn_block_height": 971315,
-        "consensus_hash": "cafe39b15f52291565a40c863ea6a01be4d259a4",
+        "block_hash": "7641a5601dc6db6466e09f32c01e12a93f41552944dcb75e0153d60de80902e1",
+        "block_height": 9201027,
+        "burn_block_hash": "00000000000000000000414484a2bef1ebba0d0b5975d15b5cbe0d04f488f2dd",
+        "burn_block_height": 971317,
+        "consensus_hash": "de92069a7ca5ce4a111e49b9c84ccf1fbe560cdf",
         "epoch": "4.0",
-        "index_block_hash": "a8eb1cc82efe29847ad7f3e32c65a41242027671c0b3461fe28f2a0d92607909",
+        "index_block_hash": "1830ecfda0afd09ab4eaed98dcdb5f4eef55fdea9b13039bfd93403e728538a4",
         "skip_tracing": false,
-        "sortition_id": "edcaabd633fdfdb0e3e47cfc49d6338f6d68e38d080d08dcf8a5706087c288a4"
+        "sortition_id": "f2d0ef1ec136f34e6ee79bf0a2ca13dd1c04025a599b4a6af4bc11da9b6c7060"
       },
       "transactions": 28,
       "smartSwapCosts": [
         {
-          "txid": "612f1a73003a419ef4da2fd3906195dcb5c02af254ce8502bfe4d7f32bcab933",
+          "txid": "ac7e175a6bdd0245582d23f81a579d7f0645cdc36ddb7995620c128ae3d052a1",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082097,
-            "runtime": 13473548,
+            "read_count": 670,
+            "read_length": 5301084,
+            "runtime": 13008068,
             "write_count": 67,
             "write_length": 2009
           }
         },
         {
-          "txid": "76f630eced493346f0585a4b19099dd5dab66de3f2acaa2093bad88205e602e9",
+          "txid": "05b91033c256c5ef08c5f4cbc220ef717bcf5cfdd19a3537d4db244de4eb9315",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082134,
-            "runtime": 13473548,
+            "read_count": 670,
+            "read_length": 5301121,
+            "runtime": 13008068,
             "write_count": 67,
             "write_length": 2009
           }
         },
         {
-          "txid": "7cac0065dd72cf3336444e142cbfccf60c897d3c792a247b920e97b15c22f0fe",
+          "txid": "f26774474501f15502e3de1a861e451cf5c0c7852d373e116163e611715bafad",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082134,
-            "runtime": 13475160,
+            "read_count": 725,
+            "read_length": 5578853,
+            "runtime": 13471389,
+            "write_count": 74,
+            "write_length": 2223
+          }
+        },
+        {
+          "txid": "08a7d55443a4b9dfe4622ca22c413a55bf97b16edb0db48d14fbc5577e4e2f22",
+          "cost": {
+            "read_count": 670,
+            "read_length": 5301121,
+            "runtime": 13009680,
             "write_count": 67,
             "write_length": 2009
           }
         },
         {
-          "txid": "57a2cb02a40bd159d147e8bdf01712fdc12874fb50dfd6fbfd542b2378a19c43",
+          "txid": "76720fac7d5de2a72a1ae927400e1b2183f451d184e6d7a3d84f768cd3039eff",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082134,
-            "runtime": 13475160,
-            "write_count": 67,
-            "write_length": 2009
-          }
-        },
-        {
-          "txid": "414db1ffa4de332c4d41e542d976045f8cf2d42084aa53af92ad9982a20fbcff",
-          "cost": {
-            "read_count": 416,
-            "read_length": 4683986,
-            "runtime": 11347470,
+            "read_count": 428,
+            "read_length": 4949387,
+            "runtime": 11622846,
             "write_count": 5,
             "write_length": 178
           }
         },
         {
-          "txid": "0ab47a9b2da42c4048b223da482c668d84a18a08c103cce550e4590f4423d8de",
+          "txid": "037e10cf26b1acc945d52ea7f88606a82cc1f2c0df3d0ce5cfb41f789e552b0d",
           "cost": {
-            "read_count": 323,
-            "read_length": 795621,
-            "runtime": 3971139,
+            "read_count": 302,
+            "read_length": 756554,
+            "runtime": 3237630,
             "write_count": 62,
             "write_length": 1831
           }
         },
         {
-          "txid": "e78eb1850da4c7efab04289a6bab901766632d17e88d98f3ab844bf5e4871a7a",
+          "txid": "38704b113043f234ef2092a42dd32251140c6c554bc200c796f738f357b9347c",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082134,
-            "runtime": 13465148,
+            "read_count": 670,
+            "read_length": 5301121,
+            "runtime": 12999668,
             "write_count": 67,
             "write_length": 2009
           }
         },
         {
-          "txid": "7886f33189e4fc020b4005a63883287a9cd8d2734ca0e6540539dff1b9451f72",
+          "txid": "e98dfffddb38682dfb46bd08af93120dab78df58233d8cabc27676d1ce1d7f84",
           "cost": {
-            "read_count": 679,
-            "read_length": 5082134,
-            "runtime": 13475160,
+            "read_count": 670,
+            "read_length": 5301121,
+            "runtime": 13009680,
             "write_count": 67,
             "write_length": 2009
           }
         },
         {
-          "txid": "a666f3c26c3965122b6cb03bf30b543cfb77418a666396c817b3aaea484edd5d",
+          "txid": "27921379653334cc0d3785a0f82f5d524a467afb78bd6679200d4898f34fc81b",
           "cost": {
-            "read_count": 496,
-            "read_length": 5107295,
-            "runtime": 12659680,
-            "write_count": 12,
-            "write_length": 392
+            "read_count": 453,
+            "read_length": 5096284,
+            "runtime": 12475088,
+            "write_count": 5,
+            "write_length": 178
           }
         }
       ]

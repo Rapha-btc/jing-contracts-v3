@@ -1073,10 +1073,33 @@ feed-y: (try! (shape-feed fy publish-time)),
 )
 
 (define-private (fresh-classification-price-aged (update (buff 8192)))
+(let ((feeds (try! (lazer-feeds update))))
+(fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))
+)
+)
+;; Same checks as fresh-classification-price-aged, on feeds the caller
+;; already verified with lazer-feeds (swap verifies its update once).
+(define-private (fresh-classification-from-feeds
+(feed-x {
+price: int,
+conf: uint,
+expo: int,
+ema-price: int,
+ema-conf: uint,
+publish-time: uint,
+prev-publish-time: uint,
+})
+(feed-y {
+price: int,
+conf: uint,
+expo: int,
+ema-price: int,
+ema-conf: uint,
+publish-time: uint,
+prev-publish-time: uint,
+})
+)
 (let (
-(feeds (try! (lazer-feeds update)))
-(feed-x (get feed-x feeds))
-(feed-y (get feed-y feeds))
 (min-freshness (- stacks-block-time MAX_STALENESS))
 (pub-x (get publish-time feed-x))
 (pub-y (get publish-time feed-y))
@@ -2601,12 +2624,40 @@ limit clearing (var-get token-x) (var-get token-y)
 (begin
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(let (
-(feeds (try! (lazer-feeds update)))
-(feed-x (get feed-x feeds))
-(feed-y (get feed-y feeds))
-(cycle (var-get current-cycle))
+(let ((feeds (try! (lazer-feeds update))))
+(settle-with-verified-feeds (get feed-x feeds) (get feed-y feeds) tx-trait
+tx-name ty-trait ty-name
 )
+)
+)
+)
+;; Body of settle-with-refresh after its trait checks and lazer-feeds.
+;; Callers must check both traits first (settle-with-refresh, swap).
+(define-private (settle-with-verified-feeds
+(feed-x {
+price: int,
+conf: uint,
+expo: int,
+ema-price: int,
+ema-conf: uint,
+publish-time: uint,
+prev-publish-time: uint,
+})
+(feed-y {
+price: int,
+conf: uint,
+expo: int,
+ema-price: int,
+ema-conf: uint,
+publish-time: uint,
+prev-publish-time: uint,
+})
+(tx-trait <ft-trait>)
+(tx-name (string-ascii 128))
+(ty-trait <ft-trait>)
+(ty-name (string-ascii 128))
+)
+(let ((cycle (var-get current-cycle)))
 (try! (execute-settlement cycle feed-x feed-y tx-trait tx-name ty-trait ty-name))
 (var-set acc-token-x-out u0)
 (var-set acc-token-y-out u0)
@@ -2640,7 +2691,6 @@ token-x-rolled: (var-get caller-token-x-rolled),
 })
 )
 )
-)
 (define-public (swap
 (amount uint)
 (limit-price uint)
@@ -2652,7 +2702,8 @@ token-x-rolled: (var-get caller-token-x-rolled),
 (deposit-x bool)
 )
 (let (
-(aged (try! (fresh-classification-price-aged update)))
+(feeds (try! (lazer-feeds update)))
+(aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
 ;; net = amount / (1 + bps): the pot is net * bps, what the fills pay.
 (net (/ (* amount BPS_PRECISION)
 (+ BPS_PRECISION (rebate-bps-for-age (get age aged)))
@@ -2733,7 +2784,11 @@ ty-trait ty-name
 )
 (var-set crossing true)
 (var-set crossing-x deposit-x)
-(let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
+(asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
+(asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
+(let ((result (try! (settle-with-verified-feeds (get feed-x feeds) (get feed-y feeds)
+tx-trait tx-name ty-trait ty-name
+))))
 (if deposit-x
 (ok (swap-result-x result
 (try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait

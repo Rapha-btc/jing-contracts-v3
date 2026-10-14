@@ -85,5 +85,13 @@
     (decoder principal)
     (max-age (optional uint))
   )
-  (decode-lazer-payload update)
+  (begin
+    (var-set verifications (+ (var-get verifications) u1))
+    (decode-lazer-payload update)
+  )
+)
+;; Counts verify-price-feeds calls, so tests can prove swap verifies once.
+(define-data-var verifications uint u0)
+(define-read-only (get-verifications)
+  (var-get verifications)
 )
