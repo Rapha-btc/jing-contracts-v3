@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import {hashInputs, assertInputsUnchanged, assertProductionPrefix, sharedInputs} from './source-integrity.mjs';
 import { spawnSync } from 'node:child_process';
-const dir='simulations/results/rv-v6-3';fs.mkdirSync(dir,{recursive:true});
+const dir=process.env.RV_LOG_DIR??'tests/rv/.build/results/rv-v6-3';fs.mkdirSync(dir,{recursive:true});
 const jobs=[
  {mode:'invariant',runs:1000,seed:230927},
  {mode:'test',runs:5000,seed:230926},

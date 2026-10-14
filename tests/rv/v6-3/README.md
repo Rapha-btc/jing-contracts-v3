@@ -8,10 +8,19 @@ The market/core hashes below match the production files tested. The
 [actual-sBTC refund integration](../../../simulations/README-v6-3-refund-costs.md)
 provide separate complementary evidence.
 
-- Market SHA-256: `5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae0c78f851bfb`.
+- Market SHA-256: `943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67`
+  (the final deploy bytes, commit ada49d8; rerun 2026-10-14, see below).
 - Core SHA-256: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
-- Random report generated: `2026-09-30T01:31:08.155Z`.
-- Full-book report generated: `2026-09-30T01:51:10.053Z`.
+- Random report generated: `2026-10-14T20:17:22.004Z`.
+- Full-book report generated: `2026-10-14T20:48:53.659Z`.
+
+Rerun on the final market (2026-10-14): the market changed after the
+2026-09-30 campaign only by c14f038 / 314aaba (swap and reprice-or-swap
+verify the Lazer update once), ee2edde (taker capacity quoted at the update
+rebate rate) and ada49d8 (a duplicate removed). Every trial count, pass /
+discard split and guided-path count below came out identical, all green.
+`run.mjs` now writes its logs to `tests/rv/.build/results/rv-v6-3` (or
+`RV_LOG_DIR`) instead of `simulations/results`.
 
 The RV swap model now computes `floor(amount * 10000 / 10020)` for its
 always-fresh oracle fixture. The STX dust regression expects 53 micro-STX:
