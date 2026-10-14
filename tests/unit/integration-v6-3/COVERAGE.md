@@ -19,7 +19,7 @@ jing-ladder-dispatch is gated here at the same thresholds. Core, ladder and mark
 | jing-ladder-dispatch | 15/15 (100%) | 132/132 (100%) | 40/40 (100%) |
 | jing-core-v6 | 32/83 (38.55%) | 405/938 (43.18%) | 41/164 (25%) |
 | jing-ladder-v1 | 25/31 (80.65%) | 217/267 (81.27%) | 29/61 (47.54%) |
-| markets-sbtc-stx-jing-v6-3 | 89/141 (63.12%) | 1354/2371 (57.11%) | 375/843 (44.48%) |
+| markets-sbtc-stx-jing-v6-3 | 89/141 (63.12%) | 1354/2381 (56.87%) | 375/847 (44.27%) |
 
 Dispatch unhit lines: none; branches: none.
 
@@ -69,7 +69,7 @@ Dispatch unhit lines: none; branches: none.
 
 ## Source SHA-256
 
-- markets-sbtc-stx-jing-v6-3: `65a8dc9aed179a3cc440306e31aff7da5bcecb99872423ca50b8ba417abbb6c0`.
+- markets-sbtc-stx-jing-v6-3: `943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 - jing-ladder-v1: `0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786`.
 - jing-rung-deposit-trait: `927fbba4826710ded7e81fb4847ed92f5c4310bc4e0cf42537600876b0a01163`.

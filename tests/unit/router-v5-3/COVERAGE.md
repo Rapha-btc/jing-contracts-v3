@@ -12,7 +12,7 @@ Execution coverage of the real router with declared local dependency substitutio
 
 ## Source SHA-256
 
-- market: `65a8dc9aed179a3cc440306e31aff7da5bcecb99872423ca50b8ba417abbb6c0`.
+- market: `2481290958023537b96399d784f2c1532a431958cbb67ce037bc0a94cde4fefb`.
 - router: `a33f8692d3f0c9f54d19f47cd71cf2b8a93fe1494bd11e672bfa59b6cc8a9382`.
 - router-ref: `a33f8692d3f0c9f54d19f47cd71cf2b8a93fe1494bd11e672bfa59b6cc8a9382`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
