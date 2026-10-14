@@ -18,6 +18,13 @@ minimum to model successful execution despite router rounding slack. This is
 not verification of live pool pricing, external oracle signatures, or mainnet
 transaction costs. The Jing router itself is actual source, not a mock.
 
+The DLMM core mock (`dlmm-core.clar`) serves `get-pool-by-id` (enabled
+entries for pool ids 6/15/16, the router's disabled-pool check) and
+`get-bin-factors-by-step` (the three-pool pick) next to `get-bin-price`.
+All three DLMM pool principals map to the one mock pool. It holds no balance,
+so the pick falls back to pool 1 and DLMM legs trade on it as before the
+three-pool router. Route amounts match the pre-three-pool router (df091b8^).
+
 Both directions cover signed maker submission/settlement/cancellation, pending
 limit acceptance/refusal, pending escrow exclusion from repricing, paused exits,
 direct taker fills, passive maker fills, aged crossing reprices, router-only and

@@ -14,7 +14,11 @@ const replacements={
  "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token":'.token',
  "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2":'.wrong-token',
  "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2":'.mock-dlmm-router',
+ // Router v5-3 picks among three DLMM pools (280c81c); all three map to the
+ // one mock pool, registered under each pool id by the mock core (dlmm-core.clar).
+ "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-1-bps-15":'.mock-dlmm-pool',
  "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-2-bps-15":'.mock-dlmm-pool',
+ "'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-3-bps-15":'.mock-dlmm-pool',
  "'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1":'.mock-dlmm-core',
  "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-core-v-1-2":'.mock-xyk-core',
  "'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.xyk-pool-sbtc-stx-v-1-1":'.mock-xyk-pool',
@@ -47,8 +51,11 @@ for(const [name,file] of Object.entries({
  market:'markets-sbtc-stx-jing-v6-3',router:'swap-router-sbtc-stx-jing-v5-3',
  'jing-vault-auth':'jing-vault-auth',vault:'vault-sbtc-stx-v6',
 }))add(name,`contracts/${file}.clar`,true);
+// The core mock serves get-pool-by-id (pool status, f342615) and
+// get-bin-factors-by-step (three-pool pick, 280c81c) besides get-bin-price.
+add('mock-dlmm-core',`${dir}/dlmm-core.clar`,true);
 for(const [name,file] of Object.entries({
- 'mock-dlmm-core':'mock-dlmm-core','mock-dlmm-pool':'mock-dlmm-pool-v5',
+ 'mock-dlmm-pool':'mock-dlmm-pool-v5',
  'mock-dlmm-router':'mock-dlmm-router-v5','mock-xyk-core':'mock-xyk-core-v5',
  'mock-xyk-pool':'mock-xyk-pool-v5','mock-velar-fees':'mock-velar-fees','mock-velar-pool':'mock-velar-pool',
 }))add(name,`tests/rv/${file}.clar`,true);
