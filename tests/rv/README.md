@@ -209,7 +209,7 @@ promised (58 uSTX, 28 bps). Bounded by one sat: 12-28 bps at the 200-sat
 end, under 0.1 bps at 100k sats; `min-out` still binds. The property now
 allows exactly that one unit and counts each use (2 of 1,057 successful smart
 swaps).
-Not fixed (out of scope here).
+Accepted 2026-10-14, won't fix: at most one base unit, no revert, `min-out` still binds, and router v5-3 is deployed.
 
 Not covered here: Pyth signatures and staleness (the oracle fixture is
 always fresh), real sBTC / wSTX, ladder ownership handover, rung
