@@ -1,0 +1,140 @@
+{
+  "generatedAt": "2026-10-14T21:52:16.918Z",
+  "sources": {
+    "market": {
+      "path": "contracts/markets-sbtc-stx-jing-v6-3.clar",
+      "sha256": "943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67",
+      "generatedSha256": "4a99d761d2f2f685253e25c9599cfa5ef77639502fb5cc4e1acbb57fc8bffd4b"
+    },
+    "router": {
+      "path": "contracts/swap-router-sbtc-stx-jing-v5-3.clar",
+      "sha256": "fb64c9a0c642bdf821cfb754900e58edc7d5b7f27aeab7348cc34a4645e43698",
+      "generatedSha256": "0bac3d45ced9e36450d1363445cc139beaf3a8a13a86df9288c416afe223ec78"
+    },
+    "jing-core-v6": {
+      "path": "contracts/jing-core-v6.clar",
+      "sha256": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697",
+      "byteIdentical": true
+    }
+  },
+  "results": [
+    {
+      "type": "invariant",
+      "runs": 1000,
+      "seed": 241024,
+      "passed": 1000,
+      "discarded": 0,
+      "failed": 0,
+      "status": "(tuple (code u0) (valid true))",
+      "successfulCalls": {
+        "maker": 371,
+        "admit": 114,
+        "manual-refused-min-out": 99,
+        "smart-amm-only": 282,
+        "smart-dlmm": 275,
+        "mid": 908,
+        "smart-with-book": 60,
+        "smart-refused-min-out": 164,
+        "manual-refused": 312,
+        "cancel": 214,
+        "venue": 96,
+        "manual-amm-only": 106,
+        "manual-with-book": 27,
+        "manual-unsold": 11,
+        "smart-unsold": 24,
+        "smart-cp": 32,
+        "smart-refused": 1
+      },
+      "publicCalls": 12352,
+      "log": "tests/rv/.build/results/router-v5-3/invariant-241024.log"
+    },
+    {
+      "type": "invariant",
+      "runs": 1000,
+      "seed": 241025,
+      "passed": 1000,
+      "discarded": 0,
+      "failed": 0,
+      "status": "(tuple (code u0) (valid true))",
+      "successfulCalls": {
+        "maker": 398,
+        "admit": 120,
+        "mid": 854,
+        "cancel": 219,
+        "smart-amm-only": 281,
+        "smart-dlmm": 291,
+        "smart-refused-min-out": 190,
+        "manual-with-book": 19,
+        "manual-refused": 302,
+        "manual-amm-only": 101,
+        "venue": 105,
+        "smart-with-book": 83,
+        "manual-refused-min-out": 97,
+        "smart-unsold": 30,
+        "smart-under-limit-by-1-unit": 2,
+        "manual-unsold": 7,
+        "smart-cp": 28
+      },
+      "publicCalls": 12468,
+      "log": "tests/rv/.build/results/router-v5-3/invariant-241025.log"
+    },
+    {
+      "type": "test",
+      "runs": 3000,
+      "seed": 241026,
+      "passed": 1035,
+      "discarded": 1965,
+      "failed": 0,
+      "status": "(tuple (code u0) (valid true))",
+      "successfulCalls": {
+        "maker": 191,
+        "admit": 54,
+        "mid": 409,
+        "cancel": 100,
+        "smart-with-book": 46,
+        "smart-dlmm": 150,
+        "smart-unsold": 19,
+        "smart-refused-min-out": 101,
+        "manual-refused-min-out": 48,
+        "manual-refused": 156,
+        "smart-amm-only": 137,
+        "manual-amm-only": 51,
+        "venue": 49,
+        "manual-with-book": 7,
+        "manual-unsold": 12,
+        "smart-cp": 7
+      },
+      "publicCalls": 3009,
+      "log": "tests/rv/.build/results/router-v5-3/test-241026.log"
+    },
+    {
+      "type": "test",
+      "runs": 3000,
+      "seed": 241027,
+      "passed": 1053,
+      "discarded": 1947,
+      "failed": 0,
+      "status": "(tuple (code u0) (valid true))",
+      "successfulCalls": {
+        "maker": 169,
+        "admit": 68,
+        "mid": 438,
+        "manual-refused": 187,
+        "smart-refused-min-out": 76,
+        "smart-amm-only": 139,
+        "smart-dlmm": 125,
+        "venue": 50,
+        "cancel": 96,
+        "smart-with-book": 29,
+        "manual-refused-min-out": 39,
+        "manual-with-book": 9,
+        "smart-unsold": 11,
+        "manual-amm-only": 64,
+        "smart-cp": 21,
+        "manual-unsold": 8
+      },
+      "publicCalls": 3009,
+      "log": "tests/rv/.build/results/router-v5-3/test-241027.log"
+    }
+  ]
+}
