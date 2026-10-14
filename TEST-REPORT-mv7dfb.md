@@ -19,7 +19,9 @@ so the set is 35 contract deployments. The exact bytes are in
 [`SHA256SUMS.txt`](simulations/deploy-bytes-mv7dfb/SHA256SUMS.txt). The
 faktory-dao templates come from `backend` commit `77d9ba48` (2026-10-14,
 "refresh Juice pool, autoswap, autostake safe, router v5-3 deploy bytes",
-old templates reproduced byte for byte from their old sources first).
+old templates reproduced byte for byte from their old sources first). The
+pool template was refreshed again in `459fa786` (juicestx `570226c`,
+zero-seat guard; the `fa8c48a` template reproduced byte for byte first).
 
 Deploy forms:
 
@@ -42,7 +44,7 @@ Deploy forms:
 | 7 | `jing-sell-stx-core-spread-v1` (as `jing-sell-stx-spread-0..90`, 10 names) | jing-contracts-v3 `d8b01e4` | 5 | 22,423 | `7fb80650...8c0bac9f` | template |
 | 8 | `jing-ladder-dispatch` | jing-contracts-v3 `a4939ec` | 5 | 9,289 | `25858ef6...1fe3cabd` | template |
 | 9 | `juice-swap-vault-trait-v2` | juicestx `e954136` | 6 | 2,116 | `655b22cb...c4a50657` | template |
-| 10 | `juice-pool-sbtc-signer` | juicestx `fa8c48a` | 6 | 33,963 | `57d8c3d3...af1f9bd6` | template |
+| 10 | `juice-pool-sbtc-signer` | juicestx `570226c` | 6 | 34,134 | `a0a28431...ca56195a` | template |
 | 11 | `juice-sbtc-autoswap` | juicestx `fa8c48a` | 6 | 22,854 | `ff0a4586...a5909033` | template |
 | 12 | `juice-autostake-safe-auth-helpers-v1` | pillar-wallets `2d136c1` | 4 | 593 | `aabf3ba3...fa61bd70` | template |
 | 13 | `juice-autostake-safe` | pillar-wallets `611873c` | 6 | 51,552 | `dda5367c...4ae28a3d` | template |
@@ -70,8 +72,9 @@ are dated 2026-10-14 unless the row says otherwise.
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `verify-deploy-set-mv7dfb.js` | All 35 deployments in DEPLOY-PLAN order, then: Juice pool OG seats, hop, evict, 1 STX shrink, 3 reward batches (fee 0, fee u10, recovery); safe canonical hash, keeper restake, passkey transfer resets the keeper; Fast Pool 96-cycle lock and finish reserve; ccd016 8adfa68 dust window; router limit-aware pick (scan 100% to 120%) and core-migration skip. Fork 9208422, burn 971438 | 340/340 | `de9bd7b811577d3e5c0f2100dfa023c1` (Clarity 6 rows sent as version 6) | yes | 2026-10-14 |
-| same, first run | same; Clarity 6 rows went out unversioned (stacks.js 7.4.0) | 340/340 | `5cf1573f3f04fe514d9c671a6914aff7` | yes | 2026-10-14 |
+| `verify-deploy-set-mv7dfb.js` | All 35 deployments in DEPLOY-PLAN order, then: Juice pool OG seats, hop, evict, 1 STX shrink, 3 reward batches (fee 0, fee u10, recovery); safe canonical hash, keeper restake, passkey transfer resets the keeper; Fast Pool 96-cycle lock and finish reserve; ccd016 8adfa68 dust window; router limit-aware pick (scan 100% to 120%) and core-migration skip. Fork 9208422, burn 971438 | 340/340 | `20c428624713b6c452cfce5c5ed890db` (pool 570226c bytes) | yes | 2026-10-14 |
+| same, pool fa8c48a bytes | same | 340/340 | `de9bd7b811577d3e5c0f2100dfa023c1` (Clarity 6 rows sent as version 6) | yes, except the pool (fa8c48a bytes) | 2026-10-14 |
+| same, first run | same; Clarity 6 rows went out unversioned (stacks.js 7.4.0) | 340/340 | `5cf1573f3f04fe514d9c671a6914aff7` | yes, except the pool (fa8c48a bytes) | 2026-10-14 |
 
 Fixtures in that run (from the result file): pox-5 reward rows for cycles
 142, 143, 144 (pool) and 144 (Fast Pool), set by Eval; the live Lazer oracle
@@ -82,11 +85,11 @@ proposal proxy.
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `verify-coverage-mv7dfb-gaps.js` | Every core-v6 `log-*` entry, Juice setters / refloor / recovery arms, Fast Pool recover edges, read-only sweeps by tx | 455/455 | `692f57275b5412c8a95176d1d9205975` | yes | 10-14 |
-| `verify-coverage-mv7dfb-gaps2.js` | Second gap pass: rung no-reserve arm, market walk err arms, router active bin < 29, pool settle-one err, Fast Pool clock / zero shares | 115/115 | `b8f56b5d69c546f9e92a91bfb8c2c378` | yes | 10-14 |
+| `verify-coverage-mv7dfb-gaps.js` | Every core-v6 `log-*` entry, Juice setters / refloor / recovery arms, Fast Pool recover edges, read-only sweeps by tx | 455/455 | `234ae5bcda75c9df2015f4239fb276db` | yes | 10-14 |
+| `verify-coverage-mv7dfb-gaps2.js` | Second gap pass: rung no-reserve arm, market walk err arms, router active bin < 29, pool settle-one err, Fast Pool clock / zero shares | 115/115 | `fb581245dabe96e2914a00d5d2bbb0b2` | yes | 10-14 |
 | `verify-coverage-mv7dfb-ccd015.js` | ccd015 book on the deploy bytes, read-only sweep | 183/183 (first run 168/168, `cfb2ec16...`) | `78d08113b634d1f65e607881212cd62a` | yes | 10-14 |
-| `verify-coverage-mv7dfb-fastpool.js` | Fast Pool vault + signer on the deploy bytes | 154/154 | `da59d0878012a90a13837ae3142ee72b` | yes | 10-14 |
-| `verify-coverage-mv7dfb-fastpool.js` (native-price session) | rfq native price fallback at the fork tip | 20/20 | `d55a9bb01d0b8027cae49e19349ca8cd` | yes | 10-14 |
+| `verify-coverage-mv7dfb-fastpool.js` | Fast Pool vault + signer on the deploy bytes | 154/154 | `4577cbf210b3f95bd430859c65c451f4` | yes | 10-14 |
+| `verify-coverage-mv7dfb-fastpool.js` (native-price session) | rfq native price fallback at the fork tip | 20/20 | `f959481db16642bbd42711a12b153217` | yes | 10-14 |
 | `verify-router-v5-3-limit-pick-mv7dfb.js` | Zealous Citadel repro: prod pick u2 -> u1, +9.05% at block 9203637, +8.43% at 9207942 | 38/38 | prod `c5d4ca0d...`, patched `9feff563...`; prod `9ed2b05e...`, patched `9a115d21...` | no (repo source 15aef66) | 10-14 |
 | `verify-router-v5-3-core-migration-mv7dfb.js` | Giant Moth 01: Bitflow `migrate-pool` on the fork; old router reverts u2001, new router skips the migrated pool. Block 9207954 | 65/65 | old `d5f7ff94...`, new `e16126da...` | no (repo source) | 10-14 |
 | `verify-v6-3-dispatch.js` | core, ladder, market, trait, rungs, dispatch; no router | 228/228 | `3b5a8e21c069ff914f72a14008b06659` (master, 3dd1d2e); preload rerun `33c70bfa...` 228/228 | preload run: yes | 10-14 |
@@ -131,45 +134,47 @@ proposal proxy.
 ### 2.3 juicestx
 
 Result files: `juicestx/simulations/results/pool-vault-stx/*.json`. Their
-`sourceHashes` match the deploy bytes except where the row says no. These
-2026-10-14 reruns are committed in juicestx `cbbb6f6`.
+`sourceHashes` match the deploy bytes except where the row says no. The
+pool-deploying rows below were rerun on the `570226c` pool bytes
+(`a0a28431...`) and are committed in juicestx (OG + accounting result files);
+the earlier `fa8c48a`-bytes reruns are in `cbbb6f6`.
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `pool-og-seats-stxer.mjs` | OG seats | 49/49 | `2fd82a2e809e8c81c31dd5ab5e0330d0` | yes | 10-14 |
-| `pool-og-cap-stxer.mjs` | OG cap and fee | 47/47 | `4783a1b8e96d7293f8a5f2eab58e6a63` | yes | 10-14 |
-| `pool-og-evict-stxer.mjs` | `og-staying` / `evict-og` (Patient Reed) | 69/69 | `7158b1ba82eb56ab8ed39132669f6f8f` | yes | 10-14 |
-| `pool-og-shrink-stxer.mjs` | Fresh small stake shrinks the cover | 52/52 | `0b130236b9c903c9be1bcd7826071b6c` | yes | 10-14 |
-| `pool-accounting-stxer.mjs` | Pool accounting | 126/126 | `4edd8ba9731420d96e243343a3e825cd` | yes | 10-14 |
-| `pool-claim-guards-stxer.mjs` | Claim guards | 24/24 | `46edf261a74e3f617594b81b82317f06` | yes | 10-14 |
-| `pool-admin-handover-stxer.mjs` | Timed admin handover | 60/60 | `18933f00608d4466957582d775988d85` | yes | 10-14 |
-| `pool-autostake-e2e-stxer.mjs` | Pool pays the safe, keeper restake | 63/63 | `3270029d6e3a5d677c39b66fb0dbde06` | yes | 10-14 |
+| `pool-og-seats-stxer.mjs` | OG seats | 49/49 | `159f73303c06a395f2713bcf153a777d` | yes | 10-14 |
+| `pool-og-cap-stxer.mjs` | OG cap and fee | 47/47 | `1152d49a6b444b27aca0bb780baf0bfd` | yes | 10-14 |
+| `pool-og-evict-stxer.mjs` | `og-staying` / `evict-og` (Patient Reed) | 69/69 | `a25807fb09d6e81b5b1597e2c4f91b8c` | yes | 10-14 |
+| `pool-og-shrink-stxer.mjs` | Fresh small stake shrinks the cover; 0-uSTX fresh stake after the lock ended (node refuses: `PoxInvalidLockAmount`, seat kept; the accepted branch asserts seat deleted + og-seats decremented) | 58/58 | `3abedcde880eb6ca558039f937950cd5` | yes | 10-14 |
+| `pool-accounting-stxer.mjs` | Pool accounting | 126/126 | `9ed500dacb665d5ebd5464db45f76e20` | yes | 10-14 |
+| `pool-claim-guards-stxer.mjs` | Claim guards | 24/24 | `161efa05e04d48e79b09e3382542b231` | yes | 10-14 |
+| `pool-admin-handover-stxer.mjs` | Timed admin handover | 60/60 | `5cb2d9520f6446ba445e7264e2c0635a` | yes | 10-14 |
+| `pool-autostake-e2e-stxer.mjs` | Pool pays the safe, keeper restake | 63/63 | `6ddeb669da83d107987f2c3405f172c0` | yes | 10-14 |
 | `pool-pay-batches-stxer.mjs` | Rare Io I1, new vs old side by side | 166/166 | `9a28245b73f5484cad4df7a73fa32a29` | no (pre-fa8c48a pool hashes) | not recorded |
 | `pool-pay-fees-stxer.mjs` | Rare Io I2, new vs old side by side | 299/299 | `3009eb741bbf5a2b7b15ca1667b6f55c` | no (pre-fa8c48a pool hashes) | not recorded |
-| `pool-vault-stx-stxer.mjs` (deployment guards) | Deploy and guards | 22/22 | `c449ad8c78a2bda393979d2b12976856` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --maker` | Maker fill | 35/35 | `c5e9f981ceb47bdbfa16ec84c1d09c7b` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --jing-router` | Router Jing fills | 46/46 | `dd93a13a0f927430ac589f517574e1fd` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --jing-take` | Admin Jing take | 41/41 | `58c0fb76b70e2ae77edbb50ea271d407` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --split-pyth` | Manual split with Pyth | 42/42 | `7388231fd4729bc08cc30b5dd5cfa98d` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --lifecycle` | AMM liquidation (pinned block 9208593) | 41/41 (tip 9208879 was 30/38: DLMM depth too thin, chunk 1 filled 330 sats, chunk 2 u16047) | `29fd3d1682888b452101f075947810ec` | yes | 10-14 |
-| `pool-vault-fixes-stxer.mjs` | Vault fixes | 218/218 | `8a0e577b18cf02a46e4d8d38ef749a5e` | yes | 10-14 |
-| `pool-vault-pyth-fee-stxer.mjs` | Pyth fee u10, vault pays both verifies, finish reserve | 58/58 | `8063c1dab9dc5ae6b5aadc4da479a9aa` | yes | 10-14 |
-| `pool-vault-mismatch-stxer.mjs` | Vault mismatch | 29/29 | `e547999db6655cfec2f88e7f178364c7` | yes | 10-14 |
-| `pool-vault-upgrade-stxer.mjs` | Vault rotation | 97/97 | `41ad661d8556d0e84cd038ac8ad06e2b` | yes | 10-14 |
-| `pool-vault-emergency-stxer.cjs` | Emergency DIA swap | 27/27 | `839af8836bf8dab09e6cb8209acd13d9` | yes | 10-14 |
-| `pool-vault-emergency-stxer.cjs --native` | Emergency native fallback | 37/37 | `5c4cea9a523bef8af7b4201c026c7d14` | yes | 10-14 |
-| `pool-vault-recovery-stxer.mjs` | Four-batch recovery continuity, pinned at block 9207370 | 190/190 | `d0108679bf3f21fb9f911e862b73e407` | yes | 10-14 |
-| `pool-vault-recovery-stxer.mjs --matrix` | Recovery matrix, 5 sessions | 534/534 each | `01b8c978...`, `12cf15ee...`, `21bd3ee2...`, `768b1ae9...`, `e78fe3b2...` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs` (deployment guards) | Deploy and guards | 22/22 | `43777d34e60227d3ecb34c69cc1beb26` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --maker` | Maker fill | 35/35 | `6219fbc1d33983a68687f5d31213566b` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --jing-router` | Router Jing fills | 46/46 | `464ab9219701018f2893d7195cf59eaa` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --jing-take` | Admin Jing take | 41/41 | `e245dac14e7097c5ee37e6bb46afad85` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --split-pyth` | Manual split with Pyth | 42/42 | `ac80191926fc12c91c440b9a75bc7099` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --lifecycle` | AMM liquidation (pinned block 9208593) | 41/41 (earlier `29fd3d16...` on fa8c48a bytes; tip 9208879 was 30/38: DLMM depth too thin, chunk 1 filled 330 sats, chunk 2 u16047) | `f18fcd192e0115ca1f2acfb2a97a0144` | yes | 10-14 |
+| `pool-vault-fixes-stxer.mjs` | Vault fixes | 218/218 | `cfbf7abf2caeb6e1926d16938449add1` | yes | 10-14 |
+| `pool-vault-pyth-fee-stxer.mjs` | Pyth fee u10, vault pays both verifies, finish reserve | 58/58 | `2c27e137d606fa8cae1ee3c2b0672b63` | yes | 10-14 |
+| `pool-vault-mismatch-stxer.mjs` | Vault mismatch | 29/29 | `f34c83803609d3af817e013ff1235adb` | yes | 10-14 |
+| `pool-vault-upgrade-stxer.mjs` | Vault rotation | 97/97 | `db6eb6da6fd311937ee312ed51a862eb` | yes | 10-14 |
+| `pool-vault-emergency-stxer.cjs` | Emergency DIA swap | 27/27 | `b9e338f712e8c284e66a460f58c349b1` | yes | 10-14 |
+| `pool-vault-emergency-stxer.cjs --native` | Emergency native fallback | 37/37 | `caaa821231aad766b0553a3d22a5226e` | yes | 10-14 |
+| `pool-vault-recovery-stxer.mjs` | Four-batch recovery continuity, pinned at block 9207370 | 190/190 | `86f2e948eab30212602aa1e75c27d7d1` | yes | 10-14 |
+| `pool-vault-recovery-stxer.mjs --matrix` | Recovery matrix, 5 sessions | 534/534 each | `59609a5f...`, `7264b553...`, `8910961e...`, `e243ffee...`, `eb885c9b...` | yes | 10-14 |
 | `vault-allowance-proof-stxer.mjs` | Allowance terms, 4 cases as expected | passed | `5bcca46c345cb9f7937c327907061794` | no (pattern needs the commented repo source) | 10-14 |
 
 ### 2.4 pillar-wallets (autostake safe)
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `simul-juice-autostake-safe.js REAL_POOL=1` | Main safe harness against the real `juice-pool-sbtc-signer` (no source swap) | 83/83 | `75074c83ede24d6bf55b02504afebb6a` | yes | 10-14 |
+| `simul-juice-autostake-safe.js REAL_POOL=1` | Main safe harness against the real `juice-pool-sbtc-signer` (no source swap) | 83/83 | `d3222b84dcc60eafda2a06a159bfd904` | yes | 10-14 |
 | `simul-juice-autostake-safe.js` | Same scenarios against the live `juice-pool-stx-signer` stand-in, incl. keeper reset after 52,610 burn blocks | 82/82 | `837734f0b07aed2a07e62656af381ad0` | no (repo source, pool stand-in) | 10-14 |
-| `simul-juice-autostake-safe-ops-coverage.js` | 17 public functions the main harness misses; section F zero-fee gas station | 208/208 (204/204 before F, `b6fd12bd...`) | `80c3db54c6af49497a65e7e05c262c94` | yes | 10-14 |
-| `simul-juice-autostake-safe-stake-passkey.js` | Passkey stake / update / unstake, token lock, replay | 43/43 | `6fd870360cfc4da466dce5dca72da925` | yes | 10-14 |
+| `simul-juice-autostake-safe-ops-coverage.js` | 17 public functions the main harness misses; section F zero-fee gas station | 208/208 (204/204 before F, `b6fd12bd...`) | `5d9897ba8ad7fa14f40c6839d436b946` | yes | 10-14 |
+| `simul-juice-autostake-safe-stake-passkey.js` | Passkey stake / update / unstake, token lock, replay | 43/43 | `d508603db48d572c96c6465b9ffa1baa` | yes | 10-14 |
 
 ### 2.5 citycoins-protocol (feat/ccd015-redemption-book)
 
@@ -208,7 +213,13 @@ ccd015 also runs in `verify-coverage-mv7dfb-ccd015.js` (183/183, section
 
 Tool: `node simulations/coverage-mv7dfb.mjs` (`trace-coverage-multi.mjs`).
 A sim counts for a contract only where it deployed byte-identical code.
-114 sims, 9,343 txs (`TRACE-COVERAGE-mv7dfb-summary.json`, 2026-10-14).
+114 sims, 9,343 txs (`TRACE-COVERAGE-mv7dfb-summary.json`, 2026-10-14). The
+pool row was re-measured on the `570226c` bytes over the 33 reruns that
+deployed them (2,100 txs). The new zero-seat arm (line 316) is credited
+only by the refused 0-uSTX probe in og-shrink `3abedcde`: the VM ran the arm,
+then the node's lock check (`PoxInvalidLockAmount`) aborted the tx, so no
+sim commits that state. Its committed effect is pinned by the unit tests and
+RV.
 Per-contract reports: `simulations/TRACE-COVERAGE-mv7dfb-<name>.md`.
 
 | Contract | Public fns reached | Branch nodes full / partial / never | Expressions | Sims |
@@ -220,7 +231,7 @@ Per-contract reports: `simulations/TRACE-COVERAGE-mv7dfb-<name>.md`.
 | jing-buy-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 651/928 | 6 |
 | jing-sell-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 650/929 | 7 |
 | jing-ladder-dispatch | 6/6 | 20 / 0 / 0 | 240/380 | 4 |
-| juice-pool-sbtc-signer | 37/37 | 51 / 2 / 0 | 758/1243 | 35 |
+| juice-pool-sbtc-signer (570226c bytes) | 37/37 | 52 / 2 / 0 | 765/1250 | 33 |
 | juice-sbtc-autoswap | 19/19 | 68 / 0 / 0 | 574/933 | 35 |
 | juice-autostake-safe | 27/27 | 113 / 0 / 0 | 1042/1588 | 7 |
 | juice-autostake-safe-auth-helpers-v1 | read-only only | none | 14/24 | 7 |
@@ -246,7 +257,7 @@ Every remaining partial or never-reached arm is proven unreachable in
 | 6 | router 687 (cp-split) | total = 0 | Needs residual 0; `cp-stage` returns early on dust first |
 | 7 | router 807 (dlmm-out) | bin-step != 15 | Bin step set once at pool creation; all three pools are bps-15 |
 | 8 | router 954 (dlmm-enabled) | pool id unknown | dlmm-core-v-1-1 never deletes from `pools` |
-| 9 | pool 755, 1121 (pay-one, pay-recovered-sbtc-one) | total-shares = 0 | Bonds refused; pox-5 changes shares only from current + 1, so a rewarded cycle has shares > 0 |
+| 9 | pool 761, 1127 (pay-one, pay-recovered-sbtc-one; 755, 1121 on fa8c48a bytes) | total-shares = 0 | Bonds refused; pox-5 changes shares only from current + 1, so a rewarded cycle has shares > 0 |
 | 10 | signer 225 (mirror-stake-for-cycle) | stake into a pinned cycle | Pinned needs rewards, which exist only for cycles <= current; mirroring starts at current + 1 |
 | 11 | signer 961 (pay-stacker) | gross > 0, net 0 | Both paths pass fee-bips u0 |
 | 12 | signer 1166, 1206 (sweeps) | balance < reserved | Every reserved counter moves with the balance; the contract locks no STX |
@@ -269,7 +280,7 @@ templates were byte-checked against the same commits (`77d9ba48`).
 | jing-contracts-v3 | `npm run test:router-v5-3` | 490/490 | 44/44 | 692/696 (99.43%) | 275/276 (99.64%) | `tests/unit/router-v5-3/COVERAGE.md`; 32 limit-pick + 12 core-migration tests added for mv7dfb |
 | jing-contracts-v3 | `npm run test:core-ladder-v1` | 95/95 | core 83/83, ladder 31/31 | core 938/938, ladder 266/267 raw | core 163/164 raw, ladder 61/61 | 100% after 2 source-anchored exceptions |
 | jing-contracts-v3 | `npm run test:v6-3:integration` (rungs + dispatch) | 118/118 | rung 35/35 each, dispatch 15/15 | buy 466/478, sell 464/476 raw; dispatch 132/132 | 155/157 each raw; dispatch 40/40 | 100% after exceptions (static call operands, two defensive payout arms) |
-| juicestx | `npm test` / `npm run test:report` | 134/134 (5 files) | pool 81/81, autoswap 41/41 | pool 715/717, autoswap 481/502 | pool 115/115, autoswap 150/150 | Coverage numbers from `contracts/README-deploy-set-test-status.md` (see note) |
+| juicestx | `npm test` / `npm run test:report` | 134/134 (5 files); 135/135 at `570226c` (commit message) | pool 81/81, autoswap 41/41 | pool 715/717, autoswap 481/502 | pool 115/115, autoswap 150/150 | Coverage numbers from `contracts/README-deploy-set-test-status.md` (see note) |
 | juicestx | `npm run test:vault` | green (fa8c48a commit) | not recorded | 481/502 | 150/150 | `tests/vault/results/coverage.json`, fa8c48a source hashes |
 | juicestx | `npm run test:rv-repro` | not recorded | - | - | - | Zero-seat repro from the RV suite (section 7) |
 | pillar-wallets | `tests/juice-autostake-safe-keeper.test.ts` | 39/39 | not recorded | not recorded | set-keeper 4/4, restake 10/10 | Both manifests (cl-v7, cl-autostake-cov) |
@@ -306,7 +317,7 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
 | Finding | Verdict | Fix commit | Unit tests | Stxer sims |
 |---|---|---|---|---|
 | Patient Reed: OG seat without stake (hop in and out) | Holds, Medium | juicestx `d90dc1c` | 6 cases "og-staying / evict-og" in `juice-pool-og.test.ts` | og-evict 69/69, og-seats 49/49, og-cap 47/47, deploy-set (hop, evict) |
-| Patient Reed recheck: fresh small stake keeps the old cover | Holds, Medium | juicestx `fa8c48a` | 6 cases "og-shrink"; 134/134 | og-shrink 52/52, deploy-set (1 STX shrink) |
+| Patient Reed recheck: fresh small stake keeps the old cover | Holds, Medium | juicestx `fa8c48a` | 6 cases "og-shrink"; 134/134 | og-shrink 58/58, deploy-set (1 STX shrink) |
 | Patient Reed F2: `finish` keeps no STX for the Pyth fee | Holds, Low | juicestx `fa8c48a`, fastpool `b719e87`; ccd016 already had it (`4940041`) | 2 cases (budget u100 / fee u10; balance <= budget) | juice pyth-fee 58/58, fastpool vault-fixes pf 78/78, deploy-set (finish reserve) |
 | Super Orb: the caller paid the first Lazer verify | Holds, Low | juicestx `fa8c48a`, fastpool `b719e87`, ccd016 `8bfbb5f` | 5 Pyth fee cases in juicestx (fail on the old source) | juice pyth-fee 58/58, fastpool pf 78/78, ccd016 pyth-fee 70/70, deploy-set (fee u10 batch) |
 | Rare Io I1: tranche totals written per staker | Holds, gas | juicestx `e425a4c` | not recorded | pay-batches 166/166, accounting 126/126 |
@@ -362,7 +373,9 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
 - **RV finding (juicestx `799adff`).** A 0-uSTX restake leaves a zero-cover
   OG seat that `evict-og` refuses, and the next stake counts the seat again.
   The node refuses a 0 lock on mainnet (`PoxInvalidLockAmount`, seen on the
-  og-shrink fork), so this edge is pinned by a unit test. Details go in
+  og-shrink fork), so this edge is pinned by a unit test. Fixed in juicestx
+  `570226c`: a 0 stake now deletes the seat and decrements `og-seats`
+  (template `459fa786`, 34,134 B; og-shrink 58/58 records the node refusal). Details go in
   section 5.
 - **Market size.** 97,701 bytes, about 2.3 KB under the cap. Any further
   market change must stay small.

@@ -2,7 +2,8 @@
 
 Date: 2026-10-14. Nothing here is deployed. What was measured: the exact deploy
 bytes in `simulations/deploy-bytes-mv7dfb/`. These are the faktory-dao
-`77d9ba48` templates and the partner files at their final commits (ccd015 and
+`77d9ba48` templates (the pool since `459fa786`: juicestx `570226c`, 34,134 B,
+sha256 `a0a28431...ca56195a`) and the partner files at their final commits (ccd015 and
 ccd016 have full-line comments dropped, which is the form every ccd016 harness
 deploys). A sim counts for a contract only where it deployed byte-identical
 code.
@@ -38,7 +39,7 @@ and writes one `TRACE-COVERAGE-mv7dfb-<name>.md` per contract and a
 | jing-buy-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 651/928 |
 | jing-sell-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 650/929 |
 | jing-ladder-dispatch | 6/6 | 20 / 0 / 0 | 240/380 |
-| juice-pool-sbtc-signer | 37/37 | 51 / 2 / 0 | 758/1243 |
+| juice-pool-sbtc-signer (570226c bytes, 33 sims) | 37/37 | 52 / 2 / 0 | 765/1250 |
 | juice-sbtc-autoswap | 19/19 | 68 / 0 / 0 | 574/933 |
 | juice-autostake-safe | 27/27 | 113 / 0 / 0 | 1042/1588 |
 | juice-autostake-safe-auth-helpers-v1 | (read-only only) | none | 14/24 |
@@ -46,6 +47,18 @@ and writes one `TRACE-COVERAGE-mv7dfb-<name>.md` per contract and a
 | signer-manager-vault-stx-rewards | 30/30 | 36 / 4 / 0 | 653/1023 |
 | ccd015-redemption-book-mia-stx | 9/9 | 29 / 1 / 0 | 355/564 |
 | ccd016-swap-vault-mia-v2 | 22/22 | 48 / 0 / 0 | 552/895 |
+
+Pool re-measure (2026-10-14, juicestx `570226c` zero-seat guard): every
+harness that deploys the pool was rerun on the new bytes with the preload
+(deploy set `20c42862`, gaps `234ae5bc`, gaps2 `fb581245`, Fast Pool
+`4577cbf2` + `f959481d`, 22 juicestx runs, 3 pillar runs; all green; ids in
+`fixtures/coverage-mv7dfb-sims.txt`). Was 758/1243, 51 / 2 / 0 on `fa8c48a`
+bytes (35 sims). The new `(is-eq amount u0)` branch in `take-og-seat` (line
+316) shows both arms, but the zero arm is credited only by the refused
+0-uSTX probe in og-shrink `3abedcde`: the VM ran it, then the node's lock
+check (`PoxInvalidLockAmount`) aborted the tx. No fork sim commits a zero
+seat drop; the unit tests and RV pin that effect. The two partial arms are
+unchanged (pay-one 761, pay-recovered-sbtc-one 1127; item 9 below).
 
 The expression totals include read-only functions and top-level definitions. A
 read-only function called from an Eval step leaves no trace. One that is called
@@ -82,7 +95,7 @@ The reason is given for each, with code references (deploy-bytes line numbers).
 | 6 | router 687 (cp-split) | total = 0 | The arm needs residual <= total = 0, so residual = 0. `cp-stage` (1157) returns early on `dust-left` (1097: `left = 0`) |
 | 7 | router 807 (dlmm-out) | bin-step != 15 | `bin-step` of a Bitflow DLMM pool is set only in `create-pool` (pool 636), which dlmm-core-v-1-1 refuses once created. All three bound pools are bps-15 |
 | 8 | router 954 (dlmm-enabled) | pool id unknown | dlmm-core-v-1-1 never deletes from `pools` (only `map-set`, 417/735/1215). Ids u6/u15/u16 exist |
-| 9 | pool 755, 1121 (pay-one, pay-recovered-sbtc-one) | total-shares = 0 | A payable batch exists only after `pox-claim-rewards` claimed > 0 for that cycle. The pool refuses bonds (`validate-stake!`, ERR_BOND_NOT_SUPPORTED), so all rewards are STX-share rewards, and those are 0 with 0 shares. pox-5 changes shares only from current + 1 on (`stake`, `stake-update`, `unstake` -> `remove-staker-from-cycles (+ u1 current-cycle)`), and rewards go to cycles <= current (`calculate-rewards` stx-cycle). So the shares for a rewarded cycle stay > 0 |
+| 9 | pool 761, 1127 (pay-one, pay-recovered-sbtc-one; 755, 1121 on fa8c48a bytes) | total-shares = 0 | A payable batch exists only after `pox-claim-rewards` claimed > 0 for that cycle. The pool refuses bonds (`validate-stake!`, ERR_BOND_NOT_SUPPORTED), so all rewards are STX-share rewards, and those are 0 with 0 shares. pox-5 changes shares only from current + 1 on (`stake`, `stake-update`, `unstake` -> `remove-staker-from-cycles (+ u1 current-cycle)`), and rewards go to cycles <= current (`calculate-rewards` stx-cycle). So the shares for a rewarded cycle stay > 0 |
 | 10 | signer 225 (mirror-stake-for-cycle) | stake into a pinned cycle | Pinned needs a claim (deadline > 0), which needs rewards. Rewards exist only for cycles <= current (as in 9). `validate-stake!` mirrors from `first-index` = current + 1 (pox-5 `stake` 1005, `stake-update` 1117). Bond calls are refused before the fold (269) |
 | 11 | signer 961 (pay-stacker) | gross > 0, net 0 | Both distribution paths pass fee-bips u0 (`get-stacker-rewards` 907, `distribute-rewards-many` fold). sbtc-fee = 0, so net = gross |
 | 12 | signer 1166, 1206 (sweeps) | balance < reserved | Every change of `unswapped-sats`, `earned-fees` and `unpaid-stx` moves the same amount in or out of the balance: the claim (319, exact pox-5 transfer), the fund (607/608), the finalize (636, asserted equal), the recover (661/662, the vault reports what it sends), the pay (941/959), and `withdraw-fees` (1130). This contract never locks STX |

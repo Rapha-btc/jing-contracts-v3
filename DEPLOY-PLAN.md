@@ -80,14 +80,14 @@ reference: `simulations/verify-v6-3-dispatch.js`.
 
 ## 2. Juice launch pool
 
-Repo `Rapha-btc/juicestx`, branch `main`, HEAD `fa8c48a` (pushed). Clarity 6.
+Repo `Rapha-btc/juicestx`, branch `main`, pool at `570226c`. Clarity 6.
 Deploy after Jing step 4: the vault binds `markets-sbtc-stx-jing-v6-3` and
 `swap-router-sbtc-stx-jing-v5-3` as literals.
 
 | # | Contract name | Source path | Last commit | Mainnet | Depends on |
 | --- | --- | --- | --- | --- | --- |
 | J1 | `juice-swap-vault-trait-v2` | `contracts/pox-5/juice-swap-vault-trait-v2.clar` | `e954136` | 404 | none. **Deploy first** (fastpool uses it too) |
-| J2 | `juice-pool-sbtc-signer` | `contracts/pox-5/juice-pool-sbtc-signer.clar` | `fa8c48a` (OG seats rotate + shrink) | 404 | J1, pox-5. `swap-vault` var = `.juice-sbtc-autoswap` (literal, no call at deploy) |
+| J2 | `juice-pool-sbtc-signer` | `contracts/pox-5/juice-pool-sbtc-signer.clar` | `570226c` (OG seats rotate + shrink; a 0 stake drops the seat). Deploy bytes 34,134, sha256 `a0a28431...ca56195a` (faktory-dao `459fa786`) | 404 | J1, pox-5. `swap-vault` var = `.juice-sbtc-autoswap` (literal, no call at deploy) |
 | J3 | `juice-sbtc-autoswap` | `contracts/pox-5/juice-sbtc-autoswap.clar` | `fa8c48a` (vault pays every Pyth verify, finish reserve) | 404 | J1, Jing 3 + 4, `rfq-sbtc-stx-jing-v2-3`, DIA. `POOL` = `.juice-pool-sbtc-signer` |
 
 The pool and the vault name each other, but neither calls the other at deploy.
@@ -102,7 +102,9 @@ The pool and the vault name each other, but neither calls the other at deploy.
       Seats rotate (`d90dc1c`, `fa8c48a`): a seat lasts while the staker stays.
       When `og-staying` is false, anyone can call `evict-og(staker)` and the
       cover goes back to the cap. Our keeper runs it, after that cycle's payout.
-      A fresh stake below the cover shrinks the cover to the stake.
+      A fresh stake below the cover shrinks the cover to the stake; a 0 stake
+      deletes the seat and decrements `og-seats` (`570226c`; pox-5 refuses a
+      0 lock today, `PoxInvalidLockAmount`).
 - [ ] Pyth budget starts at u0 (fee is u0 today). If Pyth turns on a fee, call
       `set-vault-pyth-fee-budget(ustx, .juice-sbtc-autoswap)` with at least 2x
       the fee (max 10 STX): the vault pays both verifies (its own mid and the
@@ -159,6 +161,9 @@ Done:
 - [x] mv7dfb fixes: OG rotate + shrink `fa8c48a`, safe keeper `611873c`,
       fastpool signer 96 cycles `3f82a93`, ccd016 dust window `8adfa68`.
 - [x] faktory-dao templates refreshed and byte-verified: `d0b27773`, `341da272`.
+- [x] J2 zero-seat guard: juicestx `570226c`, template `459fa786` (34,134 B,
+      fa8c48a template reproduced byte for byte first). Deploy set 340/340
+      `20c42862`.
 - [x] faktory-dao mv7dfb template refresh (router, J2, J3, P2): byte-verified,
       pushed `77d9ba48`. All 13 deploy strings audited: comment-free,
       `clarinet format`-ed (market de-indented, 97,701 B), equal to the final

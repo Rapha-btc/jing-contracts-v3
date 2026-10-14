@@ -1,5 +1,5 @@
 {
-  "simulation": "https://stxer.xyz/simulations/mainnet/de9bd7b811577d3e5c0f2100dfa023c1",
+  "simulation": "https://stxer.xyz/simulations/mainnet/20c428624713b6c452cfce5c5ed890db",
   "passed": 340,
   "total": 340,
   "sources": {
@@ -193,10 +193,10 @@
       "clarity": 6
     },
     "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer": {
-      "form": "faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 57d8c3d384f1...)",
-      "bytes": 33963,
-      "sha256": "57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6",
-      "sha512_256": "b0031a261fcbcf5cf4ade5d8be54570acd9109285dd4c6669bc4b1564b8b5d46",
+      "form": "faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 a0a28431f61e...)",
+      "bytes": 34134,
+      "sha256": "a0a28431f61e2e329a8b5af6b98d37cb0d0575f4e18821fd3de3777fca56195a",
+      "sha512_256": "eac1bb779145a68613fbc2f6ae6661e52987f2dcc1839c2a4368f5e3a68a993d",
       "clarity": 6
     },
     "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-sbtc-autoswap": {
@@ -278,11 +278,11 @@
     }
   },
   "notes": [
-    "before the crossing: 4 seats, 203396694416 uSTX covered (OG1, HOP, the safe, the user copy)",
+    "before the crossing: 4 seats, 203396188807 uSTX covered (OG1, HOP, the safe, the user copy)",
     {
       "routerPickScan": {
         "pct": "100",
-        "limit": "19689302801787",
+        "limit": "19338619222587",
         "smart": "1",
         "blind": "2",
         "caps": [
@@ -295,11 +295,11 @@
     {
       "routerPickScan": {
         "pct": "101",
-        "limit": "19886195829804",
+        "limit": "19532005414812",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "115824650",
+          "73046996",
           "0",
           "0"
         ]
@@ -308,11 +308,11 @@
     {
       "routerPickScan": {
         "pct": "102",
-        "limit": "20083088857822",
+        "limit": "19725391607038",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "376149869",
+          "227232480",
           "0",
           "0"
         ]
@@ -321,11 +321,11 @@
     {
       "routerPickScan": {
         "pct": "103",
-        "limit": "20279981885840",
+        "limit": "19918777799264",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "746991505",
+          "478511835",
           "0",
           "0"
         ]
@@ -334,11 +334,11 @@
     {
       "routerPickScan": {
         "pct": "105",
-        "limit": "20673767941876",
+        "limit": "20305550183716",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "1679982713",
+          "1129840555",
           "0",
           "0"
         ]
@@ -347,11 +347,11 @@
     {
       "routerPickScan": {
         "pct": "108",
-        "limit": "21264447025929",
+        "limit": "20885708760393",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "1679982713",
+          "1129840555",
           "0",
           "0"
         ]
@@ -360,11 +360,11 @@
     {
       "routerPickScan": {
         "pct": "112",
-        "limit": "22052019138001",
+        "limit": "21659253529297",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "1679982713",
+          "1129840555",
           "0",
           "0"
         ]
@@ -373,11 +373,11 @@
     {
       "routerPickScan": {
         "pct": "120",
-        "limit": "23627163362144",
+        "limit": "23206343067104",
         "smart": "1",
         "blind": "2",
         "caps": [
-          "1679982713",
+          "1129840555",
           "0",
           "0"
         ]
@@ -392,8 +392,8 @@
     "Fast Pool cycle 144 earned 100000 sats, FS1 1 share, mirrored via validate-stake!",
     "base-dao set-extensions: ccd016 + the proposal proxy enabled"
   ],
-  "fork": 9208422,
-  "forkBurn": 971438,
+  "fork": 9209551,
+  "forkBurn": 971455,
   "checks": [
     {
       "label": "Jing 1: deploy jing-core-v6 (template)",
@@ -681,7 +681,7 @@
       "passed": true
     },
     {
-      "label": "deploy SPV9K2.juice-pool-sbtc-signer (33963 B, faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 57d8c3d384f1...))",
+      "label": "deploy SPV9K2.juice-pool-sbtc-signer (34134 B, faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 a0a28431f61e...))",
       "actual": "(ok true)",
       "passed": true
     },
@@ -697,12 +697,12 @@
     },
     {
       "label": "J post: register-self (grant-signer-key + register-signer, real pox-5 grant hash)",
-      "actual": "(ok (tuple (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (signer-key 0x034eaf92ef7919d100eaf47ff7908ade3f7f1699634f99b37cbfb5ed419fe1e7ea)))",
+      "actual": "(ok (tuple (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (signer-key 0x0263316fc6d48546c199248c247eafe1e392e455de2a466dd85e35d0bd5de5f6d2)))",
       "passed": true
     },
     {
       "label": "pox-5 knows the pool as a signer",
-      "actual": "(some 0x034eaf92ef7919d100eaf47ff7908ade3f7f1699634f99b37cbfb5ed419fe1e7ea)",
+      "actual": "(some 0x0263316fc6d48546c199248c247eafe1e392e455de2a466dd85e35d0bd5de5f6d2)",
       "passed": true
     },
     {
@@ -977,7 +977,7 @@
     },
     {
       "label": "B1 jing-place (stranger, real signed print): rests at the floor",
-      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u150000) (floor u18427589330815)))))",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u150000) (floor u18343116111229)))))",
       "passed": true
     },
     {
@@ -1001,8 +1001,8 @@
       "passed": true
     },
     {
-      "label": "B1 patience window (3 blocks): advanced 3 burn blocks (burn 971441, cycle 145, offset 891)",
-      "actual": "u971441",
+      "label": "B1 patience window (3 blocks): advanced 3 burn blocks (burn 971458, cycle 145, offset 908)",
+      "actual": "u971458",
       "passed": true
     },
     {
@@ -1011,13 +1011,13 @@
       "passed": true
     },
     {
-      "label": "B1: real STX maker bid (581958412 uSTX at mid + 5%)",
-      "actual": "(ok u581958412)",
+      "label": "B1: real STX maker bid (579148910 uSTX at mid + 5%)",
+      "actual": "(ok u579148910)",
       "passed": true
     },
     {
       "label": "B1: STX bid is live on the book",
-      "actual": "u581958412",
+      "actual": "u579148910",
       "passed": true
     },
     {
@@ -1027,22 +1027,22 @@
     },
     {
       "label": "B1 admin jing-take 50k sats on the book through the pool",
-      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19205774634251) (out u96708060)))))",
+      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19111310279833) (out u96232397)))))",
       "passed": true
     },
     {
       "label": "B1 jing-take: vault sBTC 100k, STX + out",
-      "actual": "(tuple (s u100000) (x u96708060))",
+      "actual": "(tuple (s u100000) (x u96232397))",
       "passed": true
     },
     {
       "label": "B1 stranger router-swap: smart path sells one full 50k chunk",
-      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19203548760214) (mid u19397524000217) (out u96696851) (unsold u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19111869301872) (mid u19304918486740) (out u96235212) (unsold u0)))))",
       "passed": true
     },
     {
       "label": "B1 router-swap went through router 15aef66 smart-swap (print present)",
-      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"96696851\",\"limit-price\":\"19203548760214\",\"out\":\"96696851\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"96235212\",\"limit-price\":\"19111869301872\",\"out\":\"96235212\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
       "passed": true
     },
     {
@@ -1052,12 +1052,12 @@
     },
     {
       "label": "B1 smart out >= floor-out(sold - 8, limit)",
-      "actual": "96696851 vs limit 19203548760214",
+      "actual": "96235212 vs limit 19111869301872",
       "passed": true
     },
     {
       "label": "B1 router-swap: vault sBTC 50k, STX + out (fee 0: no Pyth transfer)",
-      "actual": "(tuple (s u50000) (x u193404911))",
+      "actual": "(tuple (s u50000) (x u192467609))",
       "passed": true
     },
     {
@@ -1066,8 +1066,8 @@
       "passed": true
     },
     {
-      "label": "B1 router cooldown: advanced 1 burn blocks (burn 971442, cycle 145, offset 892)",
-      "actual": "u971442",
+      "label": "B1 router cooldown: advanced 1 burn blocks (burn 971459, cycle 145, offset 909)",
+      "actual": "u971459",
       "passed": true
     },
     {
@@ -1082,32 +1082,32 @@
     },
     {
       "label": "B1 admin router-swap-split: manual 50k on the Jing leg",
-      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19199872173645) (mid u19393810276410) (out u96678338) (unsold u0) (velar u0) (velar-limit u19277447414751) (xyk u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19084781296047) (mid u19277556864694) (out u96098813) (unsold u0) (velar u0) (velar-limit u19161891523505) (xyk u0)))))",
       "passed": true
     },
     {
       "label": "B1 vault empty, clock closed, ready to finish",
-      "actual": "(tuple (c (tuple (batch-start none) (burn-height u971442) (ready-to-finish true) (window-elapsed false) (window-ends none) (window-open false))) (e true))",
+      "actual": "(tuple (c (tuple (batch-start none) (burn-height u971459) (ready-to-finish true) (window-elapsed false) (window-ends none) (window-open false))) (e true))",
       "passed": true
     },
     {
       "label": "B1 vault STX = jing-take + router-swap + split outs",
-      "actual": "u290083249",
+      "actual": "u288566422",
       "passed": true
     },
     {
       "label": "B1: bidder cancels the rest of its bid (book clean for the next batch)",
-      "actual": "(ok u291584791)",
+      "actual": "(ok u290293634)",
       "passed": true
     },
     {
       "label": "B1 finalize-swap: vault finish sends everything (budget 0)",
-      "actual": "(ok u290083249)",
+      "actual": "(ok u288566422)",
       "passed": true
     },
     {
       "label": "B1 pool STX + pot, vault keeps 0, stx-pot recorded",
-      "actual": "(tuple (p u290083249) (pot u290083249) (v u0))",
+      "actual": "(tuple (p u288566422) (pot u288566422) (v u0))",
       "passed": true
     },
     {
@@ -1117,27 +1117,27 @@
     },
     {
       "label": "B1 pay-stx-stakers (anyone)",
-      "actual": "(ok u283556375)",
+      "actual": "(ok u282073677)",
       "passed": true
     },
     {
-      "label": "B1 SP1FCS paid owed 48347208 - fee 0 (cover 1000000000, shares 1000000000)",
-      "actual": "u49347208",
+      "label": "B1 SP1FCS paid owed 48094403 - fee 0 (cover 1000000000, shares 1000000000)",
+      "actual": "u49094403",
       "passed": true
     },
     {
-      "label": "B1 SP2SB4 paid owed 145041624 - fee 6526873 (cover 0, shares 3000000000)",
-      "actual": "u138514751",
+      "label": "B1 SP2SB4 paid owed 144283211 - fee 6492744 (cover 0, shares 3000000000)",
+      "actual": "u137790467",
       "passed": true
     },
     {
-      "label": "B1 SPV9K2 paid owed 96694416 - fee 0 (cover 2000000000, shares 2000000000)",
-      "actual": "u96694416",
+      "label": "B1 SPV9K2 paid owed 96188807 - fee 0 (cover 2000000000, shares 2000000000)",
+      "actual": "u96188807",
       "passed": true
     },
     {
-      "label": "B1 earned-fees += 6526873 (non-OG share only)",
-      "actual": "u6526873",
+      "label": "B1 earned-fees += 6492744 (non-OG share only)",
+      "actual": "u6492744",
       "passed": true
     },
     {
@@ -1172,17 +1172,17 @@
     },
     {
       "label": "keeper (chavita) restakes exactly the payout, extend 0",
-      "actual": "(ok (tuple (amount u96694416) (cycles-to-extend u0)))",
+      "actual": "(ok (tuple (amount u96188807) (cycles-to-extend u0)))",
       "passed": true
     },
     {
       "label": "safe: pox-5 amount = 2,000 STX + payout, nothing unlocked",
-      "actual": "(tuple (a (tuple (locked u2096694416) (unlock-height u1174250) (unlocked u0))) (i (some (tuple (amount-ustx u2096694416) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer)))))",
+      "actual": "(tuple (a (tuple (locked u2096188807) (unlock-height u1174250) (unlocked u0))) (i (some (tuple (amount-ustx u2096188807) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer)))))",
       "passed": true
     },
     {
       "label": "safe seat grows with the restake",
-      "actual": "u2096694416",
+      "actual": "u2096188807",
       "passed": true
     },
     {
@@ -1247,7 +1247,7 @@
     },
     {
       "label": "B2 0-STX caller jing-place: the vault pays the one verify",
-      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u120000) (floor u18420600821157)))))",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u120000) (floor u18307289759111)))))",
       "passed": true
     },
     {
@@ -1256,8 +1256,8 @@
       "passed": true
     },
     {
-      "label": "B2 patience window: advanced 3 burn blocks (burn 971445, cycle 145, offset 895)",
-      "actual": "u971445",
+      "label": "B2 patience window: advanced 3 burn blocks (burn 971462, cycle 145, offset 912)",
+      "actual": "u971462",
       "passed": true
     },
     {
@@ -1266,18 +1266,18 @@
       "passed": true
     },
     {
-      "label": "B2: real STX maker bid (465415466 uSTX at mid + 5%)",
-      "actual": "(ok u465415466)",
+      "label": "B2: real STX maker bid (462497292 uSTX at mid + 5%)",
+      "actual": "(ok u462497292)",
       "passed": true
     },
     {
       "label": "B2: STX bid is live on the book",
-      "actual": "u465415466",
+      "actual": "u462497292",
       "passed": true
     },
     {
       "label": "B2 admin jing-take 50k: vault pays 2 verifies",
-      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19198337091706) (out u96670608)))))",
+      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19076853528565) (out u96058894)))))",
       "passed": true
     },
     {
@@ -1287,12 +1287,12 @@
     },
     {
       "label": "B2 jing-take: vault STX = before + out - 2 fees",
-      "actual": "u96671578",
+      "actual": "u96059864",
       "passed": true
     },
     {
       "label": "B2 0-STX caller router-swap (smart): sells a 50k chunk",
-      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19193669672105) (mid u19387545123339) (out u96647097) (unsold u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19073701291293) (mid u19266364940701) (out u96043012) (unsold u0)))))",
       "passed": true
     },
     {
@@ -1307,17 +1307,17 @@
     },
     {
       "label": "B2 router-swap: vault STX = before + out - 1 fee (refresh-mid, outside the router)",
-      "actual": "u193318665",
+      "actual": "u192102866",
       "passed": true
     },
     {
-      "label": "B2 cooldown: advanced 1 burn blocks (burn 971446, cycle 145, offset 896)",
-      "actual": "u971446",
+      "label": "B2 cooldown: advanced 1 burn blocks (burn 971463, cycle 145, offset 913)",
+      "actual": "u971463",
       "passed": true
     },
     {
       "label": "B2 admin split: the last 20000 sats on the Jing leg",
-      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u20000) (dlmm u0) (jing u20000) (limit-price u19193669672105) (mid u19387545123339) (out u38658833) (unsold u0) (velar u0) (velar-limit u19271219852598) (xyk u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u20000) (dlmm u0) (jing u20000) (limit-price u19072726644577) (mid u19265380449068) (out u38415236) (unsold u0) (velar u0) (velar-limit u19149788166373) (xyk u0)))))",
       "passed": true
     },
     {
@@ -1327,22 +1327,22 @@
     },
     {
       "label": "B2 split: vault STX = before + out - 1 fee",
-      "actual": "u231977488",
+      "actual": "u230518092",
       "passed": true
     },
     {
       "label": "B2: bidder cancels the rest of its bid (book clean for the next batch)",
-      "actual": "(ok u233206701)",
+      "actual": "(ok u231749383)",
       "passed": true
     },
     {
       "label": "B2 finalize: finish keeps the u20 reserve",
-      "actual": "(ok u231977468)",
+      "actual": "(ok u230518072)",
       "passed": true
     },
     {
       "label": "B2 vault keeps exactly u20; pool + pot",
-      "actual": "(tuple (p u238504341) (v u20))",
+      "actual": "(tuple (p u237010816) (v u20))",
       "passed": true
     },
     {
@@ -1352,22 +1352,22 @@
     },
     {
       "label": "B2 pay-stx-stakers (anyone)",
-      "actual": "(ok u224148229)",
+      "actual": "(ok u222738088)",
       "passed": true
     },
     {
-      "label": "B2 SP1FCS paid owed 57994367 - fee 0 (cover 1000000000, shares 1000000000)",
-      "actual": "u107341575",
+      "label": "B2 SP1FCS paid owed 57629518 - fee 0 (cover 1000000000, shares 1000000000)",
+      "actual": "u106723921",
       "passed": true
     },
     {
-      "label": "B2 SP2SB4 paid owed 173983101 - fee 7829239 (cover 0, shares 3000000000)",
-      "actual": "u304668613",
+      "label": "B2 SP2SB4 paid owed 172888554 - fee 7779984 (cover 0, shares 3000000000)",
+      "actual": "u302899037",
       "passed": true
     },
     {
-      "label": "B2 earned-fees += 7829239 (non-OG share only)",
-      "actual": "u14356112",
+      "label": "B2 earned-fees += 7779984 (non-OG share only)",
+      "actual": "u14272728",
       "passed": true
     },
     {
@@ -1407,7 +1407,7 @@
     },
     {
       "label": "B3 jing-place on the reserve (vault pays)",
-      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18420810228183)))))",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18292937588974)))))",
       "passed": true
     },
     {
@@ -1416,8 +1416,8 @@
       "passed": true
     },
     {
-      "label": "B3 RECOVERY_DELAY_BLOCKS: advanced 432 burn blocks (burn 971878, cycle 145, offset 1328)",
-      "actual": "u971878",
+      "label": "B3 RECOVERY_DELAY_BLOCKS: advanced 432 burn blocks (burn 971895, cycle 145, offset 1345)",
+      "actual": "u971895",
       "passed": true
     },
     {
@@ -1427,7 +1427,7 @@
     },
     {
       "label": "B3 pool + 100k sBTC + reserve STX; vault empty; recovered pot",
-      "actual": "(tuple (e true) (rp u100000) (s u100000) (sp u10) (v u0) (x u14356122))",
+      "actual": "(tuple (e true) (rp u100000) (s u100000) (sp u10) (v u0) (x u14272738))",
       "passed": true
     },
     {
@@ -1482,7 +1482,7 @@
     },
     {
       "label": "admin withdraw-all-fees (STX fees from B1-B3)",
-      "actual": "(ok u14356112)",
+      "actual": "(ok u14272728)",
       "passed": true
     },
     {
@@ -1497,7 +1497,7 @@
     },
     {
       "label": "FP register-self (Fast Pool deployer = admin)",
-      "actual": "(ok (tuple (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards) (signer-key 0x036bba99cbc0a5a77e9a43d787493b8a92672ea6d636a3572c10836c45e35005b8)))",
+      "actual": "(ok (tuple (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards) (signer-key 0x03812010c5f600ed95f4948dc93ad397c94a8050f22474e39db065083ab7d82179)))",
       "passed": true
     },
     {
@@ -1577,12 +1577,12 @@
     },
     {
       "label": "FP jing-place (0-STX caller, the vault pays)",
-      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18422020780386)))))",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18288954930393)))))",
       "passed": true
     },
     {
-      "label": "FP patience window: advanced 3 burn blocks (burn 971881, cycle 145, offset 1331)",
-      "actual": "u971881",
+      "label": "FP patience window: advanced 3 burn blocks (burn 971898, cycle 145, offset 1348)",
+      "actual": "u971898",
       "passed": true
     },
     {
@@ -1591,18 +1591,18 @@
       "passed": true
     },
     {
-      "label": "FP: real STX maker bid (387858992 uSTX at mid + 5%)",
-      "actual": "(ok u387858992)",
+      "label": "FP: real STX maker bid (385030630 uSTX at mid + 5%)",
+      "actual": "(ok u385030630)",
       "passed": true
     },
     {
       "label": "FP: STX bid is live on the book",
-      "actual": "u387858992",
+      "actual": "u385030630",
       "passed": true
     },
     {
       "label": "FP 0-STX caller router-swap (smart path) sells a 50k chunk",
-      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19198659842594) (mid u19392585699590) (out u96672223) (unsold u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19057683232973) (mid u19250185083812) (out u95962355) (unsold u0)))))",
       "passed": true
     },
     {
@@ -1612,17 +1612,17 @@
     },
     {
       "label": "FP router print from 15aef66: legs add to 50k",
-      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"96672233\",\"limit-price\":\"19198659842594\",\"out\":\"96672223\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"95962365\",\"limit-price\":\"19057683232973\",\"out\":\"95962355\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
       "passed": true
     },
     {
       "label": "FP vault STX = before + out - 1 fee",
-      "actual": "u96673203",
+      "actual": "u95963335",
       "passed": true
     },
     {
-      "label": "FP cooldown: advanced 1 burn blocks (burn 971882, cycle 145, offset 1332)",
-      "actual": "u971882",
+      "label": "FP cooldown: advanced 1 burn blocks (burn 971899, cycle 145, offset 1349)",
+      "actual": "u971899",
       "passed": true
     },
     {
@@ -1632,7 +1632,7 @@
     },
     {
       "label": "FP admin router-swap-split: manual 50k on the Jing leg",
-      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19188207337230) (mid u19382027613364) (out u96619591) (unsold u0) (velar u0) (velar-limit u19265735447683) (xyk u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19057845913107) (mid u19250349407179) (out u95963174) (unsold u0) (velar u0) (velar-limit u19134847310735) (xyk u0)))))",
       "passed": true
     },
     {
@@ -1642,32 +1642,32 @@
     },
     {
       "label": "FP vault empty; STX matches the two sales",
-      "actual": "(tuple (e true) (x u193292784))",
+      "actual": "(tuple (e true) (x u191926499))",
       "passed": true
     },
     {
       "label": "FP: bidder cancels the rest of its bid (book clean for the next batch)",
-      "actual": "(ok u194373673)",
+      "actual": "(ok u192912964)",
       "passed": true
     },
     {
       "label": "FP finalize-swap-vault: finish keeps the u20 reserve",
-      "actual": "(ok u193292764)",
+      "actual": "(ok u191926479)",
       "passed": true
     },
     {
       "label": "FP vault keeps u20, signer + the rest",
-      "actual": "(tuple (p u193292764) (v u20))",
+      "actual": "(tuple (p u191926479) (v u20))",
       "passed": true
     },
     {
       "label": "FP distribute-rewards-many([FS1]) pays the whole pot (fee 0, 1 of 1 share)",
-      "actual": "(ok (tuple (paid u1) (total-sbtc u0) (total-stx u193292764)))",
+      "actual": "(ok (tuple (paid u1) (total-sbtc u0) (total-stx u191926479)))",
       "passed": true
     },
     {
       "label": "FS1 unlocked STX + the whole pot",
-      "actual": "u194292764",
+      "actual": "u192926479",
       "passed": true
     },
     {
@@ -1712,7 +1712,7 @@
     },
     {
       "label": "fund-from-treasury (anyone): pulls the whole treasury, opens the window",
-      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971882)) (opened true)))))",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971899)) (opened true)))))",
       "passed": true
     },
     {
@@ -1722,7 +1722,7 @@
     },
     {
       "label": "ccd016 jing-place (0-STX caller; the vault pays the verify)",
-      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18412474500556)))))",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18281793198168)))))",
       "passed": true
     },
     {
@@ -1731,8 +1731,8 @@
       "passed": true
     },
     {
-      "label": "ccd016 window: advanced 3 burn blocks (burn 971885, cycle 145, offset 1335)",
-      "actual": "u971885",
+      "label": "ccd016 window: advanced 3 burn blocks (burn 971902, cycle 145, offset 1352)",
+      "actual": "u971902",
       "passed": true
     },
     {
@@ -1741,18 +1741,18 @@
       "passed": true
     },
     {
-      "label": "ccd016: real STX maker bid (387655692 uSTX at mid + 5%)",
-      "actual": "(ok u387655692)",
+      "label": "ccd016: real STX maker bid (384854498 uSTX at mid + 5%)",
+      "actual": "(ok u384854498)",
       "passed": true
     },
     {
       "label": "ccd016: STX bid is live on the book",
-      "actual": "u387655692",
+      "actual": "u384854498",
       "passed": true
     },
     {
       "label": "ccd016 router-swap after the window: the whole batch through router 15aef66",
-      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u100000) (limit-price u19188956774059) (mid u19382784620262) (out u193246740) (unsold u0)))))",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u100000) (limit-price u19050474279824) (mid u19242903312954) (out u191852121) (unsold u0)))))",
       "passed": true
     },
     {
@@ -1762,27 +1762,27 @@
     },
     {
       "label": "ccd016 router print legs add up",
-      "actual": "{\"amount\":\"100000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"100000\",\"jing-in\":\"100000\",\"jing-ok\":true,\"jing-out\":\"193246750\",\"limit-price\":\"19188956774059\",\"out\":\"193246740\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "actual": "{\"amount\":\"100000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"100000\",\"jing-in\":\"100000\",\"jing-ok\":true,\"jing-out\":\"191852131\",\"limit-price\":\"19050474279824\",\"out\":\"191852121\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
       "passed": true
     },
     {
       "label": "ccd016 STX = before + out - 1 fee; empty; clock cleared",
-      "actual": "(tuple (c none) (e true) (x u193247720))",
+      "actual": "(tuple (c none) (e true) (x u191853101))",
       "passed": true
     },
     {
       "label": "ccd016: bidder cancels the rest of its bid (book clean for the next batch)",
-      "actual": "(ok u194215502)",
+      "actual": "(ok u192810323)",
       "passed": true
     },
     {
       "label": "fuel-fair-book: the STX (minus the u20 reserve) to ccd015",
-      "actual": "(ok (tuple (notification \"fuel-fair-book\") (payload (tuple (amount u193247700) (book SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd015-redemption-book-mia-stx)))))",
+      "actual": "(ok (tuple (notification \"fuel-fair-book\") (payload (tuple (amount u191853081) (book SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd015-redemption-book-mia-stx)))))",
       "passed": true
     },
     {
       "label": "ccd015 book received it; ccd016 keeps the reserve",
-      "actual": "(tuple (b u193247700) (v u20))",
+      "actual": "(tuple (b u191853081) (v u20))",
       "passed": true
     },
     {
@@ -1792,12 +1792,12 @@
     },
     {
       "label": "D empty vault: funding opens (opened true)",
-      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u3) (batch-start (some u971885)) (opened true)))))",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u3) (batch-start (some u971902)) (opened true)))))",
       "passed": true
     },
     {
-      "label": "D one block: advanced 1 burn blocks (burn 971886, cycle 145, offset 1336)",
-      "actual": "u971886",
+      "label": "D one block: advanced 1 burn blocks (burn 971903, cycle 145, offset 1353)",
+      "actual": "u971903",
       "passed": true
     },
     {
@@ -1807,12 +1807,12 @@
     },
     {
       "label": "D window open: funding joins (opened false)",
-      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u5) (batch-start (some u971885)) (opened false)))))",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u5) (batch-start (some u971902)) (opened false)))))",
       "passed": true
     },
     {
-      "label": "D window elapses on 8 sats: advanced 3 burn blocks (burn 971889, cycle 145, offset 1339)",
-      "actual": "u971889",
+      "label": "D window elapses on 8 sats: advanced 3 burn blocks (burn 971906, cycle 145, offset 1356)",
+      "actual": "u971906",
       "passed": true
     },
     {
@@ -1832,7 +1832,7 @@
     },
     {
       "label": "D elapsed + dust: funding opens a FRESH window (8adfa68)",
-      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971889)) (opened true)))))",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971906)) (opened true)))))",
       "passed": true
     },
     {
@@ -1846,8 +1846,8 @@
       "passed": true
     },
     {
-      "label": "D window elapses on 100,008 sats: advanced 3 burn blocks (burn 971892, cycle 145, offset 1342)",
-      "actual": "u971892",
+      "label": "D window elapses on 100,008 sats: advanced 3 burn blocks (burn 971909, cycle 145, offset 1359)",
+      "actual": "u971909",
       "passed": true
     },
     {
@@ -1857,7 +1857,7 @@
     },
     {
       "label": "D elapsed + MORE than 8 sats: funding joins (opened false; no 1-sat re-arm)",
-      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u1) (batch-start (some u971889)) (opened false)))))",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u1) (batch-start (some u971906)) (opened false)))))",
       "passed": true
     },
     {
@@ -1891,7 +1891,7 @@
       "passed": true
     },
     {
-      "label": "into cycle 146: the HOP and OG1 locks end: advanced 778 burn blocks (burn 972670, cycle 146, offset 20)",
+      "label": "into cycle 146: the HOP and OG1 locks end: advanced 761 burn blocks (burn 972670, cycle 146, offset 20)",
       "actual": "u972670",
       "passed": true
     },
@@ -1917,7 +1917,7 @@
     },
     {
       "label": "3 seats after the evict, 200k STX back to the cap",
-      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u3396694416) (seats u3))",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u3396188807) (seats u3))",
       "passed": true
     },
     {
@@ -1937,7 +1937,7 @@
     },
     {
       "label": "cover shrank by 999 STX: freed room back to the cap",
-      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u2397694416) (seats u3))",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u2397188807) (seats u3))",
       "passed": true
     },
     {
@@ -1962,41 +1962,41 @@
     },
     {
       "label": "router: at limit 101% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "115824650/0/0",
+      "actual": "73046996/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 102% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "376149869/0/0",
+      "actual": "227232480/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 103% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "746991505/0/0",
+      "actual": "478511835/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 105% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "1679982713/0/0",
+      "actual": "1129840555/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 108% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "1679982713/0/0",
+      "actual": "1129840555/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 112% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "1679982713/0/0",
+      "actual": "1129840555/0/0",
       "passed": true
     },
     {
       "label": "router: at limit 120% the smart pick v-1 has capacity inside the limit (or none does)",
-      "actual": "1679982713/0/0",
+      "actual": "1129840555/0/0",
       "passed": true
     },
     {
-      "label": "router: limit-aware pick matters at 101% (blind v-2 has 0 capacity, smart v-1 has 115824650)",
+      "label": "router: limit-aware pick matters at 101% (blind v-2 has 0 capacity, smart v-1 has 73046996)",
       "actual": "found",
       "passed": true
     },
@@ -2006,18 +2006,18 @@
       "passed": true
     },
     {
-      "label": "router: smart 5,000 STX -> sBTC at limit 19886195829804 (update none)",
-      "actual": "(ok (tuple (dlmm-in u115824650) (dlmm-out u58360) (jing-in u0) (jing-ok false) (jing-out u0) (out u803953) (unsold u3401489550) (velar-in u1131876181) (velar-out u569184) (xyk-in u350809619) (xyk-out u176409)))",
+      "label": "router: smart 5,000 STX -> sBTC at limit 19532005414812 (update none)",
+      "actual": "(ok (tuple (dlmm-in u73046996) (dlmm-out u37468) (jing-in u0) (jing-ok false) (jing-out u0) (out u1506149) (unsold u2058386711) (velar-in u2220841117) (velar-out u1137055) (xyk-in u647725176) (xyk-out u331626)))",
       "passed": true
     },
     {
       "label": "router: smart DLMM leg filled on a pool with capacity (dlmm-in > 0 iff capacity)",
-      "actual": "dlmm-in 115824650, moved 58360/0/0",
+      "actual": "dlmm-in 73046996, moved 37468/0/0",
       "passed": true
     },
     {
       "label": "router: the DLMM fill came from the limit-aware pick, not the blind one",
-      "actual": "58360/0/0",
+      "actual": "37468/0/0",
       "passed": true
     },
     {

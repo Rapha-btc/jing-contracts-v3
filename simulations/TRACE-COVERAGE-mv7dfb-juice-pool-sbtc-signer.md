@@ -1,12 +1,12 @@
 # Trace coverage: juice-pool-sbtc-signer
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6`), counted only where a sim deployed these exact bytes (35 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `a0a28431f61e2e329a8b5af6b98d37cb0d0575f4e18821fd3de3777fca56195a`), counted only where a sim deployed these exact bytes (33 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 758 / 1243 (61.0%) |
+| expressions executed / total | 765 / 1250 (61.2%) |
 | public functions reached | 37 / 37 |
-| branch nodes (if / match / asserts!) | 53: 51 full, 2 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 54: 52 full, 2 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -19,8 +19,8 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 | line | function | kind | state |
 |---|---|---|---|
-| 755 | pay-one | if | one arm (else only) |
-| 1121 | pay-recovered-sbtc-one | if | one arm (else only) |
+| 761 | pay-one | if | one arm (else only) |
+| 1127 | pay-recovered-sbtc-one | if | one arm (else only) |
 
 ## Branch nodes never reached (0)
 
@@ -93,10 +93,10 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | pay-one | 39 / 58 |
 | sweep-recovered-sbtc-dust | 23 / 34 |
 | pay-recovered-sbtc-one | 44 / 64 |
-| take-og-seat | 40 / 57 |
 | get-recovered-sbtc-residue | 5 / 7 |
 | finalize-swap | 23 / 32 |
 | propose-admin | 11 / 15 |
+| take-og-seat | 47 / 64 |
 | confirm-fee-bips | 15 / 20 |
 | evict-og | 18 / 24 |
 | emergency-recover | 18 / 24 |
@@ -149,6 +149,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | set-vault-pyth-fee-budget | 7 / 7 |
 | router-swap-split-dia | 7 / 7 |
 
-## Sims counted (35)
+## Sims counted (33)
 
-`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727` `b8f56b5d` `80c3db54`
+`20c42862` `4577cbf2` `fb581245` `234ae5bc` `9ed500da` `5cb2d952` `6ddeb669` `161efa05` `1152d49a` `a25807fb` `159f7330` `3abedcde` `b9e338f7` `caaa8212` `cfbf7abf` `f34c8380` `2c27e137` `86f2e948` `59609a5f` `7264b553` `8910961e` `e243ffee` `eb885c9b` `464ab921` `e245dac1` `f18fcd19` `43777d34` `6219fbc1` `ac801919` `db6eb6da` `d3222b84` `5d9897ba` `d508603d`

@@ -313,7 +313,13 @@
     )
     (if (< amount prev)
       (let ((freed (- prev amount)))
-        (map-set og-stakers staker amount)
+        (if (is-eq amount u0)
+          (begin
+            (map-delete og-stakers staker)
+            (var-set og-seats (- (var-get og-seats) u1))
+          )
+          (map-set og-stakers staker amount)
+        )
         (var-set og-covered-ustx (- (var-get og-covered-ustx) freed))
         (print {
           topic: "og-shrink",
