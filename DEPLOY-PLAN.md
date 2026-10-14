@@ -5,6 +5,9 @@ deployed. Every commit below was checked with `git log -1 -- <file>`. Mainnet st
 via `http://77.42.3.101/stacks-api/v2/contracts/interface/<deployer>/<name>`
 (200 = deployed, 404 = not).
 
+Test report for this deploy set (stxer, trace coverage, unit suites, bounty
+findings, open items): [TEST-REPORT-mv7dfb.md](TEST-REPORT-mv7dfb.md).
+
 Deployer for every row: `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22` (account 0,
 chavita), unless the row says otherwise. Deploy bytes come from the faktory-dao
 BE templates (`backend/server/utils/<name>-template.ts`, sent by
