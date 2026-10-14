@@ -1,0 +1,56 @@
+1576f5bcbcf845af2020e088cfb710d8 simulations/verify-v6-3-caller-impact.js 198/198
+71ec6fc583b9a2d96aa3a5392e3a3802 simulations/verify-v6-3-capacity-hint.js 33/33
+34add6e3e280af40acbc7e910dc1423f simulations/verify-v6-3-deploy-bytes.js 17/17
+ae122a5bda7ef77d47a52319f61de8e3 simulations/verify-v6-3-cancel-orphan-pending.js [prefix: git show 7c6172b, NOT deploy bytes] 46/104 FAILED: deploy orphan-my (old market vs core-v6: expecting 11 arguments, got 10)
+28ba3ce94de5351dd0bfa8d3d9233c1d simulations/verify-v6-3-cancel-orphan-pending.js [patched] 225/225
+d72ffae1ea3a2864aa30b5cd988f726a simulations/verify-v6-3-capacity.js 473/473
+33c70bfa1348ed2bbec01e322e80e00b simulations/verify-v6-3-dispatch.js 228/228
+2b0436de3bb97ba8e9d7b8a05b5e81e0 simulations/verify-v6-3-errors-admin.js 514/514
+6d426b0f0e75043464778a7e2f4c2b94 simulations/verify-v6-3-gate-blind-band.js 332/332
+d15c235833ceaf76f9ab6135c42b6663 simulations/verify-v6-3-full-side.js 921/921
+f0c962512a01f3a560f351c56cbe4b62 simulations/verify-v6-3-ghost-deposit.js [prefix: git show 24f3e23, NOT deploy bytes] 105/231 FAILED: deploy ghost-my (old market vs core-v6)
+8854daced965a5246e763381fa2220d3 simulations/verify-v6-3-ghost-deposit.js [patched] 343/343
+e7f75295f4b50a4e959ceb452bce3845 simulations/verify-v6-3-oracle-feeds.js 97/97
+a674afe92adac3b9282b9b418ccda5c1 simulations/verify-v6-3-reachable-gaps.js 382/382
+0650bd79c3b38e496217036d856b891a simulations/verify-v6-3-router-bin-boundary.js 26/26
+54912c2f59271297b01a47d08b4ae8e6 simulations/verify-v6-3-refund-costs.js 289/289
+27d02561b682a2070115046c8cfa965e simulations/verify-v6-3-settlement-edges.js 365/365
+e1346b5adcc4395f49ca4f9b7ee92c6b simulations/verify-v6-3-router-impact.js [x/baseline: git show f6a6d3a market, NOT deploy bytes] 398/398
+d05eaf9850a56fc957d00dd9145c01fd simulations/verify-v6-3-router-impact.js [x/current] 398/398
+6fc3ab5342c986957c4ced53850dac79 simulations/verify-v6-3-router-impact.js [y/baseline: git show f6a6d3a market, NOT deploy bytes] 398/398
+09bad98ff45ca2eefec2d24a0d09e888 simulations/verify-v6-3-router-impact.js [y/current] 398/398
+6af504a8b58f2d531434b43c668bd6ea simulations/verify-v6-3-swap-walk.js 383/383
+0d66c62de411c83111af9dfd996afead simulations/verify-router-v5-3-manual.js 410/410
+2915ed46336489f775aa48ea4d5f0b77 simulations/verify-router-v5-3-pool-pick-steer.js [also deploys git show 1063add router] 34/35 FAILED: 35. 280c81c smart: dlmm-cap == v-1 capacity read before, > 0 (got 0)
+c65fd85521eca1fc50da3460adb086d3 simulations/verify-v6-3-submit-settle-lazer.js 898/898
+ad8fbf7c624b20854baa9f9820cab2d8 simulations/verify-v6-3-switched-off-ask.js [prefix: git show bb1535d, NOT deploy bytes] 82/175 FAILED: deploy swoff-mx (old market vs core-v6)
+94d5f0c91e17eaf0dc330f076b5477aa simulations/verify-v6-3-switched-off-ask.js [patched] 221/221
+6c1285d8ff464342f8724faae5b81813 simulations/verify-router-v5-3-smart.js 588/588
+3cae36d91df8e281531fe7da8d5ca13c simulations/verify-router-v5-3-smart.js 588/588
+7edc890fc3e8988aabc0ff41ac3f9e63 simulations/verify-router-v5-3-smart.js 588/588
+dce4e39c3f416fadfaae04a7d36979f9 simulations/verify-v6-rungs-audit-tail.js 12/13 FAILED: 13. fund fresh STX (InsufficientBalance)
+613d6d045474cecbd09d1f902c9fd658 simulations/verify-v6-rungs-fill-lazer.js 85/85
+76ae817dcc35c4e29599737cf4f8f836 simulations/verify-v6-rungs-keyless.js [RUNG=sell] 39/39
+120bc743963551d0af56f4a46022f1e7 simulations/verify-v6-rungs-keyless.js [RUNG=sell-peg] 42/42
+526537fa97d469535ef623754db9dd93 simulations/verify-router-v5-3-pool-pick.js 225/225
+227a39690ee6eb2609bc52ab40045f30 simulations/verify-v6-rungs-push-lazer.js 124/124
+52cde0faf35d32a7241a6c0cbc966a5c simulations/verify-router-v5-3-rebate-age.js [baseline: git show b41dbd6 router+market, NOT deploy bytes] 482/482
+c691ce1021111a8816d05babf14a1797 simulations/verify-router-v5-3-rebate-age.js [fixed] 482/482
+692960593490d35e62df1e00894350c4 simulations/verify-router-v5-3-rebate-age.js [baseline: git show b41dbd6 router+market, NOT deploy bytes] 482/482
+c63880c2e0f89aa4eb82da7850371d77 simulations/verify-router-v5-3-rebate-age.js [fixed] 482/482
+170b7df3a14544bfaff6c9ea590df68f simulations/verify-v1-core-spread-ladder-dispatch.js 559/559
+fe01ec23d5e54fdc41c8c7ebf5e59b35 simulations/verify-v1-small-proceeds.js 77/77
+18ac074b5eeb18d0d74825888ed40dbe simulations/verify-v6-rungs-escrow-timeout.js 549/549
+7a5d15a9797d9c19f0f962c7e19e2847 simulations/verify-v6-rungs-keyless.js [RUNG=buy] 39/39
+2a6ab8f9718b8c1a758be65ca9b30e8f simulations/verify-v6-rungs-keyless.js [RUNG=buy-peg] 42/42
+9f01abe49571a17c20999534c9683ca1 simulations/verify-v6-rungs-miner-band-lazer.js 225/225
+1a4fe982485021b452f1734c39ec634c simulations/verify-v6-rungs-replace-keyless.js 250/250
+8e95fe5889dd8a5c7ff555cf88cd8723 simulations/verify-ladder-v1-admin-seats.js 334/334
+35d6c1e9fac5b3af10aee6943e766fd6 simulations/verify-rung-withdraw-rounding.js [legacy jing-buy-stx + jing-ladder, text-patched; not in deploy set] FAILED: deploy jing-buy-stx-331-50 (unresolved contract markets-sbtc-stx-jing-v6-3)
+864eab88df8419d7d4f2ff63b2081ed2 simulations/verify-rungs-keyless.js [SIDE=sell; legacy jing-ladder/jing-sell-stx, not in deploy set] 5/31 FAILED: deploy jing-ladder (Duplicate contract, already on mainnet)
+387017eca52ccc09f8c12e57ab7c98b7 simulations/verify-v1-core-spread-rungs.js 998/998
+f793659c2a5633c055202303a7db020a simulations/verify-router-v5-3-xyk-snapshot.js [NEW] 75/75
+025c9647061aff83926acd23bd2eb8d7 simulations/verify-router-v5-3-xyk-snapshot.js [REF: xyk-ref reversed hunks on repo source, NOT deploy bytes; temp plumbing patch, reverted] 75/75
+584b4ed51c99da23b49c872935b624fe simulations/verify-core-v6-admin.js 149/149
+NOID simulations/verify-ladder-dispatch-local.js [clarinet simnet, no stxer sim; dispatch text-edited SPV9K->ST1] FAILED: deploy jing-ladder-dispatch (unresolved ST1...jing-ladder-v1: harness mocks jing-ladder; same with repo source)
+50bea07aa3fb52df9e7d373f005b620c simulations/verify-rungs-keyless.js [SIDE=buy; legacy jing-ladder/jing-buy-stx, not in deploy set] 4/30 FAILED: deploy jing-ladder (Duplicate contract, already on mainnet)

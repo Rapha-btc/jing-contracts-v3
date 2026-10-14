@@ -1,66 +1,63 @@
 # Trace coverage: jing-core-v6
 
-From `simulations/trace-coverage.mjs` on 2026-10-14, source at simulations/deploy-bytes-mv7dfb/jing-core-v6.clar at 7e42b9c: 1 simulations, 217 transactions (14 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-core-v6.clar` (sha256 `973482e429cf7d9110847227fdc701443d8d9884b448dce5273579e23ea7fdff`), counted only where a sim deployed these exact bytes (102 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 143 / 1178 (12.1%) |
-| code lines touched / total | 96 / 958 (10.0%) |
-| function body lines touched / total (top-level definitions excluded) | 96 / 939 (10.2%) |
-| branch nodes (if / match / asserts!) | 82: 15 full, 8 partial, 59 never reached |
+| expressions executed / total | 362 / 1178 (30.7%) |
+| public functions reached | 38 / 65 |
+| branch nodes (if / match / asserts!) | 82: 51 full, 3 partial, 28 never reached |
 
-## Branches with one arm never taken (8)
+## Public functions never reached (27)
+
+- log-withdraw
+- log-revoke
+- log-cancel
+- log-bitflow-swap
+- log-rfq-open
+- log-rfq-fill
+- log-rfq-cancel
+- log-reserve-supply
+- log-reserve-withdraw-sbtc
+- log-reserve-withdraw-stx
+- log-reserve-open-credit-line
+- log-reserve-set-credit-line-cap
+- log-reserve-set-credit-line-interest
+- log-reserve-close-credit-line
+- log-reserve-set-paused
+- log-reserve-set-min-sbtc-draw
+- log-reserve-draw
+- log-reserve-notify-return
+- log-snpl-set-reserve
+- log-snpl-borrow
+- log-snpl-swap-deposit
+- log-snpl-cancel-swap
+- log-snpl-set-swap-limit
+- log-snpl-repay
+- log-snpl-seize
+- log-jing-swap
+- log-jing-swap-reconciled
+
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
+
+
+
+## Branches with one arm never taken (3)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 150 | credit-if-not-registered | if | one arm (else only) |
 | 161 | debit-if-not-registered | if | one arm (else only) |
 | 172 | credit-if-registered | if | one arm (else only) |
-| 179 | check-not-paused | if | one arm (else only) |
-| 406 | log-deposit-x | match | one arm (else only) |
-| 447 | log-deposit-y | match | one arm (else only) |
-| 1146 | log-distribute-x-depositor | if | one arm (then only) |
-| 1179 | log-distribute-y-depositor | if | one arm (then only) |
 
-## Branch nodes never reached (59)
+## Branch nodes never reached (28)
 
 | line | function | kind |
 |---|---|---|
-| 204 | pause | asserts! |
-| 219 | unpause | asserts! |
-| 220 | unpause | asserts! |
-| 221 | unpause | asserts! |
-| 235 | propose-owner | asserts! |
-| 248 | accept-owner | asserts! |
-| 286 | log-deposit | asserts! |
 | 304 | log-withdraw | asserts! |
 | 319 | log-revoke | asserts! |
 | 334 | log-cancel | asserts! |
 | 355 | log-bitflow-swap | asserts! |
-| 514 | log-withdraw-x | asserts! |
-| 542 | log-withdraw-y | asserts! |
-| 569 | log-limit-y | asserts! |
-| 593 | log-limit-x | asserts! |
-| 618 | log-settle-refused-y | asserts! |
-| 644 | log-settle-refused-x | asserts! |
-| 668 | log-pending-readmit-y | asserts! |
-| 690 | log-pending-readmit-x | asserts! |
-| 714 | log-pending-deposit-y | asserts! |
-| 739 | log-pending-refund-y | asserts! |
-| 764 | log-pending-deposit-x | asserts! |
-| 789 | log-pending-refund-x | asserts! |
-| 813 | log-pending-limit-y | asserts! |
-| 837 | log-pending-limit-x | asserts! |
-| 861 | log-park-x | asserts! |
-| 885 | log-readmit-x | asserts! |
-| 909 | log-park-y | asserts! |
-| 933 | log-readmit-y | asserts! |
-| 956 | log-small-share-roll-x | asserts! |
-| 978 | log-small-share-roll-y | asserts! |
-| 1002 | log-limit-roll-x | asserts! |
-| 1028 | log-limit-roll-y | asserts! |
-| 1059 | log-match | asserts! |
-| 1061 | log-match | if |
 | 1243 | log-rfq-open | asserts! |
 | 1271 | log-rfq-fill | asserts! |
 | 1297 | log-rfq-cancel | asserts! |
@@ -86,151 +83,106 @@ From `simulations/trace-coverage.mjs` on 2026-10-14, source at simulations/deplo
 | 1653 | reconcile-vault-equity | if |
 | 1673 | log-jing-swap-reconciled | asserts! |
 
-## Uncovered code lines by function
+## Function bodies (expressions hit / total)
 
-| function | lines |
+| function | hit / total |
 |---|---|
-| (top) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16, 18, 23, 24, 26, 31, 38 |
-| log-match | 1057, 1058, 1059, 1061, 1062, 1063, 1064, 1065, 1067, 1068, 1069, 1070, 1073, 1087 |
-| log-bitflow-swap | 353, 354, 355, 356, 357, 358, 367, 368, 370 |
-| log-jing-swap | 1626, 1627, 1628, 1629, 1630, 1631, 1641, 1642, 1644 |
-| log-jing-swap-reconciled | 1671, 1672, 1673, 1674, 1675, 1676, 1686, 1687, 1690 |
-| pause | 203, 204, 205, 206, 207, 211, 213 |
-| unpause | 218, 219, 220, 221, 224, 225, 229 |
-| log-deposit | 284, 285, 286, 287, 288, 293, 295 |
-| log-reserve-supply | 1312, 1313, 1314, 1315, 1316, 1320, 1322 |
-| accept-owner | 247, 248, 249, 250, 251, 255 |
-| log-withdraw | 303, 304, 305, 306, 311, 313 |
-| log-withdraw-x | 513, 514, 515, 516, 526, 528 |
-| log-withdraw-y | 541, 542, 543, 544, 554, 556 |
-| log-reserve-withdraw-sbtc | 1327, 1328, 1329, 1330, 1334, 1336 |
-| propose-owner | 234, 235, 236, 237, 242 |
-| log-reserve-draw | 1445, 1446, 1447, 1448, 1455 |
-| log-snpl-borrow | 1497, 1498, 1499, 1500, 1510 |
-| log-snpl-swap-deposit | 1520, 1521, 1522, 1523, 1531 |
-| log-snpl-repay | 1574, 1575, 1576, 1577, 1590 |
-| log-snpl-seize | 1601, 1602, 1603, 1604, 1613 |
-| log-revoke | 318, 319, 320, 325 |
-| log-cancel | 333, 334, 335, 341 |
-| log-limit-y | 568, 569, 570, 580 |
-| log-limit-x | 592, 593, 594, 604 |
-| log-settle-refused-y | 617, 618, 619, 630 |
-| log-settle-refused-x | 643, 644, 645, 656 |
-| log-pending-readmit-y | 667, 668, 669, 678 |
-| log-pending-readmit-x | 689, 690, 691, 700 |
-| log-pending-deposit-y | 713, 714, 715, 726 |
-| log-pending-refund-y | 738, 739, 740, 750 |
-| log-pending-deposit-x | 763, 764, 765, 776 |
-| log-pending-refund-x | 788, 789, 790, 800 |
-| log-pending-limit-y | 812, 813, 814, 824 |
-| log-pending-limit-x | 836, 837, 838, 848 |
-| log-park-x | 860, 861, 862, 872 |
-| log-readmit-x | 884, 885, 886, 896 |
-| log-park-y | 908, 909, 910, 920 |
-| log-readmit-y | 932, 933, 934, 944 |
-| log-small-share-roll-x | 955, 956, 957, 966 |
-| log-small-share-roll-y | 977, 978, 979, 988 |
-| log-limit-roll-x | 1001, 1002, 1003, 1014 |
-| log-limit-roll-y | 1027, 1028, 1029, 1040 |
-| log-rfq-open | 1242, 1243, 1244, 1255 |
-| log-rfq-fill | 1270, 1271, 1272, 1285 |
-| log-rfq-cancel | 1296, 1297, 1298, 1307 |
-| log-reserve-withdraw-stx | 1341, 1342, 1343, 1348 |
-| log-reserve-open-credit-line | 1358, 1359, 1360, 1368 |
-| log-reserve-set-credit-line-cap | 1376, 1377, 1378, 1384 |
-| log-reserve-set-credit-line-interest | 1392, 1393, 1394, 1400 |
-| log-reserve-close-credit-line | 1405, 1406, 1407, 1412 |
-| log-reserve-set-paused | 1417, 1418, 1419, 1424 |
-| log-reserve-set-min-sbtc-draw | 1429, 1430, 1431, 1436 |
-| log-reserve-notify-return | 1464, 1465, 1466, 1473 |
-| log-snpl-set-reserve | 1478, 1479, 1480, 1485 |
-| log-snpl-cancel-swap | 1536, 1537, 1538, 1543 |
-| log-snpl-set-swap-limit | 1551, 1552, 1553, 1559 |
-| reconcile-vault-equity | 1652, 1653, 1654, 1655 |
-| ERR_NOT_AUTHORIZED | 1 |
-| ERR_INVALID_CONTRACT_HASH | 2 |
-| ERR_ALREADY_REGISTERED | 3 |
-| ERR_NOT_VERIFIED | 4 |
-| ERR_HASH_MISMATCH | 5 |
-| ERR_TIMELOCK_NOT_ELAPSED | 6 |
-| ERR_PAUSED | 7 |
-| ERR_NOT_PAUSED | 8 |
-| ERR_NO_PENDING_OWNER | 9 |
-| pending-owner | 16 |
-| verified-contracts | 20 |
-| token-equity | 32 |
-| is-verified-contract | 44 |
-| get-verified-hash | 48 |
-| get-pending-owner | 56 |
-| is-paused | 60 |
-| get-paused-at | 64 |
-| get-unpause-eligible-at | 68 |
-| get-balance | 92 |
-| credit-if-registered | 173 |
-| register | 261 |
-| log-deposit-x | 407 |
-| log-deposit-y | 448 |
+| ERR_NOT_AUTHORIZED | 0 / 1 |
+| ERR_INVALID_CONTRACT_HASH | 0 / 1 |
+| ERR_ALREADY_REGISTERED | 0 / 1 |
+| ERR_NOT_VERIFIED | 0 / 1 |
+| ERR_HASH_MISMATCH | 0 / 1 |
+| ERR_TIMELOCK_NOT_ELAPSED | 0 / 1 |
+| ERR_PAUSED | 0 / 1 |
+| ERR_NOT_PAUSED | 0 / 1 |
+| ERR_NO_PENDING_OWNER | 0 / 1 |
+| pending-owner | 0 / 1 |
+| verified-contracts | 0 / 1 |
+| token-equity | 0 / 3 |
+| log-withdraw | 0 / 13 |
+| log-revoke | 0 / 9 |
+| log-cancel | 0 / 10 |
+| log-bitflow-swap | 0 / 22 |
+| log-rfq-open | 0 / 15 |
+| log-rfq-fill | 0 / 17 |
+| log-rfq-cancel | 0 / 13 |
+| log-reserve-supply | 0 / 14 |
+| log-reserve-withdraw-sbtc | 0 / 12 |
+| log-reserve-withdraw-stx | 0 / 9 |
+| log-reserve-open-credit-line | 0 / 12 |
+| log-reserve-set-credit-line-cap | 0 / 10 |
+| log-reserve-set-credit-line-interest | 0 / 10 |
+| log-reserve-close-credit-line | 0 / 9 |
+| log-reserve-set-paused | 0 / 9 |
+| log-reserve-set-min-sbtc-draw | 0 / 9 |
+| log-reserve-draw | 0 / 13 |
+| log-reserve-notify-return | 0 / 11 |
+| log-snpl-set-reserve | 0 / 9 |
+| log-snpl-borrow | 0 / 16 |
+| log-snpl-swap-deposit | 0 / 14 |
+| log-snpl-cancel-swap | 0 / 9 |
+| log-snpl-set-swap-limit | 0 / 10 |
+| log-snpl-repay | 0 / 18 |
+| log-snpl-seize | 0 / 14 |
+| log-jing-swap | 0 / 23 |
+| reconcile-vault-equity | 0 / 10 |
+| log-jing-swap-reconciled | 0 / 24 |
+| log-sweep-dust | 6 / 18 |
+| log-settlement | 9 / 25 |
+| log-settle-refused-y | 6 / 15 |
+| log-settle-refused-x | 6 / 15 |
+| log-pending-deposit-y | 6 / 15 |
+| log-pending-deposit-x | 6 / 15 |
+| log-limit-roll-x | 6 / 15 |
+| log-limit-roll-y | 6 / 15 |
+| log-limit-y | 6 / 14 |
+| log-limit-x | 6 / 14 |
+| log-pending-refund-y | 6 / 14 |
+| log-pending-refund-x | 6 / 14 |
+| log-pending-limit-y | 6 / 14 |
+| log-pending-limit-x | 6 / 14 |
+| log-park-x | 6 / 14 |
+| log-readmit-x | 6 / 14 |
+| log-park-y | 6 / 14 |
+| log-readmit-y | 6 / 14 |
+| log-withdraw-x | 8 / 18 |
+| log-withdraw-y | 8 / 18 |
+| log-pending-readmit-y | 6 / 13 |
+| log-pending-readmit-x | 6 / 13 |
+| log-small-share-roll-x | 6 / 13 |
+| log-small-share-roll-y | 6 / 13 |
+| log-deposit-x | 13 / 28 |
+| log-deposit-y | 13 / 28 |
+| log-refund-x | 8 / 16 |
+| log-refund-y | 8 / 16 |
+| log-distribute-x-depositor | 12 / 23 |
+| log-distribute-y-depositor | 12 / 23 |
+| log-match | 17 / 29 |
+| get-token-equity | 3 / 5 |
+| credit | 8 / 13 |
+| register | 14 / 22 |
+| debit | 12 / 18 |
+| credit-if-registered | 2 / 3 |
+| log-deposit | 10 / 15 |
+| set-verified-contract | 13 / 19 |
+| pause | 10 / 14 |
+| accept-owner | 10 / 14 |
+| propose-owner | 8 / 11 |
+| unpause | 14 / 16 |
+| is-verified-contract | 2 / 2 |
+| get-verified-hash | 1 / 1 |
+| get-contract-owner | 1 / 1 |
+| get-pending-owner | 1 / 1 |
+| is-paused | 1 / 1 |
+| get-paused-at | 1 / 1 |
+| get-unpause-eligible-at | 2 / 2 |
+| is-registered | 2 / 2 |
+| get-total-token-equity | 2 / 2 |
+| get-balance | 2 / 2 |
+| credit-if-not-registered | 3 / 3 |
+| debit-if-not-registered | 3 / 3 |
+| check-not-paused | 3 / 3 |
 
-## Per simulation (cumulative executed expressions of jing-core-v6)
+## Sims counted (102)
 
-| sim | txs | before | after |
-|---|---|---|---|
-| `5cf1573f` | 217 | 0 | 365 |
-
-## Provenance and trace diagnostics
-
-source simulations/deploy-bytes-mv7dfb/jing-core-v6.clar at 7e42b9c, sha256 `973482e429cf7d9110847227fdc701443d8d9884b448dce5273579e23ea7fdff`. Only deployments with that exact code are counted.
-
-| item | count |
-|---|---|
-| transactions | 217 |
-| no trace returned by stxer | 14 |
-| trace decode errors | 0 |
-| calls to a counted market instance | 2 |
-| ... of which without a trace | 0 |
-| ... of which decode errors | 0 |
-
-| sim | counted instances |
-|---|---|
-| `5cf1573f` | jing-core-v6 |
-
-| excluded deployment (name@hash) | sims |
-|---|---|
-| bob-autostake-safe@dda5367c1800 | 1 |
-| ccd015-redemption-book-mia-stx@6b5daed326f5 | 1 |
-| ccd016-swap-vault-mia-v2@a7062d390719 | 1 |
-| dlmm-core-v-1-2@009ea45feca3 | 1 |
-| fastpool-swap-vault@aaebf34b4f14 | 1 |
-| jing-buy-stx-spread-0@0a8639678768 | 1 |
-| jing-buy-stx-spread-10@0a8639678768 | 1 |
-| jing-buy-stx-spread-20@0a8639678768 | 1 |
-| jing-buy-stx-spread-30@0a8639678768 | 1 |
-| jing-buy-stx-spread-40@0a8639678768 | 1 |
-| jing-buy-stx-spread-50@0a8639678768 | 1 |
-| jing-buy-stx-spread-60@0a8639678768 | 1 |
-| jing-buy-stx-spread-70@0a8639678768 | 1 |
-| jing-buy-stx-spread-80@0a8639678768 | 1 |
-| jing-buy-stx-spread-90@0a8639678768 | 1 |
-| jing-ladder-dispatch@25858ef64f1d | 1 |
-| jing-ladder-v1@6a5e204d47d8 | 1 |
-| jing-rung-deposit-trait@5979727e42d5 | 1 |
-| jing-sell-stx-spread-0@7fb80650787a | 1 |
-| jing-sell-stx-spread-10@7fb80650787a | 1 |
-| jing-sell-stx-spread-20@7fb80650787a | 1 |
-| jing-sell-stx-spread-30@7fb80650787a | 1 |
-| jing-sell-stx-spread-40@7fb80650787a | 1 |
-| jing-sell-stx-spread-50@7fb80650787a | 1 |
-| jing-sell-stx-spread-60@7fb80650787a | 1 |
-| jing-sell-stx-spread-70@7fb80650787a | 1 |
-| jing-sell-stx-spread-80@7fb80650787a | 1 |
-| jing-sell-stx-spread-90@7fb80650787a | 1 |
-| juice-autostake-safe-auth-helpers-v1@aabf3ba32c56 | 1 |
-| juice-autostake-safe@dda5367c1800 | 1 |
-| juice-pool-sbtc-signer@57d8c3d384f1 | 1 |
-| juice-sbtc-autoswap@ff0a45868897 | 1 |
-| juice-swap-vault-trait-v2@655b22cb792a | 1 |
-| mallory-autostake-safe@373cb4482db2 | 1 |
-| markets-sbtc-stx-jing-v6-3@7b2f0f44fca1 | 1 |
-| signer-manager-vault-stx-rewards@4858dbc67c46 | 1 |
-| sim-ccip-proxy@616692f404fc | 1 |
-| swap-router-sbtc-stx-jing-v5-3@3e457866be8d | 1 |
+`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `120bc743` `12cf15ee` `1576f5bc` `1599af88` `170b7df3` `18933f00` `18ac074b` `1a4fe982` `21bd3ee2` `227a3969` `27d02561` `28ba3ce9` `2915ed46` `2a6ab8f9` `2b0436de` `2f47455f` `2fd82a2e` `3270029d` `33c70bfa` `34add6e3` `35d275ea` `36b4f87e` `38122515` `387017ec` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54912c2f` `54f0da53` `584b4ed5` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `613d6d04` `6af504a8` `6c1285d8` `6d426b0f` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `76ae817d` `7a5d15a9` `7edc890f` `8063c1da` `839af883` `8854dace` `8a0e577b` `8a2c60cc` `94d5f0c9` `9f01abe4` `a674afe9` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c65fd855` `c691ce10` `d0108679` `d05eaf98` `d15c2358` `d4af4cc8` `d72ffae1` `dce4e39c` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e7f75295` `e8c0247d` `ec16a3f8` `f793659c` `fe01ec23` `d55a9bb0` `da59d087` `5cf1573f`

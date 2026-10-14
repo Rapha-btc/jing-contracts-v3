@@ -1,146 +1,83 @@
 # Trace coverage: jing-ladder-v1
 
-From `simulations/trace-coverage.mjs` on 2026-10-14, source at simulations/deploy-bytes-mv7dfb/jing-ladder-v1.clar at 7e42b9c: 1 simulations, 217 transactions (14 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-ladder-v1.clar` (sha256 `6a5e204d47d865047fcb7d80d97e57d13b23fc1bf843958323c8c7d0d10d0dd7`), counted only where a sim deployed these exact bytes (103 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 78 / 473 (16.5%) |
-| code lines touched / total | 48 / 316 (15.2%) |
-| function body lines touched / total (top-level definitions excluded) | 48 / 288 (16.7%) |
-| branch nodes (if / match / asserts!) | 24: 6 full, 3 partial, 15 never reached |
+| expressions executed / total | 247 / 473 (52.2%) |
+| public functions reached | 14 / 14 |
+| branch nodes (if / match / asserts!) | 24: 24 full, 0 partial, 0 never reached |
 
-## Branches with one arm never taken (3)
+## Public functions never reached (0)
+
+
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
+
+
+
+## Branches with one arm never taken (0)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 104 | is-band-current | match | one arm (then only) |
-| 149 | claim-seat | match | one arm (else only) |
-| 211 | register | if | one arm (then only) |
 
-## Branch nodes never reached (15)
+## Branch nodes never reached (0)
 
 | line | function | kind |
 |---|---|---|
-| 135 | is-current-rung | match |
-| 215 | register | asserts! |
-| 253 | register-unseated | asserts! |
-| 254 | register-unseated | asserts! |
-| 260 | register-unseated | asserts! |
-| 285 | seat-band | asserts! |
-| 286 | seat-band | asserts! |
-| 287 | seat-band | asserts! |
-| 304 | set-max-band-per-side | asserts! |
-| 306 | set-max-band-per-side | asserts! |
-| 333 | retire-band | asserts! |
-| 334 | retire-band | asserts! |
-| 490 | propose-owner | asserts! |
-| 505 | accept-owner | asserts! |
-| 506 | accept-owner | asserts! |
 
-## Uncovered code lines by function
+## Function bodies (expressions hit / total)
 
-| function | lines |
+| function | hit / total |
 |---|---|
-| (top) | 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 17, 19, 20, 22, 23, 25, 26, 27, 35, 36, 37, 39, 44, 52 |
-| register-unseated | 248, 249, 250, 251, 253, 254, 255, 256, 260, 261, 265, 275 |
-| seat-band | 280, 281, 282, 283, 285, 286, 287, 288, 289, 290, 297 |
-| set-max-band-per-side | 303, 304, 306, 307, 308, 309, 310, 314, 318 |
-| retire-band | 326, 327, 331, 333, 334, 335, 337, 338, 344 |
-| accept-owner | 504, 505, 506, 507, 510, 511, 512, 516 |
-| propose-owner | 489, 490, 491, 492, 493, 497, 499 |
-| log-deposit | 360, 361, 364, 365, 366, 374 |
-| log-push | 384, 385, 388, 389, 390, 396 |
-| log-withdraw | 407, 408, 411, 412, 413, 420 |
-| log-payout | 430, 431, 434, 435, 436, 442 |
-| log-epoch-closed | 450, 451, 454, 455, 456, 460 |
-| log-rescale | 471, 472, 475, 476, 477, 484 |
-| get-pending-owner | 65, 66, 67 |
-| rungs | 45, 46 |
-| registered | 54, 55 |
-| is-current-rung | 135, 136 |
-| register | 196, 215 |
-| ERR_NOT_AUTHORIZED | 1 |
-| ERR_INVALID_CONTRACT_HASH | 2 |
-| ERR_NOT_VERIFIED | 3 |
-| ERR_HASH_MISMATCH | 4 |
-| ERR_ALREADY_REGISTERED | 5 |
-| ERR_PRICE_TAKEN | 6 |
-| ERR_BAD_SIDE | 7 |
-| ERR_NO_PENDING_OWNER | 8 |
-| ERR_TIMELOCK_NOT_ELAPSED | 9 |
-| ERR_NOT_REGISTERED | 10 |
-| ERR_BAND_FULL | 11 |
-| ERR_ALREADY_SEATED | 12 |
-| band-count | 28 |
-| pending-owner | 36 |
-| canonical | 40 |
-| get-canonical | 72 |
-| get-rung | 79 |
-| get-registered | 86 |
-| is-registered | 90 |
-| is-current | 132 |
-| rung-of | 349 |
+| ERR_NOT_AUTHORIZED | 0 / 1 |
+| ERR_INVALID_CONTRACT_HASH | 0 / 1 |
+| ERR_NOT_VERIFIED | 0 / 1 |
+| ERR_HASH_MISMATCH | 0 / 1 |
+| ERR_ALREADY_REGISTERED | 0 / 1 |
+| ERR_PRICE_TAKEN | 0 / 1 |
+| ERR_BAD_SIDE | 0 / 1 |
+| ERR_NO_PENDING_OWNER | 0 / 1 |
+| ERR_TIMELOCK_NOT_ELAPSED | 0 / 1 |
+| ERR_NOT_REGISTERED | 0 / 1 |
+| ERR_BAND_FULL | 0 / 1 |
+| ERR_ALREADY_SEATED | 0 / 1 |
+| band-count | 0 / 1 |
+| pending-owner | 0 / 1 |
+| canonical | 0 / 1 |
+| rungs | 0 / 4 |
+| registered | 0 / 4 |
+| log-deposit | 9 / 22 |
+| log-withdraw | 9 / 21 |
+| log-rescale | 9 / 21 |
+| log-push | 9 / 20 |
+| log-payout | 9 / 20 |
+| get-rung | 2 / 4 |
+| log-epoch-closed | 9 / 18 |
+| register-unseated | 19 / 33 |
+| register | 31 / 50 |
+| retire-band | 16 / 25 |
+| seat-band | 20 / 31 |
+| get-pending-owner | 4 / 6 |
+| propose-owner | 10 / 14 |
+| claim-seat | 13 / 17 |
+| set-canonical | 10 / 13 |
+| accept-owner | 14 / 18 |
+| is-band-current | 10 / 12 |
+| set-max-band-per-side | 15 / 17 |
+| get-max-band-per-side | 1 / 1 |
+| get-owner | 1 / 1 |
+| get-canonical | 1 / 1 |
+| get-registered | 1 / 1 |
+| is-registered | 2 / 2 |
+| get-band-count | 2 / 2 |
+| is-band-side | 3 / 3 |
+| is-band-x | 1 / 1 |
+| is-band-y | 1 / 1 |
+| is-current | 3 / 3 |
+| is-current-rung | 3 / 3 |
+| valid-side | 7 / 7 |
+| rung-of | 3 / 3 |
 
-## Per simulation (cumulative executed expressions of jing-ladder-v1)
+## Sims counted (103)
 
-| sim | txs | before | after |
-|---|---|---|---|
-| `5cf1573f` | 217 | 0 | 152 |
-
-## Provenance and trace diagnostics
-
-source simulations/deploy-bytes-mv7dfb/jing-ladder-v1.clar at 7e42b9c, sha256 `6a5e204d47d865047fcb7d80d97e57d13b23fc1bf843958323c8c7d0d10d0dd7`. Only deployments with that exact code are counted.
-
-| item | count |
-|---|---|
-| transactions | 217 |
-| no trace returned by stxer | 14 |
-| trace decode errors | 0 |
-| calls to a counted market instance | 3 |
-| ... of which without a trace | 0 |
-| ... of which decode errors | 0 |
-
-| sim | counted instances |
-|---|---|
-| `5cf1573f` | jing-ladder-v1 |
-
-| excluded deployment (name@hash) | sims |
-|---|---|
-| bob-autostake-safe@dda5367c1800 | 1 |
-| ccd015-redemption-book-mia-stx@6b5daed326f5 | 1 |
-| ccd016-swap-vault-mia-v2@a7062d390719 | 1 |
-| dlmm-core-v-1-2@009ea45feca3 | 1 |
-| fastpool-swap-vault@aaebf34b4f14 | 1 |
-| jing-buy-stx-spread-0@0a8639678768 | 1 |
-| jing-buy-stx-spread-10@0a8639678768 | 1 |
-| jing-buy-stx-spread-20@0a8639678768 | 1 |
-| jing-buy-stx-spread-30@0a8639678768 | 1 |
-| jing-buy-stx-spread-40@0a8639678768 | 1 |
-| jing-buy-stx-spread-50@0a8639678768 | 1 |
-| jing-buy-stx-spread-60@0a8639678768 | 1 |
-| jing-buy-stx-spread-70@0a8639678768 | 1 |
-| jing-buy-stx-spread-80@0a8639678768 | 1 |
-| jing-buy-stx-spread-90@0a8639678768 | 1 |
-| jing-core-v6@973482e429cf | 1 |
-| jing-ladder-dispatch@25858ef64f1d | 1 |
-| jing-rung-deposit-trait@5979727e42d5 | 1 |
-| jing-sell-stx-spread-0@7fb80650787a | 1 |
-| jing-sell-stx-spread-10@7fb80650787a | 1 |
-| jing-sell-stx-spread-20@7fb80650787a | 1 |
-| jing-sell-stx-spread-30@7fb80650787a | 1 |
-| jing-sell-stx-spread-40@7fb80650787a | 1 |
-| jing-sell-stx-spread-50@7fb80650787a | 1 |
-| jing-sell-stx-spread-60@7fb80650787a | 1 |
-| jing-sell-stx-spread-70@7fb80650787a | 1 |
-| jing-sell-stx-spread-80@7fb80650787a | 1 |
-| jing-sell-stx-spread-90@7fb80650787a | 1 |
-| juice-autostake-safe-auth-helpers-v1@aabf3ba32c56 | 1 |
-| juice-autostake-safe@dda5367c1800 | 1 |
-| juice-pool-sbtc-signer@57d8c3d384f1 | 1 |
-| juice-sbtc-autoswap@ff0a45868897 | 1 |
-| juice-swap-vault-trait-v2@655b22cb792a | 1 |
-| mallory-autostake-safe@373cb4482db2 | 1 |
-| markets-sbtc-stx-jing-v6-3@7b2f0f44fca1 | 1 |
-| signer-manager-vault-stx-rewards@4858dbc67c46 | 1 |
-| sim-ccip-proxy@616692f404fc | 1 |
-| swap-router-sbtc-stx-jing-v5-3@3e457866be8d | 1 |
+`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `120bc743` `12cf15ee` `1576f5bc` `1599af88` `170b7df3` `18933f00` `18ac074b` `1a4fe982` `21bd3ee2` `227a3969` `27d02561` `28ba3ce9` `2915ed46` `2a6ab8f9` `2b0436de` `2f47455f` `2fd82a2e` `3270029d` `33c70bfa` `34add6e3` `35d275ea` `36b4f87e` `38122515` `387017ec` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54912c2f` `54f0da53` `584b4ed5` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `613d6d04` `6af504a8` `6c1285d8` `6d426b0f` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `76ae817d` `7a5d15a9` `7edc890f` `8063c1da` `839af883` `8854dace` `8a0e577b` `8a2c60cc` `8e95fe58` `94d5f0c9` `9f01abe4` `a674afe9` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c65fd855` `c691ce10` `d0108679` `d05eaf98` `d15c2358` `d4af4cc8` `d72ffae1` `dce4e39c` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e7f75295` `e8c0247d` `ec16a3f8` `f793659c` `fe01ec23` `d55a9bb0` `da59d087` `5cf1573f`

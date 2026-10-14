@@ -1,194 +1,93 @@
 # Trace coverage: swap-router-sbtc-stx-jing-v5-3
 
-From `simulations/trace-coverage.mjs` on 2026-10-14, source at simulations/deploy-bytes-mv7dfb/swap-router-sbtc-stx-jing-v5-3.clar at 7e42b9c: 1 simulations, 217 transactions (14 without a trace), every evaluated expression read from the stxer debug traces.
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/swap-router-sbtc-stx-jing-v5-3.clar` (sha256 `3e457866be8d4f6216e5e17fd87c9aa6fb2285a23909e7957a354c4af8e3b9b4`), counted only where a sim deployed these exact bytes (73 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 769 / 1318 (58.3%) |
-| code lines touched / total | 452 / 812 (55.7%) |
-| function body lines touched / total (top-level definitions excluded) | 452 / 774 (58.4%) |
-| branch nodes (if / match / asserts!) | 123: 57 full, 59 partial, 7 never reached |
+| expressions executed / total | 887 / 1318 (67.3%) |
+| public functions reached | 4 / 4 |
+| branch nodes (if / match / asserts!) | 123: 117 full, 5 partial, 1 never reached |
 
-## Branches with one arm never taken (59)
+## Public functions never reached (0)
+
+
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
+
+
+
+## Branches with one arm never taken (5)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 46 | gain | if | one arm (then only) |
-| 58 | jing-swap | match | one arm (then only) |
-| 63 | jing-swap | if | one arm (then only) |
-| 69 | jing-swap | if | one arm (then only) |
 | 109 | xyk-swap | if | one arm (then only) |
-| 110 | xyk-swap | if | one arm (else only) |
-| 137 | dlmm-sell | if | one arm (else only) |
-| 141 | dlmm-sell | if | one arm (else only) |
-| 154 | dlmm-sell | if | one arm (else only) |
-| 197 | amm-sell-stx | if | one arm (else only) |
-| 226 | leg-sbtc | if | one arm (else only) |
-| 255 | with-fallback | if | one arm (else only) |
-| 274 | fallback-residual | if | one arm (then only) |
-| 293 | scale-min | if | one arm (then only) |
-| 300 | valid-fallback | match | one arm (else only) |
-| 342 | swap-sbtc-for-stx | if | one arm (then only) |
-| 383 | swap-sbtc-for-stx | if | one arm (then only) |
-| 402 | swap-sbtc-for-stx | if | one arm (then only) |
-| 446 | swap-stx-for-sbtc | if | one arm (else only) |
-| 487 | swap-stx-for-sbtc | if | one arm (then only) |
-| 506 | swap-stx-for-sbtc | if | one arm (then only) |
-| 529 | xyk-quote | if | one arm (else only) |
-| 539 | xyk-quote | if | one arm (else only) |
-| 565 | velar-reserves | if | one arm (then only) |
-| 590 | cp-capacity | if | one arm (else only) |
-| 594 | cp-capacity | if | one arm (then only) |
-| 608 | limit-min | if | one arm (then only) |
-| 626 | book-limit | if | one arm (then only) |
-| 656 | jing-size | if | one arm (then only) |
-| 686 | cp-split | if | one arm (else only) |
-| 751 | dlmm-pick | if | one arm (then only) |
-| 755 | dlmm-pick | if | one arm (then only) |
-| 759 | dlmm-pick | if | one arm (else only) |
-| 764 | dlmm-pick | if | one arm (then only) |
-| 798 | dlmm-out | if | one arm (else only) |
+| 687 | cp-split | if | one arm (then only) |
 | 807 | dlmm-out | if | one arm (then only) |
-| 810 | dlmm-out | if | one arm (else only) |
 | 812 | dlmm-out | if | one arm (then only) |
-| 817 | dlmm-out | if | one arm (else only) |
-| 824 | dlmm-out | if | one arm (else only) |
-| 880 | dlmm-out-step | if | one arm (else only) |
-| 884 | dlmm-out-step | if | one arm (else only) |
-| 888 | dlmm-out-step | if | one arm (then only) |
-| 897 | dlmm-out-step | if | one arm (else only) |
-| 906 | dlmm-out-step | if | one arm (else only) |
-| 908 | dlmm-out-step | if | one arm (else only) |
-| 915 | dlmm-out-step | if | one arm (else only) |
-| 921 | dlmm-out-step | if | one arm (else only) |
 | 954 | dlmm-enabled | match | one arm (then only) |
-| 992 | dlmm-bin-balances | if | one arm (else only) |
-| 1032 | dlmm-bin-step | if | one arm (then only) |
-| 1045 | dlmm-bin-step | if | one arm (else only) |
-| 1106 | amm-leg | if | one arm (else only) |
-| 1125 | dlmm-stage | if | one arm (then only) |
-| 1133 | dlmm-stage | if | one arm (then only) |
-| 1173 | cp-stage | if | one arm (else only) |
-| 1177 | cp-stage | if | one arm (else only) |
-| 1182 | cp-stage | if | one arm (then only) |
-| 1292 | smart-swap-stx-for-sbtc | if | one arm (else only) |
 
-## Branch nodes never reached (7)
+## Branch nodes never reached (1)
 
 | line | function | kind |
 |---|---|---|
 | 118 | xyk-swap | if |
-| 171 | amm-sell-sbtc | if |
-| 173 | amm-sell-sbtc | if |
-| 687 | cp-split | if |
-| 766 | dlmm-pick | if |
-| 818 | dlmm-out | if |
-| 825 | dlmm-out | if |
 
-## Uncovered code lines by function
+## Function bodies (expressions hit / total)
 
-| function | lines |
+| function | hit / total |
 |---|---|
-| (top) | 1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 13, 14, 15, 17, 19, 20, 22, 23, 24, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 518, 519, 520, 601, 619, 704, 705, 706, 776 |
-| amm-sell-sbtc | 171, 172, 173, 174, 176, 178, 180, 181 |
-| dlmm-out-step | 881, 885, 898, 907, 909, 916, 922 |
-| dlmm-out | 799, 800, 818, 819, 825 |
-| xyk-quote | 530, 531, 532, 540, 541 |
-| xyk-swap | 111, 118, 119, 122 |
-| valid-fallback | 301, 302, 303, 304 |
-| swap-stx-for-sbtc | 444, 447, 489, 508 |
-| cp-split | 687, 688, 691, 693 |
-| dlmm-sell | 138, 142, 155 |
-| swap-sbtc-for-stx | 340, 385, 404 |
-| velar-reserves | 570, 571, 572 |
-| jing-swap | 65, 71 |
-| dlmm-pick | 760, 766 |
-| amm-sell-stx | 198, 200 |
-| smart-swap-stx-for-sbtc | 1288, 1293 |
-| ERR_ZERO_AMOUNT | 30 |
-| ERR_MIN_OUT | 31 |
-| ERR_BAD_VENUE | 32 |
-| ERR_SPLIT_MISMATCH | 33 |
-| ERR_VAA_REQUIRED | 34 |
-| ERR_ZERO_LIMIT | 35 |
-| ERR_ZERO_MID | 36 |
-| xyk-x-is-sbtc | 99 |
-| dlmm-bin-balances | 993 |
-| DLMM_WALK_BINS | 706 |
-| leg-sbtc | 227 |
-| with-fallback | 256 |
-| fallback-residual | 276 |
-| scale-min | 295 |
-| cp-capacity | 591 |
-| book-limit | 628 |
-| jing-size | 658 |
-| dlmm-bin-step | 1046 |
-| amm-leg | 1107 |
-| dlmm-stage | 1137 |
-| cp-stage | 1190 |
-| smart-swap-sbtc-for-stx | 1223 |
-| get-jing-min-deposits | 1341 |
+| ERR_ZERO_AMOUNT | 0 / 1 |
+| ERR_MIN_OUT | 0 / 1 |
+| ERR_BAD_VENUE | 0 / 1 |
+| ERR_SPLIT_MISMATCH | 0 / 1 |
+| ERR_VAA_REQUIRED | 0 / 1 |
+| ERR_ZERO_LIMIT | 0 / 1 |
+| ERR_ZERO_MID | 0 / 1 |
+| DLMM_WALK_BINS | 0 / 1 |
+| smart-swap-sbtc-for-stx | 53 / 93 |
+| smart-swap-stx-for-sbtc | 53 / 93 |
+| cp-split | 12 / 20 |
+| dlmm-capacity | 18 / 30 |
+| xyk-swap | 5 / 8 |
+| xyk-quote | 25 / 40 |
+| cp-stage | 47 / 75 |
+| dlmm-stage | 25 / 38 |
+| swap-sbtc-for-stx | 77 / 116 |
+| swap-stx-for-sbtc | 77 / 116 |
+| velar-keep | 8 / 12 |
+| dlmm-out | 39 / 58 |
+| jing-size | 27 / 40 |
+| velar-reserves | 13 / 19 |
+| leg-sbtc | 6 / 8 |
+| leg-stx | 6 / 8 |
+| dlmm-pick | 44 / 57 |
+| dlmm-depth | 8 / 10 |
+| amm-sell-sbtc | 16 / 20 |
+| amm-sell-stx | 16 / 20 |
+| limit-min | 9 / 11 |
+| dlmm-out-step | 85 / 103 |
+| dlmm-bin-step | 57 / 68 |
+| jing-swap | 12 / 14 |
+| cp-capacity | 24 / 26 |
+| sbtc-balance | 2 / 2 |
+| gain | 3 / 3 |
+| jing-spent | 2 / 2 |
+| jing-out | 2 / 2 |
+| xyk-x-is-sbtc | 4 / 4 |
+| dlmm-sell | 15 / 15 |
+| dlmm-pool-info | 8 / 8 |
+| dlmm-enabled | 14 / 14 |
+| dlmm-threshold | 11 / 11 |
+| dlmm-bin-balances | 8 / 8 |
+| amm-floor | 2 / 2 |
+| with-fallback | 4 / 4 |
+| dust-left | 4 / 4 |
+| fallback-residual | 17 / 17 |
+| scale-min | 6 / 6 |
+| valid-fallback | 5 / 5 |
+| book-limit | 12 / 12 |
+| amm-leg | 5 / 5 |
+| get-jing-min-deposits | 1 / 1 |
 
-## Per simulation (cumulative executed expressions of swap-router-sbtc-stx-jing-v5-3)
+## Sims counted (73)
 
-| sim | txs | before | after |
-|---|---|---|---|
-| `5cf1573f` | 217 | 0 | 1631 |
-
-## Provenance and trace diagnostics
-
-source simulations/deploy-bytes-mv7dfb/swap-router-sbtc-stx-jing-v5-3.clar at 7e42b9c, sha256 `3e457866be8d4f6216e5e17fd87c9aa6fb2285a23909e7957a354c4af8e3b9b4`. Only deployments with that exact code are counted.
-
-| item | count |
-|---|---|
-| transactions | 217 |
-| no trace returned by stxer | 14 |
-| trace decode errors | 0 |
-| calls to a counted market instance | 4 |
-| ... of which without a trace | 0 |
-| ... of which decode errors | 0 |
-
-| sim | counted instances |
-|---|---|
-| `5cf1573f` | swap-router-sbtc-stx-jing-v5-3 |
-
-| excluded deployment (name@hash) | sims |
-|---|---|
-| bob-autostake-safe@dda5367c1800 | 1 |
-| ccd015-redemption-book-mia-stx@6b5daed326f5 | 1 |
-| ccd016-swap-vault-mia-v2@a7062d390719 | 1 |
-| dlmm-core-v-1-2@009ea45feca3 | 1 |
-| fastpool-swap-vault@aaebf34b4f14 | 1 |
-| jing-buy-stx-spread-0@0a8639678768 | 1 |
-| jing-buy-stx-spread-10@0a8639678768 | 1 |
-| jing-buy-stx-spread-20@0a8639678768 | 1 |
-| jing-buy-stx-spread-30@0a8639678768 | 1 |
-| jing-buy-stx-spread-40@0a8639678768 | 1 |
-| jing-buy-stx-spread-50@0a8639678768 | 1 |
-| jing-buy-stx-spread-60@0a8639678768 | 1 |
-| jing-buy-stx-spread-70@0a8639678768 | 1 |
-| jing-buy-stx-spread-80@0a8639678768 | 1 |
-| jing-buy-stx-spread-90@0a8639678768 | 1 |
-| jing-core-v6@973482e429cf | 1 |
-| jing-ladder-dispatch@25858ef64f1d | 1 |
-| jing-ladder-v1@6a5e204d47d8 | 1 |
-| jing-rung-deposit-trait@5979727e42d5 | 1 |
-| jing-sell-stx-spread-0@7fb80650787a | 1 |
-| jing-sell-stx-spread-10@7fb80650787a | 1 |
-| jing-sell-stx-spread-20@7fb80650787a | 1 |
-| jing-sell-stx-spread-30@7fb80650787a | 1 |
-| jing-sell-stx-spread-40@7fb80650787a | 1 |
-| jing-sell-stx-spread-50@7fb80650787a | 1 |
-| jing-sell-stx-spread-60@7fb80650787a | 1 |
-| jing-sell-stx-spread-70@7fb80650787a | 1 |
-| jing-sell-stx-spread-80@7fb80650787a | 1 |
-| jing-sell-stx-spread-90@7fb80650787a | 1 |
-| juice-autostake-safe-auth-helpers-v1@aabf3ba32c56 | 1 |
-| juice-autostake-safe@dda5367c1800 | 1 |
-| juice-pool-sbtc-signer@57d8c3d384f1 | 1 |
-| juice-sbtc-autoswap@ff0a45868897 | 1 |
-| juice-swap-vault-trait-v2@655b22cb792a | 1 |
-| mallory-autostake-safe@373cb4482db2 | 1 |
-| markets-sbtc-stx-jing-v6-3@7b2f0f44fca1 | 1 |
-| signer-manager-vault-stx-rewards@4858dbc67c46 | 1 |
-| sim-ccip-proxy@616692f404fc | 1 |
+`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `12cf15ee` `1599af88` `18933f00` `21bd3ee2` `2915ed46` `2f47455f` `2fd82a2e` `3270029d` `34add6e3` `35d275ea` `36b4f87e` `38122515` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54f0da53` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `6c1285d8` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `7edc890f` `8063c1da` `839af883` `8a0e577b` `8a2c60cc` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c691ce10` `d0108679` `d05eaf98` `d4af4cc8` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e8c0247d` `ec16a3f8` `f793659c` `d55a9bb0` `da59d087` `5cf1573f`
