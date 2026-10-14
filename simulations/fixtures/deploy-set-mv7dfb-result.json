@@ -1,0 +1,2091 @@
+{
+  "simulation": "https://stxer.xyz/simulations/mainnet/5cf1573f3f04fe514d9c671a6914aff7",
+  "passed": 340,
+  "total": 340,
+  "sources": {
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v6": {
+      "form": "faktory-dao template jing-core-v6-template.ts (sha256 973482e429cf...)",
+      "bytes": 37147,
+      "sha256": "973482e429cf7d9110847227fdc701443d8d9884b448dce5273579e23ea7fdff",
+      "sha512_256": "fef4718d084084bfde456f6fbabd06f987a844e33da1701293290840fda1e4bd",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1": {
+      "form": "faktory-dao template jing-ladder-v1-template.ts (sha256 6a5e204d47d8...)",
+      "bytes": 11742,
+      "sha256": "6a5e204d47d865047fcb7d80d97e57d13b23fc1bf843958323c8c7d0d10d0dd7",
+      "sha512_256": "eaffbce3e1a8fbb609deb5dfd35e4c32a0d70de3f1f97ca724284c584971738d",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3": {
+      "form": "faktory-dao template markets-sbtc-stx-jing-v6-3-template.ts (sha256 7b2f0f44fca1...)",
+      "bytes": 97701,
+      "sha256": "7b2f0f44fca1feaf1e8c30f195d0a639a3daf102db4f4c84060c8062132f5f4c",
+      "sha512_256": "67fb0bd262f968d1da2ae1c63b5c7c1dee806c476600d87cb4082084f9679c0c",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-3": {
+      "form": "faktory-dao template swap-router-sbtc-stx-jing-v5-3-template.ts (sha256 3e457866be8d...)",
+      "bytes": 33216,
+      "sha256": "3e457866be8d4f6216e5e17fd87c9aa6fb2285a23909e7957a354c4af8e3b9b4",
+      "sha512_256": "4281122b0723f2118111507cb9273d5a9c03b499421e154584c3212d6047d25f",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait": {
+      "form": "faktory-dao template jing-rung-deposit-trait-template.ts (sha256 5979727e42d5...)",
+      "bytes": 409,
+      "sha256": "5979727e42d5f0c1bc7169e2566fa8c6b7b2ec5d26525ef5c500358d7bb1e385",
+      "sha512_256": "366d1c1eb58c526ff70fcbee9e739a66b0a1ff57e09060e91b28656045f2a168",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-0": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-10": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-20": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-30": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-40": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-50": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-60": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-70": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-80": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-spread-90": {
+      "form": "faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...)",
+      "bytes": 22445,
+      "sha256": "0a8639678768e49495a26263d462f0dab100815a83c424121c801124c4e89bd6",
+      "sha512_256": "2d2aab6bba657aba4069aef3b8e7b8ebd06b5da2734127afeb0667cf1986e734",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-0": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-10": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-20": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-30": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-40": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-50": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-60": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-70": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-80": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-spread-90": {
+      "form": "faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...)",
+      "bytes": 22423,
+      "sha256": "7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f",
+      "sha512_256": "d964503e90d3a27e49e071b1865a4a7e6b3fc18e679cc7c5094fe0e9243882f8",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-dispatch": {
+      "form": "faktory-dao template jing-ladder-dispatch-template.ts (sha256 25858ef64f1d...)",
+      "bytes": 9289,
+      "sha256": "25858ef64f1da1458272f53e1654e4e1704bfcb5bdea8fea859202771fe3cabd",
+      "sha512_256": "7eb032abcdc80ef541e1f74ffd41eb11a4d4e9b4d57a9a8c5330d621c00832ea",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-swap-vault-trait-v2": {
+      "form": "faktory-dao template juice-swap-vault-trait-v2-template.ts (sha256 655b22cb792a...)",
+      "bytes": 2116,
+      "sha256": "655b22cb792a8204699d8292803eee8364d15e0a32d827ebb85b9687c4a50657",
+      "sha512_256": "d164287b515ab1ce9d80d2f26ba34eb233a7302c9497d7703ee29ca47cbeb169"
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer": {
+      "form": "faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 57d8c3d384f1...)",
+      "bytes": 33963,
+      "sha256": "57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6",
+      "sha512_256": "b0031a261fcbcf5cf4ade5d8be54570acd9109285dd4c6669bc4b1564b8b5d46"
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-sbtc-autoswap": {
+      "form": "faktory-dao template juice-sbtc-autoswap-template.ts (sha256 ff0a45868897...)",
+      "bytes": 22854,
+      "sha256": "ff0a45868897397187106fe284ed72ab64f2d3718adb238addf8d7c1a5909033",
+      "sha512_256": "ea6c45e83f040d94556081276a07113f80b9ba5e9d8f2b642df43dd2aae108d6"
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-autostake-safe-auth-helpers-v1": {
+      "form": "faktory-dao template juice-autostake-safe-auth-helpers-v1-template.ts (sha256 aabf3ba32c56...)",
+      "bytes": 593,
+      "sha256": "aabf3ba32c5602b83693f1581adb7a22a2e180df2306673b23f94c61fa61bd70",
+      "sha512_256": "72d82c770f581606cb8f932d2d03f8b0a2e841c4dc17ae50e18cf8859d30511a",
+      "clarity": 4
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-autostake-safe": {
+      "form": "faktory-dao template juice-autostake-safe-template.ts (sha256 dda5367c1800...)",
+      "bytes": 51552,
+      "sha256": "dda5367c1800f6f541840607ba9b5437f479580d51cd3654c12270024ae28a3d",
+      "sha512_256": "1ef1627fd1f4b993cef8565ce8d6634c94cadb4c9ae2c914eeaaddb5e1fab9bb"
+    },
+    "SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.fastpool-swap-vault": {
+      "form": "repo file fastpool-pox-5 b719e87 contracts/fastpool-swap-vault.clar, byte for byte",
+      "bytes": 28375,
+      "sha256": "aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac",
+      "sha512_256": "37957b01fe0fee0b6698fe87ff29ed13d9ce4737f44c9ab991ca738589157377"
+    },
+    "SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards": {
+      "form": "repo file fastpool-pox-5 3f82a93 contracts/signer-manager-vault-stx-rewards.clar, byte for byte",
+      "bytes": 41593,
+      "sha256": "4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731",
+      "sha512_256": "a2d20eb23af0471071a7dd14485f6a07fd4a8eb780fa6611c765a9fffb40bb84"
+    },
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd015-redemption-book-mia-stx": {
+      "form": "repo file citycoins-protocol 8bfbb5f ccd015-redemption-book-mia-stx.clar, full-line comments dropped (the ccd016 harness deploy form)",
+      "bytes": 12641,
+      "sha256": "6b5daed326f50f6a84f02526687ec8d7950ea7422521e8cff42c381d3721df57",
+      "sha512_256": "0663d1b36827d80d975147cc0b0e81de73f86eafaf808398f39133a88f48704c",
+      "clarity": 5
+    },
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd016-swap-vault-mia-v2": {
+      "form": "repo file citycoins-protocol 8bfbb5f ccd016-swap-vault-mia-v2.clar, full-line comments dropped (the ccd016 harness deploy form)",
+      "bytes": 22427,
+      "sha256": "a7062d390719177f08581a729aa26481d4e12cc811b58a27c5442d4528fa48c6",
+      "sha512_256": "99b8b6e0922b176d90191e1c764c3f9ca4e1ccc1ba9af99462092e4b7c7da036",
+      "clarity": 5
+    },
+    "SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.mallory-autostake-safe": {
+      "form": "template + one comment line (tampered)",
+      "bytes": 51571,
+      "sha256": "373cb4482db29690147ee45cba2623e66457cbde1b3ffe93d5ae87069ca1f6df",
+      "sha512_256": "3da4292d00eaa75cd09c6d76a525a996359b45a1a33bb975b040130c8138e3fb"
+    },
+    "SP28MP1HQDJWQAFSQJN2HBAXBVP7H7THD1W2NYZVK.bob-autostake-safe": {
+      "form": "template bytes, relay user copy",
+      "bytes": 51552,
+      "sha256": "dda5367c1800f6f541840607ba9b5437f479580d51cd3654c12270024ae28a3d",
+      "sha512_256": "1ef1627fd1f4b993cef8565ce8d6634c94cadb4c9ae2c914eeaaddb5e1fab9bb"
+    },
+    "SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.sim-ccip-proxy": {
+      "form": "sim-only proxy playing a passed CCIP proposal",
+      "bytes": 659,
+      "sha256": "616692f404fcc70516f78c4392b91c57c4e026904d7a961fb9648ff79d231068",
+      "sha512_256": "7bcaf57180796f5ffd8e843785f5e16326f23773002d958b768e586524b918c3",
+      "clarity": 5
+    },
+    "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.dlmm-core-v-1-2": {
+      "form": "live dlmm-core-v-1-1 source (migration target)",
+      "bytes": 84396,
+      "sha256": "009ea45feca3a23dc3b2b9fda48aa2369f1d1528ba5f4b19fd9882f728ae955b",
+      "sha512_256": "40b1bdfb87ee2a675f983d233c1cd14349eafca210f0638d4d397a58071e62fb",
+      "clarity": 5
+    }
+  },
+  "notes": [
+    "before the crossing: 4 seats, 203397215644 uSTX covered (OG1, HOP, the safe, the user copy)",
+    {
+      "routerPickScan": {
+        "pct": "100",
+        "limit": "19659884006684",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "0",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "101",
+        "limit": "19856482846750",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "123494622",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "102",
+        "limit": "20053081686817",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "375426573",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "103",
+        "limit": "20249680526884",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "735559864",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "105",
+        "limit": "20642878207018",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "1642034963",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "108",
+        "limit": "21232674727218",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "1642034963",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "112",
+        "limit": "22019070087486",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "1642034963",
+          "0",
+          "0"
+        ]
+      }
+    },
+    {
+      "routerPickScan": {
+        "pct": "120",
+        "limit": "23591860808020",
+        "smart": "1",
+        "blind": "2",
+        "caps": [
+          "1642034963",
+          "0",
+          "0"
+        ]
+      }
+    }
+  ],
+  "fixtures": [
+    "cycle 144 earned 150000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000 SPV9K2=2000000000",
+    "live Lazer oracle fee set to u10 (Eval in the oracle; governance not drivable)",
+    "cycle 143 earned 120000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000",
+    "cycle 142 earned 100000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000",
+    "Fast Pool cycle 144 earned 100000 sats, FS1 1 share, mirrored via validate-stake!",
+    "base-dao set-extensions: ccd016 + the proposal proxy enabled"
+  ],
+  "fork": 9208080,
+  "forkBurn": 971434,
+  "checks": [
+    {
+      "label": "Jing 1: deploy jing-core-v6 (template)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-ladder-v1 (11742 B, faktory-dao template jing-ladder-v1-template.ts (sha256 6a5e204d47d8...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.markets-sbtc-stx-jing-v6-3 (97701 B, faktory-dao template markets-sbtc-stx-jing-v6-3-template.ts (sha256 7b2f0f44fca1...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "Jing post 3a: market sync-seat-count reads ladder max u10",
+      "actual": "(ok u10)",
+      "passed": true
+    },
+    {
+      "label": "Jing post 3b: core-v6 set-verified-contract(market)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "Jing post 3c: market initialize (registers with core-v6)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.swap-router-sbtc-stx-jing-v5-3 (33216 B, faktory-dao template swap-router-sbtc-stx-jing-v5-3-template.ts (sha256 3e457866be8d...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "router binds the deployed market literal",
+      "actual": "(list SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-rung-deposit-trait (409 B, faktory-dao template jing-rung-deposit-trait-template.ts (sha256 5979727e42d5...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-0 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-0: initialize before set-canonical -> refused",
+      "actual": "(err u6003)",
+      "passed": true
+    },
+    {
+      "label": "ladder set-canonical(\"buy-band\", jing-buy-stx-spread-0)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-0: initialize(u0, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-10 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-10: initialize(u10, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-20 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-20: initialize(u20, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-30 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-30: initialize(u30, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-40 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-40: initialize(u40, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-50 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-50: initialize(u50, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-60 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-60: initialize(u60, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-70 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-70: initialize(u70, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-80 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-80: initialize(u80, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-buy-stx-spread-90 (22445 B, faktory-dao template jing-buy-stx-core-spread-v1-template.ts (sha256 0a8639678768...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-buy-stx-spread-90: initialize(u90, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "all 10 buy rungs seated",
+      "actual": "(list true true true true true true true true true true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-0 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-0: initialize before set-canonical -> refused",
+      "actual": "(err u6003)",
+      "passed": true
+    },
+    {
+      "label": "ladder set-canonical(\"sel-band\", jing-sell-stx-spread-0)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-0: initialize(u0, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-10 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-10: initialize(u10, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-20 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-20: initialize(u20, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-30 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-30: initialize(u30, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-40 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-40: initialize(u40, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-50 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-50: initialize(u50, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-60 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-60: initialize(u60, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-70 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-70: initialize(u70, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-80 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-80: initialize(u80, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-sell-stx-spread-90 (22423 B, faktory-dao template jing-sell-stx-core-spread-v1-template.ts (sha256 7fb80650787a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "jing-sell-stx-spread-90: initialize(u90, true) registers + seats",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "all 10 sell rungs seated",
+      "actual": "(list true true true true true true true true true true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.jing-ladder-dispatch (9289 B, faktory-dao template jing-ladder-dispatch-template.ts (sha256 25858ef64f1d...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.juice-swap-vault-trait-v2 (2116 B, faktory-dao template juice-swap-vault-trait-v2-template.ts (sha256 655b22cb792a...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.juice-pool-sbtc-signer (33963 B, faktory-dao template juice-pool-sbtc-signer-template.ts (sha256 57d8c3d384f1...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.juice-sbtc-autoswap (22854 B, faktory-dao template juice-sbtc-autoswap-template.ts (sha256 ff0a45868897...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "J post: register-self by a stranger -> u100",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "J post: register-self (grant-signer-key + register-signer, real pox-5 grant hash)",
+      "actual": "(ok (tuple (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (signer-key 0x034ad8ed29e71b24f3544ec67ca2a512e0e6d5180062632e903354d627ba6606d9)))",
+      "passed": true
+    },
+    {
+      "label": "pox-5 knows the pool as a signer",
+      "actual": "(some 0x034ad8ed29e71b24f3544ec67ca2a512e0e6d5180062632e903354d627ba6606d9)",
+      "passed": true
+    },
+    {
+      "label": "pool: fee 450, OG cap 2.1M STX, no seats, budget 0",
+      "actual": "(tuple (fee u450) (og (tuple (cap-ustx u2100000000000) (covered-ustx u0) (seats u0))) (vault SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-sbtc-autoswap))",
+      "passed": true
+    },
+    {
+      "label": "autoswap config: pyth-fee-budget u0",
+      "actual": "(tuple (dia-band-bps u1000) (last-router-swap u0) (leeway-bps u500) (market SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3) (max-chunk-sats u1000000) (no-pyth-slippage-bps u1000) (pool SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (pyth-fee-budget u0) (recovery-delay-blocks u432) (router SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-3) (router-cooldown-blocks u1) (slippage-bps u100) (window-blocks u288))",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.juice-autostake-safe-auth-helpers-v1 (593 B, faktory-dao template juice-autostake-safe-auth-helpers-v1-template.ts (sha256 aabf3ba32c56...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.juice-autostake-safe (51552 B, faktory-dao template juice-autostake-safe-template.ts (sha256 dda5367c1800...))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "P post: core-v2 set-verified-contract(safe) computes the on-chain hash",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "core-v2 canonical hash == sha512/256 of the template bytes (1ef1627f...e1fab9bb)",
+      "actual": "(some 0x1ef1627fd1f4b993cef8565ce8d6634c94cadb4c9ae2c914eeaaddb5e1fab9bb)",
+      "passed": true
+    },
+    {
+      "label": "template canonical hash is the one DEPLOY-PLAN pins (1ef1627f...e1fab9bb)",
+      "actual": "1ef1627fd1f4b993cef8565ce8d6634c94cadb4c9ae2c914eeaaddb5e1fab9bb",
+      "passed": true
+    },
+    {
+      "label": "deploy SPMPMA.fastpool-swap-vault (28375 B, repo file fastpool-pox-5 b719e87 contracts/fastpool-swap-vault.clar, byte for byte)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SPMPMA.signer-manager-vault-stx-rewards (41593 B, repo file fastpool-pox-5 3f82a93 contracts/signer-manager-vault-stx-rewards.clar, byte for byte)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SP8A9H.ccd015-redemption-book-mia-stx (12641 B, repo file citycoins-protocol 8bfbb5f ccd015-redemption-book-mia-stx.clar, full-line comments dropped (the ccd016 harness deploy form))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "deploy SP8A9H.ccd016-swap-vault-mia-v2 (22427 B, repo file citycoins-protocol 8bfbb5f ccd016-swap-vault-mia-v2.clar, full-line comments dropped (the ccd016 harness deploy form))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fund OG1 1,001 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "OG1 stakes 1,000 STX for 96 cycles (real pox-5 -> validate-stake!)",
+      "actual": "(ok (tuple (amount-ustx u1000000000) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (staker SP1FCS0HTWWMWWZF2N9291891SZ1HDGKKPQMAN1ZK) (unlock-burn-height u1174250) (unlock-cycle u242)))",
+      "passed": true
+    },
+    {
+      "label": "OG1 holds a 1,000 STX seat",
+      "actual": "u1000000000",
+      "passed": true
+    },
+    {
+      "label": "HOP is locked at fastpool-max500 on mainnet (200k STX)",
+      "actual": "(some (tuple (amount-ustx u200000000000) (first-reward-cycle u146) (num-cycles u4) (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.fastpool-max500-signer-manager)))",
+      "passed": true
+    },
+    {
+      "label": "HOP: stake-update fastpool-max500 -> juice pool (a hop, no new STX)",
+      "actual": "(ok (tuple (amount-increase u0) (amount-ustx u200000000000) (cycles-to-extend u0) (num-cycles u4) (old-signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.fastpool-max500-signer-manager) (prev-unlock-height u150) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (staker SP13CM9QN6J23B6T6415SC0T8JQZ3YADPD1TJ27WZ) (unlock-burn-height u981050) (unlock-cycle u150)))",
+      "passed": true
+    },
+    {
+      "label": "HOP takes a 200k STX seat",
+      "actual": "u200000000000",
+      "passed": true
+    },
+    {
+      "label": "2 seats, 201,000 STX covered",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u201000000000) (seats u2))",
+      "passed": true
+    },
+    {
+      "label": "ALICE has no seat (pays the 4.5% fee)",
+      "actual": "false",
+      "passed": true
+    },
+    {
+      "label": "fund the canonical safe 2,000 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "onboard the canonical safe (FAKFUN relay)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "safe keeper defaults to chavita",
+      "actual": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22",
+      "passed": true
+    },
+    {
+      "label": "owner: stake-stx-juice 2,000 STX into the pool (real pox-5 stake)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "pox-5 position names the pool",
+      "actual": "(some (tuple (amount-ustx u2000000000) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer)))",
+      "passed": true
+    },
+    {
+      "label": "safe takes a 2,000 STX seat",
+      "actual": "u2000000000",
+      "passed": true
+    },
+    {
+      "label": "nothing landed yet: keeper restake refused (u4026)",
+      "actual": "(err u4026)",
+      "passed": true
+    },
+    {
+      "label": "3 seats, 203,000 STX covered",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u203000000000) (seats u3))",
+      "passed": true
+    },
+    {
+      "label": "deploy SP28MP.mallory-autostake-safe (51571 B, template + one comment line (tampered))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "tampered copy onboard -> refused by core-v2 (hash mismatch)",
+      "actual": "(err u6002)",
+      "passed": true
+    },
+    {
+      "label": "deploy SP28MP.bob-autostake-safe (51552 B, template bytes, relay user copy)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "user copy onboards on the canonical hash (own passkey)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fund the user copy 300 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "owner stakes 200 STX from the user copy",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "owner sets keeper RANDOM",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "owner proposes transfer to RECIPIENT",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "relayer submits the passkey confirm-transfer-wallet",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "owner is RECIPIENT and the keeper reset to RECIPIENT (611873c)",
+      "actual": "(tuple (k SP22WH53NS94VR6N145ZX77BK4S0EWFBE41VW3Z6B) (o (ok SP22WH53NS94VR6N145ZX77BK4S0EWFBE41VW3Z6B)))",
+      "passed": true
+    },
+    {
+      "label": "old keeper RANDOM restake -> u4001",
+      "actual": "(err u4001)",
+      "passed": true
+    },
+    {
+      "label": "chavita restake -> u4001",
+      "actual": "(err u4001)",
+      "passed": true
+    },
+    {
+      "label": "old owner set-keeper -> u4001",
+      "actual": "(err u4001)",
+      "passed": true
+    },
+    {
+      "label": "new owner sets chavita as keeper",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "chavita restakes the free 100 STX for the new owner",
+      "actual": "(ok (tuple (amount u100000000) (cycles-to-extend u0)))",
+      "passed": true
+    },
+    {
+      "label": "user copy: 300 STX staked with the pool, nothing unlocked",
+      "actual": "(tuple (a (tuple (locked u300000000) (unlock-height u1174250) (unlocked u0))) (i (some (tuple (amount-ustx u300000000) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer)))))",
+      "passed": true
+    },
+    {
+      "label": "stranger cannot set the vault window through the pool (u100)",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "admin: set-vault-window-blocks u3 (vault idle)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "admin: set-vault-max-chunk-sats u50000",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "window 289 refused (u16033)",
+      "actual": "(err u16033)",
+      "passed": true
+    },
+    {
+      "label": "pyth budget above 10 STX refused (u16033)",
+      "actual": "(err u16033)",
+      "passed": true
+    },
+    {
+      "label": "real sBTC into pox-5 backs cycle 144 rewards (150000 sats)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fixture: cycle 144 earned 150000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000 SPV9K2=2000000000",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B1 stranger: pox-claim-rewards -> vault funded (fund opens the clock)",
+      "actual": "(ok (tuple (bond-rewards (list )) (bond-totals u0) (stx-rewards (tuple (earned u150000) (rewards-per-token u1440258939597))) (total-rewards u150000)))",
+      "passed": true
+    },
+    {
+      "label": "B1 vault holds the reward, pool holds no sBTC",
+      "actual": "(tuple (p u0) (v u150000))",
+      "passed": true
+    },
+    {
+      "label": "B1 pending-swap = cycle 144 tranche 0",
+      "actual": "(some (tuple (reward-cycle u144) (tranche u0)))",
+      "passed": true
+    },
+    {
+      "label": "B1 claim again in the same distribution cycle -> u112",
+      "actual": "(err u112)",
+      "passed": true
+    },
+    {
+      "label": "B1 jing-place (stranger, real signed print): rests at the floor",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u150000) (floor u18527314048443)))))",
+      "passed": true
+    },
+    {
+      "label": "B1 resting on the v6-3 book, vault holds 0 sBTC",
+      "actual": "(tuple (book u150000) (vault u0))",
+      "passed": true
+    },
+    {
+      "label": "B1 router-swap during patience -> u16031",
+      "actual": "(err u16031)",
+      "passed": true
+    },
+    {
+      "label": "B1 jing-take during patience -> u16031",
+      "actual": "(err u16031)",
+      "passed": true
+    },
+    {
+      "label": "B1 finalize while resting -> u16032",
+      "actual": "(err u16032)",
+      "passed": true
+    },
+    {
+      "label": "B1 patience window (3 blocks): advanced 3 burn blocks (burn 971437, cycle 145, offset 887)",
+      "actual": "u971437",
+      "passed": true
+    },
+    {
+      "label": "B1 jing-reclaim by anyone after the window",
+      "actual": "(ok (tuple (notification \"jing-reclaim\") (payload (tuple (amount u150000)))))",
+      "passed": true
+    },
+    {
+      "label": "B1: real STX maker bid (585025020 uSTX at mid + 5%)",
+      "actual": "(ok u585025020)",
+      "passed": true
+    },
+    {
+      "label": "B1: STX bid is live on the book",
+      "actual": "u585025020",
+      "passed": true
+    },
+    {
+      "label": "B1 stranger cannot jing-take (u100)",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "B1 admin jing-take 50k sats on the book through the pool",
+      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19306744512712) (out u97216480)))))",
+      "passed": true
+    },
+    {
+      "label": "B1 jing-take: vault sBTC 100k, STX + out",
+      "actual": "(tuple (s u100000) (x u97216480))",
+      "passed": true
+    },
+    {
+      "label": "B1 stranger router-swap: smart path sells one full 50k chunk",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19308262864281) (mid u19503295822507) (out u97224125) (unsold u0)))))",
+      "passed": true
+    },
+    {
+      "label": "B1 router-swap went through router 15aef66 smart-swap (print present)",
+      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"97224125\",\"limit-price\":\"19308262864281\",\"out\":\"97224125\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "passed": true
+    },
+    {
+      "label": "B1 smart legs add up to 50k",
+      "actual": "50000+0+0+0",
+      "passed": true
+    },
+    {
+      "label": "B1 smart out >= floor-out(sold - 8, limit)",
+      "actual": "97224125 vs limit 19308262864281",
+      "passed": true
+    },
+    {
+      "label": "B1 router-swap: vault sBTC 50k, STX + out (fee 0: no Pyth transfer)",
+      "actual": "(tuple (s u50000) (x u194440605))",
+      "passed": true
+    },
+    {
+      "label": "B1 same burn block: cooldown u16044",
+      "actual": "(err u16044)",
+      "passed": true
+    },
+    {
+      "label": "B1 router cooldown: advanced 1 burn blocks (burn 971438, cycle 145, offset 888)",
+      "actual": "u971438",
+      "passed": true
+    },
+    {
+      "label": "B1 split that does not add up -> u16040",
+      "actual": "(err u16040)",
+      "passed": true
+    },
+    {
+      "label": "B1 split over the chunk cap -> u16039",
+      "actual": "(err u16039)",
+      "passed": true
+    },
+    {
+      "label": "B1 admin router-swap-split: manual 50k on the Jing leg",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19304728206102) (mid u19499725460710) (out u97206327) (unsold u0) (velar u0) (velar-limit u19382727107945) (xyk u0)))))",
+      "passed": true
+    },
+    {
+      "label": "B1 vault empty, clock closed, ready to finish",
+      "actual": "(tuple (c (tuple (batch-start none) (burn-height u971438) (ready-to-finish true) (window-elapsed false) (window-ends none) (window-open false))) (e true))",
+      "passed": true
+    },
+    {
+      "label": "B1 vault STX = jing-take + router-swap + split outs",
+      "actual": "u291646932",
+      "passed": true
+    },
+    {
+      "label": "B1: bidder cancels the rest of its bid (book clean for the next batch)",
+      "actual": "(ok u293086151)",
+      "passed": true
+    },
+    {
+      "label": "B1 finalize-swap: vault finish sends everything (budget 0)",
+      "actual": "(ok u291646932)",
+      "passed": true
+    },
+    {
+      "label": "B1 pool STX + pot, vault keeps 0, stx-pot recorded",
+      "actual": "(tuple (p u291646932) (pot u291646932) (v u0))",
+      "passed": true
+    },
+    {
+      "label": "B1 pay-stx-stakers before finalize of another tranche -> u115",
+      "actual": "(err u115)",
+      "passed": true
+    },
+    {
+      "label": "B1 pay-stx-stakers (anyone)",
+      "actual": "(ok u285084877)",
+      "passed": true
+    },
+    {
+      "label": "B1 SP1FCS paid owed 48607822 - fee 0 (cover 1000000000, shares 1000000000)",
+      "actual": "u49607822",
+      "passed": true
+    },
+    {
+      "label": "B1 SP2SB4 paid owed 145823466 - fee 6562055 (cover 0, shares 3000000000)",
+      "actual": "u139261411",
+      "passed": true
+    },
+    {
+      "label": "B1 SPV9K2 paid owed 97215644 - fee 0 (cover 2000000000, shares 2000000000)",
+      "actual": "u97215644",
+      "passed": true
+    },
+    {
+      "label": "B1 earned-fees += 6562055 (non-OG share only)",
+      "actual": "u6562055",
+      "passed": true
+    },
+    {
+      "label": "B1 tranche fully paid, residue = pot - owed",
+      "actual": "(tuple (f true) (r u0))",
+      "passed": true
+    },
+    {
+      "label": "B1 replay pays nothing",
+      "actual": "(ok u0)",
+      "passed": true
+    },
+    {
+      "label": "B1 stranger cannot sweep dust (u100)",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "B1 sweep again -> u105",
+      "actual": "(err u105)",
+      "passed": true
+    },
+    {
+      "label": "stranger cannot restake (u4001)",
+      "actual": "(err u4001)",
+      "passed": true
+    },
+    {
+      "label": "keeper (chavita) restakes exactly the payout, extend 0",
+      "actual": "(ok (tuple (amount u97215644) (cycles-to-extend u0)))",
+      "passed": true
+    },
+    {
+      "label": "safe: pox-5 amount = 2,000 STX + payout, nothing unlocked",
+      "actual": "(tuple (a (tuple (locked u2097215644) (unlock-height u1174250) (unlocked u0))) (i (some (tuple (amount-ustx u2097215644) (first-reward-cycle u146) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer)))))",
+      "passed": true
+    },
+    {
+      "label": "safe seat grows with the restake",
+      "actual": "u2097215644",
+      "passed": true
+    },
+    {
+      "label": "fixture: live Lazer oracle fee set to u10 (Eval in the oracle; governance not drivable)",
+      "actual": "u10",
+      "passed": true
+    },
+    {
+      "label": "oracle fee recipient",
+      "actual": "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8",
+      "passed": true
+    },
+    {
+      "label": "real sBTC into pox-5 backs cycle 143 rewards (120000 sats)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fixture: cycle 143 earned 120000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B2 claim cycle 143 -> vault (tranche 0 of a new cycle)",
+      "actual": "(ok (tuple (bond-rewards (list )) (bond-totals u0) (stx-rewards (tuple (earned u120000) (rewards-per-token u903631748280))) (total-rewards u120000)))",
+      "passed": true
+    },
+    {
+      "label": "B2 0-STX caller",
+      "actual": "u0",
+      "passed": true
+    },
+    {
+      "label": "B2 vault holds 0 STX: jing-place aborts, the oracle fee cannot be paid (err u1)",
+      "actual": "(err u1)",
+      "passed": true
+    },
+    {
+      "label": "B2 vault float 1000 uSTX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B2 float but budget 0: jing-place aborts on vault-mid with-stx allowance (err u0)",
+      "actual": "(err u0)",
+      "passed": true
+    },
+    {
+      "label": "B2 budget u9 (fee - 1): still aborts (err u0)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B2 budget fee - 1: jing-place aborts (err u0)",
+      "actual": "(err u0)",
+      "passed": true
+    },
+    {
+      "label": "B2 admin sets budget u20 (= 2 x fee) through the pool",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B2 0-STX caller jing-place: the vault pays the one verify",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u120000) (floor u18543005773561)))))",
+      "passed": true
+    },
+    {
+      "label": "B2 jing-place: vault paid 1 x fee, caller paid nothing",
+      "actual": "{\"v\":[\"10\"],\"c\":[]}",
+      "passed": true
+    },
+    {
+      "label": "B2 patience window: advanced 3 burn blocks (burn 971441, cycle 145, offset 891)",
+      "actual": "u971441",
+      "passed": true
+    },
+    {
+      "label": "B2 reclaim",
+      "actual": "(ok (tuple (notification \"jing-reclaim\") (payload (tuple (amount u120000)))))",
+      "passed": true
+    },
+    {
+      "label": "B2: real STX maker bid (468673630 uSTX at mid + 5%)",
+      "actual": "(ok u468673630)",
+      "passed": true
+    },
+    {
+      "label": "B2: STX bid is live on the book",
+      "actual": "u468673630",
+      "passed": true
+    },
+    {
+      "label": "B2 admin jing-take 50k: vault pays 2 verifies",
+      "actual": "(ok (tuple (notification \"jing-take\") (payload (tuple (amount u50000) (limit-price u19335413569520) (out u97360838)))))",
+      "passed": true
+    },
+    {
+      "label": "B2 jing-take: vault paid 2 x fee (vault-mid + market swap)",
+      "actual": "10,10",
+      "passed": true
+    },
+    {
+      "label": "B2 jing-take: vault STX = before + out - 2 fees",
+      "actual": "u97361808",
+      "passed": true
+    },
+    {
+      "label": "B2 0-STX caller router-swap (smart): sells a 50k chunk",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19337225572636) (mid u19532551083471) (out u97369952) (unsold u0)))))",
+      "passed": true
+    },
+    {
+      "label": "B2 router-swap: vault paid 2 x fee, caller sent no STX",
+      "actual": "{\"v\":[\"10\",\"10\"],\"c\":0}",
+      "passed": true
+    },
+    {
+      "label": "B2 caller still holds 0 STX",
+      "actual": "u0",
+      "passed": true
+    },
+    {
+      "label": "B2 router-swap: vault STX = before + out - 1 fee (refresh-mid, outside the router)",
+      "actual": "u194731750",
+      "passed": true
+    },
+    {
+      "label": "B2 cooldown: advanced 1 burn blocks (burn 971442, cycle 145, offset 892)",
+      "actual": "u971442",
+      "passed": true
+    },
+    {
+      "label": "B2 admin split: the last 20000 sats on the Jing leg",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u20000) (dlmm u0) (jing u20000) (limit-price u19337533215806) (mid u19532861834148) (out u38948595) (unsold u0) (velar u0) (velar-limit u19415664663143) (xyk u0)))))",
+      "passed": true
+    },
+    {
+      "label": "B2 split: vault paid 2 x fee",
+      "actual": "10,10",
+      "passed": true
+    },
+    {
+      "label": "B2 split: vault STX = before + out - 1 fee",
+      "actual": "u233680335",
+      "passed": true
+    },
+    {
+      "label": "B2: bidder cancels the rest of its bid (book clean for the next batch)",
+      "actual": "(ok u234760313)",
+      "passed": true
+    },
+    {
+      "label": "B2 finalize: finish keeps the u20 reserve",
+      "actual": "(ok u233680315)",
+      "passed": true
+    },
+    {
+      "label": "B2 vault keeps exactly u20; pool + pot",
+      "actual": "(tuple (p u240242370) (v u20))",
+      "passed": true
+    },
+    {
+      "label": "B2 pay-stx-stakers before finalize of another tranche -> u115",
+      "actual": "(err u115)",
+      "passed": true
+    },
+    {
+      "label": "B2 pay-stx-stakers (anyone)",
+      "actual": "(ok u225793604)",
+      "passed": true
+    },
+    {
+      "label": "B2 SP1FCS paid owed 58420078 - fee 0 (cover 1000000000, shares 1000000000)",
+      "actual": "u108027900",
+      "passed": true
+    },
+    {
+      "label": "B2 SP2SB4 paid owed 175260236 - fee 7886710 (cover 0, shares 3000000000)",
+      "actual": "u306634937",
+      "passed": true
+    },
+    {
+      "label": "B2 earned-fees += 7886710 (non-OG share only)",
+      "actual": "u14448765",
+      "passed": true
+    },
+    {
+      "label": "B2 tranche fully paid, residue = pot - owed",
+      "actual": "(tuple (f true) (r u1))",
+      "passed": true
+    },
+    {
+      "label": "B2 replay pays nothing",
+      "actual": "(ok u0)",
+      "passed": true
+    },
+    {
+      "label": "B2 stranger cannot sweep dust (u100)",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "B2 sweep-tranche-dust -> admin",
+      "actual": "(ok u1)",
+      "passed": true
+    },
+    {
+      "label": "B2 sweep again -> u105",
+      "actual": "(err u105)",
+      "passed": true
+    },
+    {
+      "label": "real sBTC into pox-5 backs cycle 142 rewards (100000 sats)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fixture: cycle 142 earned 100000 sats for juice-pool-sbtc-signer, shares SP1FCS=1000000000 SP2SB4=3000000000",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "B3 claim cycle 142 -> vault",
+      "actual": "(ok (tuple (bond-rewards (list )) (bond-totals u0) (stx-rewards (tuple (earned u100000) (rewards-per-token u909456324512))) (total-rewards u100000)))",
+      "passed": true
+    },
+    {
+      "label": "B3 jing-place on the reserve (vault pays)",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18555837254491)))))",
+      "passed": true
+    },
+    {
+      "label": "B3 emergency-recover too soon -> u16046",
+      "actual": "(err u16046)",
+      "passed": true
+    },
+    {
+      "label": "B3 RECOVERY_DELAY_BLOCKS: advanced 432 burn blocks (burn 971874, cycle 145, offset 1324)",
+      "actual": "u971874",
+      "passed": true
+    },
+    {
+      "label": "B3 emergency-recover by anyone: reclaims from Jing, sBTC + the STX reserve back to the pool",
+      "actual": "(ok (tuple (sbtc u100000) (stx u10)))",
+      "passed": true
+    },
+    {
+      "label": "B3 pool + 100k sBTC + reserve STX; vault empty; recovered pot",
+      "actual": "(tuple (e true) (rp u100000) (s u100000) (sp u10) (v u0) (x u14448775))",
+      "passed": true
+    },
+    {
+      "label": "B3 pay-stx-stakers pays the recovered STX pot (the reserve)",
+      "actual": "(ok u9)",
+      "passed": true
+    },
+    {
+      "label": "B3 pay-recovered-sbtc-stakers",
+      "actual": "(ok u96625)",
+      "passed": true
+    },
+    {
+      "label": "B3 SP1FCS recovered sBTC = owed 25000 - fee 0",
+      "actual": "u25000",
+      "passed": true
+    },
+    {
+      "label": "B3 SP2SB4 recovered sBTC = owed 75000 - fee 3375",
+      "actual": "u71625",
+      "passed": true
+    },
+    {
+      "label": "B3 earned-sbtc-fees += the non-OG fee",
+      "actual": "u3375",
+      "passed": true
+    },
+    {
+      "label": "B3 recovered tranche fully paid; residue = pot - owed",
+      "actual": "(tuple (f true) (r u0))",
+      "passed": true
+    },
+    {
+      "label": "B3 replay pays nothing",
+      "actual": "(ok u0)",
+      "passed": true
+    },
+    {
+      "label": "B3 sweep-recovered-sbtc-dust again -> u105",
+      "actual": "(err u105)",
+      "passed": true
+    },
+    {
+      "label": "stranger withdraw-sbtc-fees -> u100",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "admin withdraw-sbtc-fees (all)",
+      "actual": "(ok u3375)",
+      "passed": true
+    },
+    {
+      "label": "admin withdraw-all-fees (STX fees from B1-B3)",
+      "actual": "(ok u14448765)",
+      "passed": true
+    },
+    {
+      "label": "pool fee ledgers empty",
+      "actual": "(tuple (s u0) (x u0))",
+      "passed": true
+    },
+    {
+      "label": "FP register-self by a stranger -> u1001",
+      "actual": "(err u1001)",
+      "passed": true
+    },
+    {
+      "label": "FP register-self (Fast Pool deployer = admin)",
+      "actual": "(ok (tuple (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards) (signer-key 0x03706116bc9f3a46f34269a1e514bf03b3f3e0c441638e937e8e57240b940b7e8b)))",
+      "passed": true
+    },
+    {
+      "label": "fund FS1 101 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fund FS2 101 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FS1 stakes 100 STX for 96 cycles: validate-stake! accepts (3f82a93)",
+      "actual": "(ok (tuple (amount-ustx u100000000) (first-reward-cycle u146) (num-cycles u96) (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards) (staker SPRVJH4MZS15RS7206XWAGFANQ9HK2BGDP10CYHS) (unlock-burn-height u1174250) (unlock-cycle u242)))",
+      "passed": true
+    },
+    {
+      "label": "FS2 stakes 100 STX for 13 cycles (was the first refused length)",
+      "actual": "(ok (tuple (amount-ustx u100000000) (first-reward-cycle u146) (num-cycles u13) (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards) (staker SP10P7F2KB9XRST88NBN9CDMEJGX6TYEM2YGKWR81) (unlock-burn-height u999950) (unlock-cycle u159)))",
+      "passed": true
+    },
+    {
+      "label": "FS1 locked 96 cycles at the Fast Pool signer",
+      "actual": "(some (tuple (amount-ustx u100000000) (first-reward-cycle u146) (num-cycles u96) (signer SPMPMA1V6P430M8C91QS1G9XJ95S59JS1TZFZ4Q4.signer-manager-vault-stx-rewards)))",
+      "passed": true
+    },
+    {
+      "label": "FS1 share mirrored in the signer for the 96th cycle",
+      "actual": "u100000000",
+      "passed": true
+    },
+    {
+      "label": "real sBTC into pox-5 backs Fast Pool cycle 144",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fixture: Fast Pool cycle 144 earned 100000 sats, FS1 1 share, mirrored via validate-stake!",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FP set-vault-window-blocks u3 (admin, vault idle)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FP set-vault-max-chunk-sats u50000",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FP set-vault-pyth-fee-budget u20 (fee u10 is live on the fork)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FP vault float 1000 uSTX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "FP claim-rewards (anyone)",
+      "actual": "(ok u100000)",
+      "passed": true
+    },
+    {
+      "label": "FP fund-swap-vault (anyone)",
+      "actual": "(ok u100000)",
+      "passed": true
+    },
+    {
+      "label": "FP vault holds the pot",
+      "actual": "u100000",
+      "passed": true
+    },
+    {
+      "label": "FP jing-place (0-STX caller, the vault pays)",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18561696059443)))))",
+      "passed": true
+    },
+    {
+      "label": "FP patience window: advanced 3 burn blocks (burn 971877, cycle 145, offset 1327)",
+      "actual": "u971877",
+      "passed": true
+    },
+    {
+      "label": "FP jing-reclaim",
+      "actual": "(ok (tuple (notification \"jing-reclaim\") (payload (tuple (amount u100000)))))",
+      "passed": true
+    },
+    {
+      "label": "FP: real STX maker bid (390769988 uSTX at mid + 5%)",
+      "actual": "(ok u390769988)",
+      "passed": true
+    },
+    {
+      "label": "FP: STX bid is live on the book",
+      "actual": "u390769988",
+      "passed": true
+    },
+    {
+      "label": "FP 0-STX caller router-swap (smart path) sells a 50k chunk",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u50000) (limit-price u19343346779485) (mid u19538734120692) (out u97400775) (unsold u0)))))",
+      "passed": true
+    },
+    {
+      "label": "FP router-swap: vault paid 2 x fee, caller none",
+      "actual": "10,10",
+      "passed": true
+    },
+    {
+      "label": "FP router print from 15aef66: legs add to 50k",
+      "actual": "{\"amount\":\"50000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"50000\",\"jing-in\":\"50000\",\"jing-ok\":true,\"jing-out\":\"97400785\",\"limit-price\":\"19343346779485\",\"out\":\"97400775\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "passed": true
+    },
+    {
+      "label": "FP vault STX = before + out - 1 fee",
+      "actual": "u97401755",
+      "passed": true
+    },
+    {
+      "label": "FP cooldown: advanced 1 burn blocks (burn 971878, cycle 145, offset 1328)",
+      "actual": "u971878",
+      "passed": true
+    },
+    {
+      "label": "FP stranger router-swap-split -> u1001",
+      "actual": "(err u1001)",
+      "passed": true
+    },
+    {
+      "label": "FP admin router-swap-split: manual 50k on the Jing leg",
+      "actual": "(ok (tuple (notification \"router-swap-split\") (payload (tuple (amount u50000) (dlmm u0) (jing u50000) (limit-price u19338828425429) (mid u19534170126696) (out u97378023) (unsold u0) (velar u0) (velar-limit u19416965105935) (xyk u0)))))",
+      "passed": true
+    },
+    {
+      "label": "FP split: vault paid 2 x fee",
+      "actual": "10,10",
+      "passed": true
+    },
+    {
+      "label": "FP vault empty; STX matches the two sales",
+      "actual": "(tuple (e true) (x u194779768))",
+      "passed": true
+    },
+    {
+      "label": "FP: bidder cancels the rest of its bid (book clean for the next batch)",
+      "actual": "(ok u195796197)",
+      "passed": true
+    },
+    {
+      "label": "FP finalize-swap-vault: finish keeps the u20 reserve",
+      "actual": "(ok u194779748)",
+      "passed": true
+    },
+    {
+      "label": "FP vault keeps u20, signer + the rest",
+      "actual": "(tuple (p u194779748) (v u20))",
+      "passed": true
+    },
+    {
+      "label": "FP distribute-rewards-many([FS1]) pays the whole pot (fee 0, 1 of 1 share)",
+      "actual": "(ok (tuple (paid u1) (total-sbtc u0) (total-stx u194779748)))",
+      "passed": true
+    },
+    {
+      "label": "FS1 unlocked STX + the whole pot",
+      "actual": "u195779748",
+      "passed": true
+    },
+    {
+      "label": "deploy SP8A9H.sim-ccip-proxy (659 B, sim-only proxy playing a passed CCIP proposal)",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "stranger set-window-blocks -> u16000 (DAO only)",
+      "actual": "(err u16000)",
+      "passed": true
+    },
+    {
+      "label": "fixture: base-dao set-extensions: ccd016 + the proposal proxy enabled",
+      "actual": "true",
+      "passed": true
+    },
+    {
+      "label": "proxy: treasury allows sBTC",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "proxy: set-window-blocks u3",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "proxy: set-pyth-fee-budget u20",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "ccd016 STX float 1000 uSTX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "MIA rewards: 100k sats into the treasury",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "fund-from-treasury (anyone): pulls the whole treasury, opens the window",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971878)) (opened true)))))",
+      "passed": true
+    },
+    {
+      "label": "treasury emptied, vault holds it",
+      "actual": "(tuple (t u0) (v u100000))",
+      "passed": true
+    },
+    {
+      "label": "ccd016 jing-place (0-STX caller; the vault pays the verify)",
+      "actual": "(ok (tuple (notification \"jing-place\") (payload (tuple (amount u100000) (floor u18559996122648)))))",
+      "passed": true
+    },
+    {
+      "label": "router-swap inside the window -> u16031",
+      "actual": "(err u16031)",
+      "passed": true
+    },
+    {
+      "label": "ccd016 window: advanced 3 burn blocks (burn 971881, cycle 145, offset 1331)",
+      "actual": "u971881",
+      "passed": true
+    },
+    {
+      "label": "jing-reclaim after the window (anyone)",
+      "actual": "(ok (tuple (notification \"jing-reclaim\") (payload (tuple (amount u100000)))))",
+      "passed": true
+    },
+    {
+      "label": "ccd016: real STX maker bid (390684620 uSTX at mid + 5%)",
+      "actual": "(ok u390684620)",
+      "passed": true
+    },
+    {
+      "label": "ccd016: STX bid is live on the book",
+      "actual": "u390684620",
+      "passed": true
+    },
+    {
+      "label": "ccd016 router-swap after the window: the whole batch through router 15aef66",
+      "actual": "(ok (tuple (notification \"router-swap\") (payload (tuple (amount u100000) (limit-price u19343428572476) (mid u19538816739875) (out u194802384) (unsold u0)))))",
+      "passed": true
+    },
+    {
+      "label": "ccd016 router-swap: vault paid 2 x fee, caller none",
+      "actual": "10,10",
+      "passed": true
+    },
+    {
+      "label": "ccd016 router print legs add up",
+      "actual": "{\"amount\":\"100000\",\"dlmm-cap\":\"0\",\"dlmm-in\":\"0\",\"dlmm-out\":\"0\",\"jing-cap\":\"100000\",\"jing-in\":\"100000\",\"jing-ok\":true,\"jing-out\":\"194802394\",\"limit-price\":\"19343428572476\",\"out\":\"194802384\",\"unsold\":\"0\",\"velar-cap\":\"0\",\"velar-in\":\"0\",\"velar-out\":\"0\",\"xyk-cap\":\"0\",\"xyk-in\":\"0\",\"xyk-out\":\"0\"}",
+      "passed": true
+    },
+    {
+      "label": "ccd016 STX = before + out - 1 fee; empty; clock cleared",
+      "actual": "(tuple (c none) (e true) (x u194803364))",
+      "passed": true
+    },
+    {
+      "label": "ccd016: bidder cancels the rest of its bid (book clean for the next batch)",
+      "actual": "(ok u195687229)",
+      "passed": true
+    },
+    {
+      "label": "fuel-fair-book: the STX (minus the u20 reserve) to ccd015",
+      "actual": "(ok (tuple (notification \"fuel-fair-book\") (payload (tuple (amount u194803344) (book SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH.ccd015-redemption-book-mia-stx)))))",
+      "passed": true
+    },
+    {
+      "label": "ccd015 book received it; ccd016 keeps the reserve",
+      "actual": "(tuple (b u194803344) (v u20))",
+      "passed": true
+    },
+    {
+      "label": "D 3 sats land in the treasury",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "D empty vault: funding opens (opened true)",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u3) (batch-start (some u971881)) (opened true)))))",
+      "passed": true
+    },
+    {
+      "label": "D one block: advanced 1 burn blocks (burn 971882, cycle 145, offset 1332)",
+      "actual": "u971882",
+      "passed": true
+    },
+    {
+      "label": "D 5 sats land in the treasury",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "D window open: funding joins (opened false)",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u5) (batch-start (some u971881)) (opened false)))))",
+      "passed": true
+    },
+    {
+      "label": "D window elapses on 8 sats: advanced 3 burn blocks (burn 971885, cycle 145, offset 1335)",
+      "actual": "u971885",
+      "passed": true
+    },
+    {
+      "label": "D elapsed on 8 sats of dust, not empty",
+      "actual": "(tuple (e true) (m false) (s u8))",
+      "passed": true
+    },
+    {
+      "label": "D router-swap on 8 dust sats -> below the slack (err)",
+      "actual": "(err u16047)",
+      "passed": true
+    },
+    {
+      "label": "D new rewards 100k sats in the treasury",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "D elapsed + dust: funding opens a FRESH window (8adfa68)",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u100000) (batch-start (some u971885)) (opened true)))))",
+      "passed": true
+    },
+    {
+      "label": "D batch-start is this block, window open",
+      "actual": "(tuple (b true) (o true))",
+      "passed": true
+    },
+    {
+      "label": "D the new rewards are not router-swapped at once (u16031)",
+      "actual": "(err u16031)",
+      "passed": true
+    },
+    {
+      "label": "D window elapses on 100,008 sats: advanced 3 burn blocks (burn 971888, cycle 145, offset 1338)",
+      "actual": "u971888",
+      "passed": true
+    },
+    {
+      "label": "D 1 sat lands",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "D elapsed + MORE than 8 sats: funding joins (opened false; no 1-sat re-arm)",
+      "actual": "(ok (tuple (notification \"fund-from-treasury\") (payload (tuple (amount u1) (batch-start (some u971885)) (opened false)))))",
+      "passed": true
+    },
+    {
+      "label": "D window still elapsed",
+      "actual": "true",
+      "passed": true
+    },
+    {
+      "label": "HOP unstakes",
+      "actual": "(ok (tuple (amount-ustx u200000000000) (first-reward-cycle u146) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (staker SP13CM9QN6J23B6T6415SC0T8JQZ3YADPD1TJ27WZ) (unlock-burn-height u972650) (unlock-cycle u146)))",
+      "passed": true
+    },
+    {
+      "label": "OG1 unstakes",
+      "actual": "(ok (tuple (amount-ustx u1000000000) (first-reward-cycle u146) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (staker SP1FCS0HTWWMWWZF2N9291891SZ1HDGKKPQMAN1ZK) (unlock-burn-height u972650) (unlock-cycle u146)))",
+      "passed": true
+    },
+    {
+      "label": "HOP still staying until the lock ends",
+      "actual": "true",
+      "passed": true
+    },
+    {
+      "label": "evict-og HOP while staying -> u129",
+      "actual": "(err u129)",
+      "passed": true
+    },
+    {
+      "label": "evict-og of a never-seated staker -> u128",
+      "actual": "(err u128)",
+      "passed": true
+    },
+    {
+      "label": "into cycle 146: the HOP and OG1 locks end: advanced 782 burn blocks (burn 972670, cycle 146, offset 20)",
+      "actual": "u972670",
+      "passed": true
+    },
+    {
+      "label": "pox-5: HOP has no position",
+      "actual": "none",
+      "passed": true
+    },
+    {
+      "label": "og-staying HOP false",
+      "actual": "false",
+      "passed": true
+    },
+    {
+      "label": "stranger evict-og HOP after the payout: the 200k cover goes back to the cap",
+      "actual": "(ok u200000000000)",
+      "passed": true
+    },
+    {
+      "label": "og-evict print",
+      "actual": "(tuple (freed-ustx u200000000000) (seats u3) (staker SP13CM9QN6J23B6T6415SC0T8JQZ3YADPD1TJ27WZ) (topic \"og-evict\"))",
+      "passed": true
+    },
+    {
+      "label": "3 seats after the evict, 200k STX back to the cap",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u3397215644) (seats u3))",
+      "passed": true
+    },
+    {
+      "label": "OG1 stakes 1 STX fresh before anyone evicts it (Patient Reed)",
+      "actual": "(ok (tuple (amount-ustx u1000000) (first-reward-cycle u147) (num-cycles u96) (signer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.juice-pool-sbtc-signer) (staker SP1FCS0HTWWMWWZF2N9291891SZ1HDGKKPQMAN1ZK) (unlock-burn-height u1176350) (unlock-cycle u243)))",
+      "passed": true
+    },
+    {
+      "label": "og-shrink print: cover 1 STX, freed 999 STX",
+      "actual": "(tuple (covered-ustx u1000000) (freed-ustx u999000000) (staker SP1FCS0HTWWMWWZF2N9291891SZ1HDGKKPQMAN1ZK) (topic \"og-shrink\")) | (tuple (amount-sats u0) (amount-ustx u1000000) (first-index u147) (is-bond false) (num-indexes u96) (signer-calldata none) (staker SP1FCS0HTWWMWWZF2N9291891SZ1HDGKKPQMAN1ZK) (topic \"validate-stake\"))",
+      "passed": true
+    },
+    {
+      "label": "OG1 keeps its seat at 1 STX",
+      "actual": "(tuple (c u1000000) (o true))",
+      "passed": true
+    },
+    {
+      "label": "cover shrank by 999 STX: freed room back to the cap",
+      "actual": "(tuple (cap-ustx u2100000000000) (covered-ustx u2398215644) (seats u3))",
+      "passed": true
+    },
+    {
+      "label": "OG1 fee on a 1,000 STX share is charged above the 1 STX cover",
+      "actual": "u44955",
+      "passed": true
+    },
+    {
+      "label": "raise-og-cap by a stranger -> u100",
+      "actual": "(err u100)",
+      "passed": true
+    },
+    {
+      "label": "raise-og-cap lower -> u127",
+      "actual": "(err u127)",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 100% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "0/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 101% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "123494622/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 102% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "375426573/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 103% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "735559864/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 105% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "1642034963/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 108% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "1642034963/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 112% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "1642034963/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: at limit 120% the smart pick v-1 has capacity inside the limit (or none does)",
+      "actual": "1642034963/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: limit-aware pick matters at 101% (blind v-2 has 0 capacity, smart v-1 has 123494622)",
+      "actual": "found",
+      "passed": true
+    },
+    {
+      "label": "router taker 5,010 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "router: smart 5,000 STX -> sBTC at limit 19856482846750 (update none)",
+      "actual": "(ok (tuple (dlmm-in u123494622) (dlmm-out u62336) (jing-in u0) (jing-ok false) (jing-out u0) (out u529968) (unsold u3947961015) (velar-in u867829117) (velar-out u437055) (xyk-in u60715246) (xyk-out u30577)))",
+      "passed": true
+    },
+    {
+      "label": "router: smart DLMM leg filled on a pool with capacity (dlmm-in > 0 iff capacity)",
+      "actual": "dlmm-in 123494622, moved 62336/0/0",
+      "passed": true
+    },
+    {
+      "label": "router: the DLMM fill came from the limit-aware pick, not the blind one",
+      "actual": "62336/0/0",
+      "passed": true
+    },
+    {
+      "label": "deploy SPV9K2.dlmm-core-v-1-2 (84396 B, live dlmm-core-v-1-1 source (migration target))",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "all three DLMM pools enabled before",
+      "actual": "(list true true true)",
+      "passed": true
+    },
+    {
+      "label": "fund the Bitflow admin 10 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "claim-protocol-fees v-1",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "target core add-bin-step u15",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "target core set-core-migration-source",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "dlmm-core-v-1-1 set-core-migration-target",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "advance 3 x 500,000 s (migration cooldown)",
+      "actual": "ok",
+      "passed": true
+    },
+    {
+      "label": "migrate-pool v-1 -> dlmm-core-v-1-2",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "router 15aef66 dlmm-enabled skips migrated v-1 (core-address check)",
+      "actual": "(list false true true)",
+      "passed": true
+    },
+    {
+      "label": "smart + manual picks skip v-1",
+      "actual": "u2 / u2",
+      "passed": true
+    },
+    {
+      "label": "router taker 2: 10,020 STX",
+      "actual": "(ok true)",
+      "passed": true
+    },
+    {
+      "label": "router: smart 5,000 STX after the migration fills (no u1060 revert)",
+      "actual": "(ok (tuple (dlmm-in u5000000000) (dlmm-out u2064177) (jing-in u0) (jing-ok false) (jing-out u0) (out u2064177) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+      "passed": true
+    },
+    {
+      "label": "router: manual 5,000 STX DLMM leg fills on the next pool",
+      "actual": "(ok (tuple (dlmm-in u5000000000) (dlmm-out u2035029) (jing-in u0) (jing-ok false) (jing-out u0) (out u2035029) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+      "passed": true
+    },
+    {
+      "label": "no sBTC left migrated v-1",
+      "actual": "0",
+      "passed": true
+    }
+  ]
+}

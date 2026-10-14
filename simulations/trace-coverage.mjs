@@ -54,7 +54,7 @@ const REV = arg("--rev", "HEAD");
 const SRC = arg("--source");
 const source = SRC ? fs.readFileSync(SRC, "utf8") : REV === "worktree" ? fs.readFileSync(`contracts/${NAME}.clar`, "utf8") : execFileSync("git", ["show", `${REV}:contracts/${NAME}.clar`], { encoding: "utf8", maxBuffer: 1 << 26 });
 const SRC_LABEL = SRC ? `${SRC} at ${execFileSync("git", ["-C", path.dirname(SRC), "log", "-1", "--format=%h", "--", path.basename(SRC)], { encoding: "utf8" }).trim() || "the working tree"}` : REV === "worktree" ? "the working tree" : execFileSync("git", ["rev-parse", "--short", REV], { encoding: "utf8" }).trim();
-const ast = await parseContract({ sourceCode: source, contractId: `SP000000000000000000002Q6VF78.${NAME}`, clarityVersion: "5" });
+const ast = await parseContract({ sourceCode: source, contractId: `SP000000000000000000002Q6VF78.${NAME}`, clarityVersion: arg("--clarity", "5") });
 const exprs = ast.expressions ?? ast.ast ?? ast;
 const nodes = new Map(); // id -> { line, list, fn }
 const listOf = (e) => e?.expr?.List ?? e?.expr?.list ?? e?.list ?? null;
