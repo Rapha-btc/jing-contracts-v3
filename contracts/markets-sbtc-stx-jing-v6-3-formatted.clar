@@ -2350,8 +2350,6 @@
         (var-set pending-rebate-bps-y bps)
         (var-set crossing true)
         (var-set crossing-x false)
-        (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
-        (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
         (let ((result (try! (settle-with-verified-feeds (get feed-x (get feeds verified))
             (get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
           ))))
@@ -2453,8 +2451,6 @@
         (var-set pending-rebate-bps-x bps)
         (var-set crossing true)
         (var-set crossing-x true)
-        (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
-        (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
         (let ((result (try! (settle-with-verified-feeds (get feed-x (get feeds verified))
             (get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
           ))))
