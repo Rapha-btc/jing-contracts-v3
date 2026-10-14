@@ -5,8 +5,8 @@ AIBTC bounty `mv7dfb43df5505479788` (10k), on the final v6-3 deploy set
 
 ## Zealous Citadel: limit-blind DLMM pick in the smart stage
 
-Status: accepted. Fix in the working tree of
-`contracts/swap-router-sbtc-stx-jing-v5-3.clar`, not committed yet.
+Status: accepted. Fix committed in `15aef66`
+(`contracts/swap-router-sbtc-stx-jing-v5-3.clar`).
 
 ### The finding
 
@@ -94,6 +94,37 @@ definition sorter, and `clarinet check` on Clarity 5 then fails with
     1M-sat sale before it moves v-1 past the smart limit that the harness
     computed before that sale, so v-1 capacity is 0 on both. The harness is
     stale at this block; the change does not cause it.
+- Re-run on the committed bytes (router at `15aef66`, market at HEAD,
+  2026-10-14):
+  - `verify-router-v5-3-limit-pick-mv7dfb.js` (PROD = router at `f342615`):
+    38/38. Block 9203637: pick u2 -> u1, out 1,359,288 -> 1,482,269
+    (+9.05%) [prod](https://stxer.xyz/simulations/mainnet/c5d4ca0d88bd7b4299141c20fa28fc40),
+    [patched](https://stxer.xyz/simulations/mainnet/9feff56361300c96f4dae4a42f661231). Block 9207942: pick
+    u2 -> u1, DLMM 0 -> 360,292,180 uSTX, out 2,153,589 -> 2,335,153
+    (+8.43%) [prod](https://stxer.xyz/simulations/mainnet/9ed2b05e73537f28b79286d7067ee3c6),
+    [patched](https://stxer.xyz/simulations/mainnet/9a115d2188f9ef3c6c1361bc9dd08dad).
+  - `verify-router-v5-3-smart.js`: 588/588
+    ([1](https://stxer.xyz/simulations/mainnet/d3948d5ce4a4ad79ca4744487a70d44b), [2](https://stxer.xyz/simulations/mainnet/ddfef18644687e4389d2e7b0c1cc17ab),
+    [3](https://stxer.xyz/simulations/mainnet/f781c8338413eb9a65210994c6dbded7)).
+  - `verify-router-v5-3-manual.js`: 410/410 ([sim](https://stxer.xyz/simulations/mainnet/7c6fa36fb626bbcc787da159f486e700)).
+  - `verify-router-v5-3-pool-pick.js`: 225/225 ([sim](https://stxer.xyz/simulations/mainnet/8deb5c9efbf5c4c73cc8ba1ee1a099a9)).
+  - `verify-v6-3-router-bin-boundary.js`: 26/26 ([sim](https://stxer.xyz/simulations/mainnet/18909e71b47813ab1f9de98827ac2db8)).
+  - `verify-router-v5-3-xyk-snapshot.js`: 75/75
+    ([1](https://stxer.xyz/simulations/mainnet/8ac44da13bea7f54315f734dccd49383), [2](https://stxer.xyz/simulations/mainnet/ebdea471677e2de60fc2fdf3978e6e0a)).
+  - `verify-router-v5-3-rebate-age.js`: 482/482
+    ([1](https://stxer.xyz/simulations/mainnet/a9f07d18afcb1cdcc1b5549a0506f93d), [2](https://stxer.xyz/simulations/mainnet/231ef277ca20362eae4ec91f1b850189),
+    [3](https://stxer.xyz/simulations/mainnet/0771d562a8b829d91da8d5e480165fba), [4](https://stxer.xyz/simulations/mainnet/f0d7201755766c8e4410c7a7f01d0355)).
+    Three earlier tries stopped at check 15 (the fork tip's Bitcoin time was
+    about 60 s ahead of the newest Lazer print); the next run, a minute
+    later, is green.
+  - `verify-v6-3-router-impact.js`: 398/398
+    ([x base](https://stxer.xyz/simulations/mainnet/8b516dfd3252d8db0bf67f55258b6f42), [x](https://stxer.xyz/simulations/mainnet/247a106ef934e1c31d5158c39359bed1),
+    [y base](https://stxer.xyz/simulations/mainnet/14ea179c418812efe4e7867d299869f3), [y](https://stxer.xyz/simulations/mainnet/e71d98a1134b1f019ce4ce856b62121a)).
+  - `verify-router-v5-3-pool-pick-steer.js`: 34/35
+    ([sim](https://stxer.xyz/simulations/mainnet/bf61bb251f08c2f165c30b4dd5f2c2b9)), and 34/35 on the `f342615`
+    tree ([sim](https://stxer.xyz/simulations/mainnet/f37f8c8a529eee39a66a04962edea0f1)): the same stale check #35.
+  - Not run: `verify-v6-3-dispatch.js` deploys router v5 (not v5-3), and
+    `verify-vault-sbtc-stx-v6-parked.js` needs `PYTH_API_KEY`.
 - Harness update: `_router-v5-3-harness.js` `dlmmOutModel` and `dlmmPick`
   take an optional `limit` (default 0n, the manual legs).
   `verify-router-v5-3-smart.js` sizing reads `dlmm-pick` with the limit.
@@ -111,9 +142,8 @@ definition sorter, and `clarinet check` on Clarity 5 then fails with
 
 ## Giant Moth note 01: a migrated DLMM pool reverts the smart swap
 
-Status: accepted. Fix in the working tree of
-`contracts/swap-router-sbtc-stx-jing-v5-3.clar` (`dlmm-enabled`), not
-committed yet.
+Status: accepted. Fix committed in `15aef66`
+(`contracts/swap-router-sbtc-stx-jing-v5-3.clar`, `dlmm-enabled`).
 
 ### The finding
 
@@ -179,6 +209,29 @@ capacity in `dlmm-stage`.
     [prod](https://stxer.xyz/simulations/mainnet/b745870857bc32a85ab77b26dd035526),
     [patched](https://stxer.xyz/simulations/mainnet/e437eeba745f838a89992773c0d0ef0e).
   The live pools all report `DLMM_CORE`, so no mainnet pick changes.
+- Migration on the fork (new, `verify-router-v5-3-core-migration-mv7dfb.js`,
+  block 9207954, result `simulations/fixtures/router-v5-3-core-migration-mv7dfb.json`):
+  65/65. No patch: Bitflow's own path as its admin `SM1FKX...`. The live
+  `dlmm-core-v-1-1` source is deployed as `dlmm-core-v-1-2` (bin step 15
+  with the live factors, migration source = v-1-1); v-1-1
+  `claim-protocol-fees`, `set-core-migration-target`, `migrate-pool`
+  (u1059 before the cooldown, `(ok true)` after AdvanceBlocks 3 x 500,000 s).
+  Pool v-2 (the pick of both routers for 5,000 STX) then reports the new
+  core; the old core entry stays enabled; a direct v-1-1 `swap-x-for-y` on it
+  is `(err u1060)`.
+  - Router at `f342615` ([sim](https://stxer.xyz/simulations/mainnet/d5f7ff94b76c8a04512fd90303650a38)): `dlmm-enabled`
+    still true for v-2, smart and manual picks stay u2; the 5,000 STX smart
+    sale and the 5,000 STX manual DLMM leg both revert `(err u2001)`
+    (Bitflow's `dlmm-swap-router-v-1-2` folds the core's u1060 into its
+    ERR_NO_RESULT_DATA).
+  - Router at `15aef66` ([sim](https://stxer.xyz/simulations/mainnet/e16126da832e64a295264a65cd35a02f)): `dlmm-enabled`
+    `(list true false true)`, picks u2 -> u1. Smart sale `(ok)`: DLMM
+    1,554,727,268 uSTX on v-1, XYK 1,302,131,468, Velar 2,143,141,264, out
+    2,498,156 sats, nothing from v-2. Manual DLMM leg `(ok)`: all 5,000 STX on
+    v-1, out 2,347,881 sats, nothing from v-2.
+- The other harnesses on the committed bytes (one router carries both
+  fixes): see the `15aef66` re-run under Zealous Citadel, all green but the
+  stale steer check #35.
 - Deploy bytes (same method): 32,949 before, 33,216 after (+267).
 
 ## Not taken

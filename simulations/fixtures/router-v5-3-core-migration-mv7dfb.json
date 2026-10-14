@@ -1,0 +1,62 @@
+{
+  "bounty": "mv7dfb Giant Moth 01",
+  "height": 9207954,
+  "oldRouter": "f342615",
+  "newRouter": "15aef66",
+  "migratedPool": "v-2",
+  "limit": "29401964051198",
+  "old": {
+    "simulation": "https://stxer.xyz/simulations/mainnet/d5f7ff94b76c8a04512fd90303650a38",
+    "n": 2,
+    "pre": {
+      "smart": "u2",
+      "manual": "u2",
+      "enabled": "(list true true true)"
+    },
+    "post": {
+      "smart": "u2",
+      "manual": "u2",
+      "enabled": "(list true true true)"
+    },
+    "smart": "(err u2001)",
+    "manual": "(err u2001)",
+    "smartMoved": [
+      "0",
+      "0",
+      "0"
+    ],
+    "manualMoved": [
+      "0",
+      "0",
+      "0"
+    ]
+  },
+  "new": {
+    "simulation": "https://stxer.xyz/simulations/mainnet/e16126da832e64a295264a65cd35a02f",
+    "n": 2,
+    "pre": {
+      "smart": "u2",
+      "manual": "u2",
+      "enabled": "(list true true true)"
+    },
+    "post": {
+      "smart": "u1",
+      "manual": "u1",
+      "enabled": "(list true false true)"
+    },
+    "smart": "(ok (tuple (dlmm-in u1554727268) (dlmm-out u769570) (jing-in u0) (jing-ok false) (jing-out u0) (out u2498156) (unsold u0) (velar-in u2143141264) (velar-out u1078958) (xyk-in u1302131468) (xyk-out u649628)))",
+    "manual": "(ok (tuple (dlmm-in u5000000000) (dlmm-out u2347881) (jing-in u0) (jing-ok false) (jing-out u0) (out u2347881) (unsold u0) (velar-in u0) (velar-out u0) (xyk-in u0) (xyk-out u0)))",
+    "smartMoved": [
+      "769570",
+      "0",
+      "0"
+    ],
+    "manualMoved": [
+      "2347881",
+      "0",
+      "0"
+    ]
+  },
+  "passed": 65,
+  "checks": 65
+}
