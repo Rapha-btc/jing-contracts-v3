@@ -125,7 +125,7 @@ proposal proxy.
 | `verify-v6-rungs-fill-lazer.js` | Rung fill on Lazer | 85/85 | `613d6d045474cecbd09d1f902c9fd658` | yes | 10-14 |
 | `verify-v6-rungs-miner-band-lazer.js` | Miner band | 225/225 | `9f01abe49571a17c20999534c9683ca1` | yes | 10-14 |
 | `verify-v6-rungs-escrow-timeout.js` | Escrow timeout | 549/549 | `18ac074b5eeb18d0d74825888ed40dbe` | yes | 10-14 |
-| `verify-v6-rungs-audit-tail.js` | Audit tail | **20/21, stale harness** (funding fixed: taker 1M -> 800k STX, whale has ~970k; #21 expects the pre-`f015382` tail freeze, now `sync` rolls the tail, index = SCALE, by design) | `3ef109fe8cf12d4c87fdc7edebd323b1` | yes | 10-14 |
+| `verify-v6-rungs-audit-tail.js` | Audit tail on the two deploy-set rungs (core-spread-v1 buy + sell): drift under MINT_FLOOR rescales and a newcomer joins (no u7013); a >99.9% fill makes `sync` roll the tail (epoch +1, index = SCALE, shares/members 0, order off the market), the newcomer opens the fresh epoch 1:1, closed members take reserve + proceeds exactly (dispatch + claim), nothing left over | 91/91 buy, 91/91 sell (182/182) | `034ac44310314ff27a485205e39c07f0`, `ae252375e9dd0007ac9f15f79455a9b3` | yes | 10-14 |
 | `verify-rung-withdraw-rounding.js`, `verify-rungs-keyless.js` | Legacy contracts, not in the deploy set | FAILED at deploy (unresolved / duplicate contract) | `35d6c1e9...`, `50bea07a...`, `864eab88...` | n/a | 10-14 |
 
 ### 2.3 juicestx
@@ -335,11 +335,7 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
   At the tip the DLMM depth is too thin (30/38, `d4af4cc8`, u16047). Same
   sources at the pinned block: 41/41 (`29fd3d16`). Fork drift, not a regression.
 - **Stale or failing checks in the rerun list:** router pool-pick-steer #35
-  (34/35, stale at this block, same on `f342615`); `verify-v6-rungs-audit-tail.js`
-  (funding fixed; now 20/21: #21 tests the old tail freeze that `f015382`
-  replaced with the sync tail roll, so the harness needs a rewrite; roll-tail
-  is fork-covered only for the two core-spread rungs by
-  `verify-v1-core-spread-rungs.js`, not for the fixed and peg rungs); two legacy rung harnesses
+  (34/35, stale at this block, same on `f342615`); two legacy rung harnesses
   that are not in the deploy set fail at deploy.
 - **Pyth fee by Eval fixture.** No governance VAA can be signed on a fork, so
   every fee-u10 run sets the oracle `fee` var by Eval. The live fee is u0.
