@@ -61,7 +61,7 @@
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.21.0",
-    "@stacks/transactions": "^7.2.0",
+    "@stacks/transactions": "^7.6.0",
     "stxer": "^0.8.0",
     "tsx": "^4.19.0",
     "vitest": "^2.1.9",

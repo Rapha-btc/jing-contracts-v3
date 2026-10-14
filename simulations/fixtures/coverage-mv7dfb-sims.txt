@@ -1,0 +1,107 @@
+01b8c978350feb2cb4b6176e87c32d0f juicestx/pool-vault-recovery-stxer.mjs --matrix rc=0 534/534 checks green
+0650bd79c3b38e496217036d856b891a simulations/verify-v6-3-router-bin-boundary.js 26/26
+09bad98ff45ca2eefec2d24a0d09e888 simulations/verify-v6-3-router-impact.js [y/current] 398/398
+0b130236b9c903c9be1bcd7826071b6c juicestx/pool-og-shrink-stxer.mjs rc=0 === juice-og-shrink: 52/52
+0d61fa25de37d125b24e85359a714840 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (pending+resting/public) 124/124
+0d66c62de411c83111af9dfd996afead simulations/verify-router-v5-3-manual.js 410/410
+120bc743963551d0af56f4a46022f1e7 simulations/verify-v6-rungs-keyless.js [RUNG=sell-peg] 42/42
+12cf15eea1303f1e15a7ef032c24aec3 juicestx/pool-vault-recovery-stxer.mjs --matrix rc=0 534/534 checks green
+1576f5bcbcf845af2020e088cfb710d8 simulations/verify-v6-3-caller-impact.js 198/198
+1599af88214922f70a09d20c18fb816d fastpool-pox-5/vault-fixes-stxer.mjs (l2d6) 46/46
+170b7df3a14544bfaff6c9ea590df68f simulations/verify-v1-core-spread-ladder-dispatch.js 559/559
+18933f00608d4466957582d775988d85 juicestx/pool-admin-handover-stxer.mjs rc=0 60/60 checks passed
+18ac074b5eeb18d0d74825888ed40dbe simulations/verify-v6-rungs-escrow-timeout.js 549/549
+1a4fe982485021b452f1734c39ec634c simulations/verify-v6-rungs-replace-keyless.js 250/250
+21bd3ee276dff013102c6c91d6c9559d juicestx/pool-vault-recovery-stxer.mjs --matrix rc=0 534/534 checks green
+227a39690ee6eb2609bc52ab40045f30 simulations/verify-v6-rungs-push-lazer.js 124/124
+27d02561b682a2070115046c8cfa965e simulations/verify-v6-3-settlement-edges.js 365/365
+28ba3ce94de5351dd0bfa8d3d9233c1d simulations/verify-v6-3-cancel-orphan-pending.js [patched] 225/225
+2915ed46336489f775aa48ea4d5f0b77 simulations/verify-router-v5-3-pool-pick-steer.js [also deploys git show 1063add router] 34/35 FAILED: 35. 280c81c smart: dlmm-cap == v-1 capacity read before, > 0 (got 0)
+2a6ab8f9718b8c1a758be65ca9b30e8f simulations/verify-v6-rungs-keyless.js [RUNG=buy-peg] 42/42
+2b0436de3bb97ba8e9d7b8a05b5e81e0 simulations/verify-v6-3-errors-admin.js 514/514
+2f47455fd820fbd5c343d4e55cd013be citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (pending+resting/dao) 124/124
+2fd82a2e809e8c81c31dd5ab5e0330d0 juicestx/pool-og-seats-stxer.mjs rc=0 49/49 passed 
+3270029d6e3a5d677c39b66fb0dbde06 juicestx/pool-autostake-e2e-stxer.mjs rc=0 63/63 passed 
+33c70bfa1348ed2bbec01e322e80e00b simulations/verify-v6-3-dispatch.js 228/228
+34add6e3e280af40acbc7e910dc1423f simulations/verify-v6-3-deploy-bytes.js 17/17
+35d275ea13e8e32cf5d58816943a5d29 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (parked/dao) 130/130
+35d6c1e9fac5b3af10aee6943e766fd6 simulations/verify-rung-withdraw-rounding.js [legacy jing-buy-stx + jing-ladder, text-patched; not in deploy set] FAILED: deploy jing-buy-stx-331-50 (unresolved contract markets-sbtc-stx-jing-v6-3)
+36b4f87ed7d299e745091c2e0437e71d citycoins-protocol/stxer-ccd016-v2-clock-keyless.js 101/101
+381225159535fe5344a443aad23202de fastpool-pox-5/pool-vault-stx-stxer.mjs --lifecycle rc=0 42/42 lifecycle checks passed
+387017eca52ccc09f8c12e57ab7c98b7 simulations/verify-v1-core-spread-rungs.js 998/998
+3c99bc1ed9d17a2873bd02f196fb967a citycoins-protocol/stxer-ccd016-v2-pyth-fee.js 70/70
+3cae36d91df8e281531fe7da8d5ca13c simulations/verify-router-v5-3-smart.js 588/588
+40bee8c0bead0ddd20ddef2a8acb11e4 fastpool-pox-5/vault-fixes-stxer.mjs (pf) 78/78
+41a52fa17077912357a0ce7fe54b7575 fastpool-pox-5/dust-router-stxer.mjs (pass 2) measurement, no checks (smallest sale 3 sats)
+41ad661d8556d0e84cd038ac8ad06e2b juicestx/pool-vault-upgrade-stxer.mjs rc=0 97/97 checks green
+41c6aa11080dcebe6fe24cabc216416d fastpool-pox-5/dust-1sat-stxer.mjs 23/23
+46edf261a74e3f617594b81b82317f06 juicestx/pool-claim-guards-stxer.mjs rc=0 === juice-claim-guards: 24/24
+4783a1b8e96d7293f8a5f2eab58e6a63 juicestx/pool-og-cap-stxer.mjs rc=0 === juice-og-cap: 47/47
+486a08d0f6d9548d2866938c935f2d95 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (resting/public) 101/101
+4d1bb9ef11a303f67e336ca0f7acfa2e citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (none/public) 97/97
+4edd8ba9731420d96e243343a3e825cd juicestx/pool-accounting-stxer.mjs rc=0 126/126 passed 
+50bea07aa3fb52df9e7d373f005b620c simulations/verify-rungs-keyless.js [SIDE=buy; legacy jing-ladder/jing-buy-stx, not in deploy set] 4/30 FAILED: deploy jing-ladder (Duplicate contract, already on mainnet)
+523e3e7d7184c156f0d112d66ae33ab5 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (pending/dao) 112/112
+526537fa97d469535ef623754db9dd93 simulations/verify-router-v5-3-pool-pick.js 225/225
+542564285a8d1e019cce3e56bca984f1 citycoins-protocol/stxer-ccd016-v2-happy-path.js 58/58
+54912c2f59271297b01a47d08b4ae8e6 simulations/verify-v6-3-refund-costs.js 289/289
+54f0da53c3e44c7a63c0bd56be7726fb fastpool-pox-5/dust-router-stxer.mjs (pass 1) measurement, no checks (ran OK)
+584b4ed51c99da23b49c872935b624fe simulations/verify-core-v6-admin.js 149/149
+58724eb020719eceaeae2dfb75624799 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (none/dao) 97/97
+58c0fb76b70e2ae77edbb50ea271d407 juicestx/pool-vault-stx-stxer.mjs --jing-take rc=0 41/41 lifecycle checks passed
+59cdc203b48523c12bfd7895b087a592 fastpool-pox-5/pool-vault-stx-stxer.mjs rc=0 34/34 fork checks passed
+5a727d6de0f0d7983f31544f9202b60d citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (parked/public) 130/130
+5c4cea9a523bef8af7b4201c026c7d14 juicestx/pool-vault-emergency-stxer.cjs --native rc=0 37/37 checks passed; report /home/raphastacks/projects/juicestx/simulations/results/pool-vault-stx/juice-emergency-native.json
+613d6d045474cecbd09d1f902c9fd658 simulations/verify-v6-rungs-fill-lazer.js 85/85
+6af504a8b58f2d531434b43c668bd6ea simulations/verify-v6-3-swap-walk.js 383/383
+6c1285d8ff464342f8724faae5b81813 simulations/verify-router-v5-3-smart.js 588/588
+6d426b0f0e75043464778a7e2f4c2b94 simulations/verify-v6-3-gate-blind-band.js 332/332
+6f30d6e22ec4271ca63171528c7144ed fastpool-pox-5/vault-fixes-stxer.mjs (d7) 80/80
+7158b1ba82eb56ab8ed39132669f6f8f juicestx/pool-og-evict-stxer.mjs rc=0 === juice-og-evict: 69/69
+71ec6fc583b9a2d96aa3a5392e3a3802 simulations/verify-v6-3-capacity-hint.js 33/33
+7388231fd4729bc08cc30b5dd5cfa98d juicestx/pool-vault-stx-stxer.mjs --split-pyth rc=0 42/42 lifecycle checks passed
+75074c83ede24d6bf55b02504afebb6a pillar/simul-juice-autostake-safe.js REAL_POOL=1 83/83
+75f1cd1332180df923897516c09cfe72 citycoins-protocol/stxer-ccd016-v2-fixes.js 96/96
+7668f859258cbfe43e42f158f79f0f7c citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (pending/public) 112/112
+768b1ae950156a1019634bd3adb7532f juicestx/pool-vault-recovery-stxer.mjs --matrix rc=0 534/534 checks green
+76ae817dcc35c4e29599737cf4f8f836 simulations/verify-v6-rungs-keyless.js [RUNG=sell] 39/39
+7a5d15a9797d9c19f0f962c7e19e2847 simulations/verify-v6-rungs-keyless.js [RUNG=buy] 39/39
+7edc890fc3e8988aabc0ff41ac3f9e63 simulations/verify-router-v5-3-smart.js 588/588
+8063c1dab9dc5ae6b5aadc4da479a9aa juicestx/pool-vault-pyth-fee-stxer.mjs rc=0 === juice-pyth-fee: 58/58
+839af8836bf8dab09e6cb8209acd13d9 juicestx/pool-vault-emergency-stxer.cjs rc=0 27/27 checks passed; report /home/raphastacks/projects/juicestx/simulations/results/pool-vault-stx/juice-emergency-dia.json
+864eab88df8419d7d4f2ff63b2081ed2 simulations/verify-rungs-keyless.js [SIDE=sell; legacy jing-ladder/jing-sell-stx, not in deploy set] 5/31 FAILED: deploy jing-ladder (Duplicate contract, already on mainnet)
+8854daced965a5246e763381fa2220d3 simulations/verify-v6-3-ghost-deposit.js [patched] 343/343
+8a0e577b18cf02a46e4d8d38ef749a5e juicestx/pool-vault-fixes-stxer.mjs rc=0 218/218 checks passed
+8a2c60ccb0090372e5efe1936eecd288 citycoins-protocol/stxer-ccd016-v2-coverage.js 104/104
+8e95fe5889dd8a5c7ff555cf88cd8723 simulations/verify-ladder-v1-admin-seats.js 334/334
+94d5f0c91e17eaf0dc330f076b5477aa simulations/verify-v6-3-switched-off-ask.js [patched] 221/221
+9f01abe49571a17c20999534c9683ca1 simulations/verify-v6-rungs-miner-band-lazer.js 225/225
+a674afe92adac3b9282b9b418ccda5c1 simulations/verify-v6-3-reachable-gaps.js 382/382
+ad49570eedfcb1d8b60fff911323cf90 fastpool-pox-5/pool-vault-stx-stxer.mjs --maker rc=0 36/36 lifecycle checks passed
+b18edad11f9c78d141804d7f333334a6 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --native 48/48
+b95238c0662a8c7755f0c64bdd96f503 fastpool-pox-5/dust-vaults-stxer.mjs 69/69
+c449ad8c78a2bda393979d2b12976856 juicestx/pool-vault-stx-stxer.mjs rc=0 22/22 fork checks passed
+c5e9f981ceb47bdbfa16ec84c1d09c7b juicestx/pool-vault-stx-stxer.mjs --maker rc=0 35/35 lifecycle checks passed
+c63880c2e0f89aa4eb82da7850371d77 simulations/verify-router-v5-3-rebate-age.js [fixed] 482/482
+c65fd85521eca1fc50da3460adb086d3 simulations/verify-v6-3-submit-settle-lazer.js 898/898
+c691ce1021111a8816d05babf14a1797 simulations/verify-router-v5-3-rebate-age.js [fixed] 482/482
+cfb2ec164daf56e1e0966e87f3f2caa4 jing-contracts-v3/verify-coverage-mv7dfb-ccd015.js 168/168
+d0108679bf3f21fb9f911e862b73e407 juicestx/pool-vault-recovery-stxer.mjs rc=0 190/190 checks passed
+d05eaf9850a56fc957d00dd9145c01fd simulations/verify-v6-3-router-impact.js [x/current] 398/398
+d15c235833ceaf76f9ab6135c42b6663 simulations/verify-v6-3-full-side.js 921/921
+d4af4cc8e8f42be9310813af60106b3b juicestx/pool-vault-stx-stxer.mjs --lifecycle rc=1 
+d72ffae1ea3a2864aa30b5cd988f726a simulations/verify-v6-3-capacity.js 473/473
+dce4e39c3f416fadfaae04a7d36979f9 simulations/verify-v6-rungs-audit-tail.js 12/13 FAILED: 13. fund fresh STX (InsufficientBalance)
+dd93a13a0f927430ac589f517574e1fd juicestx/pool-vault-stx-stxer.mjs --jing-router rc=0 46/46 lifecycle checks passed
+e3f21dae64459178ef9acfaaa9d3d3a7 citycoins-protocol/stxer-ccd016-v2-parked.js 136/136
+e547999db6655cfec2f88e7f178364c7 juicestx/pool-vault-mismatch-stxer.mjs rc=0 === juice-vault-mismatch: 29/29
+e58d43d1da203387034bfa30d1c987a9 citycoins-protocol/stxer-ccd016-v2-emergency.cjs 45/45
+e78fe3b2c1f714ac4ad4ea1eb47a525e juicestx/pool-vault-recovery-stxer.mjs --matrix rc=0 534/534 checks green
+e7f75295f4b50a4e959ceb452bce3845 simulations/verify-v6-3-oracle-feeds.js 97/97
+e8c0247d71dbce74607cfa839e020050 citycoins-protocol/stxer-ccd016-v2-emergency.cjs --recovery (resting/dao) 101/101
+ec16a3f811853055dd93e96035d32565 fastpool-pox-5/vault-fixes-stxer.mjs (l1) 51/51
+f793659c2a5633c055202303a7db020a simulations/verify-router-v5-3-xyk-snapshot.js [NEW] 75/75
+fe01ec23d5e54fdc41c8c7ebf5e59b35 simulations/verify-v1-small-proceeds.js 77/77
+d55a9bb01d0b8027cae49e19349ca8cd jing-contracts-v3/verify-coverage-mv7dfb-fastpool.js green
+da59d0878012a90a13837ae3142ee72b jing-contracts-v3/verify-coverage-mv7dfb-fastpool.js green
+5cf1573f3f04fe514d9c671a6914aff7 jing-contracts-v3/verify-deploy-set-mv7dfb.js 340/340 (Clarity 6 rows unversioned: stacks.js 7.4.0)
