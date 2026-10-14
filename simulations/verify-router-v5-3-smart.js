@@ -74,12 +74,12 @@ async function sizing(sellX, taker, { amount, limit, u, mid }) {
   // leg (`dlmm-pick sell left`) and walks that pool's capacity. d: the pick
   // and capacity for left = amount - jing-size (the book leg fills in full),
   // d0 / n0 for left = amount, c1..c3 every pool's capacity (a partial book
-  // fill leaves another left).
+  // fill leaves another left). mv7dfb: the stage picks inside its limit.
   const ju = `(get size (jing-size u${amount} u${limit} ${u ? `(some 0x${u.hex.replace(/^0x/, '')})` : 'none'} u${mid} ${b}))`;
   return fields(await evRaw(ROUTER, `{ j: ${ju},
-    n: (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j)))),
-    d: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))))),
-    n0: (dlmm-pick ${b} u${amount}), d0: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} u${amount})),
+    n: (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))) u${limit}),
+    d: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} (- u${amount} (let ((j ${ju})) (if (> j u${amount}) u${amount} j))) u${limit})),
+    n0: (dlmm-pick ${b} u${amount} u${limit}), d0: (dlmm-capacity u${limit} ${b} (dlmm-pick ${b} u${amount} u${limit})),
     c1: (dlmm-capacity u${limit} ${b} u1), c2: (dlmm-capacity u${limit} ${b} u2), c3: (dlmm-capacity u${limit} ${b} u3),
     x: (let ((q (xyk-quote ${b}))) (cp-capacity (get reserves q) (get keep q) u${limit} ${b})),
     v: (cp-capacity (velar-reserves ${b}) (velar-keep) u${limit} ${b}) }`, taker));

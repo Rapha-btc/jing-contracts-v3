@@ -19,6 +19,7 @@ the vaults, rungs and market are unaffected.
 | `280c81c` | best payout for the leg's amount (below) | |
 | `c2b046a` | dust legs dropped (below) | |
 | `2373cec` | the walk carries only the reachable bin factors | Runtime of a two-pool pick fell from 11.36M to 4.79M. |
+| (uncommitted) | the smart stage ranks pools inside its limit; manual legs pass `u0` | A deep pool parked past the limit won the pick with 0 capacity, so DLMM sold nothing. Zealous Citadel, bounty `mv7dfb`; see [README-bounty-mv7dfb.md](README-bounty-mv7dfb.md). |
 
 ## The rule
 

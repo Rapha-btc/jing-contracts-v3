@@ -198,15 +198,23 @@ export function dlmmPickModel(sellSbtc, depths, outs) {
 // ceil(avail * price / 1e8) (selling sBTC) or ceil(avail * 1e8 / price)
 // grossed by fee; the bin the input runs out in pays net * 1e8 / price
 // (selling sBTC) or net * price / 1e8, net = left * (BPS - fee) / BPS; the
-// edge bin stops the walk; bin-step != 15 -> 0. -> { out, left, bins }
-export function dlmmOutModel(pool, amount, sellSbtc) {
+// edge bin stops the walk; bin-step != 15 -> 0. mv7dfb: with a `limit`
+// (the smart stage's; 0n = none, the manual legs) the walk stops at the first
+// bin past dlmm-capacity's fee-adjusted threshold. -> { out, left, bins }
+export function dlmmThreshold(limit, sellSbtc, fee) {
+  const BPS = 10_000n, base = 10_000_000_000n * 100_000_000n / limit;
+  return sellSbtc ? base * (BPS - fee) / BPS : base * BPS / (BPS - fee);
+}
+export function dlmmOutModel(pool, amount, sellSbtc, limit = 0n) {
   if (pool.bs !== 15n) return { out: 0n, left: amount, bins: 0 };
   const BPS = 10_000n, S = 100_000_000n, up = sellSbtc;
+  const thr = limit > 0n ? dlmmThreshold(limit, sellSbtc, pool.fee) : null;
   let bin = pool.ab, left = amount, out = 0n, done = false, bins = 0;
   for (let i = 0; i < DLMM_WALK && !done && left > 0n; i++) {
     const b = pool.bins.get(bin);
     if (!b) throw new Error(`dlmmOutModel: bin ${bin} not read`);
     const price = pool.ip * b.f / S, avail = up ? b.x : b.y;
+    if (thr !== null && (up ? price > thr : price < thr)) break;
     const raw = up ? (avail * price + S - 1n) / S : (avail * S + price - 1n) / price;
     const grossed = pool.fee > 0n ? raw * BPS / (BPS - pool.fee) : raw;
     const edge = bin === (up ? 500 : -500);
@@ -241,15 +249,15 @@ export async function dlmmPickInputs(evalFn, sellSbtc, label = 'DLMM pick') {
 }
 // The model checked against the router: its `dlmm-out` for all three pools
 // and its `dlmm-pick`. -> { n, pool, depths, outs, est, e, walked, pools }
-export async function dlmmPick(sellSbtc, amount, label = 'DLMM pick', evalAt = (code) => evRaw(ROUTER, code), checkFn = check) {
+export async function dlmmPick(sellSbtc, amount, label = 'DLMM pick', evalAt = (code) => evRaw(ROUTER, code), checkFn = check, limit = 0n) {
   if (typeof amount !== 'bigint') throw new Error('dlmmPick(sellSbtc, amount, label): amount must be a bigint');
   const { depths, pools } = await dlmmPickInputs(evalAt, sellSbtc, label);
-  const est = pools.map((p) => dlmmOutModel(p, amount, sellSbtc));
+  const est = pools.map((p) => dlmmOutModel(p, amount, sellSbtc, limit));
   const outs = est.map((x) => x.out);
-  const routerOuts = await evalAt(`(let ((f (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step DLMM_BIN_STEP))))) (list (dlmm-out u1 u${amount} ${sellSbtc} f) (dlmm-out u2 u${amount} ${sellSbtc} f) (dlmm-out u3 u${amount} ${sellSbtc} f)))`);
+  const routerOuts = await evalAt(`(let ((f (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step DLMM_BIN_STEP))))) (list (dlmm-out u1 u${amount} ${sellSbtc} f u${limit}) (dlmm-out u2 u${amount} ${sellSbtc} f u${limit}) (dlmm-out u3 u${amount} ${sellSbtc} f u${limit})))`);
   checkFn(`${label}: router dlmm-out for ${amount} on v-1 / v-2 / v-3 == model`, routerOuts, `(list ${outs.map((o) => `u${o}`).join(' ')})`);
   const m = dlmmPickModel(sellSbtc, depths, outs);
-  checkFn(`${label}: router dlmm-pick ${sellSbtc} ${amount} (${sellSbtc ? 'STX' : 'sBTC'} depth ${depths.join(' / ')}; floor ${m.floor}; eligible ${m.e.map((x, j) => (x ? `v-${j + 1}` : '')).filter(Boolean).join(',') || 'none'}${m.walked ? '; walked' : '; single, not walked'}) == model`, await evalAt(`(dlmm-pick ${sellSbtc} u${amount})`), `u${m.n}`);
+  checkFn(`${label}: router dlmm-pick ${sellSbtc} ${amount} (${sellSbtc ? 'STX' : 'sBTC'} depth ${depths.join(' / ')}; floor ${m.floor}; eligible ${m.e.map((x, j) => (x ? `v-${j + 1}` : '')).filter(Boolean).join(',') || 'none'}${m.walked ? '; walked' : '; single, not walked'}) == model`, await evalAt(`(dlmm-pick ${sellSbtc} u${amount} u${limit})`), `u${m.n}`);
   return { n: m.n, pool: DLMM_POOLS[m.n - 1], depths, outs, est, e: m.e, walked: m.walked, floor: m.floor, pools };
 }
 // The pick's estimate for the picked pool next to the DLMM leg's actual fill

@@ -42,6 +42,14 @@
     (asserts! (is-eq tx-sender owner) (err u401))
     (var-set walk true) (ok (map-set bins bin {x: x, y: y}))))
 (define-private (bin-of (bin int)) (default-to {x: u0, y: u0} (map-get? bins bin)))
+;; The pool's core-address, read by the router's dlmm-enabled (Giant Moth 01:
+;; a pool Bitflow migrated to another core). Defaults to this deployer's
+;; .dlmm-router (the router's DLMM_CORE substitute), built with
+;; principal-construct? so the fixture takes no deploy dependency on it.
+(define-data-var core principal (let ((d (unwrap-panic (principal-destruct? tx-sender))))
+  (unwrap-panic (principal-construct? (get version d) (get hash-bytes d) "dlmm-router"))))
+(define-public (set-core (p principal))
+  (begin (asserts! (is-eq tx-sender owner) (err u401)) (ok (var-set core p))))
 (define-public (set-inflate (n uint))
   (begin (asserts! (is-eq tx-sender owner) (err u401)) (ok (var-set inflate n))))
 (define-read-only (get-pool)
@@ -52,6 +60,7 @@
     reserve0: (if (var-get reverse) (var-get microstx) (var-get sats)),
     reserve1: (if (var-get reverse) (var-get sats) (var-get microstx)),
     active-bin-id: (var-get active), initial-price: (var-get price), bin-step: (var-get step),
+    core-address: (var-get core),
     x-protocol-fee: (var-get fee-x), x-provider-fee: u0, x-variable-fee: u0,
     y-protocol-fee: (var-get fee-y), y-provider-fee: u0, y-variable-fee: u0}))
 ;; DLMM pool getter with the mainnet dlmm-pool-stx-sbtc-v-N-bps-15 tuple: x =

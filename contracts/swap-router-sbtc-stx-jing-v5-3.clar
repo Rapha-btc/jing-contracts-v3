@@ -312,7 +312,7 @@
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (dlmm-sell (dlmm-pick true amount) true amount min-received)
+    (dlmm-sell (dlmm-pick true amount u0) true amount min-received)
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
@@ -336,7 +336,7 @@
     (venue uint)
   )
   (if (is-eq venue VENUE_DLMM)
-    (dlmm-sell (dlmm-pick false amount) false amount min-received)
+    (dlmm-sell (dlmm-pick false amount u0) false amount min-received)
     (if (is-eq venue VENUE_XYK)
       (ok {
         in: amount,
@@ -943,9 +943,14 @@
 ;; swap. With a single eligible pool nothing is walked. Ties go to the lower
 ;; number; with no pool holding the asset, u1 (the leg then fills nothing,
 ;; and the smart stage skips a disabled pool 1, `dlmm-stage`).
+;; `limit` (u0 = none, the manual legs) stops each walk at the first bin
+;; that `dlmm-capacity` would refuse, so the pool is ranked on what it pays
+;; inside the limit: a deep pool parked past the limit cannot outrank one
+;; with liquidity inside it (bounty mv7dfb, Zealous Citadel).
 (define-private (dlmm-pick
     (sell-sbtc bool)
     (amount uint)
+    (limit uint)
   )
   (let (
       (d1 (dlmm-depth DLMM_POOL_1 DLMM_POOL_ID_1 sell-sbtc))
@@ -964,9 +969,9 @@
           (factors (unwrap-panic (unwrap-panic
             (contract-call? DLMM_CORE get-bin-factors-by-step DLMM_BIN_STEP)
           )))
-          (o1 (if e1 (dlmm-out u1 amount sell-sbtc factors) u0))
-          (o2 (if e2 (dlmm-out u2 amount sell-sbtc factors) u0))
-          (o3 (if e3 (dlmm-out u3 amount sell-sbtc factors) u0))
+          (o1 (if e1 (dlmm-out u1 amount sell-sbtc factors limit) u0))
+          (o2 (if e2 (dlmm-out u2 amount sell-sbtc factors limit) u0))
+          (o3 (if e3 (dlmm-out u3 amount sell-sbtc factors limit) u0))
         )
         (if (and (>= o1 o2) (>= o1 o3))
           u1
@@ -982,17 +987,32 @@
 
 (define-constant DLMM_BIN_STEP u15)
 
+;; The bin price (sats per STX, DLMM scale) a bin must meet to pay out at
+;; `limit` net of `fee`. One formula for the capacity walk and the pick.
+(define-private (dlmm-threshold
+    (limit uint)
+    (sell-sbtc bool)
+    (fee uint)
+  )
+  (if sell-sbtc
+    (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) (- BPS fee)) BPS)
+    (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) BPS) (- BPS fee))
+  )
+)
+
 ;; What `amount` buys in `pool`, walking its bins from the active one (at most
 ;; DLMM_WALK_BINS, as the capacity walk): each bin pays out what it holds of
 ;; the bought asset for its input (fee included); the bin that runs the input
 ;; out pays the rest at its own price. An estimate for ranking pools; the
 ;; swap itself keeps the caller's minimum. A pool with another bin step is not
-;; priced (u0).
+;; priced (u0). With a `limit` the walk stops at the first bin past
+;; `dlmm-threshold`, as the capacity walk does; u0 walks all 30 bins.
 (define-private (dlmm-out
     (pool uint)
     (amount uint)
     (sell-sbtc bool)
     (factors (list 1001 uint))
+    (limit uint)
   )
   (let (
       (info (dlmm-pool-info pool))
@@ -1024,12 +1044,22 @@
             )
             (+ aid u1)
           ))
+          ;; no limit: a bound every bin price meets (bound outside the
+          ;; tuple: the definition sorter does not look inside `{}`)
+          (threshold (if (is-eq limit u0)
+            (if sell-sbtc
+              u340282366920938463463374607431768211455
+              u0
+            )
+            (dlmm-threshold limit sell-sbtc fee)
+          ))
         )
       (get out
         (fold dlmm-out-step DLMM_WALK_BINS {
           pool: pool,
           bin: (get active-bin-id info),
           up: sell-sbtc,
+          threshold: threshold,
           initial-price: (get initial-price info),
           factors: (unwrap-panic (slice? factors lo hi)),
           base: lo,
@@ -1050,6 +1080,7 @@
       pool: uint,
       bin: int,
       up: bool,
+      threshold: uint,
       initial-price: uint,
       factors: (list 1001 uint),
       base: uint,
@@ -1082,8 +1113,14 @@
           raw
         ))
         (edge (is-eq (get bin acc) (if (get up acc) 500 -500)))
+        ;; the same comparison as `dlmm-bin-step`: a bin past the limit pays
+        ;; nothing and ends the walk (the last branch, with `net` u0)
+        (ok-price (if (get up acc)
+          (<= price (get threshold acc))
+          (>= price (get threshold acc))
+        ))
       )
-      (if (>= (get left acc) grossed)
+      (if (and ok-price (>= (get left acc) grossed))
         (merge acc {
           out: (+ (get out acc) avail),
           left: (- (get left acc) grossed),
@@ -1095,7 +1132,10 @@
           ),
           done: edge,
         })
-        (let ((net (/ (* (get left acc) (- BPS (get fee acc))) BPS)))
+        (let ((net (if ok-price
+            (/ (* (get left acc) (- BPS (get fee acc))) BPS)
+            u0
+          )))
           (merge acc {
             out: (+ (get out acc)
               (if (get up acc)
@@ -1130,13 +1170,29 @@
 )
 
 ;; The core's entry for pool `id` is this pool and is enabled (what the
-;; core's check-pool-validity asserts before a swap). No entry: false.
+;; core's check-pool-validity asserts before a swap), and the pool still
+;; names this core (its swaps assert it, u1060). No entry: false.
 (define-private (dlmm-enabled
     (pool principal)
     (id uint)
   )
   (match (unwrap-panic (contract-call? DLMM_CORE get-pool-by-id id))
-    entry (and (get status entry) (is-eq (get pool-contract entry) pool))
+    entry (and
+      (get status entry)
+      (is-eq (get pool-contract entry) pool)
+      ;; a pool Bitflow migrated to another core keeps its old core entry
+      ;; enabled but refuses this core's swaps (bounty mv7dfb, Giant Moth 01)
+      (is-eq
+        (get core-address (dlmm-pool-info (if (is-eq id DLMM_POOL_ID_2)
+          u2
+          (if (is-eq id DLMM_POOL_ID_3)
+            u3
+            u1
+          )
+        )))
+        DLMM_CORE
+      )
+    )
     false
   )
 )
@@ -1248,10 +1304,7 @@
         ;; must beat the limit by the fee to pay out at the limit net: selling
         ;; sBTC (walk up, price <= threshold) the threshold shrinks by the fee,
         ;; selling STX (walk down, price >= threshold) it grows by it
-        threshold: (if sell-sbtc
-          (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) (- BPS fee)) BPS)
-          (/ (* (/ (* PRICE_SCALE DLMM_PRICE_SCALE) limit) BPS) (- BPS fee))
-        ),
+        threshold: (dlmm-threshold limit sell-sbtc fee),
         initial-price: (get initial-price pool),
         bin-step: (get bin-step pool),
         fee: fee,
@@ -1307,9 +1360,9 @@
       out: u0,
     })
     (let (
-        ;; one pick for the stage: the capacity walk and the sale use the
-        ;; same pool
-        (pick (dlmm-pick sell-sbtc left))
+        ;; one pick for the stage, ranked inside the limit: the capacity walk
+        ;; and the sale use the same pool
+        (pick (dlmm-pick sell-sbtc left limit))
         ;; a u1 pick may be the no-eligible-pool fallback: a disabled pool 1
         ;; would refuse the sale (u1010), so it gets no capacity and the
         ;; stage passes the order on. u2 and u3 are only picked when eligible.
