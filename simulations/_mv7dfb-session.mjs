@@ -178,3 +178,51 @@ export function session(name) {
   };
   return S;
 }
+
+// ---- signatures from source (balanced parens), for probes and read-only sweeps ----
+export function signatures(src, kind) {
+  const out = [];
+  const re = new RegExp(`\\(define-${kind} \\(`, 'g');
+  let m;
+  while ((m = re.exec(src))) {
+    let i = m.index + m[0].length - 1, depth = 0, j = i;
+    for (; j < src.length; j++) { if (src[j] === '(') depth++; else if (src[j] === ')') { depth--; if (depth === 0) break; } }
+    const sig = src.slice(i + 1, j).trim();
+    const name = sig.split(/\s/)[0];
+    const params = [];
+    let k = name.length, d = 0, start = -1;
+    for (; k < sig.length; k++) {
+      if (sig[k] === '(') { if (d === 0) start = k; d++; } else if (sig[k] === ')') { d--; if (d === 0) { const p = sig.slice(start + 1, k).trim(); const sp = p.indexOf(' '); params.push({ name: p.slice(0, sp), type: p.slice(sp + 1).trim() }); } }
+    }
+    out.push({ name, params });
+  }
+  return out;
+}
+// a value for a Clarity type (null when the harness cannot build one: traits, tuples, lists)
+export function valueFor(type, pick = {}) {
+  if (type === 'uint') return Cl.uint(pick.uint ?? 0);
+  if (type === 'int') return Cl.int(pick.int ?? 0);
+  if (type === 'bool') return Cl.bool(pick.bool ?? false);
+  if (type === 'principal') return Cl.principal(pick.principal ?? DEP);
+  let m;
+  if ((m = type.match(/^\(buff (\d+)\)$/))) return Cl.buffer(Buffer.alloc(Math.min(1, Number(m[1]))));
+  if ((m = type.match(/^\(string-ascii (\d+)\)$/))) return Cl.stringAscii(pick.ascii ?? 'x');
+  if ((m = type.match(/^\(string-utf8 (\d+)\)$/))) return Cl.stringUtf8('x');
+  if ((m = type.match(/^\(optional (.+)\)$/))) { if (!pick.some) return Cl.none(); const v = valueFor(m[1], pick); return v ? Cl.some(v) : null; }
+  return null;
+}
+// every read-only function, by tx (a contract-call tx on a read-only runs and is traced),
+// once per variant of the arguments; results are logged, not asserted.
+export async function sweepReadOnly(S, cid, src, variants = [{}]) {
+  let n = 0;
+  for (const f of signatures(src, 'read-only')) {
+    for (const pick of variants) {
+      const args = f.params.map((p) => valueFor(p.type, pick));
+      if (args.some((a) => a === null)) break;
+      await S.tx(`read-only ${cid.split('.')[1]}.${f.name}(${f.params.map((p) => p.name).join(' ')})`, DEP, cid, f.name, args, () => true);
+      n++;
+      if (!f.params.length) break;
+    }
+  }
+  return n;
+}

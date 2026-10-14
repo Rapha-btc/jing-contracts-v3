@@ -1,19 +1,19 @@
 # Trace coverage: ccd015-redemption-book-mia-stx
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd015-redemption-book-mia-stx.clar` (sha256 `6b5daed326f50f6a84f02526687ec8d7950ea7422521e8cff42c381d3721df57`), counted only where a sim deployed these exact bytes (22 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd015-redemption-book-mia-stx.clar` (sha256 `6b5daed326f50f6a84f02526687ec8d7950ea7422521e8cff42c381d3721df57`), counted only where a sim deployed these exact bytes (23 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 314 / 564 (55.7%) |
+| expressions executed / total | 355 / 564 (62.9%) |
 | public functions reached | 9 / 9 |
-| branch nodes (if / match / asserts!) | 30: 28 full, 1 partial, 1 never reached |
+| branch nodes (if / match / asserts!) | 30: 29 full, 1 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
 
-## Read-only functions with no traced expression (8; read-only calls from Eval steps leave no trace)
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
 
-get-par-ustx, get-par-ustx-per-1m-mia, get-par-scaled, get-offer-book, get-offer-count, get-offer, get-book-totals, get-info
+
 
 ## Branches with one arm never taken (1)
 
@@ -21,11 +21,10 @@ get-par-ustx, get-par-ustx-per-1m-mia, get-par-scaled, get-offer-book, get-offer
 |---|---|---|---|
 | 242 | calculate-par | if | one arm (else only) |
 
-## Branch nodes never reached (1)
+## Branch nodes never reached (0)
 
 | line | function | kind |
 |---|---|---|
-| 302 | find-owner-step | if |
 
 ## Function bodies (expressions hit / total)
 
@@ -49,18 +48,11 @@ get-par-ustx, get-par-ustx-per-1m-mia, get-par-scaled, get-offer-book, get-offer
 | PAR_SCALE | 0 / 1 |
 | min-deposit | 0 / 1 |
 | offer-book | 0 / 6 |
-| get-par-ustx | 0 / 3 |
-| get-par-ustx-per-1m-mia | 0 / 3 |
-| get-par-scaled | 0 / 1 |
-| get-offer-book | 0 / 1 |
-| get-offer-count | 0 / 2 |
-| find-owner-step | 0 / 8 |
-| get-offer | 0 / 6 |
-| sum-step | 0 / 9 |
-| get-book-totals | 0 / 5 |
-| get-info | 0 / 18 |
+| get-info | 10 / 18 |
+| get-book-totals | 3 / 5 |
 | cross-book | 41 / 63 |
 | update-par | 14 / 21 |
+| get-offer | 4 / 6 |
 | change-offer | 43 / 63 |
 | insert-step | 22 / 31 |
 | cancel-offer | 18 / 25 |
@@ -71,6 +63,8 @@ get-par-ustx, get-par-ustx-per-1m-mia, get-par-scaled, get-offer-book, get-offer
 | set-min-deposit | 10 / 13 |
 | calculate-par | 10 / 13 |
 | place-offer | 59 / 76 |
+| sum-step | 7 / 9 |
+| find-owner-step | 7 / 8 |
 | is-dao-or-extension | 5 / 5 |
 | callback | 1 / 1 |
 | get-mia-total-supply | 6 / 6 |
@@ -78,7 +72,12 @@ get-par-ustx, get-par-ustx-per-1m-mia, get-par-scaled, get-offer-book, get-offer
 | is-target-owner | 3 / 3 |
 | not-target-owner | 4 / 4 |
 | push-rec | 3 / 3 |
+| get-par-ustx | 3 / 3 |
+| get-par-ustx-per-1m-mia | 3 / 3 |
+| get-par-scaled | 1 / 1 |
+| get-offer-book | 1 / 1 |
+| get-offer-count | 2 / 2 |
 
-## Sims counted (22)
+## Sims counted (23)
 
-`de9bd7b8` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `b95238c0` `cfb2ec16` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f`
+`de9bd7b8` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `b95238c0` `cfb2ec16` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f` `78d08113`

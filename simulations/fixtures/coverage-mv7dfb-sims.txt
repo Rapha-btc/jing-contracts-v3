@@ -105,3 +105,7 @@ fe01ec23d5e54fdc41c8c7ebf5e59b35 simulations/verify-v1-small-proceeds.js 77/77
 d55a9bb01d0b8027cae49e19349ca8cd jing-contracts-v3/verify-coverage-mv7dfb-fastpool.js green
 da59d0878012a90a13837ae3142ee72b jing-contracts-v3/verify-coverage-mv7dfb-fastpool.js green
 5cf1573f3f04fe514d9c671a6914aff7 jing-contracts-v3/verify-deploy-set-mv7dfb.js 340/340 (Clarity 6 rows unversioned: stacks.js 7.4.0)
+78d08113b634d1f65e607881212cd62a jing-contracts-v3/verify-coverage-mv7dfb-ccd015.js 183/183
+b6fd12bda7695aa13138daabdb73a613 pillar/simul-juice-autostake-safe-ops-coverage.js 204/204 (pillar e2c1eb0)
+6fd870360cfc4da466dce5dca72da925 pillar/simul-juice-autostake-safe-stake-passkey.js 43/43
+692f57275b5412c8a95176d1d9205975 jing-contracts-v3/verify-coverage-mv7dfb-gaps.js 455/455

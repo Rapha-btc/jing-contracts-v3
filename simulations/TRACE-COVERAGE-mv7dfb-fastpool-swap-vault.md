@@ -1,31 +1,30 @@
 # Trace coverage: fastpool-swap-vault
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (12 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (13 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 554 / 933 (59.4%) |
+| expressions executed / total | 571 / 933 (61.2%) |
 | public functions reached | 19 / 19 |
-| branch nodes (if / match / asserts!) | 68: 66 full, 1 partial, 1 never reached |
+| branch nodes (if / match / asserts!) | 68: 67 full, 1 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
 
-## Read-only functions with no traced expression (2; read-only calls from Eval steps leave no trace)
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
 
-get-clock, get-config
+
 
 ## Branches with one arm never taken (1)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 336 | emergency-recover | if | one arm (then only) |
+| 807 | get-clock | match | one arm (else only) |
 
-## Branch nodes never reached (1)
+## Branch nodes never reached (0)
 
 | line | function | kind |
 |---|---|---|
-| 807 | get-clock | match |
 
 ## Function bodies (expressions hit / total)
 
@@ -51,8 +50,8 @@ get-clock, get-config
 | ERR_SPLIT_MISMATCH | 0 / 1 |
 | ERR_UPDATE_REQUIRED | 0 / 1 |
 | batch-start | 0 / 1 |
-| get-clock | 0 / 18 |
-| get-config | 0 / 23 |
+| get-clock | 7 / 18 |
+| get-config | 10 / 23 |
 | get-upgrade-status | 10 / 19 |
 | reclaim-core | 9 / 15 |
 | router-swap-split-dia | 41 / 68 |
@@ -93,6 +92,6 @@ get-clock, get-config
 | cooldown-tick | 8 / 8 |
 | floor-out | 3 / 3 |
 
-## Sims counted (12)
+## Sims counted (13)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f`
+`de9bd7b8` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727`

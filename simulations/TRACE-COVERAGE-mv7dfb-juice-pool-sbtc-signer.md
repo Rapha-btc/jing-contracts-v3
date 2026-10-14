@@ -1,19 +1,19 @@
 # Trace coverage: juice-pool-sbtc-signer
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6`), counted only where a sim deployed these exact bytes (30 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6`), counted only where a sim deployed these exact bytes (33 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 695 / 1243 (55.9%) |
+| expressions executed / total | 756 / 1243 (60.8%) |
 | public functions reached | 37 / 37 |
-| branch nodes (if / match / asserts!) | 53: 49 full, 3 partial, 1 never reached |
+| branch nodes (if / match / asserts!) | 53: 50 full, 3 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
 
-## Read-only functions with no traced expression (19; read-only calls from Eval steps leave no trace)
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
 
-get-admin, is-paused, get-pending-admin, get-swap-vault, get-pending-swap-vault, get-fee-bips, get-earned-fees, is-og, get-og-status, get-effective-fee-bips, get-pending-fee, get-last-claim-dist-cycle, get-stx-paid, get-stx-owed, get-unclaimed-signer-rewards, get-staker-entitlement, get-recovered-sbtc-paid, get-earned-sbtc-fees, get-pending-swap
+
 
 ## Branches with one arm never taken (3)
 
@@ -23,11 +23,10 @@ get-admin, is-paused, get-pending-admin, get-swap-vault, get-pending-swap-vault,
 | 898 | settle-one | match | one arm (then only) |
 | 1121 | pay-recovered-sbtc-one | if | one arm (else only) |
 
-## Branch nodes never reached (1)
+## Branch nodes never reached (0)
 
 | line | function | kind |
 |---|---|---|
-| 716 | get-stx-owed | if |
 
 ## Function bodies (expressions hit / total)
 
@@ -57,51 +56,37 @@ get-admin, is-paused, get-pending-admin, get-swap-vault, get-pending-swap-vault,
 | ERR_NO_PENDING_FEE | 0 / 1 |
 | ERR_COOLDOWN | 0 / 1 |
 | pending-admin | 0 / 1 |
-| get-admin | 0 / 1 |
-| is-paused | 0 / 1 |
-| get-pending-admin | 0 / 8 |
-| get-swap-vault | 0 / 1 |
-| get-pending-swap-vault | 0 / 8 |
 | ERR_OG_NOTHING_TO_ADD | 0 / 1 |
 | ERR_OG_CAP_FULL | 0 / 1 |
 | ERR_OG_NOT_RAISED | 0 / 1 |
 | ERR_OG_NOT_SEATED | 0 / 1 |
 | ERR_OG_STILL_STAKED | 0 / 1 |
-| get-fee-bips | 0 / 1 |
-| get-earned-fees | 0 / 1 |
-| is-og | 0 / 2 |
-| get-og-status | 0 / 7 |
-| get-effective-fee-bips | 0 / 1 |
 | pending-fee | 0 / 1 |
-| get-pending-fee | 0 / 8 |
 | stx-pot | 0 / 3 |
-| get-last-claim-dist-cycle | 0 / 1 |
 | stx-paid | 0 / 4 |
 | tranche-paid | 0 / 3 |
 | tranche-paid-shares | 0 / 3 |
-| get-stx-paid | 0 / 5 |
-| get-stx-owed | 0 / 26 |
-| get-unclaimed-signer-rewards | 0 / 1 |
-| get-staker-entitlement | 0 / 1 |
 | recovered-sbtc-pot | 0 / 3 |
 | recovered-sbtc-paid | 0 / 4 |
 | recovered-sbtc-tranche-paid | 0 / 3 |
 | recovered-sbtc-paid-shares | 0 / 3 |
-| get-recovered-sbtc-paid | 0 / 5 |
-| get-earned-sbtc-fees | 0 / 1 |
-| get-pending-swap | 0 / 1 |
-| set-vault-leeway-bps | 3 / 7 |
-| set-vault-dia-band-bps | 3 / 7 |
+| get-stx-paid | 2 / 5 |
+| get-recovered-sbtc-paid | 2 / 5 |
 | pox-settle-stakers | 11 / 23 |
 | pay-recovered-sbtc-stakers | 19 / 35 |
 | pay-stx-stakers | 31 / 55 |
+| get-og-status | 4 / 7 |
 | get-stx-pot | 3 / 5 |
 | get-tranche-paid | 3 / 5 |
 | get-tranche-paid-shares | 3 / 5 |
 | is-recovered-tranche | 3 / 5 |
 | get-recovered-sbtc-pot | 3 / 5 |
 | get-recovered-sbtc-paid-shares | 3 / 5 |
+| get-stx-owed | 16 / 26 |
 | validate-stake! | 13 / 21 |
+| get-pending-admin | 5 / 8 |
+| get-pending-swap-vault | 5 / 8 |
+| get-pending-fee | 5 / 8 |
 | do-withdraw-fees | 13 / 20 |
 | pox-claim-rewards | 33 / 50 |
 | register-self | 12 / 18 |
@@ -128,29 +113,43 @@ get-admin, is-paused, get-pending-admin, get-swap-vault, get-pending-swap-vault,
 | cancel-swap-vault-proposal | 9 / 11 |
 | propose-swap-vault | 21 / 25 |
 | confirm-swap-vault | 29 / 34 |
-| refloor-vault | 6 / 7 |
 | assert-idle-vault | 15 / 17 |
+| get-admin | 1 / 1 |
+| is-paused | 1 / 1 |
 | assert-admin | 4 / 4 |
+| get-swap-vault | 1 / 1 |
 | assert-active-vault | 5 / 5 |
+| get-fee-bips | 1 / 1 |
+| get-earned-fees | 1 / 1 |
+| is-og | 2 / 2 |
 | get-og-ustx | 2 / 2 |
+| get-effective-fee-bips | 1 / 1 |
 | og-staying | 4 / 4 |
 | withdraw-fees | 4 / 4 |
 | withdraw-all-fees | 5 / 5 |
 | get-tranche-count | 2 / 2 |
+| get-last-claim-dist-cycle | 1 / 1 |
 | get-cycle-total-shares | 1 / 1 |
 | get-tranche-residue | 3 / 3 |
 | is-tranche-fully-paid | 3 / 3 |
+| get-unclaimed-signer-rewards | 1 / 1 |
+| get-staker-entitlement | 1 / 1 |
 | is-recovered-tranche-fully-paid | 3 / 3 |
+| get-earned-sbtc-fees | 1 / 1 |
+| refloor-vault | 7 / 7 |
 | set-vault-window-blocks | 7 / 7 |
+| set-vault-leeway-bps | 7 / 7 |
 | set-vault-slippage-bps | 7 / 7 |
 | set-vault-max-chunk-sats | 7 / 7 |
+| set-vault-dia-band-bps | 7 / 7 |
 | set-vault-router-cooldown | 7 / 7 |
 | jing-take | 7 / 7 |
 | router-swap-split | 7 / 7 |
+| get-pending-swap | 1 / 1 |
 | set-vault-no-pyth-slippage-bps | 7 / 7 |
 | set-vault-pyth-fee-budget | 7 / 7 |
 | router-swap-split-dia | 7 / 7 |
 
-## Sims counted (30)
+## Sims counted (33)
 
-`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f`
+`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727`

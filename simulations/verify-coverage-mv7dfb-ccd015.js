@@ -12,7 +12,7 @@
 // proposal; one var-set of par-scaled DOWN (the treasury cannot shrink on a
 // fork) to make every offer above par for the no-fill arm.
 // Run: node simulations/verify-coverage-mv7dfb-ccd015.js
-import { session, bytes, Cl, ClarityVersion, U, ok, P, mk, stxOf, STX_WHALE, STX } from './_mv7dfb-session.mjs';
+import { session, bytes, sweepReadOnly, Cl, ClarityVersion, U, ok, P, mk, stxOf, STX_WHALE, STX } from './_mv7dfb-session.mjs';
 
 const DAO = 'SP8A9HZ3PKST0S42VM9523Z9NV42SZ026V4K39WH';
 const BOOK = `${DAO}.ccd015-redemption-book-mia-stx`, PROXY = `${DAO}.sim-ccip-proxy-015`, BASE_DAO = `${DAO}.base-dao`;
@@ -134,4 +134,5 @@ await tx('cross-book with every offer above par -> u15006 (kept arm)', STRANGER,
 await tx('place-offer at par 1 -> above par u15008', late, BOOK, 'place-offer', [Cl.uint(10n * M), Cl.uint(1)], '(err u15008)');
 await tx('proxy update-par restores the real par', STRANGER, PROXY, 'update-par', [], ok);
 await tx('cancel-offer by an offer owner refunds', mk(1000), BOOK, 'cancel-offer', [], '(ok true)');
+S.notes.push(`read-only sweep: ${await sweepReadOnly(S, BOOK, bytes('ccd015-redemption-book-mia-stx'), [{ principal: late, uint: 10n * M }, { principal: mk(1001), uint: 1 }])} calls`);
 S.done();

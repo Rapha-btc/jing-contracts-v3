@@ -1,28 +1,27 @@
 # Trace coverage: signer-manager-vault-stx-rewards
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (11 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (12 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 615 / 1023 (60.1%) |
+| expressions executed / total | 653 / 1023 (63.8%) |
 | public functions reached | 30 / 30 |
-| branch nodes (if / match / asserts!) | 40: 33 full, 7 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 40: 34 full, 6 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
 
-## Read-only functions with no traced expression (11; read-only calls from Eval steps leave no trace)
+## Read-only functions with no traced expression (0; read-only calls from Eval steps leave no trace)
 
-get-swap-vault, get-pending-swap-vault, get-vault-cycle, get-swap-status, check-mirror, get-mirrored-shares, get-mirrored-total-shares, get-fees-bips, get-earned-fees, get-unswapped-sats, get-unpaid-stx
 
-## Branches with one arm never taken (7)
+
+## Branches with one arm never taken (6)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 225 | mirror-stake-for-cycle | if | one arm (else only) |
 | 868 | compute-due | if | one arm (else only) |
 | 872 | compute-due | if | one arm (else only) |
-| 933 | pay-stacker | if | one arm (then only) |
 | 961 | pay-stacker | if | one arm (then only) |
 | 1166 | sweep-sbtc-dust | if | one arm (then only) |
 | 1206 | sweep-stx-dust | if | one arm (then only) |
@@ -63,22 +62,14 @@ get-swap-vault, get-pending-swap-vault, get-vault-cycle, get-swap-status, check-
 | stacker-stx-paid | 0 / 3 |
 | stacker-sbtc-accounted | 0 / 3 |
 | pending-swap-vault | 0 / 1 |
-| get-swap-vault | 0 / 1 |
-| get-pending-swap-vault | 0 / 8 |
 | vault-cycle | 0 / 1 |
-| get-vault-cycle | 0 / 1 |
-| get-swap-status | 0 / 22 |
-| check-mirror | 0 / 12 |
-| get-mirrored-shares | 0 / 5 |
-| get-mirrored-total-shares | 0 / 2 |
-| get-fees-bips | 0 / 1 |
-| get-earned-fees | 0 / 1 |
-| get-unswapped-sats | 0 / 1 |
-| get-unpaid-stx | 0 / 1 |
+| check-mirror | 6 / 12 |
 | distribute-rewards-many | 22 / 41 |
 | compute-due | 28 / 51 |
+| get-mirrored-shares | 3 / 5 |
 | validate-stake! | 14 / 23 |
 | mirror-stake-for-cycle | 18 / 29 |
+| get-pending-swap-vault | 5 / 8 |
 | repair-mirror-many | 22 / 34 |
 | sweep-stx-dust | 17 / 26 |
 | claim-rewards | 27 / 40 |
@@ -87,6 +78,7 @@ get-swap-vault, get-pending-swap-vault, get-vault-cycle, get-swap-status, check-
 | fold-repair-mirror | 23 / 33 |
 | pin-shares | 21 / 30 |
 | pay-stacker | 41 / 58 |
+| get-swap-status | 16 / 22 |
 | get-stacker-rewards | 6 / 8 |
 | update-admin | 10 / 13 |
 | update-fees | 10 / 13 |
@@ -102,11 +94,13 @@ get-swap-vault, get-pending-swap-vault, get-vault-cycle, get-swap-status, check-
 | get-settlement | 2 / 2 |
 | is-pinned | 2 / 2 |
 | authorize-pox-5 | 3 / 3 |
+| get-swap-vault | 1 / 1 |
 | assert-active-vault | 5 / 5 |
 | is-admin | 2 / 2 |
 | authorize-admin | 5 / 5 |
 | get-fee-bips-for-cycle | 3 / 3 |
 | refloor-vault | 6 / 6 |
+| get-vault-cycle | 1 / 1 |
 | set-vault-window-blocks | 6 / 6 |
 | set-vault-leeway-bps | 6 / 6 |
 | set-vault-slippage-bps | 6 / 6 |
@@ -120,7 +114,12 @@ get-swap-vault, get-pending-swap-vault, get-vault-cycle, get-swap-status, check-
 | router-swap-split-dia | 6 / 6 |
 | get-unswapped-for-cycle | 2 / 2 |
 | register-self | 6 / 6 |
+| get-mirrored-total-shares | 2 / 2 |
+| get-fees-bips | 1 / 1 |
+| get-earned-fees | 1 / 1 |
+| get-unswapped-sats | 1 / 1 |
+| get-unpaid-stx | 1 / 1 |
 
-## Sims counted (11)
+## Sims counted (12)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f`
+`de9bd7b8` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727`
