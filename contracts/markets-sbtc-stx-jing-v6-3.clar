@@ -1078,7 +1078,7 @@ feed-y: (try! (shape-feed fy publish-time)),
 )
 )
 ;; Same checks as fresh-classification-price-aged, on feeds the caller
-;; already verified with lazer-feeds (swap verifies its update once).
+;; already verified with lazer-feeds (swap and reprice-or-swap verify once).
 (define-private (fresh-classification-from-feeds
 (feed-x {
 price: int,
@@ -2274,14 +2274,22 @@ set-at: (get submitted-at pending),
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(if (and
-(> (len (get-token-x-depositors cycle)) u0)
-(let ((price (try! (fresh-classification-price update))))
-(would-take-as-y price (order-y-price limit-price spread-bps price))
-)
-)
+;; Verify once; a crossing settles on the same feeds.
+(match (if (> (len (get-token-x-depositors cycle)) u0)
 (let (
-(bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
+(feeds (try! (lazer-feeds update)))
+(aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
+)
+(if (would-take-as-y (get price aged) (order-y-price limit-price spread-bps (get price aged)))
+(some { feeds: feeds, age: (get age aged) })
+none
+)
+)
+none
+)
+verified
+(let (
+(bps (rebate-bps-for-age (get age verified)))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
 (map-set token-y-deposit-limits tx-sender {
@@ -2300,7 +2308,11 @@ set-at: stacks-block-time,
 (var-set pending-rebate-bps-y bps)
 (var-set crossing true)
 (var-set crossing-x false)
-(let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
+(asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
+(asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
+(let ((result (try! (settle-with-verified-feeds (get feed-x (get feeds verified))
+(get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
+))))
 (ok (swap-result-y result
 (try! (cross-remainder-as-y limit-price (get token-y-rolled result)
 tx-trait tx-name
@@ -2360,14 +2372,22 @@ rebate-refunded: u0,
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(if (and
-(> (len (get-token-y-depositors cycle)) u0)
-(let ((price (try! (fresh-classification-price update))))
-(would-take-as-x price (order-x-price limit-price spread-bps price))
-)
-)
+;; Verify once; a crossing settles on the same feeds.
+(match (if (> (len (get-token-y-depositors cycle)) u0)
 (let (
-(bps (rebate-bps-for-age (get age (try! (fresh-classification-price-aged update)))))
+(feeds (try! (lazer-feeds update)))
+(aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
+)
+(if (would-take-as-x (get price aged) (order-x-price limit-price spread-bps (get price aged)))
+(some { feeds: feeds, age: (get age aged) })
+none
+)
+)
+none
+)
+verified
+(let (
+(bps (rebate-bps-for-age (get age verified)))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
 (map-set token-x-deposit-limits tx-sender {
@@ -2388,7 +2408,11 @@ none
 (var-set pending-rebate-bps-x bps)
 (var-set crossing true)
 (var-set crossing-x true)
-(let ((result (try! (settle-with-refresh update tx-trait tx-name ty-trait ty-name))))
+(asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
+(asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
+(let ((result (try! (settle-with-verified-feeds (get feed-x (get feeds verified))
+(get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
+))))
 (ok (swap-result-x result
 (try! (cross-remainder-as-x limit-price (get token-x-rolled result)
 tx-trait tx-name
@@ -2632,7 +2656,8 @@ tx-name ty-trait ty-name
 )
 )
 ;; Body of settle-with-refresh after its trait checks and lazer-feeds.
-;; Callers must check both traits first (settle-with-refresh, swap).
+;; Callers must check both traits first (settle-with-refresh, swap,
+;; reprice-or-swap-token-x/y).
 (define-private (settle-with-verified-feeds
 (feed-x {
 price: int,
