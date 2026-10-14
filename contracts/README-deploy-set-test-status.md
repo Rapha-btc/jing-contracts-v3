@@ -90,28 +90,29 @@ npx vitest run tests/juice-safe-v7*.test.ts \
 
 ## Partner contracts
 
-These are in the launch plan but are deployed by partner teams, not the
-primary 31-contract set above. Their status means the answer is **not yet yes
-for every partner deployment**:
+These partner deployments now also have source-pinned Clarinet SDK suites:
 
 | Partner contract(s) | Source commit | Clarinet status |
 |---|---|---|
-| `ccd015-redemption-book-mia-stx` | `a9a6bd6` | Loaded as the real book in the CityCoins vault harness, but no separate full book coverage gate is reported. |
-| `ccd016-swap-vault-mia-v2` | `8bfbb5f` | `npm run test:vault`: 313 checks; 450/473 lines (95.14%), 118/119 branches (99.16%). The remaining branch is a vault floor guard the mock router rejects before the vault receives a result. |
-| `fastpool-swap-vault` | `b719e87` | `tests/vault-stx/run-fastpool.mjs`, 85 assertions green; fixture builder verifies raw source SHA-256 before compiling. No line/branch/function coverage report. |
-| `signer-manager-vault-stx-rewards` | `3f82a93` | Same source-pinned suite and result. Test scenarios cover the lifecycle, fee snapshots, late claims, recovery, mixed-asset payouts and vault rotation; public-function coverage is not exhaustive. |
+| `ccd015-redemption-book-mia-stx` | `a9a6bd6` | `npm run test:book`: 1/1 suite; 21/21 public/read-only functions, 29/29 instrumented functions, 211/213 lines (99.06%), 72/72 branches. The two unhit line counters are static token principal literals at source lines 373 and 375; all function and branch counters are hit. |
+| `ccd016-swap-vault-mia-v2` | `8bfbb5f` | `npm run test:vault`: 313 assertions; 46/46 functions, 450/473 lines (95.14%), 118/119 branches (99.16%). The remaining branch is a vault floor guard the mock router rejects before the vault receives a result. |
+| `fastpool-swap-vault` | `b719e87` | Source-pinned Vitest/Clarinet suite: 317 assertions; 41/41 functions, 466/502 lines (92.8%), 138/150 branches (92.0%). |
+| `signer-manager-vault-stx-rewards` | `3f82a93` | Same 317-assertion suite; 56/56 functions, 551/563 lines (97.9%), 85/91 branches (93.4%). |
 
 FastPool's focused Clarinet harness instructions, source pins and limits are in
 `fastpool-pox-5/tests/vault-stx/README.md`.
 Its isolated builder uses the current Jing v6-3 test market/Core interface
 instead of the stale CityCoins fixture, and keeps generated files under the
-FastPool `.build/fastpool-only` directory. This updates the earlier report:
-the FastPool scenario harness is green, but full function/branch coverage is
-still not established.
+FastPool `.build/fastpool-only` directory. Every public function is hit in both
+FastPool contracts; remaining misses are defensive status/balance/payout
+branches and fixture-reachability cases. The FastPool repository suite also
+passes: 49 tests passed with one intentional isolated-harness skip.
 
-The CityCoins run pins both source hashes in its
-[`runtime.json`](https://github.com/Rapha-btc/citycoins-protocol/blob/feat/ccd015-redemption-book/tests/vault/results/runtime.json).
-Its SDK/epoch plumbing fix is pushed as `8e05c13`.
+CityCoins pins both source hashes in its
+[`runtime.json`](https://github.com/Rapha-btc/citycoins-protocol/blob/feat/ccd015-redemption-book/tests/vault/results/runtime.json)
+and the book-specific counters in
+[`ccd015-book-runtime.json`](https://github.com/Rapha-btc/citycoins-protocol/blob/feat/ccd015-redemption-book/tests/vault/results/ccd015-book-runtime.json).
+Book coverage details are in the [CityCoins vault README](https://github.com/Rapha-btc/citycoins-protocol/blob/feat/ccd015-redemption-book/tests/vault/README.md).
 
 ## Source pins and interpretation
 
