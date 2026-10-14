@@ -1,6 +1,6 @@
 # Trace coverage: juice-sbtc-autoswap
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-sbtc-autoswap.clar` (sha256 `ff0a45868897397187106fe284ed72ab64f2d3718adb238addf8d7c1a5909033`), counted only where a sim deployed these exact bytes (33 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-sbtc-autoswap.clar` (sha256 `ff0a45868897397187106fe284ed72ab64f2d3718adb238addf8d7c1a5909033`), counted only where a sim deployed these exact bytes (35 sims).
 
 | metric | value |
 |---|---|
@@ -91,6 +91,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | cooldown-tick | 8 / 8 |
 | floor-out | 3 / 3 |
 
-## Sims counted (33)
+## Sims counted (35)
 
-`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727`
+`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727` `b8f56b5d` `80c3db54`

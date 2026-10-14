@@ -1,6 +1,6 @@
 # Trace coverage: juice-autostake-safe-auth-helpers-v1
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe-auth-helpers-v1.clar` (sha256 `aabf3ba32c5602b83693f1581adb7a22a2e180df2306673b23f94c61fa61bd70`), counted only where a sim deployed these exact bytes (6 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe-auth-helpers-v1.clar` (sha256 `aabf3ba32c5602b83693f1581adb7a22a2e180df2306673b23f94c61fa61bd70`), counted only where a sim deployed these exact bytes (7 sims).
 
 | metric | value |
 |---|---|
@@ -32,6 +32,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | get-domain-hash | 4 / 8 |
 | build-set-keeper-hash | 10 / 13 |
 
-## Sims counted (6)
+## Sims counted (7)
 
-`de9bd7b8` `3270029d` `75074c83` `5cf1573f` `b6fd12bd` `6fd87036`
+`de9bd7b8` `3270029d` `75074c83` `5cf1573f` `b6fd12bd` `6fd87036` `80c3db54`

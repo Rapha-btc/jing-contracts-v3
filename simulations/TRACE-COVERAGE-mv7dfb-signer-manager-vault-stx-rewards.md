@@ -1,12 +1,12 @@
 # Trace coverage: signer-manager-vault-stx-rewards
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (12 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (13 sims).
 
 | metric | value |
 |---|---|
 | expressions executed / total | 653 / 1023 (63.8%) |
 | public functions reached | 30 / 30 |
-| branch nodes (if / match / asserts!) | 40: 34 full, 6 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 40: 36 full, 4 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,13 +15,11 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 
 
-## Branches with one arm never taken (6)
+## Branches with one arm never taken (4)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 225 | mirror-stake-for-cycle | if | one arm (else only) |
-| 868 | compute-due | if | one arm (else only) |
-| 872 | compute-due | if | one arm (else only) |
 | 961 | pay-stacker | if | one arm (then only) |
 | 1166 | sweep-sbtc-dust | if | one arm (then only) |
 | 1206 | sweep-stx-dust | if | one arm (then only) |
@@ -120,6 +118,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | get-unswapped-sats | 1 / 1 |
 | get-unpaid-stx | 1 / 1 |
 
-## Sims counted (12)
+## Sims counted (13)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727`
+`de9bd7b8` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d`

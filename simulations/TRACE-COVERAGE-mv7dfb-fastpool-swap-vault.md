@@ -1,12 +1,12 @@
 # Trace coverage: fastpool-swap-vault
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (13 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (14 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 571 / 933 (61.2%) |
+| expressions executed / total | 574 / 933 (61.5%) |
 | public functions reached | 19 / 19 |
-| branch nodes (if / match / asserts!) | 68: 67 full, 1 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 68: 68 full, 0 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,11 +15,10 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 
 
-## Branches with one arm never taken (1)
+## Branches with one arm never taken (0)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 807 | get-clock | match | one arm (else only) |
 
 ## Branch nodes never reached (0)
 
@@ -50,9 +49,9 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | ERR_SPLIT_MISMATCH | 0 / 1 |
 | ERR_UPDATE_REQUIRED | 0 / 1 |
 | batch-start | 0 / 1 |
-| get-clock | 7 / 18 |
 | get-config | 10 / 23 |
 | get-upgrade-status | 10 / 19 |
+| get-clock | 10 / 18 |
 | reclaim-core | 9 / 15 |
 | router-swap-split-dia | 41 / 68 |
 | get-no-pyth-price | 20 / 33 |
@@ -92,6 +91,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | cooldown-tick | 8 / 8 |
 | floor-out | 3 / 3 |
 
-## Sims counted (13)
+## Sims counted (14)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727`
+`de9bd7b8` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d`

@@ -1,12 +1,12 @@
 # Trace coverage: swap-router-sbtc-stx-jing-v5-3
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/swap-router-sbtc-stx-jing-v5-3.clar` (sha256 `3e457866be8d4f6216e5e17fd87c9aa6fb2285a23909e7957a354c4af8e3b9b4`), counted only where a sim deployed these exact bytes (76 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/swap-router-sbtc-stx-jing-v5-3.clar` (sha256 `3e457866be8d4f6216e5e17fd87c9aa6fb2285a23909e7957a354c4af8e3b9b4`), counted only where a sim deployed these exact bytes (78 sims).
 
 | metric | value |
 |---|---|
 | expressions executed / total | 887 / 1318 (67.3%) |
 | public functions reached | 4 / 4 |
-| branch nodes (if / match / asserts!) | 123: 117 full, 5 partial, 1 never reached |
+| branch nodes (if / match / asserts!) | 123: 118 full, 4 partial, 1 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,14 +15,13 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 
 
-## Branches with one arm never taken (5)
+## Branches with one arm never taken (4)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 109 | xyk-swap | if | one arm (then only) |
 | 687 | cp-split | if | one arm (then only) |
 | 807 | dlmm-out | if | one arm (then only) |
-| 812 | dlmm-out | if | one arm (then only) |
 | 954 | dlmm-enabled | match | one arm (then only) |
 
 ## Branch nodes never reached (1)
@@ -88,6 +87,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | amm-leg | 5 / 5 |
 | get-jing-min-deposits | 1 / 1 |
 
-## Sims counted (76)
+## Sims counted (78)
 
-`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `12cf15ee` `1599af88` `18933f00` `21bd3ee2` `2915ed46` `2f47455f` `2fd82a2e` `3270029d` `34add6e3` `35d275ea` `36b4f87e` `38122515` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54f0da53` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `6c1285d8` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `7edc890f` `8063c1da` `839af883` `8a0e577b` `8a2c60cc` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c691ce10` `d0108679` `d05eaf98` `d4af4cc8` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e8c0247d` `ec16a3f8` `f793659c` `d55a9bb0` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727`
+`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `12cf15ee` `1599af88` `18933f00` `21bd3ee2` `2915ed46` `2f47455f` `2fd82a2e` `3270029d` `34add6e3` `35d275ea` `36b4f87e` `38122515` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54f0da53` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `6c1285d8` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `7edc890f` `8063c1da` `839af883` `8a0e577b` `8a2c60cc` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c691ce10` `d0108679` `d05eaf98` `d4af4cc8` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e8c0247d` `ec16a3f8` `f793659c` `d55a9bb0` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727` `b8f56b5d` `80c3db54`

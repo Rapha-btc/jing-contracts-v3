@@ -1,8 +1,8 @@
 {
-  "date": "2026-10-14T19:55:34.324Z",
-  "sims": 112,
-  "txs": 9079,
-  "noTrace": 753,
+  "date": "2026-10-14T20:16:53.945Z",
+  "sims": 114,
+  "txs": 9343,
+  "noTrace": 762,
   "summary": [
     {
       "name": "jing-core-v6",
@@ -12,7 +12,7 @@
       "full": 82,
       "partial": 0,
       "never": 0,
-      "sims": 105
+      "sims": 107
     },
     {
       "name": "jing-ladder-v1",
@@ -22,47 +22,47 @@
       "full": 24,
       "partial": 0,
       "never": 0,
-      "sims": 106
+      "sims": 108
     },
     {
       "name": "markets-sbtc-stx-jing-v6-3",
-      "expr": "3221/4456",
+      "expr": "3223/4456",
       "pub": "32/32",
       "branches": 307,
-      "full": 301,
-      "partial": 6,
+      "full": 303,
+      "partial": 4,
       "never": 0,
-      "sims": 105
+      "sims": 107
     },
     {
       "name": "swap-router-sbtc-stx-jing-v5-3",
       "expr": "887/1318",
       "pub": "4/4",
       "branches": 123,
-      "full": 117,
-      "partial": 5,
+      "full": 118,
+      "partial": 4,
       "never": 1,
-      "sims": 76
+      "sims": 78
     },
     {
       "name": "jing-buy-stx-core-spread-v1",
-      "expr": "650/928",
+      "expr": "651/928",
       "pub": "8/8",
       "branches": 62,
-      "full": 57,
-      "partial": 5,
+      "full": 58,
+      "partial": 4,
       "never": 0,
-      "sims": 5
+      "sims": 6
     },
     {
       "name": "jing-sell-stx-core-spread-v1",
-      "expr": "649/929",
+      "expr": "650/929",
       "pub": "8/8",
       "branches": 62,
-      "full": 57,
-      "partial": 5,
+      "full": 58,
+      "partial": 4,
       "never": 0,
-      "sims": 6
+      "sims": 7
     },
     {
       "name": "jing-ladder-dispatch",
@@ -76,13 +76,13 @@
     },
     {
       "name": "juice-pool-sbtc-signer",
-      "expr": "756/1243",
+      "expr": "758/1243",
       "pub": "37/37",
       "branches": 53,
-      "full": 50,
-      "partial": 3,
+      "full": 51,
+      "partial": 2,
       "never": 0,
-      "sims": 33
+      "sims": 35
     },
     {
       "name": "juice-sbtc-autoswap",
@@ -92,17 +92,17 @@
       "full": 68,
       "partial": 0,
       "never": 0,
-      "sims": 33
+      "sims": 35
     },
     {
       "name": "juice-autostake-safe",
       "expr": "1042/1588",
       "pub": "27/27",
       "branches": 113,
-      "full": 112,
-      "partial": 1,
+      "full": 113,
+      "partial": 0,
       "never": 0,
-      "sims": 6
+      "sims": 7
     },
     {
       "name": "juice-autostake-safe-auth-helpers-v1",
@@ -112,27 +112,27 @@
       "full": 0,
       "partial": 0,
       "never": 0,
-      "sims": 6
+      "sims": 7
     },
     {
       "name": "fastpool-swap-vault",
-      "expr": "571/933",
+      "expr": "574/933",
       "pub": "19/19",
       "branches": 68,
-      "full": 67,
-      "partial": 1,
+      "full": 68,
+      "partial": 0,
       "never": 0,
-      "sims": 13
+      "sims": 14
     },
     {
       "name": "signer-manager-vault-stx-rewards",
       "expr": "653/1023",
       "pub": "30/30",
       "branches": 40,
-      "full": 34,
-      "partial": 6,
+      "full": 36,
+      "partial": 4,
       "never": 0,
-      "sims": 12
+      "sims": 13
     },
     {
       "name": "ccd015-redemption-book-mia-stx",

@@ -1,12 +1,12 @@
 # Trace coverage: juice-pool-sbtc-signer
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6`), counted only where a sim deployed these exact bytes (33 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `57d8c3d384f11d955574a0bce365dad788c4cac919708a70d03c2e10af1f9bd6`), counted only where a sim deployed these exact bytes (35 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 756 / 1243 (60.8%) |
+| expressions executed / total | 758 / 1243 (61.0%) |
 | public functions reached | 37 / 37 |
-| branch nodes (if / match / asserts!) | 53: 50 full, 3 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 53: 51 full, 2 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,12 +15,11 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 
 
-## Branches with one arm never taken (3)
+## Branches with one arm never taken (2)
 
 | line | function | kind | state |
 |---|---|---|---|
 | 755 | pay-one | if | one arm (else only) |
-| 898 | settle-one | match | one arm (then only) |
 | 1121 | pay-recovered-sbtc-one | if | one arm (else only) |
 
 ## Branch nodes never reached (0)
@@ -94,7 +93,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | pay-one | 39 / 58 |
 | sweep-recovered-sbtc-dust | 23 / 34 |
 | pay-recovered-sbtc-one | 44 / 64 |
-| settle-one | 9 / 13 |
 | take-og-seat | 40 / 57 |
 | get-recovered-sbtc-residue | 5 / 7 |
 | finalize-swap | 23 / 32 |
@@ -112,6 +110,7 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | cancel-admin-proposal | 9 / 11 |
 | cancel-swap-vault-proposal | 9 / 11 |
 | propose-swap-vault | 21 / 25 |
+| settle-one | 11 / 13 |
 | confirm-swap-vault | 29 / 34 |
 | assert-idle-vault | 15 / 17 |
 | get-admin | 1 / 1 |
@@ -150,6 +149,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | set-vault-pyth-fee-budget | 7 / 7 |
 | router-swap-split-dia | 7 / 7 |
 
-## Sims counted (33)
+## Sims counted (35)
 
-`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727`
+`de9bd7b8` `01b8c978` `0b130236` `12cf15ee` `18933f00` `21bd3ee2` `2fd82a2e` `3270029d` `41ad661d` `46edf261` `4783a1b8` `4edd8ba9` `58c0fb76` `5c4cea9a` `7158b1ba` `7388231f` `75074c83` `768b1ae9` `8063c1da` `839af883` `8a0e577b` `c449ad8c` `c5e9f981` `d0108679` `d4af4cc8` `dd93a13a` `e547999d` `e78fe3b2` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727` `b8f56b5d` `80c3db54`

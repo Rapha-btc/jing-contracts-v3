@@ -1,12 +1,12 @@
 # Trace coverage: juice-autostake-safe
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe.clar` (sha256 `dda5367c1800f6f541840607ba9b5437f479580d51cd3654c12270024ae28a3d`), counted only where a sim deployed these exact bytes (6 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe.clar` (sha256 `dda5367c1800f6f541840607ba9b5437f479580d51cd3654c12270024ae28a3d`), counted only where a sim deployed these exact bytes (7 sims).
 
 | metric | value |
 |---|---|
 | expressions executed / total | 1042 / 1588 (65.6%) |
 | public functions reached | 27 / 27 |
-| branch nodes (if / match / asserts!) | 113: 112 full, 1 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 113: 113 full, 0 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,11 +15,10 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 get-pending-config, get-pending-max-gas, get-token-lock-enabled, get-pending-operation, get-owner, get-keeper
 
-## Branches with one arm never taken (1)
+## Branches with one arm never taken (0)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 167 | pay-gas-accounted | if | one arm (then only) |
 
 ## Branch nodes never reached (0)
 
@@ -110,6 +109,6 @@ get-pending-config, get-pending-max-gas, get-token-lock-enabled, get-pending-ope
 | recover-inactive-wallet | 18 / 18 |
 | locked-ustx | 2 / 2 |
 
-## Sims counted (6)
+## Sims counted (7)
 
-`de9bd7b8` `3270029d` `75074c83` `5cf1573f` `b6fd12bd` `6fd87036`
+`de9bd7b8` `3270029d` `75074c83` `5cf1573f` `b6fd12bd` `6fd87036` `80c3db54`

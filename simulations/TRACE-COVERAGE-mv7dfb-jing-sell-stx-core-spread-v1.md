@@ -1,12 +1,12 @@
 # Trace coverage: jing-sell-stx-core-spread-v1
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-sell-stx-core-spread-v1.clar` (sha256 `7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f`), counted only where a sim deployed these exact bytes (6 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-sell-stx-core-spread-v1.clar` (sha256 `7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f`), counted only where a sim deployed these exact bytes (7 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 649 / 929 (69.9%) |
+| expressions executed / total | 650 / 929 (70.0%) |
 | public functions reached | 8 / 8 |
-| branch nodes (if / match / asserts!) | 62: 57 full, 5 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 62: 58 full, 4 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,11 +15,10 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 
 
-## Branches with one arm never taken (5)
+## Branches with one arm never taken (4)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 213 | epoch-payout | match | one arm (then only) |
 | 669 | count-reserve-claim | match | one arm (then only) |
 | 674 | count-reserve-claim | if | one arm (else only) |
 | 678 | count-reserve-claim | if | one arm (else only) |
@@ -53,7 +52,7 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | earned | 4 / 10 |
 | get-state | 12 / 23 |
 | position-of | 6 / 10 |
-| epoch-payout | 17 / 26 |
+| epoch-payout | 18 / 26 |
 | get-position | 34 / 49 |
 | settle-proceeds | 68 / 90 |
 | earned-step | 28 / 37 |
@@ -86,6 +85,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | escrow-for | 10 / 10 |
 | claim | 7 / 7 |
 
-## Sims counted (6)
+## Sims counted (7)
 
-`de9bd7b8` `170b7df3` `33c70bfa` `387017ec` `fe01ec23` `5cf1573f`
+`de9bd7b8` `170b7df3` `33c70bfa` `387017ec` `fe01ec23` `5cf1573f` `b8f56b5d`

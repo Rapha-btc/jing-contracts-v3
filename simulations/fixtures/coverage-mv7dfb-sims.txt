@@ -109,3 +109,5 @@ da59d0878012a90a13837ae3142ee72b jing-contracts-v3/verify-coverage-mv7dfb-fastpo
 b6fd12bda7695aa13138daabdb73a613 pillar/simul-juice-autostake-safe-ops-coverage.js 204/204 (pillar e2c1eb0)
 6fd870360cfc4da466dce5dca72da925 pillar/simul-juice-autostake-safe-stake-passkey.js 43/43
 692f57275b5412c8a95176d1d9205975 jing-contracts-v3/verify-coverage-mv7dfb-gaps.js 455/455
+b8f56b5d69c546f9e92a91bfb8c2c378 jing-contracts-v3/verify-coverage-mv7dfb-gaps2.js 115/115
+80c3db54c6af49497a65e7e05c262c94 pillar/simul-juice-autostake-safe-ops-coverage.js 208/208 (F: zero-fee gas station)

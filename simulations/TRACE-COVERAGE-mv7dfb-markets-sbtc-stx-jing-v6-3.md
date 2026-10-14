@@ -1,12 +1,12 @@
 # Trace coverage: markets-sbtc-stx-jing-v6-3
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/markets-sbtc-stx-jing-v6-3.clar` (sha256 `7b2f0f44fca1feaf1e8c30f195d0a639a3daf102db4f4c84060c8062132f5f4c`), counted only where a sim deployed these exact bytes (105 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/markets-sbtc-stx-jing-v6-3.clar` (sha256 `7b2f0f44fca1feaf1e8c30f195d0a639a3daf102db4f4c84060c8062132f5f4c`), counted only where a sim deployed these exact bytes (107 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 3221 / 4456 (72.3%) |
+| expressions executed / total | 3223 / 4456 (72.3%) |
 | public functions reached | 32 / 32 |
-| branch nodes (if / match / asserts!) | 307: 301 full, 6 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 307: 303 full, 4 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -15,12 +15,10 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 
 get-taker-rebate-max-bps, get-taker-rebate-bps
 
-## Branches with one arm never taken (6)
+## Branches with one arm never taken (4)
 
 | line | function | kind | state |
 |---|---|---|---|
-| 3009 | walk-x-book-step | match | one arm (then only) |
-| 3050 | walk-y-book-step | match | one arm (then only) |
 | 3605 | distribute-to-token-y-depositor | if | one arm (then only) |
 | 3609 | distribute-to-token-y-depositor | if | one arm (then only) |
 | 3700 | distribute-to-token-x-depositor | if | one arm (then only) |
@@ -131,8 +129,6 @@ get-taker-rebate-max-bps, get-taker-rebate-bps
 | filter-small-token-y-depositor | 49 / 62 |
 | deposit-token-y-core | 83 / 105 |
 | settle-token-y-deposit | 81 / 102 |
-| walk-x-book-step | 27 / 34 |
-| walk-y-book-step | 27 / 34 |
 | cancel-token-y-deposit | 70 / 88 |
 | pegged-bid | 8 / 10 |
 | pegged-ask | 8 / 10 |
@@ -152,6 +148,8 @@ get-taker-rebate-max-bps, get-taker-rebate-bps
 | cap-kept-ask-fold | 17 / 21 |
 | live-bid-fold | 14 / 17 |
 | live-offer-fold | 14 / 17 |
+| walk-x-book-step | 28 / 34 |
+| walk-y-book-step | 28 / 34 |
 | prune-one | 10 / 12 |
 | smallest-outside-y-fold | 21 / 25 |
 | smallest-outside-x-fold | 21 / 25 |
@@ -220,6 +218,6 @@ get-taker-rebate-max-bps, get-taker-rebate-bps
 | prune-cycles | 2 / 2 |
 | refresh-mid | 1 / 1 |
 
-## Sims counted (105)
+## Sims counted (107)
 
-`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `120bc743` `12cf15ee` `1576f5bc` `1599af88` `170b7df3` `18933f00` `18ac074b` `1a4fe982` `21bd3ee2` `227a3969` `27d02561` `28ba3ce9` `2915ed46` `2a6ab8f9` `2b0436de` `2f47455f` `2fd82a2e` `3270029d` `33c70bfa` `34add6e3` `35d275ea` `36b4f87e` `38122515` `387017ec` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54912c2f` `54f0da53` `584b4ed5` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `613d6d04` `6af504a8` `6c1285d8` `6d426b0f` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `76ae817d` `7a5d15a9` `7edc890f` `8063c1da` `839af883` `8854dace` `8a0e577b` `8a2c60cc` `94d5f0c9` `9f01abe4` `a674afe9` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c65fd855` `c691ce10` `d0108679` `d05eaf98` `d15c2358` `d4af4cc8` `d72ffae1` `dce4e39c` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e7f75295` `e8c0247d` `ec16a3f8` `f793659c` `fe01ec23` `d55a9bb0` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727`
+`de9bd7b8` `01b8c978` `09bad98f` `0b130236` `0d61fa25` `0d66c62d` `120bc743` `12cf15ee` `1576f5bc` `1599af88` `170b7df3` `18933f00` `18ac074b` `1a4fe982` `21bd3ee2` `227a3969` `27d02561` `28ba3ce9` `2915ed46` `2a6ab8f9` `2b0436de` `2f47455f` `2fd82a2e` `3270029d` `33c70bfa` `34add6e3` `35d275ea` `36b4f87e` `38122515` `387017ec` `3c99bc1e` `3cae36d9` `40bee8c0` `41a52fa1` `41ad661d` `41c6aa11` `46edf261` `4783a1b8` `486a08d0` `4d1bb9ef` `4edd8ba9` `523e3e7d` `526537fa` `54256428` `54912c2f` `54f0da53` `584b4ed5` `58724eb0` `58c0fb76` `59cdc203` `5a727d6d` `5c4cea9a` `613d6d04` `6af504a8` `6c1285d8` `6d426b0f` `6f30d6e2` `7158b1ba` `71ec6fc5` `7388231f` `75074c83` `75f1cd13` `7668f859` `768b1ae9` `76ae817d` `7a5d15a9` `7edc890f` `8063c1da` `839af883` `8854dace` `8a0e577b` `8a2c60cc` `94d5f0c9` `9f01abe4` `a674afe9` `ad49570e` `b18edad1` `b95238c0` `c449ad8c` `c5e9f981` `c63880c2` `c65fd855` `c691ce10` `d0108679` `d05eaf98` `d15c2358` `d4af4cc8` `d72ffae1` `dce4e39c` `dd93a13a` `e3f21dae` `e547999d` `e58d43d1` `e78fe3b2` `e7f75295` `e8c0247d` `ec16a3f8` `f793659c` `fe01ec23` `d55a9bb0` `da59d087` `5cf1573f` `b6fd12bd` `6fd87036` `692f5727` `b8f56b5d` `80c3db54`
