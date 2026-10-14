@@ -53,6 +53,24 @@ Concrete attack:
 The hash check binds CODE correctness; it doesn't bind DEPLOYMENT
 identity.
 
+## Status in jing-core-v4, v5 and v6: open registration, by design
+
+The owner check below is NOT in `register` from jing-core-v4 on (v4, v5
+live, v6 to deploy). Registration binds code only: any contract whose
+bytecode hash equals a verified contract's can register itself and call the
+`log-*` functions. This is accepted (bounty mv7dfb coverage review,
+2026-10-14):
+
+- The core holds no funds. `log-*` only updates the core's own records
+  and prints events.
+- A copy of a verified market is a separate market with its own
+  deployer. Users who send it funds trust that copy, not ours.
+- Consumers must not treat "registered in the core" as "ours": the
+  indexer, frontends and any contract that relies on core events filter
+  on our own market principals.
+
+The section below is the historical fix from the earlier core.
+
 ## Fix
 
 ```clarity
