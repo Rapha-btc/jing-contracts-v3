@@ -1,6 +1,6 @@
 # Trace coverage: jing-ladder-dispatch
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-ladder-dispatch.clar` (sha256 `25858ef64f1da1458272f53e1654e4e1704bfcb5bdea8fea859202771fe3cabd`), counted only where a sim deployed these exact bytes (4 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-ladder-dispatch.clar` (sha256 `25858ef64f1da1458272f53e1654e4e1704bfcb5bdea8fea859202771fe3cabd`), counted only where a sim deployed these exact bytes (5 sims).
 
 | metric | value |
 |---|---|
@@ -52,6 +52,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | claim-buy | 1 / 1 |
 | claim-sell | 1 / 1 |
 
-## Sims counted (4)
+## Sims counted (5)
 
-`de9bd7b8` `170b7df3` `33c70bfa` `5cf1573f`
+`b220ceef` `170b7df3` `33c70bfa` `5cf1573f` `20c42862`

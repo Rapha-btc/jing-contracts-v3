@@ -2,11 +2,11 @@
   "bounty": "mv7dfb Giant Moth 01",
   "height": 9207954,
   "oldRouter": "f342615",
-  "newRouter": "15aef66",
+  "newRouter": "876fb0b",
   "migratedPool": "v-2",
   "limit": "29401964051198",
   "old": {
-    "simulation": "https://stxer.xyz/simulations/mainnet/d5f7ff94b76c8a04512fd90303650a38",
+    "simulation": "https://stxer.xyz/simulations/mainnet/dc78c7219cecc1aa14419d3a1dc14fc8",
     "n": 2,
     "pre": {
       "smart": "u2",
@@ -32,7 +32,7 @@
     ]
   },
   "new": {
-    "simulation": "https://stxer.xyz/simulations/mainnet/e16126da832e64a295264a65cd35a02f",
+    "simulation": "https://stxer.xyz/simulations/mainnet/213aaf3a2125258aba143af30e9f2541",
     "n": 2,
     "pre": {
       "smart": "u2",

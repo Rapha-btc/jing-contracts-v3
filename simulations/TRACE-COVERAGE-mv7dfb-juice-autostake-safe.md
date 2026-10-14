@@ -1,12 +1,12 @@
 # Trace coverage: juice-autostake-safe
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe.clar` (sha256 `dda5367c1800f6f541840607ba9b5437f479580d51cd3654c12270024ae28a3d`), counted only where a sim deployed these exact bytes (7 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-autostake-safe.clar` (sha256 `599192e3cc933485ca03d9b703fd6aaf56c57929815e141f9fe4aabe872c2500`), counted only where a sim deployed these exact bytes (5 sims).
 
 | metric | value |
 |---|---|
-| expressions executed / total | 1042 / 1588 (65.6%) |
+| expressions executed / total | 1046 / 1594 (65.6%) |
 | public functions reached | 27 / 27 |
-| branch nodes (if / match / asserts!) | 113: 113 full, 0 partial, 0 never reached |
+| branch nodes (if / match / asserts!) | 114: 114 full, 0 partial, 0 never reached |
 
 ## Public functions never reached (0)
 
@@ -77,11 +77,11 @@ get-pending-config, get-pending-max-gas, get-token-lock-enabled, get-pending-ope
 | would-exceed-stx-threshold | 7 / 10 |
 | would-exceed-sbtc-threshold | 7 / 10 |
 | restake | 35 / 50 |
+| stake-stx-juice | 35 / 49 |
+| update-stake-stx-juice | 39 / 54 |
 | set-keeper | 29 / 40 |
-| stake-stx-juice | 35 / 48 |
 | propose-max-gas-amount | 11 / 15 |
 | sip009-transfer | 33 / 45 |
-| update-stake-stx-juice | 39 / 53 |
 | veto-operation | 32 / 43 |
 | is-admin-pubkey | 6 / 8 |
 | propose-recovery | 24 / 32 |
@@ -91,9 +91,9 @@ get-pending-config, get-pending-max-gas, get-token-lock-enabled, get-pending-ope
 | pay-gas-accounted | 24 / 31 |
 | execute-pending-sbtc-transfer-now | 47 / 60 |
 | sip010-transfer | 48 / 61 |
-| confirm-transfer-wallet | 37 / 47 |
 | toggle-token-lock | 32 / 40 |
 | execute-pending-stx-transfer-now | 52 / 65 |
+| confirm-transfer-wallet | 41 / 51 |
 | verify-signature | 12 / 14 |
 | execute-pending-sbtc-transfer | 31 / 36 |
 | confirm-recovery | 13 / 15 |
@@ -109,6 +109,6 @@ get-pending-config, get-pending-max-gas, get-token-lock-enabled, get-pending-ope
 | recover-inactive-wallet | 18 / 18 |
 | locked-ustx | 2 / 2 |
 
-## Sims counted (7)
+## Sims counted (5)
 
-`de9bd7b8` `3270029d` `75074c83` `5cf1573f` `b6fd12bd` `6fd87036` `80c3db54`
+`b220ceef` `1d74d1bc` `2333f897` `23732d55` `50de1e4a`

@@ -1,6 +1,6 @@
 # Trace coverage: fastpool-swap-vault
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (14 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/fastpool-swap-vault.clar` (sha256 `aaebf34b4f14044459db4857f9d7849355a4113f51f24afc3e00f3b98101fdac`), counted only where a sim deployed these exact bytes (19 sims).
 
 | metric | value |
 |---|---|
@@ -91,6 +91,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | cooldown-tick | 8 / 8 |
 | floor-out | 3 / 3 |
 
-## Sims counted (14)
+## Sims counted (19)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d`
+`b220ceef` `1599af88` `38122515` `40bee8c0` `41c6aa11` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d` `4577cbf2` `f959481d` `fb581245` `234ae5bc` `20c42862`

@@ -327,7 +327,7 @@ async function main() {
   await tx('P post: core-v2 set-verified-contract(safe) computes the on-chain hash', DEP, WCORE, 'set-verified-contract', [P(SAFE), Cl.none()], ok);
   const canon = sha512_256(T['juice-autostake-safe'].body);
   await ev(`core-v2 canonical hash == sha512/256 of the template bytes (${canon.slice(0, 8)}...${canon.slice(-8)})`, WCORE, `(get-verified-contract-hash '${SAFE})`, `(some 0x${canon})`);
-  check('template canonical hash is the one DEPLOY-PLAN pins (1ef1627f...e1fab9bb)', canon, (v) => v.startsWith('1ef1627f') && v.endsWith('e1fab9bb'));
+  check('template canonical hash is the one DEPLOY-PLAN pins (cdb7c603...732a7a97, 7724b0d)', canon, (v) => v.startsWith('cdb7c603') && v.endsWith('732a7a97'));
 
   // ==== Partners (section 4): fastpool then MIA =============================================
   if (ONLY.has('fast')) {
@@ -373,7 +373,9 @@ async function juice(C) {
     await tx('onboard the canonical safe (FAKFUN relay)', FAKFUN_DEPLOYER, SAFE, 'onboard',
       [Cl.buffer(Buffer.from('02' + 'ab'.repeat(32), 'hex')), P(OWNER), P(RECOVERY), Cl.uint(100_000_000), Cl.uint(100_000), Cl.uint(144)], ok);
     await ev('safe keeper defaults to chavita', SAFE, '(get-keeper)', DEP);
-    await tx('owner: stake-stx-juice 2,000 STX into the pool (real pox-5 stake)', OWNER, SAFE, 'stake-stx-juice', [Cl.uint(2000n * STX), Cl.none(), Cl.none()], ok);
+    const sk = await tx('owner: stake-stx-juice 2,000 STX into the pool, signer-calldata "telegram" (real pox-5 stake)', OWNER, SAFE, 'stake-stx-juice', [Cl.uint(2000n * STX), Cl.none(), Cl.none(), Cl.some(Cl.bufferFromAscii('telegram'))], ok);
+    check('pool validate-stake print carries the safe ref (signer-calldata 99d69e8)', printsOf(sk, PID).find((p) => p.includes('"validate-stake"')) ?? 'no validate-stake print',
+      (v) => v.includes(`(staker ${SAFE})`) && v.includes(`(signer-calldata (some 0x${Buffer.from('telegram').toString('hex')}))`));
     await ev('pox-5 position names the pool', POX, `(get-staker-info '${SAFE})`, (v) => v.includes(PID) && v.includes(`(amount-ustx u${2000n * STX})`));
     await ev('safe takes a 2,000 STX seat', PID, `(get-og-ustx '${SAFE})`, `u${2000n * STX}`);
     await tx('nothing landed yet: keeper restake refused (u4026)', DEP, SAFE, 'restake', [], '(err u4026)');
@@ -572,7 +574,7 @@ async function safeCopies() {
   const key = generateP256Keypair();
   await tx('user copy onboards on the canonical hash (own passkey)', FAKFUN_DEPLOYER, BOB, 'onboard', onboard(strip(key.pubKeyHex)), ok);
   await sendStx('fund the user copy 300 STX', STX_WHALE, BOB, 300n * STX);
-  await tx('owner stakes 200 STX from the user copy', OWNER, BOB, 'stake-stx-juice', [Cl.uint(200n * STX), Cl.none(), Cl.none()], ok);
+  await tx('owner stakes 200 STX from the user copy', OWNER, BOB, 'stake-stx-juice', [Cl.uint(200n * STX), Cl.none(), Cl.none(), Cl.none()], ok);
   await tx('owner sets keeper RANDOM', OWNER, BOB, 'set-keeper', [P(RANDOM), Cl.none(), Cl.none()], ok);
   await tx('owner proposes transfer to RECIPIENT', OWNER, BOB, 'propose-transfer-wallet', [P(RECIPIENT)], ok);
   const t = tupleCV({ topic: stringAsciiCV('confirm-transfer'), 'auth-id': uintCV(21), 'new-admin': principalCV(RECIPIENT) });

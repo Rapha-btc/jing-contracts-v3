@@ -1,8 +1,8 @@
 {
-  "date": "2026-10-14T20:16:53.945Z",
-  "sims": 114,
-  "txs": 9343,
-  "noTrace": 762,
+  "date": "2026-10-14T23:31:25.686Z",
+  "sims": 163,
+  "txs": 12550,
+  "noTrace": 1039,
   "summary": [
     {
       "name": "jing-core-v6",
@@ -12,7 +12,7 @@
       "full": 82,
       "partial": 0,
       "never": 0,
-      "sims": 107
+      "sims": 153
     },
     {
       "name": "jing-ladder-v1",
@@ -22,7 +22,7 @@
       "full": 24,
       "partial": 0,
       "never": 0,
-      "sims": 108
+      "sims": 154
     },
     {
       "name": "markets-sbtc-stx-jing-v6-3",
@@ -32,7 +32,7 @@
       "full": 303,
       "partial": 4,
       "never": 0,
-      "sims": 107
+      "sims": 153
     },
     {
       "name": "swap-router-sbtc-stx-jing-v5-3",
@@ -42,7 +42,7 @@
       "full": 118,
       "partial": 4,
       "never": 1,
-      "sims": 78
+      "sims": 121
     },
     {
       "name": "jing-buy-stx-core-spread-v1",
@@ -52,7 +52,7 @@
       "full": 58,
       "partial": 4,
       "never": 0,
-      "sims": 6
+      "sims": 8
     },
     {
       "name": "jing-sell-stx-core-spread-v1",
@@ -62,7 +62,7 @@
       "full": 58,
       "partial": 4,
       "never": 0,
-      "sims": 7
+      "sims": 9
     },
     {
       "name": "jing-ladder-dispatch",
@@ -72,7 +72,7 @@
       "full": 20,
       "partial": 0,
       "never": 0,
-      "sims": 4
+      "sims": 5
     },
     {
       "name": "juice-pool-sbtc-signer",
@@ -82,7 +82,7 @@
       "full": 52,
       "partial": 2,
       "never": 0,
-      "sims": 33
+      "sims": 41
     },
     {
       "name": "juice-sbtc-autoswap",
@@ -92,17 +92,17 @@
       "full": 68,
       "partial": 0,
       "never": 0,
-      "sims": 35
+      "sims": 73
     },
     {
       "name": "juice-autostake-safe",
-      "expr": "1042/1588",
+      "expr": "1046/1594",
       "pub": "27/27",
-      "branches": 113,
-      "full": 113,
+      "branches": 114,
+      "full": 114,
       "partial": 0,
       "never": 0,
-      "sims": 7
+      "sims": 5
     },
     {
       "name": "juice-autostake-safe-auth-helpers-v1",
@@ -112,7 +112,7 @@
       "full": 0,
       "partial": 0,
       "never": 0,
-      "sims": 7
+      "sims": 16
     },
     {
       "name": "fastpool-swap-vault",
@@ -122,7 +122,7 @@
       "full": 68,
       "partial": 0,
       "never": 0,
-      "sims": 14
+      "sims": 19
     },
     {
       "name": "signer-manager-vault-stx-rewards",
@@ -132,7 +132,7 @@
       "full": 36,
       "partial": 4,
       "never": 0,
-      "sims": 13
+      "sims": 18
     },
     {
       "name": "ccd015-redemption-book-mia-stx",
@@ -142,7 +142,7 @@
       "full": 29,
       "partial": 1,
       "never": 0,
-      "sims": 23
+      "sims": 24
     },
     {
       "name": "ccd016-swap-vault-mia-v2",
@@ -152,14 +152,7 @@
       "full": 48,
       "partial": 0,
       "never": 0,
-      "sims": 20
+      "sims": 21
     }
-  ],
-  "poolRemeasured": {
-    "date": "2026-10-14T21:56:56.401Z",
-    "sims": 147,
-    "txs": 2100,
-    "noTrace": 90,
-    "note": "pool row re-measured on 570226c deploy bytes (sha256 a0a28431...); other rows from the 114-sim pass above"
-  }
+  ]
 }

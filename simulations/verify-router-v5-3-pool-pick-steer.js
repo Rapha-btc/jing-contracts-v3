@@ -107,11 +107,14 @@ async function run280() {
   const { direct, got, r } = await sale(label, taker);
   check(`${label}: the taker receives exactly what v-1 pays`, String(got), String(direct));
   check(`${label}: dlmm-in == amount`, String(r.f['dlmm-in']), String(AMOUNT));
-  // smart, update none, limit 5% beyond v-1's active bin
-  const p1 = pk.pools[0];
+  // smart, update none, limit 5% beyond v-1's active bin. v-1 is read again
+  // AFTER the manual sale above: that 1M-sat sale moves v-1's active bin, and a
+  // limit from the pre-sale price can sit past every bin v-1 still holds
+  // (dlmm-cap 0 at block 9210xxx, check #35 of the 2026-10-14 run).
+  const pk2 = await dlmmPick(true, 500_000n, `${label} smart`);
+  const p1 = pk2.pools[0];
   const v1Limit = 10_000_000_000n * 100_000_000n / p1.price;
   const limit = v1Limit * 95n / 100n;
-  const pk2 = await dlmmPick(true, 500_000n, `${label} smart`);
   check(`${label} smart: pick v-1`, `u${pk2.n}`, 'u1');
   const cap = uint(await evRaw(ROUTER, `(dlmm-capacity u${limit} true u1)`, taker));
   const s = await tx(`${label}: smart sale 500000 sats at limit ${limit}`, taker, ROUTER, smartFn(true), smartArgs({ amount: 500_000n, limit, mid: v1Limit }), (v) => String(v).startsWith('(ok'));

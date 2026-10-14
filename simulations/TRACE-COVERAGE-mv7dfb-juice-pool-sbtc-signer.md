@@ -1,6 +1,6 @@
 # Trace coverage: juice-pool-sbtc-signer
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `a0a28431f61e2e329a8b5af6b98d37cb0d0575f4e18821fd3de3777fca56195a`), counted only where a sim deployed these exact bytes (33 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/juice-pool-sbtc-signer.clar` (sha256 `a0a28431f61e2e329a8b5af6b98d37cb0d0575f4e18821fd3de3777fca56195a`), counted only where a sim deployed these exact bytes (41 sims).
 
 | metric | value |
 |---|---|
@@ -149,6 +149,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | set-vault-pyth-fee-budget | 7 / 7 |
 | router-swap-split-dia | 7 / 7 |
 
-## Sims counted (33)
+## Sims counted (41)
 
-`20c42862` `4577cbf2` `fb581245` `234ae5bc` `9ed500da` `5cb2d952` `6ddeb669` `161efa05` `1152d49a` `a25807fb` `159f7330` `3abedcde` `b9e338f7` `caaa8212` `cfbf7abf` `f34c8380` `2c27e137` `86f2e948` `59609a5f` `7264b553` `8910961e` `e243ffee` `eb885c9b` `464ab921` `e245dac1` `f18fcd19` `43777d34` `6219fbc1` `ac801919` `db6eb6da` `d3222b84` `5d9897ba` `d508603d`
+`b220ceef` `4577cbf2` `fb581245` `234ae5bc` `9ed500da` `5cb2d952` `6ddeb669` `161efa05` `1152d49a` `a25807fb` `159f7330` `3abedcde` `b9e338f7` `caaa8212` `cfbf7abf` `f34c8380` `2c27e137` `86f2e948` `59609a5f` `7264b553` `8910961e` `e243ffee` `eb885c9b` `464ab921` `e245dac1` `f18fcd19` `43777d34` `6219fbc1` `ac801919` `db6eb6da` `d3222b84` `5d9897ba` `d508603d` `20c42862` `1d74d1bc` `2333f897` `23732d55` `a430d141` `3b6746eb` `783ca0c1` `50de1e4a`

@@ -1,6 +1,6 @@
 # Trace coverage: jing-sell-stx-core-spread-v1
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-sell-stx-core-spread-v1.clar` (sha256 `7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f`), counted only where a sim deployed these exact bytes (7 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/jing-sell-stx-core-spread-v1.clar` (sha256 `7fb80650787a6710628084c8c715ebd9c0e810a4aa4d362192dd6efb8c0bac9f`), counted only where a sim deployed these exact bytes (9 sims).
 
 | metric | value |
 |---|---|
@@ -85,6 +85,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | escrow-for | 10 / 10 |
 | claim | 7 / 7 |
 
-## Sims counted (7)
+## Sims counted (9)
 
-`de9bd7b8` `170b7df3` `33c70bfa` `387017ec` `fe01ec23` `5cf1573f` `b8f56b5d`
+`b220ceef` `170b7df3` `33c70bfa` `387017ec` `fe01ec23` `5cf1573f` `b8f56b5d` `fb581245` `20c42862`

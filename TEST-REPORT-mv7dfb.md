@@ -1,5 +1,43 @@
 # Pre-deploy test report: bounty mv7dfb deploy set
 
+## Status at a glance
+
+All runs are on the final deploy bytes unless a row says otherwise.
+"Pass" counts are checks passed / checks run. Details are in sections 2-7.
+
+| Component | Stxer sims (fork) | Clarinet tests, branches | Rendezvous | Open items |
+|---|---|---|---|---|
+| Jing market v6-3 | deploy set 341/341; 44 jing-contracts-v3 harnesses green, only the 2 legacy rung harnesses fail (e.g. full-side 921/921, submit-settle 898/898, errors-admin 514/514) | 338/338, 845/847 (99.76%) | 12,000 trials, 0 failed | None. 2.3 KB under the size cap |
+| Router v5-3 | smart 588/588, manual 410/410, pool-pick 225/225, steer 60/60, limit-pick 38/38, core-migration 65/65 | 490/490, 275/276 (99.64%) | 2 x 1000 inv + 2 x 3000 props, 0 failed | LOW rounding: up to 1 base unit under `limit-price` (not fixed) |
+| Core-v6 + ladder | core-admin 149/149, ladder-admin-seats 334/334, gaps 455/455 | 95/95; core 163/164 raw, ladder 61/61 (100% after 2 exceptions) | ladder-v1 stack: 2 x 1500 inv + 2 x 3000 props, 0 failed | None |
+| Rungs buy + sell | rungs 998/998, rungs + ladder + dispatch 559/559, audit-tail 182/182 | 118/118; 155/157 raw each (100% after exceptions) | in the ladder-v1 stack, 0 failed | None |
+| Dispatch | v6-3-dispatch 228/228, deploy set | in the 118/118 run; 40/40 | in the ladder-v1 stack, 0 failed | None |
+| Juice pool sbtc signer | 25 juicestx harnesses green on `570226c` bytes (e.g. accounting 126/126, pay-fees 299/299, recovery 190/190) | 135/135 at `570226c`; pool 115/115 | pool `570226c`: 2 x 2000 with zero stakes on and off, 0 failures (`9b28e1e`) | RV zero-seat finding fixed in `570226c` |
+| juice-sbtc-autoswap vault | vault-fixes 218/218, pyth-fee 58/58, recovery matrix 534/534 x 5 | autoswap 150/150 | vault 2 x 2000, 0 failures | None |
+| Autostake safe (`7724b0d`) | deploy set 341/341, REAL_POOL 87/87, main 86/86 (RV-F1), ops 208/208, passkey 50/50 | 153/153; 231/235 (98.30%); vitest 52/52 | `7724b0d`: 12 inv + 14 props, seeds 1 and 2, 2000 / 10000 runs, PASS; RV-F1 refused 7/7 in the quick `RV_ALLOW_F1` run (`1fc75c8`) | FE copy + hash + 4th arg before `AUTOSTAKE_LIVE` |
+| Fast Pool vault + signer | 255/255 vault-fixes, lifecycle 42/42, deploy set; recovery matrix 574/574 on repo source | 317 assertions; vault 138/150 (92.0%), signer 85/91 (93.4%) | 1500 x 2 inv, 2000 x 2 props, pass; 3 mutants caught | Recovery matrix on deploy bytes: in progress (other session) |
+| ccd015 / ccd016 | 18 sims, all on the final bytes (checked by decoding the deploy txs) | ccd016 313 checks; 118/119 (99.16%) | ccd016 16 inv + 10 props, 2 x 1000, 0 failed; ccd015 500 runs (2026-09-15) | `STX_FAIR_BOOK` relative name (partner's call) |
+
+### Open before deploy
+
+- stx-juice-fe: regenerate the safe copy and `JUICE_AUTOSTAKE_SAFE_CANONICAL_HASH`
+  (`cdb7c603...732a7a97`) from the template, and pass `signer-calldata` in
+  the stake calls. Blocker before `AUTOSTAKE_LIVE`.
+- Fast Pool: rerun the `_vault-recovery-v6-3.mjs` matrix on the deploy
+  bytes. In progress in another session.
+- pillar-wallets: commit `tests/juice-autostake-safe-cross-safe-replay.test.ts`
+  (part of the 52/52 run, still untracked).
+- Router LOW rounding finding (RV): accept or fix. `min-out` still binds.
+- From DEPLOY-PLAN: ladder `set-canonical` before any rung `initialize`;
+  owner keys to a multisig with distinct cosigners; launch before cycle 146
+  (burn 972,650).
+- Closed in this pass: pool-pick-steer #35 (harness fix, 60/60); limit-pick,
+  core-migration and the three "patched" market sims rerun on the deploy
+  bytes; juicestx autostake-e2e, pay-batches, pay-fees and allowance proof
+  rerun on the deploy bytes; the deploy set rerun on the `7724b0d` safe;
+  pillar coverage copy regenerated from `7724b0d` (153/153); RV rerun on the
+  `7724b0d` safe (pillar `1fc75c8`) and on the `570226c` pool (juicestx `9b28e1e`).
+
 Date: 2026-10-14. Nothing here is deployed. This report collects the test
 results for the deploy set in [DEPLOY-PLAN.md](DEPLOY-PLAN.md). It only
 repeats numbers that are written in result files, READMEs or commit
@@ -47,7 +85,7 @@ Deploy forms:
 | 10 | `juice-pool-sbtc-signer` | juicestx `570226c` | 6 | 34,134 | `a0a28431...ca56195a` | template |
 | 11 | `juice-sbtc-autoswap` | juicestx `fa8c48a` | 6 | 22,854 | `ff0a4586...a5909033` | template |
 | 12 | `juice-autostake-safe-auth-helpers-v1` | pillar-wallets `2d136c1` | 4 | 593 | `aabf3ba3...fa61bd70` | template |
-| 13 | `juice-autostake-safe` | pillar-wallets `611873c` | 6 | 51,552 | `dda5367c...4ae28a3d` | template |
+| 13 | `juice-autostake-safe` | pillar-wallets `7724b0d` (signer-calldata `99d69e8`, RV-F1 fix `7724b0d`); faktory-dao template `d566bbc3`; deploy-bytes commit `8b4816a` | 6 | 51,812 | `599192e3...872c2500` | template |
 | 14 | `fastpool-swap-vault` | fastpool-pox-5 `b719e87` | 6 | 28,375 | `aaebf34b...8101fdac` | partner, byte for byte |
 | 15 | `signer-manager-vault-stx-rewards` | fastpool-pox-5 `3f82a93` | 6 | 41,593 | `4858dbc6...07d4a731` | partner, byte for byte |
 | 16 | `ccd015-redemption-book-mia-stx` | citycoins-protocol `8bfbb5f` (book unchanged) | 5 | 12,641 | `6b5daed3...3721df57` | partner, comment lines dropped |
@@ -56,8 +94,10 @@ Deploy forms:
 The full SHA-256 values are in `SHA256SUMS.txt`. The Clarity versions are
 the ones the deploy-set harness sends (`deploy-set-mv7dfb-result.json`).
 Other recorded hashes: the safe canonical hash (sha512/256 of the template)
-is `1ef1627f...e1fab9bb`; the deploy-set result also records the sha512/256
-of every row.
+is `cdb7c603...732a7a97` (full: `cdb7c6036368ba0bebd0c91539df7aa3543daa25443754a961a575ff732a7a97`;
+was `1ef1627f...e1fab9bb` on the `611873c` bytes). The deploy-set run reads it
+from core-v2 on the fork and checks it. The deploy-set result also records
+the sha512/256 of every row.
 
 ## 2. Stxer mainnet-fork simulations
 
@@ -72,9 +112,18 @@ are dated 2026-10-14 unless the row says otherwise.
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `verify-deploy-set-mv7dfb.js` | All 35 deployments in DEPLOY-PLAN order, then: Juice pool OG seats, hop, evict, 1 STX shrink, 3 reward batches (fee 0, fee u10, recovery); safe canonical hash, keeper restake, passkey transfer resets the keeper; Fast Pool 96-cycle lock and finish reserve; ccd016 8adfa68 dust window; router limit-aware pick (scan 100% to 120%) and core-migration skip. Fork 9208422, burn 971438 | 340/340 | `20c428624713b6c452cfce5c5ed890db` (pool 570226c bytes) | yes | 2026-10-14 |
-| same, pool fa8c48a bytes | same | 340/340 | `de9bd7b811577d3e5c0f2100dfa023c1` (Clarity 6 rows sent as version 6) | yes, except the pool (fa8c48a bytes) | 2026-10-14 |
-| same, first run | same; Clarity 6 rows went out unversioned (stacks.js 7.4.0) | 340/340 | `5cf1573f3f04fe514d9c671a6914aff7` | yes, except the pool (fa8c48a bytes) | 2026-10-14 |
+| `verify-deploy-set-mv7dfb.js` | All 35 deployments in DEPLOY-PLAN order, then: Juice pool OG seats, hop, evict, 1 STX shrink, 3 reward batches (fee 0, fee u10, recovery); safe canonical hash `cdb7c603...732a7a97` read from core-v2 and checked; the canonical safe stakes with signer-calldata "telegram" and the pool's `validate-stake` print carries `(signer-calldata (some 0x74656c656772616d))`; keeper restake; tampered copy refused; passkey transfer resets the keeper; Fast Pool 96-cycle lock and finish reserve; ccd016 8adfa68 dust window; router limit-aware pick (scan 100% to 120%) and core-migration skip. Fork 9210211, burn 971469 | **341/341** | `b220ceefc481c57434c580280ee4d554` | yes (safe `7724b0d` bytes, pool `570226c` bytes) | 2026-10-14 |
+
+The RV-F1 path needs an inactivity recovery (52,560 burn blocks), so the
+deploy-set run does not repeat it. It is proven on the same safe bytes in
+pillar `simul-juice-autostake-safe.js` 86/86 (section 2.4).
+
+Earlier runs, kept for the record[^ds]:
+
+[^ds]: 340/340 `20c428624713b6c452cfce5c5ed890db` (safe `611873c` bytes, pool
+    `570226c`); 340/340 `de9bd7b811577d3e5c0f2100dfa023c1` (pool `fa8c48a`,
+    Clarity 6 rows sent as version 6); 340/340 `5cf1573f3f04fe514d9c671a6914aff7`
+    (first run, Clarity 6 rows unversioned).
 
 Fixtures in that run (from the result file): pox-5 reward rows for cycles
 142, 143, 144 (pool) and 144 (Fast Pool), set by Eval; the live Lazer oracle
@@ -90,14 +139,14 @@ proposal proxy.
 | `verify-coverage-mv7dfb-ccd015.js` | ccd015 book on the deploy bytes, read-only sweep | 183/183 (first run 168/168, `cfb2ec16...`) | `78d08113b634d1f65e607881212cd62a` | yes | 10-14 |
 | `verify-coverage-mv7dfb-fastpool.js` | Fast Pool vault + signer on the deploy bytes | 154/154 | `4577cbf210b3f95bd430859c65c451f4` | yes | 10-14 |
 | `verify-coverage-mv7dfb-fastpool.js` (native-price session) | rfq native price fallback at the fork tip | 20/20 | `f959481db16642bbd42711a12b153217` | yes | 10-14 |
-| `verify-router-v5-3-limit-pick-mv7dfb.js` | Zealous Citadel repro: prod pick u2 -> u1, +9.05% at block 9203637, +8.43% at 9207942 | 38/38 | prod `c5d4ca0d...`, patched `9feff563...`; prod `9ed2b05e...`, patched `9a115d21...` | no (repo source 15aef66) | 10-14 |
-| `verify-router-v5-3-core-migration-mv7dfb.js` | Giant Moth 01: Bitflow `migrate-pool` on the fork; old router reverts u2001, new router skips the migrated pool. Block 9207954 | 65/65 | old `d5f7ff94...`, new `e16126da...` | no (repo source) | 10-14 |
+| `verify-router-v5-3-limit-pick-mv7dfb.js` | Zealous Citadel repro: PROD = router `f342615`, NEW = router deploy bytes (preload). Pick u2 -> u1, +9.05% at block 9203637, +8.43% at 9207942 | 38/38 | NEW `80b820f4f6ff2257aabfa0be914fba18`, `101c85a53513fbb4e555ad85b75fbd5c`; PROD `b5bc781d...`, `a40e8216...`[^lp] | yes (NEW side) | 10-14 |
+| `verify-router-v5-3-core-migration-mv7dfb.js` | Giant Moth 01: Bitflow `migrate-pool` on the fork; old router (`f342615`) reverts u2001, new router (deploy bytes) skips the migrated pool. Block 9207954 | 65/65 | new `213aaf3a2125258aba143af30e9f2541`, old `dc78c721...`[^cm] | yes (new side) | 10-14 |
 | `verify-v6-3-dispatch.js` | core, ladder, market, trait, rungs, dispatch; no router | 228/228 | `3b5a8e21c069ff914f72a14008b06659` (master, 3dd1d2e); preload rerun `33c70bfa...` 228/228 | preload run: yes | 10-14 |
 | `verify-v6-3-deploy-bytes.js` | Deploy of the byte files | 17/17 | `34add6e3e280af40acbc7e910dc1423f` | yes | 10-14 |
 | `verify-router-v5-3-smart.js` | Smart router paths | 588/588 | `3cae36d9...`, `6c1285d8...`, `7edc890f...` | yes | 10-14 |
 | `verify-router-v5-3-manual.js` | Manual router legs | 410/410 | `0d66c62de411c83111af9dfd996afead` | yes | 10-14 |
 | `verify-router-v5-3-pool-pick.js` | DLMM pool pick | 225/225 | `526537fa97d469535ef623754db9dd93` | yes | 10-14 |
-| `verify-router-v5-3-pool-pick-steer.js` | Pick steering | **34/35** (check #35 stale at this block, same on f342615) | `2915ed46336489f775aa48ea4d5f0b77` | yes | 10-14 |
+| `verify-router-v5-3-pool-pick-steer.js` | Pick steering: the deploy-bytes router keeps the leg on v-1 (36 checks), 1063add contrast (24 checks). Check #35 fixed: the smart limit is now computed from v-1 read AFTER the 1M-sat manual sale | **60/60** | `cb36bd72b62572e87476c0bdf6e8c204` (deploy-bytes router), `b1a4be8469feed3d40fb8b2a2aacdd88` (1063add)[^st] | yes | 10-14 |
 | `verify-router-v5-3-xyk-snapshot.js` | XYK snapshot read | 75/75 | `f793659c2a5633c055202303a7db020a` | yes | 10-14 |
 | `verify-router-v5-3-rebate-age.js` | Rebate by print age | 482/482 | `c63880c2...`, `c691ce10...` | yes | 10-14 |
 | `verify-v6-3-router-bin-boundary.js` | DLMM bin boundary, no VM panic | 26/26 | `0650bd79c3b38e496217036d856b891a` | yes | 10-14 |
@@ -114,9 +163,9 @@ proposal proxy.
 | `verify-v6-3-submit-settle-lazer.js` | Submit + settle on Lazer | 898/898 | `c65fd85521eca1fc50da3460adb086d3` | yes | 10-14 |
 | `verify-v6-3-oracle-feeds.js` | Oracle feeds | 97/97 | `e7f75295f4b50a4e959ceb452bce3845` | yes | 10-14 |
 | `verify-v6-3-reachable-gaps.js` | Reachable gaps | 382/382 | `a674afe92adac3b9282b9b418ccda5c1` | yes | 10-14 |
-| `verify-v6-3-cancel-orphan-pending.js` | Orphan pending cancel | 225/225 | `28ba3ce94de5351dd0bfa8d3d9233c1d` | partial (harness text-patches) | 10-14 |
-| `verify-v6-3-ghost-deposit.js` | Ghost deposit | 343/343 | `8854daced965a5246e763381fa2220d3` | partial (patched) | 10-14 |
-| `verify-v6-3-switched-off-ask.js` | Switched-off ask | 221/221 | `94d5f0c91e17eaf0dc330f076b5477aa` | partial (patched) | 10-14 |
+| `verify-v6-3-cancel-orphan-pending.js` (patched mode) | Orphan pending cancel | 225/225 | `9857aa866216ef6eeb9ed72455d09fae`[^pt] | yes: market, core, ladder are deploy bytes | 10-14 |
+| `verify-v6-3-ghost-deposit.js` (patched mode) | Ghost deposit | 343/343 | `b382fe53a64623f776244b7364a30f38`[^pt] | yes: market, core, ladder are deploy bytes; the minimal band rung is a sim fixture | 10-14 |
+| `verify-v6-3-switched-off-ask.js` (patched mode) | Switched-off ask | 221/221 | `37871f1625eab67569623222a6574ef6`[^pt] | yes: market, core, ladder are deploy bytes | 10-14 |
 | `verify-core-v6-admin.js` | Core admin | 149/149 | `584b4ed51c99da23b49c872935b624fe` | yes | 10-14 |
 | `verify-ladder-v1-admin-seats.js` | Ladder admin and seats | 334/334 | `8e95fe5889dd8a5c7ff555cf88cd8723` | yes | 10-14 |
 | `verify-v1-core-spread-rungs.js` | Rungs | 998/998 | `387017eca52ccc09f8c12e57ab7c98b7` | yes | 10-14 |
@@ -130,6 +179,20 @@ proposal proxy.
 | `verify-v6-rungs-escrow-timeout.js` | Escrow timeout | 549/549 | `18ac074b5eeb18d0d74825888ed40dbe` | yes | 10-14 |
 | `verify-v6-rungs-audit-tail.js` | Audit tail on the two deploy-set rungs (core-spread-v1 buy + sell): drift under MINT_FLOOR rescales and a newcomer joins (no u7013); a >99.9% fill makes `sync` roll the tail (epoch +1, index = SCALE, shares/members 0, order off the market), the newcomer opens the fresh epoch 1:1, closed members take reserve + proceeds exactly (dispatch + claim), nothing left over | 91/91 buy, 91/91 sell (182/182) | `034ac44310314ff27a485205e39c07f0`, `ae252375e9dd0007ac9f15f79455a9b3` | yes | 10-14 |
 | `verify-rung-withdraw-rounding.js`, `verify-rungs-keyless.js` | Legacy contracts, not in the deploy set | FAILED at deploy (unresolved / duplicate contract) | `35d6c1e9...`, `50bea07a...`, `864eab88...` | n/a | 10-14 |
+
+[^lp]: Earlier run on the repo source: prod `c5d4ca0d...`, patched `9feff563...`;
+    prod `9ed2b05e...`, patched `9a115d21...`, 38/38. Same picks and outputs.
+[^cm]: Earlier run on the repo source: old `d5f7ff94...`, new `e16126da...`, 65/65.
+[^st]: Earlier run: 34/35 `2915ed46336489f775aa48ea4d5f0b77`. Check #35 was a
+    harness error: the smart limit came from v-1's price before the 1M-sat
+    manual sale moved v-1, so v-1 had no capacity inside it. Fixed in the
+    harness, not in a contract.
+[^pt]: "Patched" is the harness name for the fixed market (the working tree),
+    against the "prefix" (pre-fix) market. With `_use-deploy-bytes.mjs` the
+    patched market is the 97,701-byte deploy file, deployed under sim names
+    (`orphan-my`, `ghost-mx`, `swoff-my`, ...). The harness does not edit the
+    market text (`fit()` changes only files >= 100,000 bytes). Earlier runs:
+    `28ba3ce9...`, `8854dace...`, `94d5f0c9...`, same counts.
 
 ### 2.3 juicestx
 
@@ -148,9 +211,9 @@ the earlier `fa8c48a`-bytes reruns are in `cbbb6f6`.
 | `pool-accounting-stxer.mjs` | Pool accounting | 126/126 | `9ed500dacb665d5ebd5464db45f76e20` | yes | 10-14 |
 | `pool-claim-guards-stxer.mjs` | Claim guards | 24/24 | `161efa05e04d48e79b09e3382542b231` | yes | 10-14 |
 | `pool-admin-handover-stxer.mjs` | Timed admin handover | 60/60 | `5cb2d9520f6446ba445e7264e2c0635a` | yes | 10-14 |
-| `pool-autostake-e2e-stxer.mjs` | Pool pays the safe, keeper restake | 63/63 | `6ddeb669da83d107987f2c3405f172c0` | yes | 10-14 |
-| `pool-pay-batches-stxer.mjs` | Rare Io I1, new vs old side by side | 166/166 | `9a28245b73f5484cad4df7a73fa32a29` | no (pre-fa8c48a pool hashes) | not recorded |
-| `pool-pay-fees-stxer.mjs` | Rare Io I2, new vs old side by side | 299/299 | `3009eb741bbf5a2b7b15ca1667b6f55c` | no (pre-fa8c48a pool hashes) | not recorded |
+| `pool-autostake-e2e-stxer.mjs` | Pool pays the safe, keeper restake; safe `7724b0d` bytes (stake call takes the 4th arg `signer-calldata none`) | 63/63 | `23732d55dfc70ab9e82f4d0a0a6111cd`[^je] | yes (safe `599192e3...`, helpers `aabf3ba3...`) | 10-14 (juicestx `cd52afc`) |
+| `pool-pay-batches-stxer.mjs` | Rare Io I1, new vs old side by side; NEW = pool `570226c` deploy bytes (`NEW_SOURCE_FILE`) | 166/166 | `a430d1411dc124f02fe66de34851d54f`[^jp] | yes (NEW side) | 10-14 (`cd52afc`) |
+| `pool-pay-fees-stxer.mjs` | Rare Io I2, new vs old side by side; NEW = pool `570226c` deploy bytes | 299/299 | `3b6746ebb0c4d7de0c0bac38bd6d1c64`[^jp] | yes (NEW side) | 10-14 (`cd52afc`) |
 | `pool-vault-stx-stxer.mjs` (deployment guards) | Deploy and guards | 22/22 | `43777d34e60227d3ecb34c69cc1beb26` | yes | 10-14 |
 | `pool-vault-stx-stxer.mjs --maker` | Maker fill | 35/35 | `6219fbc1d33983a68687f5d31213566b` | yes | 10-14 |
 | `pool-vault-stx-stxer.mjs --jing-router` | Router Jing fills | 46/46 | `464ab9219701018f2893d7195cf59eaa` | yes | 10-14 |
@@ -165,16 +228,31 @@ the earlier `fa8c48a`-bytes reruns are in `cbbb6f6`.
 | `pool-vault-emergency-stxer.cjs --native` | Emergency native fallback | 37/37 | `caaa821231aad766b0553a3d22a5226e` | yes | 10-14 |
 | `pool-vault-recovery-stxer.mjs` | Four-batch recovery continuity, pinned at block 9207370 | 190/190 | `86f2e948eab30212602aa1e75c27d7d1` | yes | 10-14 |
 | `pool-vault-recovery-stxer.mjs --matrix` | Recovery matrix, 5 sessions | 534/534 each | `59609a5f...`, `7264b553...`, `8910961e...`, `e243ffee...`, `eb885c9b...` | yes | 10-14 |
-| `vault-allowance-proof-stxer.mjs` | Allowance terms, 4 cases as expected | passed | `5bcca46c345cb9f7937c327907061794` | no (pattern needs the commented repo source) | 10-14 |
+| `vault-allowance-proof-stxer.mjs` | Allowance terms, 4 cases as expected (24/24 setup steps). The term pattern now ignores whitespace, so it runs on the deploy bytes. Comment-stripped + `clarinet format` repo source reproduces the pool, vault and trait deploy sha256 exactly | passed (4/4 cases) | `783ca0c1f687ebc7c473d0ab560c17d2`[^ja] | yes | 10-14 (`cd52afc`) |
+
+[^je]: Earlier 63/63 `6ddeb669...` read the pillar working copy with a
+    3-arg stake call, so it ran older safe bytes.
+[^jp]: Earlier runs on pre-`fa8c48a` pool hashes: 166/166 `9a28245b...`,
+    299/299 `3009eb74...`.
+[^ja]: Earlier run on the commented repo source: `5bcca46c...`, passed.
 
 ### 2.4 pillar-wallets (autostake safe)
 
+All rows run the safe deploy bytes at `7724b0d` (51,812 B, `599192e3...`),
+through `_use-deploy-bytes.mjs` (pillar `28bfb48` and the rerun below).
+
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
-| `simul-juice-autostake-safe.js REAL_POOL=1` | Main safe harness against the real `juice-pool-sbtc-signer` (no source swap) | 83/83 | `d3222b84dcc60eafda2a06a159bfd904` | yes | 10-14 |
-| `simul-juice-autostake-safe.js` | Same scenarios against the live `juice-pool-stx-signer` stand-in, incl. keeper reset after 52,610 burn blocks | 82/82 | `837734f0b07aed2a07e62656af381ad0` | no (repo source, pool stand-in) | 10-14 |
-| `simul-juice-autostake-safe-ops-coverage.js` | 17 public functions the main harness misses; section F zero-fee gas station | 208/208 (204/204 before F, `b6fd12bd...`) | `5d9897ba8ad7fa14f40c6839d436b946` | yes | 10-14 |
-| `simul-juice-autostake-safe-stake-passkey.js` | Passkey stake / update / unstake, token lock, replay | 43/43 | `d508603db48d572c96c6465b9ffa1baa` | yes | 10-14 |
+| `simul-juice-autostake-safe.js REAL_POOL=1` | Main safe harness against the real `juice-pool-sbtc-signer` `570226c` deploy bytes (register-self with a real pox-5 grant), incl. keeper reset and the RV-F1 step | 87/87 | `50de1e4ae75471c76f55673211c0be2c`[^pw] | yes (safe + pool) | 10-14 (pillar `8102212`) |
+| `simul-juice-autostake-safe.js` | Same scenarios against the live `juice-pool-stx-signer` stand-in, incl. keeper reset after 52,610 burn blocks, and RV-F1: a transfer to OWNER proposed before the idle period names the owner after recovery; the passkey confirm is refused u4001 and OWNER stays admin | 86/86 | `36669f5e320a5811e0e9c0218cfe61b8` | safe yes (pool stand-in) | 10-14 (pillar `28bfb48`) |
+| `simul-juice-autostake-safe-ops-coverage.js` | 17 public functions the main harness misses; section F zero-fee gas station | 208/208 | `2333f897b10606d208ee3c03a460f1b2` | yes | 10-14 (`28bfb48`) |
+| `simul-juice-autostake-safe-stake-passkey.js` | Passkey stake / update / unstake, token lock, replay; signer-calldata: (some "telegram") on one stake (A8) and one update-stake (A10), and the pool's `validate-stake!` print carries exactly that value for pox-5 stake and stake-update (`37ce0c7`) | 50/50 | `1d74d1bc1b2227500a7a270b94f49a38` | yes | 10-14 (`28bfb48`) |
+
+[^pw]: Earlier runs on the `611873c` safe bytes: REAL_POOL 83/83 `d3222b84...`,
+    stand-in 82/82 `837734f0...`, ops-coverage 208/208 `5d9897ba...` (204/204
+    before section F, `b6fd12bd...`), stake-passkey 43/43 `d508603d...`. On the
+    `99d69e8` bytes (51,742 B, before RV-F1): stake-passkey 50/50 `8881fb12...`,
+    ops-coverage 208/208 `c1e4997e...`.
 
 ### 2.5 citycoins-protocol (feat/ccd015-redemption-book)
 
@@ -196,6 +274,15 @@ the deploy bytes (commit `986c682`).
 ccd015 also runs in `verify-coverage-mv7dfb-ccd015.js` (183/183, section
 2.2) and in the deploy-set harness.
 
+Checked again on 2026-10-14: the deploy transactions of all 18 sims above
+were pulled from stxer, decoded and hashed. ccd015 (`6b5daed3...`), ccd016
+(`a7062d39...`), jing-core-v6, jing-ladder-v1, market v6-3 and router v5-3
+are the final deploy bytes in every one. The only other code is sim
+fixtures (a DAO proposal proxy, a base-dao patch that accepts the vault).
+ccd015 and ccd016 are unchanged from `8bfbb5f` to HEAD (`f4c5130`). The 10
+recovery modes are saved together in `simulations/results/v6-3-recovery/citycoins.json`
+(1128/1128).
+
 ### 2.6 fastpool-pox-5 (rapha/fastpool-swap-vault)
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
@@ -207,13 +294,14 @@ ccd015 also runs in `verify-coverage-mv7dfb-ccd015.js` (183/183, section
 | `dust-vaults-stxer.mjs` | Dust in the vaults | 69/69 | `b95238c0662a8c7755f0c64bdd96f503` | yes | 10-14 |
 | `dust-1sat-stxer.mjs` | 1-sat dust | 23/23 | `41c6aa11080dcebe6fe24cabc216416d` | yes | 10-14 |
 | `dust-router-stxer.mjs` (2 passes) | Measurement only: 1-2 sats unsold, 3 sats and up sell | no checks | `54f0da53...`, `41a52fa1...` | yes | 10-14 |
-| `_vault-recovery-v6-3.mjs` matrix | Recovery matrix, 5 sessions | 574/574 | `65c78704...`, `c4403aee...`, `0c1d27b1...`, `d1088899...`, `be1311f4...` | no (repo source hashes) | 10-14 (b719e87) |
+| `_vault-recovery-v6-3.mjs` matrix | Recovery matrix, 5 sessions | 574/574 | `65c78704...`, `c4403aee...`, `0c1d27b1...`, `d1088899...`, `be1311f4...` | no (repo source hashes): **in progress (other session)** | 10-14 (b719e87) |
 
 ## 3. Stxer trace coverage on the exact deploy bytes
 
 Tool: `node simulations/coverage-mv7dfb.mjs` (`trace-coverage-multi.mjs`).
 A sim counts for a contract only where it deployed byte-identical code.
-114 sims, 9,343 txs (`TRACE-COVERAGE-mv7dfb-summary.json`, 2026-10-14). The
+163 sims, 12,550 txs (`TRACE-COVERAGE-mv7dfb-summary.json`, rerun 2026-10-14 after the
+`7724b0d` safe bytes and the reruns of section 2; was 114 sims, 9,343 txs). The
 pool row was re-measured on the `570226c` bytes over the 33 reruns that
 deployed them (2,100 txs). The new zero-seat arm (line 316) is credited
 only by the refused 0-uSTX probe in og-shrink `3abedcde`: the VM ran the arm,
@@ -224,21 +312,21 @@ Per-contract reports: `simulations/TRACE-COVERAGE-mv7dfb-<name>.md`.
 
 | Contract | Public fns reached | Branch nodes full / partial / never | Expressions | Sims |
 |---|---|---|---|---|
-| jing-core-v6 | 65/65 | 82 / 0 / 0 | 567/1178 | 107 |
-| jing-ladder-v1 | 14/14 | 24 / 0 / 0 | 247/473 | 108 |
-| markets-sbtc-stx-jing-v6-3 | 32/32 | 303 / 4 / 0 | 3223/4456 | 107 |
-| swap-router-sbtc-stx-jing-v5-3 | 4/4 | 118 / 4 / 1 | 887/1318 | 78 |
-| jing-buy-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 651/928 | 6 |
-| jing-sell-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 650/929 | 7 |
-| jing-ladder-dispatch | 6/6 | 20 / 0 / 0 | 240/380 | 4 |
-| juice-pool-sbtc-signer (570226c bytes) | 37/37 | 52 / 2 / 0 | 765/1250 | 33 |
-| juice-sbtc-autoswap | 19/19 | 68 / 0 / 0 | 574/933 | 35 |
-| juice-autostake-safe | 27/27 | 113 / 0 / 0 | 1042/1588 | 7 |
-| juice-autostake-safe-auth-helpers-v1 | read-only only | none | 14/24 | 7 |
-| fastpool-swap-vault | 19/19 | 68 / 0 / 0 | 574/933 | 14 |
-| signer-manager-vault-stx-rewards | 30/30 | 36 / 4 / 0 | 653/1023 | 13 |
-| ccd015-redemption-book-mia-stx | 9/9 | 29 / 1 / 0 | 355/564 | 23 |
-| ccd016-swap-vault-mia-v2 | 22/22 | 48 / 0 / 0 | 552/895 | 20 |
+| jing-core-v6 | 65/65 | 82 / 0 / 0 | 567/1178 | 153 |
+| jing-ladder-v1 | 14/14 | 24 / 0 / 0 | 247/473 | 154 |
+| markets-sbtc-stx-jing-v6-3 | 32/32 | 303 / 4 / 0 | 3223/4456 | 153 |
+| swap-router-sbtc-stx-jing-v5-3 | 4/4 | 118 / 4 / 1 | 887/1318 | 121 |
+| jing-buy-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 651/928 | 8 |
+| jing-sell-stx-core-spread-v1 (10 rungs) | 8/8 | 58 / 4 / 0 | 650/929 | 9 |
+| jing-ladder-dispatch | 6/6 | 20 / 0 / 0 | 240/380 | 5 |
+| juice-pool-sbtc-signer (570226c bytes) | 37/37 | 52 / 2 / 0 | 765/1250 | 41 |
+| juice-sbtc-autoswap | 19/19 | 68 / 0 / 0 | 574/933 | 73 |
+| juice-autostake-safe (7724b0d bytes) | 27/27 | 114 / 0 / 0 (incl. the RV-F1 refusal) | 1046/1594 | 5 (deploy-set `b220ceef`, REAL_POOL `50de1e4a`, ops-coverage `2333f897`, stake-passkey `1d74d1bc`, juicestx e2e `23732d55`) |
+| juice-autostake-safe-auth-helpers-v1 | read-only only | none | 14/24 | 16 |
+| fastpool-swap-vault | 19/19 | 68 / 0 / 0 | 574/933 | 19 |
+| signer-manager-vault-stx-rewards | 30/30 | 36 / 4 / 0 | 653/1023 | 18 |
+| ccd015-redemption-book-mia-stx | 9/9 | 29 / 1 / 0 | 355/564 | 24 |
+| ccd016-swap-vault-mia-v2 | 22/22 | 48 / 0 / 0 | 552/895 | 21 |
 
 The traits have no executable code. Expression totals include read-only
 functions and top-level definitions; a read-only call from an Eval step
@@ -272,7 +360,8 @@ change (the oracle `fee` var is set by Eval and labelled as a fixture).
 
 Unit suites run the repo sources (or generated copies with declared
 dependency substitutions), not the template strings. The faktory-dao
-templates were byte-checked against the same commits (`77d9ba48`).
+templates were byte-checked against the same commits (`77d9ba48`; the
+safe template again at `d566bbc3` for `7724b0d`).
 
 | Repo | Suite | Tests | Functions | Lines | Branches | Notes |
 |---|---|---|---|---|---|---|
@@ -282,13 +371,14 @@ templates were byte-checked against the same commits (`77d9ba48`).
 | jing-contracts-v3 | `npm run test:v6-3:integration` (rungs + dispatch) | 118/118 | rung 35/35 each, dispatch 15/15 | buy 466/478, sell 464/476 raw; dispatch 132/132 | 155/157 each raw; dispatch 40/40 | 100% after exceptions (static call operands, two defensive payout arms) |
 | juicestx | `npm test` / `npm run test:report` | 134/134 (5 files); 135/135 at `570226c` (commit message) | pool 81/81, autoswap 41/41 | pool 715/717, autoswap 481/502 | pool 115/115, autoswap 150/150 | Coverage numbers from `contracts/README-deploy-set-test-status.md` (see note) |
 | juicestx | `npm run test:vault` | green (fa8c48a commit) | not recorded | 481/502 | 150/150 | `tests/vault/results/coverage.json`, fa8c48a source hashes |
-| juicestx | `npm run test:rv-repro` | not recorded | - | - | - | Zero-seat repro from the RV suite (section 7) |
-| pillar-wallets | `tests/juice-autostake-safe-keeper.test.ts` | 39/39 | not recorded | not recorded | set-keeper 4/4, restake 10/10 | Both manifests (cl-v7, cl-autostake-cov) |
-| pillar-wallets | 9-file safe run (coverage manifest) | 152/152 | safe 50/50, helpers 2/2 | safe 810/861 (94.08%), helpers 13/13 | safe 230/233 (98.71%) | From `contracts/README-deploy-set-test-status.md`. Production safe body with 3 principal substitutions |
+| juicestx | `npm run test:rv-repro` | 1/1 (1 file) | - | - | - | Zero-seat repro from the RV suite (section 5), run 2026-10-14 |
+| pillar-wallets | `tests/juice-autostake-safe-keeper.test.ts` | 40/40 | not recorded | not recorded | set-keeper 4/4, restake 10/10 | Both manifests (cl-v7, cl-autostake-cov), safe `7724b0d` (pillar `8102212`; was 39/39 on `611873c`) |
+| pillar-wallets | 9-file safe run (`tests/cl-autostake-cov`, regenerated from `7724b0d` by `gen.sh`) | 153/153 | safe 50/50, helpers 2/2 | safe 813/864 (94.10%), helpers 13/13 | safe 231/235 (98.30%) | pillar `8102212`. Production safe body with 3 principal substitutions. The one new arm, the RV-F1 refusal (:1166), is not hit here; it is hit by the rv-repro test on cl-v7 and by the stxer M2 step. Was 152/152, 810/861, 230/233 on a hand-patched `611873c` copy |
+| pillar-wallets | `npx vitest run tests/juice-autostake-safe-*.test.ts -- --manifest tests/cl-v7/Clarinet.toml` | 52/52 | - | - | - | keeper 40 + cross-safe-replay 11 + rv-repro 1, on `7724b0d`. `tests/juice-autostake-safe-cross-safe-replay.test.ts` is untracked in pillar-wallets |
 | citycoins-protocol | `npm run test:vault` | 313 checks, passed | not recorded | 450/473 (95.14%) | 118/119 (99.16%) | `tests/vault/results/runtime.json` (2026-10-14), ccd016 sha `e3437fcf...` = repo HEAD. Missed branch 622: vault floor guard that the mock router rejects first |
 | citycoins-protocol | ccd015 book | no separate gate | - | - | - | Loaded as the real book in the vault harness |
-| fastpool-pox-5 | `npm test` | 50/50 (docs section 11.3); the deploy-set status doc says 49/49 | not recorded | not recorded | not recorded | The vault is not in this repo's simnet; its `finish` case lives in juicestx `tests/juice-vault.test.ts` |
-| fastpool-pox-5 | `tests/vault-stx` | not run | - | - | - | Stale: `build-fixtures.py` and `fixtures/` are untracked and copy from a sibling `stacking-juice` checkout. No source-anchored report |
+| fastpool-pox-5 | `npm test` | 49 passed + 1 intentional isolated-harness skip (`ef08da9` README) | not recorded | not recorded | not recorded | Earlier: 50/50 (docs section 11.3), 49/49 (deploy-set status doc) |
+| fastpool-pox-5 | `tests/vault-stx` (source-pinned, `1e2897b` + `ef08da9`) | 317 assertions, passed | vault 41/41, signer 56/56 | vault 466/502 (92.8%), signer 551/563 (97.9%) | vault 138/150 (92.0%), signer 85/91 (93.4%) | Builder refuses unless the sources match the pinned sha256 (`aaebf34b...` b719e87, `4858dbc6...` 3f82a93 = deploy bytes). Misses: defensive status, balance, payout and fixture-reachability arms (README). Other session still has uncommitted work in this folder |
 
 Known setups:
 
@@ -298,13 +388,41 @@ Known setups:
   vault suite to final APIs"; `8e05c13`, latest Clarinet SDK). It runs green
   on the current ccd016 source. `tests/vault/README.md` still shows the
   2026-09-18 numbers.
-- **Fast Pool `tests/vault-stx` (not fixed).** See the table row above.
+- **Fast Pool `tests/vault-stx` (fixed in fastpool `1e2897b`, `ef08da9`).** A
+  source-pinned builder replaces the stale `stacking-juice` copy. See the
+  table row above.
 - Note: the juicestx and pillar coverage figures come from
   `contracts/README-deploy-set-test-status.md` (`39f3cd4`).
 
 ## 5. Rendezvous fuzzing
 
-In progress. Another agent will fill this section.
+Rendezvous (RV) runs random call sequences against generated copies of the
+final sources and checks invariants (after each call) or properties (per
+call). The numbers below are copied from each suite's README or commit.
+"Runs" is RV runs per seed.
+
+| Repo / commit | Target (source) | Invariants / properties | Seeds x runs | Result | Findings |
+|---|---|---|---|---|---|
+| jing-contracts-v3 `876fb0b` | ladder-v1 stack: rungs buy + sell core-spread-v1 (each twice, spreads 20 and 50), jing-ladder-v1, dispatch, rung trait, market v6-3 (`ada49d8`), core-v6 | JS monitor after every call (shares, input solvency, exact proceeds ledger, conservation, no over-withdrawal, indices, core ledger, fill price) + `invariant-all`; rung and dispatcher properties | invariant 241014, 241015 x 1500; test 241016, 241017 x 3000 | invariant 1500/0/0 both seeds (18,753 and 18,737 calls); test 1424/1576/0 and 1369/1631/0 (passed / discarded / failed) | None. Two harness checks corrected (stranded proceeds, ownerless shares), not contract findings |
+| jing-contracts-v3 `876fb0b` | router v5-3 (`15aef66`) with market v6-3 and core-v6 | Manual + smart swap properties; `rv-valid`, router holds nothing | invariant 241024, 241025 x 1000; test 241026, 241027 x 3000 | invariant 1000/0/0 both; test 1035/1965/0 and 1053/1947/0 | LOW, rounding: a smart swap can net up to one base unit of the sold asset under `limit-price` (12-28 bps at 200 sats, < 0.1 bps at 100k sats; `min-out` still binds). Repro `tests/rv-repro-router-smart-limit.test.ts`. Not fixed |
+| jing-contracts-v3 `52339b5` | market v6-3 (sha `943927cc`, `ada49d8`) with the real core-v6 | v6-3 suite (cycle totals, solvency, core equity, recovery) | invariant 230927 x 1000; test 230926 x 5000; seeded 230929 x 3000; 3 full-book seeds + 1000 native each | 12,000 native trials, 4,659 passed, 7,341 discarded, 0 failed; 600 guided episodes; counts identical to 2026-09-30 | None |
+| juicestx `799adff` | pool `juice-pool-sbtc-signer` + vault `juice-sbtc-autoswap` (`fa8c48a`) | pool 13 invariants (pox-5 model); vault 12 invariants (8 from tests/vault + extras: floor, flows, finish, recover) | pool 20261014, 20261015 x 1000 (zero stakes on) and x 2000 (`--no-zero-stake`); vault same seeds x 2000 | pool with zero stakes: FAIL `og-seats-is-count` at test 570 / 838; pool no-zero: 0 failures; vault: 0 failures | Zero-uSTX restake leaves a zero-cover OG seat that `evict-og` refuses; `og-seats` drifts. No funds move. Fixed in `570226c` (a 0 stake deletes the seat). Repro `npm run test:rv-repro`: 1 test, passed (juicestx `cd52afc` run) |
+| juicestx `9b28e1e` (rerun) | pool `570226c` (repo sha256 `f8217080...85a3`) + vault `fa8c48a` | same 13 + 12 invariants | 20261014, 20261015 x 2000 (pool with zero stakes on and off; vault) | 0 failures in all six runs; `og-seats-is-count` now holds | None |
+| pillar-wallets `8b9b340` (README in `tests/rv/`) | `juice-autostake-safe` source `611873c` | 12 invariants + oracle O1-O5 (dialer injects valid passkey signatures); 14 properties | seeds 1 and 2; invariant x 2000, property x 10000 | PASS all four | RV-F1 (below). Fixed in `7724b0d`. Rerun on `7724b0d` in the next row |
+| pillar-wallets `1fc75c8` (rerun) | `juice-autostake-safe` source `7724b0d` | same 12 invariants + 14 properties; `test-stake` / `test-update-stake` moved to the 4-arg calls; dialer counts RV-F1 attempts | seeds 1 and 2: quick 300 / 1000 and full 2000 / 10000, each with and without `RV_ALLOW_F1=1` | PASS in all 16 runs; `single-admin-is-owner` holds | RV-F1 signed 7 times, 0 successes (quick, seed 2, `RV_ALLOW_F1=1`). The full `RV_ALLOW_F1` runs never reached pending == owner (0 / 0) |
+| citycoins-protocol `f4c5130` | ccd016 vault (sha `e3437fcf`, the commented `8bfbb5f` file; deploy bytes = same file with comment lines dropped) | 16 invariants + 10 properties (RV 1.0.3) | 20261014, 20261015 x 1000 each mode | invariant 1000/1000 both; property 1000/1000 both (11 / 9 discarded: jing-take had no fill) | None. Sensitivity: removing the router-swap floor assert fails `invariant-never-below-floor` after 53 runs (seed 11); the old fee path fails `test-fee-payer` (u801) and `invariant-only-vault-pays-fee` after 42 runs (seed 12) |
+| citycoins-protocol (2026-09-15) | ccd015 book (unchanged since `a9a6bd6`) | 7 invariants | 500 runs, seed not recorded | no falsified invariant | None |
+| fastpool-pox-5 `e4e8e98` | `fastpool-swap-vault` (`b719e87`), `signer-manager-vault-stx-rewards` (`3f82a93`) | vault 17 invariants; signer 9 + 17; props 7 properties (RV 1.0.3) | 20261014, 20261015; invariant x 1500, props x 2000 | pass, 0 falsified, 0 runtime errors | None. Mutants floor, finish, fee all caught |
+
+**RV-F1 (pillar, Low, fixed in `7724b0d`).** `confirm-transfer-wallet` set
+then deleted the same admin key when `pending-transfer` named the current
+owner, leaving the safe with no admin. Reachable without harness aids: A
+transfers to B, B proposes A, the recovery address recovers to A after the
+inactivity period (pending still A), A's passkey confirms. No funds move;
+the safe stays frozen until a second inactivity recovery. Fix: the confirm
+asserts `pending != owner` (u4001). Proven on the deploy bytes by pillar
+`simul-juice-autostake-safe.js` (RV-F1 step, 86/86 and REAL_POOL 87/87).
+juice-safe-v8 carries the same fix (section 6 note).
 
 ## 6. Bounty mv7dfb findings and their tests
 
@@ -326,8 +444,8 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
 | Zealous Citadel: limit-blind DLMM pick | Holds | jing `15aef66` | 32 tests in `limit-pick.test.ts` (10 fail on the old router) | limit-pick-mv7dfb 38/38, deploy-set pick scan 100% to 120%, router suite reruns |
 | Zealous Citadel Info: fee proposal never expires | Holds, Info, no change (5% cap) | none | - | - |
 | Giant Moth 01: migrated DLMM pool reverts the smart swap | Holds | jing `15aef66` | 12 tests "migrated DLMM pool" | core-migration 65/65, deploy-set (migration skip) |
-| Giant Moth: passkey `set-keeper` ignores the token lock | Holds | pillar `7758200` | 4 tests "set-keeper: token lock" (3 fail without the fix) | stake-passkey 43/43, ops-coverage 208/208 (token-lock arms) |
-| Giant Moth F2: keeper kept after an owner change | Holds | pillar `611873c` | 8 tests "owner change resets the keeper" (39 total) | autostake-safe 82/82 (L, M), REAL_POOL 83/83, deploy-set (passkey transfer resets the keeper) |
+| Giant Moth: passkey `set-keeper` ignores the token lock | Holds | pillar `7758200` | 4 tests "set-keeper: token lock" (3 fail without the fix) | stake-passkey 50/50, ops-coverage 208/208 (token-lock arms), `7724b0d` bytes |
+| Giant Moth F2: keeper kept after an owner change | Holds | pillar `611873c` | 8 tests "owner change resets the keeper" (39 total) | autostake-safe 86/86 (L, M), REAL_POOL 87/87, deploy-set 341/341 (passkey transfer resets the keeper), all on `7724b0d` bytes |
 | Calm Forge: ccd016 elapsed window on dust funding | Holds | citycoins `8adfa68` | not recorded | clock-keyless 101/101 (S8, S8d), fixes 96/96, deploy-set (dust window) |
 | Void Cannon: Fast Pool `CYCLE_OFFSETS` had 12 entries (pox-5 allows 96) | Holds | fastpool `3f82a93` | not recorded | deploy-set (96-cycle lock) |
 | Void Cannon F2: signer fee on unswapped sBTC | By design, no change | none | - | - |
@@ -336,6 +454,13 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
 | Iron Hub F2: `finish` dust theft | Does not hold (`finish` is POOL-only) | none | - | - |
 | Violet Reed: `router-swap-split` reverts on a bid in the net band | By design (fail-safe, operator path) | none | - | - |
 | Coverage review: core-v6 `register` has no owner check | Accepted, by design; design doc fixed | jing `616169e` (docs only) | - | gaps 455/455 (check "FINDING") |
+| RV-F1 (found by Rendezvous, pillar RV suite): `confirm-transfer-wallet` to the current owner empties the admin set | Holds, Low | pillar `7724b0d` | `tests/juice-autostake-safe-rv-repro.test.ts` (plain sequence, real 52,560-block period); vitest 52/52 (keeper 40 + cross-safe-replay 11 + rv-repro 1) | autostake-safe 86/86 and REAL_POOL 87/87 (RV-F1 step: confirm u4001, owner stays admin) |
+| Feature (not a finding): signer-calldata ref. `stake-stx-juice` / `update-stake-stx-juice` take `signer-calldata (optional (buff 500))` last and forward it to pox-5, so the pool's `validate-stake!` prints the ref | n/a | pillar `99d69e8` | stake-passkey tests in vitest 52/52 | stake-passkey 50/50 (stake A8 + update A10 print "telegram"); deploy-set 341/341 (canonical safe stake prints "telegram") |
+
+Note: `juice-safe-v8` (pillar `4f4ce93`, tests `6f092ef`, 120/120) is v7
+plus the same two changes (signer-calldata ref and the RV-F1 fix), bound to
+`juice-pool-stx-signer`. It is NOT in the mv7dfb deploy set. faktory-dao
+`4ef2f67c` wires it for new juice safes.
 
 ## 7. Known open items and accepted risks
 
@@ -346,8 +471,9 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
   At the tip the DLMM depth is too thin (30/38, `d4af4cc8`, u16047). Same
   sources at the pinned block: 41/41 (`29fd3d16`). Fork drift, not a regression.
 - **Stale or failing checks in the rerun list:** router pool-pick-steer #35
-  (34/35, stale at this block, same on `f342615`); two legacy rung harnesses
-  that are not in the deploy set fail at deploy.
+  is fixed in the harness (60/60, `cb36bd72`). Two legacy rung harnesses
+  that are not in the deploy set still fail at deploy; they test retired
+  contracts.
 - **Pyth fee by Eval fixture.** No governance VAA can be signed on a fork, so
   every fee-u10 run sets the oracle `fee` var by Eval. The live fee is u0.
   Vault budgets must be >= 2x fee and set before a fee goes live.
@@ -365,11 +491,12 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
   live).** `stx-juice-fe/src/contracts/juice-autostake-safe.clar` is the
   2026-10-06 copy (`7813132`, 51,975 bytes, sha512/256 `88886acc...4bdd`,
   also the `JUICE_AUTOSTAKE_SAFE_CANONICAL_HASH` constant). The deploy
-  template is 51,552 bytes, sha512/256 `1ef1627f...e1fab9bb`. The FE copy and
-  hash must be regenerated from the template before `AUTOSTAKE_LIVE`.
-- **`vault-allowance-proof-stxer.mjs`** finds the allowance terms by a text
-  pattern over the commented source, so it cannot run on the deploy bytes.
-  Its result stands on the repo source only.
+  template is now 51,812 bytes (`7724b0d`), sha512/256 `cdb7c603...732a7a97`.
+  The FE copy and hash must be regenerated from the template before
+  `AUTOSTAKE_LIVE`, and the FE stake calls must pass the new 4th argument
+  (`signer-calldata`).
+- **`vault-allowance-proof-stxer.mjs`** now matches its pattern with any
+  whitespace and runs on the deploy bytes (juicestx `cd52afc`, `783ca0c1`).
 - **RV finding (juicestx `799adff`).** A 0-uSTX restake leaves a zero-cover
   OG seat that `evict-og` refuses, and the next stake counts the seat again.
   The node refuses a 0 lock on mainnet (`PoxInvalidLockAmount`, seen on the

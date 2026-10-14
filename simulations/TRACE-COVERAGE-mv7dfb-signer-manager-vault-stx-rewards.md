@@ -1,6 +1,6 @@
 # Trace coverage: signer-manager-vault-stx-rewards
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (13 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/signer-manager-vault-stx-rewards.clar` (sha256 `4858dbc67c466cd8e7cd0a13bcff32cf0f8e2bc72830f5ee914f270a07d4a731`), counted only where a sim deployed these exact bytes (18 sims).
 
 | metric | value |
 |---|---|
@@ -118,6 +118,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | get-unswapped-sats | 1 / 1 |
 | get-unpaid-stx | 1 / 1 |
 
-## Sims counted (13)
+## Sims counted (18)
 
-`de9bd7b8` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d`
+`b220ceef` `1599af88` `38122515` `40bee8c0` `59cdc203` `6f30d6e2` `ad49570e` `ec16a3f8` `d55a9bb0` `da59d087` `5cf1573f` `692f5727` `b8f56b5d` `4577cbf2` `f959481d` `fb581245` `234ae5bc` `20c42862`

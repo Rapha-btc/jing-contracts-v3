@@ -1,6 +1,6 @@
 # Trace coverage: ccd015-redemption-book-mia-stx
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd015-redemption-book-mia-stx.clar` (sha256 `6b5daed326f50f6a84f02526687ec8d7950ea7422521e8cff42c381d3721df57`), counted only where a sim deployed these exact bytes (23 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd015-redemption-book-mia-stx.clar` (sha256 `6b5daed326f50f6a84f02526687ec8d7950ea7422521e8cff42c381d3721df57`), counted only where a sim deployed these exact bytes (24 sims).
 
 | metric | value |
 |---|---|
@@ -78,6 +78,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | get-offer-book | 1 / 1 |
 | get-offer-count | 2 / 2 |
 
-## Sims counted (23)
+## Sims counted (24)
 
-`de9bd7b8` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `b95238c0` `cfb2ec16` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f` `78d08113`
+`b220ceef` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `b95238c0` `cfb2ec16` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f` `78d08113` `20c42862`

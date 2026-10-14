@@ -144,3 +144,19 @@ db6eb6da6fd311937ee312ed51a862eb juicestx/pool-vault-upgrade-stxer.mjs rc=0 97/9
 d3222b84dcc60eafda2a06a159bfd904 pillar/simul-juice-autostake-safe.js REAL_POOL=1 rc=0 83/83 === 83 passed, 0 failed === (pool 570226c bytes a0a28431)
 5d9897ba8ad7fa14f40c6839d436b946 pillar/simul-juice-autostake-safe-ops-coverage.js rc=0 208/208 === 208 passed, 0 failed (208) === (pool 570226c bytes a0a28431)
 d508603db48d572c96c6465b9ffa1baa pillar/simul-juice-autostake-safe-stake-passkey.js rc=0 43/43 === 43 passed, 0 failed (43) === (pool 570226c bytes a0a28431)
+20c428624713b6c452cfce5c5ed890db simulations/verify-deploy-set-mv7dfb.js 340/340 (previous deploy set, 611873c safe bytes; kept so the other rows keep their traces)
+80b820f4f6ff2257aabfa0be914fba18 simulations/verify-router-v5-3-limit-pick-mv7dfb.js [NEW, deploy bytes, block 9203637] 38/38
+101c85a53513fbb4e555ad85b75fbd5c simulations/verify-router-v5-3-limit-pick-mv7dfb.js [NEW, deploy bytes, block 9207942] 38/38
+213aaf3a2125258aba143af30e9f2541 simulations/verify-router-v5-3-core-migration-mv7dfb.js [new, deploy bytes, block 9207954] 65/65
+cb36bd72b62572e87476c0bdf6e8c204 simulations/verify-router-v5-3-pool-pick-steer.js [280c81c part = deploy bytes; limit re-read after the manual sale] 60/60
+9857aa866216ef6eeb9ed72455d09fae simulations/verify-v6-3-cancel-orphan-pending.js [patched = deploy bytes via preload] 225/225
+b382fe53a64623f776244b7364a30f38 simulations/verify-v6-3-ghost-deposit.js [patched = deploy bytes via preload] 343/343
+37871f1625eab67569623222a6574ef6 simulations/verify-v6-3-switched-off-ask.js [patched = deploy bytes via preload] 221/221
+1d74d1bc1b2227500a7a270b94f49a38 pillar/simul-juice-autostake-safe-stake-passkey.js 50/50 (safe 7724b0d bytes)
+2333f897b10606d208ee3c03a460f1b2 pillar/simul-juice-autostake-safe-ops-coverage.js 208/208 (safe 7724b0d bytes)
+36669f5e320a5811e0e9c0218cfe61b8 pillar/simul-juice-autostake-safe.js 86/86 incl. RV-F1 (safe 7724b0d bytes)
+23732d55dfc70ab9e82f4d0a0a6111cd juicestx/pool-autostake-e2e-stxer.mjs 63/63 (safe 7724b0d bytes, juicestx cd52afc)
+a430d1411dc124f02fe66de34851d54f juicestx/pool-pay-batches-stxer.mjs 166/166 (NEW = pool 570226c bytes)
+3b6746ebb0c4d7de0c0bac38bd6d1c64 juicestx/pool-pay-fees-stxer.mjs 299/299 (NEW = pool 570226c bytes)
+783ca0c1f687ebc7c473d0ab560c17d2 juicestx/vault-allowance-proof-stxer.mjs 4/4 cases (deploy bytes)
+50de1e4ae75471c76f55673211c0be2c pillar/simul-juice-autostake-safe.js REAL_POOL=1 87/87 (safe 7724b0d + pool 570226c deploy bytes)

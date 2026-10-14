@@ -1,6 +1,6 @@
 # Trace coverage: ccd016-swap-vault-mia-v2
 
-From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd016-swap-vault-mia-v2.clar` (sha256 `a7062d390719177f08581a729aa26481d4e12cc811b58a27c5442d4528fa48c6`), counted only where a sim deployed these exact bytes (20 sims).
+From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `simulations/deploy-bytes-mv7dfb/ccd016-swap-vault-mia-v2.clar` (sha256 `a7062d390719177f08581a729aa26481d4e12cc811b58a27c5442d4528fa48c6`), counted only where a sim deployed these exact bytes (21 sims).
 
 | metric | value |
 |---|---|
@@ -96,6 +96,6 @@ From `simulations/trace-coverage-multi.mjs` on 2026-10-14: final deploy bytes `s
 | cooldown-tick | 8 / 8 |
 | floor-out | 3 / 3 |
 
-## Sims counted (20)
+## Sims counted (21)
 
-`de9bd7b8` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f`
+`b220ceef` `0d61fa25` `2f47455f` `35d275ea` `36b4f87e` `3c99bc1e` `486a08d0` `4d1bb9ef` `523e3e7d` `54256428` `58724eb0` `5a727d6d` `75f1cd13` `7668f859` `8a2c60cc` `b18edad1` `e3f21dae` `e58d43d1` `e8c0247d` `5cf1573f` `20c42862`
