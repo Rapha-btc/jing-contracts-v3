@@ -1,16 +1,13 @@
 (define-trait rung-trait (
   (deposit
     (uint)
-    (
-      response       {
+    (response {
       amount: uint,
       shares: uint,
       epoch: uint,
       stx-paid: uint,
       sbtc-paid: uint,
-    }
-      uint
-    )
+    } uint)
   )
   (withdraw
     (uint (optional (buff 8192)))
@@ -27,4 +24,3 @@
     } uint)
   )
 ))
-
