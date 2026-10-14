@@ -156,8 +156,10 @@ Done:
 - [x] mv7dfb fixes: OG rotate + shrink `fa8c48a`, safe keeper `611873c`,
       fastpool signer 96 cycles `3f82a93`, ccd016 dust window `8adfa68`.
 - [x] faktory-dao templates refreshed and byte-verified: `d0b27773`, `341da272`.
-- [ ] faktory-dao mv7dfb template refresh (router, J2, J3, P2): byte-verified,
-      not yet committed or pushed.
+- [x] faktory-dao mv7dfb template refresh (router, J2, J3, P2): byte-verified,
+      pushed `77d9ba48`. All 13 deploy strings audited: comment-free,
+      `clarinet format`-ed (market de-indented, 97,701 B), equal to the final
+      sources. Rungs: send `contractName` with `-v1`.
 
 Still open:
 
