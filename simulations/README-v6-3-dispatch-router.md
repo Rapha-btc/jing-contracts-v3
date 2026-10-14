@@ -6,7 +6,7 @@ The router bin fix is already committed as `f231e51`; the work here is tests.
 
 ## Dispatch: 228/228
 
-[Run](https://stxer.xyz/simulations/mainnet/c69f2c9ce96f9f4674b625854c37b387),
+[Run](https://stxer.xyz/simulations/mainnet/3b5a8e21c069ff914f72a14008b06659) (2026-10-14 rerun on master 2dc0b40: dispatch a4939ec, rungs d8b01e4; this harness deploys no router),
 [harness](verify-v6-3-dispatch.js), [result](fixtures/dispatch-v6-3-result.json).
 
 Deployment order: core-v6, ladder-v1, market v6-3, rung trait, six rung templates
