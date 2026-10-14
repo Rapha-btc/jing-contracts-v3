@@ -123,15 +123,17 @@ Repo `Rapha-btc/pillar-wallets-xyz`, branch `main`, HEAD `611873c` (pushed). Nes
 | # | Contract name | Source path | Last commit | Clarity | Mainnet | Depends on |
 | --- | --- | --- | --- | --- | --- | --- |
 | P1 | `juice-autostake-safe-auth-helpers-v1` | `contracts/juice-autostake-safe-auth-helpers-v1.clar` | `2d136c1` (unchanged) | 4 | 404 | none |
-| P2 | `juice-autostake-safe` | `contracts/juice-autostake-safe.clar` | `611873c` (set-keeper token lock, keeper reset on owner change) | 6 | 404 | J2 (`JUICE-SIGNER` literal), P1, `clarity-5-webauthn-v4`, `fakfun-wallet-core-v2`, `juice-safe-auth-helpers-v1` (all live) |
+| P2 | `juice-autostake-safe` | `contracts/juice-autostake-safe.clar` | `7724b0d` (set-keeper token lock, keeper reset on owner change, signer-calldata to pox-5 `99d69e8`, no transfer to the current owner RV-F1 `7724b0d`) | 6 | 404 | J2 (`JUICE-SIGNER` literal), P1, `clarity-5-webauthn-v4`, `fakfun-wallet-core-v2`, `juice-safe-auth-helpers-v1` (all live) |
 
 Post-deploy:
 
 - [ ] `fakfun-wallet-core-v2.set-verified-contract(SPV9K21....juice-autostake-safe)`
       before any user copy onboards (`register-wallet` checks the canonical hash).
-      The canonical hash changed with `611873c`: deploy bytes 51,552 (was
-      51,419), sha512/256 of the template `1ef1627f...e1fab9bb` (was
-      `094a2c58...7ed28548`). The BE pins no hash; core-v2 reads it on chain.
+      The canonical hash changed with `7724b0d`: deploy bytes 51,812 (was
+      51,552 at `611873c`), sha256 `599192e3...872c2500`, sha512/256 of the
+      template `cdb7c603...732a7a97` (was `1ef1627f...e1fab9bb`). The BE pins
+      no hash; core-v2 reads it on chain. stx-juice-fe pins it in
+      `JUICE_AUTOSTAKE_SAFE_CANONICAL_HASH`.
 
 ## 4. Partner deploys (not ours to broadcast)
 
