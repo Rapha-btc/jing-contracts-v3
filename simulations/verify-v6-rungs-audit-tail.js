@@ -143,7 +143,9 @@ async function scenario(side,kind) {
  await tx('initialize rung',DEP,rung,'initialize',kind==='fixed'?[uintCV(cents)]:kind==='peg'?[uintCV(100),uintCV(guardCents)]:[uintCV(100),boolCV(true)],'(ok true)');
  const alice=mk(881),bob=mk(882),carol=mk(883),taker=mk(884),big=side==='x'?100000000n:100000000000n,small=side==='x'?1000n:1000000n;
  for(const who of [alice,bob,carol])await fund(side,who,big*4n);
- await fund(opposite(side),taker,side==='x'?1000000000000n:1000000000n);
+ // STX whale WHALES.y holds ~970k STX at the 10-14 tip; 1M STX failed (InsufficientBalance).
+ // The x-side taker buys ~3 BTC (~0.6M STX at ~194k STX/BTC), so 800k STX keeps headroom.
+ await fund(opposite(side),taker,side==='x'?800000000000n:1000000000n);
  const state=()=>read(rung,'(get-state)');
  const actual=()=>get(rung,`(+ (market-size) ${side==='x'?`(unwrap-panic (contract-call? '${SBTC} get-balance current-contract))`:'(stx-get-balance current-contract)'})`);
  const sync=()=>tx('sync rung',keeper,rung,'sync',[],'(ok true)');

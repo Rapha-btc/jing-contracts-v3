@@ -125,15 +125,14 @@ proposal proxy.
 | `verify-v6-rungs-fill-lazer.js` | Rung fill on Lazer | 85/85 | `613d6d045474cecbd09d1f902c9fd658` | yes | 10-14 |
 | `verify-v6-rungs-miner-band-lazer.js` | Miner band | 225/225 | `9f01abe49571a17c20999534c9683ca1` | yes | 10-14 |
 | `verify-v6-rungs-escrow-timeout.js` | Escrow timeout | 549/549 | `18ac074b5eeb18d0d74825888ed40dbe` | yes | 10-14 |
-| `verify-v6-rungs-audit-tail.js` | Audit tail | **12/13** (#13 "fund fresh STX", InsufficientBalance) | `dce4e39c3f416fadfaae04a7d36979f9` | yes | 10-14 |
+| `verify-v6-rungs-audit-tail.js` | Audit tail | **20/21, stale harness** (funding fixed: taker 1M -> 800k STX, whale has ~970k; #21 expects the pre-`f015382` tail freeze, now `sync` rolls the tail, index = SCALE, by design) | `3ef109fe8cf12d4c87fdc7edebd323b1` | yes | 10-14 |
 | `verify-rung-withdraw-rounding.js`, `verify-rungs-keyless.js` | Legacy contracts, not in the deploy set | FAILED at deploy (unresolved / duplicate contract) | `35d6c1e9...`, `50bea07a...`, `864eab88...` | n/a | 10-14 |
 
 ### 2.3 juicestx
 
 Result files: `juicestx/simulations/results/pool-vault-stx/*.json`. Their
 `sourceHashes` match the deploy bytes except where the row says no. These
-2026-10-14 reruns are in the juicestx working tree, not committed (the
-commit `1215ae4` lists the ids).
+2026-10-14 reruns are committed in juicestx `cbbb6f6`.
 
 | Harness | Covers | Pass | Stxer | Deploy bytes | Date |
 |---|---|---|---|---|---|
@@ -152,7 +151,7 @@ commit `1215ae4` lists the ids).
 | `pool-vault-stx-stxer.mjs --jing-router` | Router Jing fills | 46/46 | `dd93a13a0f927430ac589f517574e1fd` | yes | 10-14 |
 | `pool-vault-stx-stxer.mjs --jing-take` | Admin Jing take | 41/41 | `58c0fb76b70e2ae77edbb50ea271d407` | yes | 10-14 |
 | `pool-vault-stx-stxer.mjs --split-pyth` | Manual split with Pyth | 42/42 | `7388231fd4729bc08cc30b5dd5cfa98d` | yes | 10-14 |
-| `pool-vault-stx-stxer.mjs --lifecycle` | AMM liquidation | **30/38, rc=1** (likely fork drift, not investigated) | `d4af4cc8e8f42be9310813af60106b3b` | yes | 10-14 |
+| `pool-vault-stx-stxer.mjs --lifecycle` | AMM liquidation (pinned block 9208593) | 41/41 (tip 9208879 was 30/38: DLMM depth too thin, chunk 1 filled 330 sats, chunk 2 u16047) | `29fd3d1682888b452101f075947810ec` | yes | 10-14 |
 | `pool-vault-fixes-stxer.mjs` | Vault fixes | 218/218 | `8a0e577b18cf02a46e4d8d38ef749a5e` | yes | 10-14 |
 | `pool-vault-pyth-fee-stxer.mjs` | Pyth fee u10, vault pays both verifies, finish reserve | 58/58 | `8063c1dab9dc5ae6b5aadc4da479a9aa` | yes | 10-14 |
 | `pool-vault-mismatch-stxer.mjs` | Vault mismatch | 29/29 | `e547999db6655cfec2f88e7f178364c7` | yes | 10-14 |
@@ -332,12 +331,15 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
 - **Recovery continuity pinned at block 9207370.** At the tip the DLMM depth
   is too thin and the harness fails (u16047, 13/158 at `fa8c48a`, same on the
   old source). Pinned run: 190/190 (`cc9daef`, rerun `d0108679...`).
-- **juicestx `--lifecycle` failed once** on the traced rerun (`d4af4cc8`,
-  30/38). The other 21 juice runs passed. Likely fork drift, not
-  investigated.
+- **juicestx `--lifecycle` pinned at block 9208593** (juicestx `cbbb6f6`).
+  At the tip the DLMM depth is too thin (30/38, `d4af4cc8`, u16047). Same
+  sources at the pinned block: 41/41 (`29fd3d16`). Fork drift, not a regression.
 - **Stale or failing checks in the rerun list:** router pool-pick-steer #35
   (34/35, stale at this block, same on `f342615`); `verify-v6-rungs-audit-tail.js`
-  #13 (12/13, fund fresh STX, InsufficientBalance); two legacy rung harnesses
+  (funding fixed; now 20/21: #21 tests the old tail freeze that `f015382`
+  replaced with the sync tail roll, so the harness needs a rewrite; roll-tail
+  is fork-covered only for the two core-spread rungs by
+  `verify-v1-core-spread-rungs.js`, not for the fixed and peg rungs); two legacy rung harnesses
   that are not in the deploy set fail at deploy.
 - **Pyth fee by Eval fixture.** No governance VAA can be signed on a fork, so
   every fee-u10 run sets the oracle `fee` var by Eval. The live fee is u0.
@@ -368,9 +370,8 @@ in [contracts/README-audit-v6-3-deploy-set-bounty.md](contracts/README-audit-v6-
   section 5.
 - **Market size.** 97,701 bytes, about 2.3 KB under the cap. Any further
   market change must stay small.
-- **Uncommitted result files.** The 2026-10-14 traced reruns in juicestx
-  (`simulations/results/pool-vault-stx/*.json`) are in its working tree, not
-  committed.
+- **juicestx result files committed.** The 2026-10-14 reruns are in juicestx
+  `cbbb6f6`.
 - **From DEPLOY-PLAN, still open:** ladder `set-canonical` before any rung
   `initialize`; owner keys to a multisig with distinct cosigners; ccd016
   `STX_FAIR_BOOK` is still a relative name (partner's call); launch before
