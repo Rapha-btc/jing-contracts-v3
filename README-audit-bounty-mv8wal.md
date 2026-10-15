@@ -9,6 +9,7 @@ jing-ladder-v1, 20 rungs). The Juice findings are in juicestx
 | 1 | Rare Io | `settle-token-{x,y}-readmit` reverts u1010 instead of a clean refusal when the list is 50/50 with stale seats | Does not hold: the state cannot be reached | Rejected, no change |
 | 2 | Patient Reed | `settle-token-{x,y}-deposit` checks crossing on the pending top-up's limit, but the newer stored limit is the one kept | Holds, Low | Fixed in source, live market changes on next deploy |
 | 3 | Violet Reed | Exit-path cancel in the rungs never sets `escrow-cancelled-at`, so the 24h push cooldown is open | Holds, Low-Medium (griefing) | Fixed in source, live rungs change on redeploy |
+| 4 | Inner Ozma | F-3 `log-jing-swap-reconciled` sets own equity; F-1 `log-withdraw` skips pause and clamps; F-8 `accept-owner` has no timelock | Does not hold: unreachable or stats only; F-8 by design | Rejected, no change |
 
 ## 1. Rare Io: readmit reverts u1010 at 50/50 with stale seats
 
@@ -130,3 +131,27 @@ Applied to the live rung sources `contracts/jing-buy-stx-core-spread-v1.clar`
 `clarinet check` passes on all three. Not yet run: rung suites and stxer
 (held until the end of the bounty review). The 20 live rungs change only on
 redeploy.
+
+## 4. Inner Ozma: jing-core-v6 ledger findings
+
+jing-core-v6 holds no funds and makes no transfers. Its equity ledger only
+records stats and events.
+
+- **F-3 `log-jing-swap-reconciled` lets a registered contract set its own
+  equity: does not hold.** `register` (L259-276) accepts only a caller whose
+  `contract-hash?` matches a hash the owner set with `set-verified-contract`
+  (owner-only, L185-199). The only verified hash on mainnet is
+  markets-sbtc-stx-jing-v6-3, and its code never calls
+  `log-jing-swap-reconciled`. A clone of that code registers but runs the
+  same code. The intended caller (vault-sbtc-stx-v6) is not deployed and
+  derives its targets from real balances. Even if reached, it moves a stats
+  number, not funds.
+- **F-1 `log-withdraw` skips `check-not-paused` and the debit clamps: by
+  design.** Pause blocks new entries (`log-deposit`, `log-jing-swap`), not
+  exits, so users can leave while paused. markets-v6-3 never calls
+  `log-withdraw`. The worst case is an event amount above the clamped
+  equity, seen only by an indexer.
+- **F-8 `accept-owner` has no 144-block timelock: by design.**
+  `TIMELOCK_BURN_BLOCKS` (L11) is used only by `pause`/`unpause`; no constant
+  promises an owner timelock. Ownership is a two-step propose/accept that
+  only the current owner can start.
