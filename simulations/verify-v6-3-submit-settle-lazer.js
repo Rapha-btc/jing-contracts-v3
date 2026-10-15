@@ -15,6 +15,9 @@ import {
   submitSimulationSteps, callContract, getNonce, setSender,
 } from 'stxer';
 import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
+import { installRetrySubmit } from './_retry-submit.js';
+
+installRetrySubmit();
 
 const DEP = 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
 const CORE = `${DEP}.jing-core-v6`;
@@ -54,8 +57,15 @@ function finishPhase() {
     throw new Error(`Stopped on failed checks. Fork: https://stxer.xyz/simulations/mainnet/${sid}`);
   }
 }
+// Reads only: an Eval has no effect, so a stxer 5xx (Cloudflare 520) is retried.
+async function evalStep(cid, code) {
+  for (let i = 0; ; i++) {
+    try { return await submitSimulationSteps(sid, { steps: [{ Eval: [DEP, '', cid, code] }] }); }
+    catch (e) { if (i >= 4 || !/HTTP 5\d\d/.test(String(e))) throw e; console.log(`  stxer ${String(e).match(/HTTP 5\d\d/)[0]} on a read, retry in 30s`); await new Promise((r) => setTimeout(r, 30_000)); }
+  }
+}
 async function ev(label, cid, code, want) {
-  const out = await submitSimulationSteps(sid, { steps: [{ Eval: [DEP, '', cid, code] }] });
+  const out = await evalStep(cid, code);
   const actual = decode({ Result: out.steps[0] });
   check(label, actual, want);
   return actual;
@@ -79,8 +89,14 @@ async function main() {
   const call = (sender, cid, fn, args) => (bb) => bb.withSender(sender).addContractCall({ contract_id: cid, function_name: fn, function_args: args });
   const read = (label, cid, code, want) => add(label, (bb) => bb.addEvalCode(cid, code), want);
   const deploy = (name, file = name) => add(`deploy ${name}`, (bb) => bb.withSender(DEP).addContractDeploy({ contract_name: name, source_code: source(file), clarity_version: ClarityVersion.Clarity5 }), (v) => !v.includes('ERR'));
-  deploy('jing-core-v6');
-  deploy('jing-ladder-v1');
+  // jing-core-v6 and jing-ladder-v1 are LIVE on mainnet since the v6-3 deploy:
+  // a redeploy is "Duplicate contract", so the fork uses the live ones
+  // (owner = DEP) and only redeploys them on a fork from before that deploy.
+  for (const name of ['jing-core-v6', 'jing-ladder-v1']) {
+    const live = (await fetch(`http://77.42.3.101/stacks-api/v2/contracts/interface/${DEP}/${name}`)).ok;
+    if (!live) deploy(name);
+    else read(`${name} live, owner is the deployer`, `${DEP}.${name}`, name === 'jing-core-v6' ? '(get-contract-owner)' : '(get-owner)', DEP);
+  }
   // Reserve 49 protected seats, leaving one public seat. This reaches the
   // ordinary full-side branch with two principals instead of 41. No seats
   // are fabricated; use the public ladder and market operator APIs.

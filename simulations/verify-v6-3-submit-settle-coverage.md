@@ -5,7 +5,15 @@ The harness deploys the unmodified deploy copy on stxer, after core-v6 and
 ladder-v1, and initializes/registers fresh market instances. It never broadcasts
 a mainnet transaction. Contract version under test: `321699e` plus the uncommitted cancellation recovery changes.
 
-Latest run: **950/950 checks green**, exit 0.
+Latest run (2026-10-15, market at `9a69481`: deposit settle prices the crossing
+check on a newer stored limit, bounty mv8wal): **898/898 checks green**, exit 0,
+[stxer run](https://stxer.xyz/simulations/mainnet/09894fc5bdffc6bf1b47e9103f3d7f4c).
+Same count as 898/898 on `72b60b0` (after `f00db7a`). jing-core-v6 and
+jing-ladder-v1 are live now, so the harness uses the live contracts (owner
+read instead of redeploy) and only deploys the market. The fix itself is
+proven in `verify-v6-3-settle-newer-limit.js` (183/183 prefix + patched).
+
+Earlier run: **950/950 checks green**, exit 0.
 [stxer run](https://stxer.xyz/simulations/mainnet/ec3b1f35d30a51b6106573b591c86703).
 Cancellation coverage checks exact pending refunds, cancellation events, cleared
 pending metadata, and subsequent `u1030` on both sides, including market-only,
