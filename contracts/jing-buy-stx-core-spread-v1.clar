@@ -1089,6 +1089,7 @@
               (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
             ))))
             (var-set held-sats (+ have refunded))
+            (var-set escrow-cancelled-at stacks-block-time)
             (ok true)
           )
         )

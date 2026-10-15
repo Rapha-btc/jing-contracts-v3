@@ -8,6 +8,7 @@ jing-ladder-v1, 20 rungs). The Juice findings are in juicestx
 |---|---|---|---|---|
 | 1 | Rare Io | `settle-token-{x,y}-readmit` reverts u1010 instead of a clean refusal when the list is 50/50 with stale seats | Does not hold: the state cannot be reached | Rejected, no change |
 | 2 | Patient Reed | `settle-token-{x,y}-deposit` checks crossing on the pending top-up's limit, but the newer stored limit is the one kept | Holds, Low | Fixed in source, live market changes on next deploy |
+| 3 | Violet Reed | Exit-path cancel in the rungs never sets `escrow-cancelled-at`, so the 24h push cooldown is open | Holds, Low-Medium (griefing) | Fixed in source, live rungs change on redeploy |
 
 ## 1. Rare Io: readmit reverts u1010 at 50/50 with stale seats
 
@@ -86,3 +87,46 @@ Applied to `markets-sbtc-stx-jing-v6-3.clar` (y L1372, x L1619) and the
 `check:v6-3-mirrors` in sync. Not yet run: the v6-3 suite and the
 reporter's `stale-topup-crossing.test.ts`. The live market keeps the old
 behavior until the next deploy.
+
+## 3. Violet Reed: exit-path cancel skips the 24h push cooldown
+
+Claim: `push-to-market` refuses a push for 24h after an escrow cancel:
+
+```clarity
+(asserts! (>= stacks-block-time (+ (var-get escrow-cancelled-at) u86400))
+  ERR_ESCROW_COOLDOWN
+)
+```
+
+The rung cancels the market escrow in two places. `settle-escrow` sets
+`escrow-cancelled-at` (the Void Kael #2 fix). The cancel inside
+`pull-to-held-sats` (buy) / `pull-to-held-ustx` (sell), which runs when a
+member exit would leave the market position under `min-market`, does not.
+With `escrow-cancelled-at` at u0 the gate is always open.
+
+Sequence: a pending top-up sits next to a live deposit. Bob exits; the rung
+cancels its whole market position, and pending + live + parked come back to
+`held`. Anyone calls the permissionless `push` at once, and the refunded
+funds go back into a fresh pending escrow. The next member exit needs a
+Lazer update again (err u7012).
+
+Impact: griefing only. No funds lost. A member can still exit by passing a
+Lazer `update`, anyone can settle the pending with Lazer bytes, and after
+24h `settle-escrow` cancels with no oracle and arms the cooldown. The worst
+case is a 24h oracle dependency each time it is set up again. It breaks the
+README promise "The lock is at most one 24h window". Low-Medium.
+
+Fix (1 line per side): set the cooldown in the exit-path cancel too, right
+after `held` takes the refund.
+
+```clarity
+(var-set held-sats (+ have refunded))
+(var-set escrow-cancelled-at stacks-block-time)
+```
+
+Applied to the live rung sources `contracts/jing-buy-stx-core-spread-v1.clar`
+(L1092) and `contracts/jing-sell-stx-core-spread-v1.clar` (L1044), and to
+`contracts/jing-buy-stx-market-spread-v1.clar` (L755, not live, same bug).
+`clarinet check` passes on all three. Not yet run: rung suites and stxer
+(held until the end of the bounty review). The 20 live rungs change only on
+redeploy.
