@@ -80,10 +80,10 @@ Notes:
 then `initialize(u<bps>, true)` for bps 0..90, skipping steps already done or
 pending. `dryRun: true` returns the plan and the on-chain state without
 broadcasting. Proven on a stxer mainnet fork against the live deployed rungs
-(nothing redeployed), 52/52: all 20 rungs initialized with the right spread and
+(nothing redeployed), 54/54 (incl. a pending buy batch not hiding the sell set-canonical): all 20 rungs initialized with the right spread and
 seated, ladder 10/10 per side, market seated-x / seated-y list the 10 rungs, a
 re-run plans nothing, and a 1,000-sat deposit into buy-0 and a 1 STX deposit
-into sell-0 work: https://stxer.xyz/simulations/mainnet/1ec63f731a4488c3a9a2977c07b163f4
+into sell-0 work: https://stxer.xyz/simulations/mainnet/a5b7c3894459a4b82d63c03128468ce8
 (harness `simulations/verify-init-jing-rungs-route.js`).
 
 The router binds the market as a literal and needs no init. Sequence
