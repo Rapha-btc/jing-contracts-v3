@@ -94,10 +94,10 @@ TAKER_REBATE_BPS
 (is-some (index-of? (var-get seated-y) who))
 )
 (define-private (still-seated-x (p principal))
-(contract-call? .jing-ladder-v2 is-band-x p)
+(contract-call? .jing-ladder-v1 is-band-x p)
 )
 (define-private (still-seated-y (p principal))
-(contract-call? .jing-ladder-v2 is-band-y p)
+(contract-call? .jing-ladder-v1 is-band-y p)
 )
 (define-private (with-seat
 (lst (list 50 principal))
@@ -109,7 +109,7 @@ TAKER_REBATE_BPS
 )
 )
 (define-private (refresh-seat-count)
-(let ((n (contract-call? .jing-ladder-v2 get-max-band-per-side)))
+(let ((n (contract-call? .jing-ladder-v1 get-max-band-per-side)))
 (var-set seats-per-side
 (if (> n MAX_DEPOSITORS)
 MAX_DEPOSITORS
@@ -134,8 +134,8 @@ n
 )
 (define-public (sync-seat (who principal))
 (let (
-(x (contract-call? .jing-ladder-v2 is-band-x who))
-(y (contract-call? .jing-ladder-v2 is-band-y who))
+(x (contract-call? .jing-ladder-v1 is-band-x who))
+(y (contract-call? .jing-ladder-v1 is-band-y who))
 )
 (asserts! (or x y) ERR_NOT_A_SEAT)
 (and x (var-set seated-x

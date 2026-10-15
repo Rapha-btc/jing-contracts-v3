@@ -1,5 +1,5 @@
 // The deployed market is the de-indented markets-sbtc-stx-jing-v6-3.clar
-// (and v6-4, the same market on jing-ladder-v2).
+// (and v6-4, the same source redeployed under a new name).
 // Its -formatted copy must be the same program: same token
 // stream once comments, whitespace and tuple trailing commas are ignored.
 // Prints the first divergence per copy (with line numbers) and exits 1 if any.
