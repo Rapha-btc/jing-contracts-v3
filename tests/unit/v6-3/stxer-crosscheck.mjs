@@ -12,11 +12,13 @@ const reviewedRebateFix = '5c08412fc5990a8bf0db3a0cbbec3fa4c859d4185d0caf1cd16ae
 const reviewedCapacityAgeFix = 'ed046155b017d6acad569c6769da050747f4c69db7f627e4767fe0cafea41848';
 const reviewedVerifyOnceFix = '65a8dc9aed179a3cc440306e31aff7da5bcecb99872423ca50b8ba417abbb6c0';
 const reviewedRepriceOnceFix = '943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67';
-const repriceOnce = matrix.summary.sha256 === reviewedRepriceOnceFix;
+const reviewedNewestLimitFix = '86e1ab584ccaab791dc0e4bb0c4d0a22acca28949787e124d1547b5112c42c8c';
+const newestLimitFix = matrix.summary.sha256 === reviewedNewestLimitFix;
+const repriceOnce = matrix.summary.sha256 === reviewedRepriceOnceFix || newestLimitFix;
 const verifyOnce = matrix.summary.sha256 === reviewedVerifyOnceFix || repriceOnce;
 const ageAwareCapacity = matrix.summary.sha256 === reviewedCapacityAgeFix || verifyOnce;
 const netBasedRebate = matrix.summary.sha256 === reviewedRebateFix || ageAwareCapacity;
-if (![stxer.sourceSha256, reviewedRefundFix, reviewedMakerFix, reviewedCancelFix, reviewedSettleRefundFix, reviewedRebateFix, reviewedCapacityAgeFix, reviewedVerifyOnceFix, reviewedRepriceOnceFix].includes(matrix.summary.sha256)) throw Error('Market changed; review the Stxer cross-check source locations.');
+if (![stxer.sourceSha256, reviewedRefundFix, reviewedMakerFix, reviewedCancelFix, reviewedSettleRefundFix, reviewedRebateFix, reviewedCapacityAgeFix, reviewedVerifyOnceFix, reviewedRepriceOnceFix, reviewedNewestLimitFix].includes(matrix.summary.sha256)) throw Error('Market changed; review the Stxer cross-check source locations.');
 // The reviewed fix adds three lines at old L3283 and three at old L3350.
 // The maker-accounting fix only changes the log-match argument line, with
 // no added source lines. Cancellation and pending settlement replace twelve try! wrappers
@@ -51,7 +53,8 @@ const verifiedLine = line => repriceOnceLine(verifyOnceLine(line));
 const currentLine = old => {
   const prior = matrix.summary.sha256 === stxer.sourceSha256 ? old
     : old + (old >= 3350 ? 6 : old >= 3283 ? 3 : 0) + (netBasedRebate && old >= 2653 ? 3 : 0);
-  return verifiedLine(prior + (ageAwareCapacity ? (prior >= 1094 ? 3 : prior >= 1069 ? 6 : 0) : 0));
+  const withLimitFix = prior + (newestLimitFix ? (old >= 1612 ? 8 : old >= 1369 ? 4 : 0) : 0);
+  return verifiedLine(withLimitFix + (ageAwareCapacity ? (prior >= 1094 ? 3 : prior >= 1069 ? 6 : 0) : 0));
 };
 const oracleSites = [
   [1065, 'Malformed y-feed shape'], [1083, 'Stale y feed during classification'],
@@ -90,7 +93,7 @@ const partials = [
 });
 // The historical decrement is absent, not covered. Independently require
 // both outcomes of the replacement zero-capacity guard in the current source.
-const grossUp = netBasedRebate ? (ageAwareCapacity ? ['3954,0,0', '3955,0,1'] : ['3935,0,0', '3936,0,1']).map(key => key.replace(/^\d+/, l => verifiedLine(Number(l)))).map(key => {
+const grossUp = netBasedRebate ? (ageAwareCapacity ? ['3954,0,0', '3955,0,1'] : ['3935,0,0', '3936,0,1']).map(key => key.replace(/^\d+/, l => verifiedLine(Number(l) + (newestLimitFix ? 8 : 0)))).map(key => {
   const hits = branches.get(key);
   if (!hits) throw Error(`Missing new gross-up outcome: ${key}`);
   return {clarinetBranch: key, hits};
