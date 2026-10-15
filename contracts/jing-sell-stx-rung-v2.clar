@@ -1041,7 +1041,6 @@
               (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
             ))))
             (var-set held-ustx (+ have refunded))
-            (var-set escrow-cancelled-at stacks-block-time)
             (ok true)
           )
         )
