@@ -2,39 +2,35 @@
 // Proof for the jingswap.com /swap Ladder tab on a mainnet fork of the LIVE
 // set (nothing deployed, nothing patched): jing-ladder-dispatch, jing-ladder-v1,
 // markets-sbtc-stx-jing-v6-3, jing-core-v6 and the 20 seated rungs
-// jing-buy-stx-spread-0..90 / jing-sell-stx-spread-0..90.
+// jing-buy-stx-spread-0..90 (Buy STX) / jing-sell-stx-spread-0..90 (Sell STX).
 //
 // Every ladder tx is built by the page's own pure module,
-// jingswap-frontend/src/lib/ladder.ts (imported, not copied): the split
-// (presets + per-rung minimum + redistribution), the dispatch function name,
-// its args and the exact post-condition. Txs are signed in allow mode with
-// that post-condition, so a wrong total aborts. The keeper's settles are
-// built by faktory-dao backend/server/utils/jing-settle-args.ts (imported).
+// jingswap-frontend/src/lib/ladder.ts (imported, not copied): the split, the
+// dispatch call, AND its post-conditions + mode. Never allow mode:
+//   originator (SIP-040, Leather / Xverse): only the user's transfers are
+//     checked; deposit = user sends exactly the total, withdraw / claim = no
+//     condition (the user can send nothing).
+//   deny (any other wallet): plus a willSendLte bound on every rung (input
+//     and payout asset) and on the market, from balances read just before
+//     signing (RungFunds); any unlisted transfer aborts.
+// The txs are serialized with that mode and those conditions and run by the
+// stxer node, which ENFORCES them: the tamper checks below abort with
+// post_condition_aborted in both modes.
 //
-//  0. live state: 10 seats per side in the market (get-seated-x / -y) are
-//     the page's rung ids, in order; market minimums; rungs empty
-//  1. Sell sBTC (deposit-buy), one user per preset: Near the mid (small total:
-//     the far rungs fall under the market minimum, are dropped and their
-//     share redistributed), Even, Wide. Opposite side empty: every leg rests
-//     live at once ("Live on the book"). Per rung: the member's position
-//     value = the leg, the market custody of the rung grew by the leg, the
-//     user paid exactly the total. A tampered post-condition (total - 1) aborts.
-//  2. Sell STX (deposit-sell), same three presets. The buy side now rests, so
-//     each rung push goes PENDING (pending-deposit-y per rung). The keeper
-//     settles each rung (settle-token-y-deposit who = the rung): placed, or
-//     refunded to the rung when it would cross (sell-0 at the mid vs buy-0
-//     at the mid). Each round settles before the next deposit.
-//  3. takers: an STX taker and an sBTC taker swap through the book, so the
-//     rungs earn proceeds
-//  4. Claim all (claim-buy / claim-sell over every rung holding a position):
-//     the user's wallet moves by exactly the claim's receipt, proceeds > 0 on
-//     both sides, a second claim pays 0
-//  5. Withdraw all (withdraw-buy / withdraw-sell, full exit, with the page's
-//     Lazer update): every position gone, the user gets back exactly the
-//     resting value read just before
-//  6. Withdraw all while every rung is PENDING: without an update the rung
-//     cannot settle its escrow (u7012); with the page's update it settles
-//     and exits, the user gets the whole deposit back
+//  0. live state: seated rungs = the page's rung ids, minimums
+//  1. Buy STX (deposit-buy) x 3 presets, ONE-STEP (bid side empty, every leg
+//     rests at once). near = originator, even / wide = deny. Tampers: user
+//     total - 1 aborts (both modes); deny set minus one rung's bound aborts.
+//  2. Sell STX (deposit-sell) x 3 presets, PENDING (asks rest): each push
+//     goes pending. Then a second deny deposit while the rungs' escrows are
+//     still pending: the market refuses the push (already pending), the leg
+//     waits in the rung, the deny set holds. Keeper settles.
+//  3. Buy STX x 3 presets again, PENDING (bids rest now), keeper settles.
+//  4. takers -> proceeds; 5. Claim all (originator / deny; deny minus the
+//     payout bounds aborts); 6. Withdraw all Sell STX (deny minus the market
+//     bound aborts); 7. Withdraw all while every rung is PENDING (deny);
+//  8. Withdraw all Buy STX; 9. Sell STX x 3 presets ONE-STEP (bid side
+//     empty now) and withdraw them.
 import { homedir } from 'node:os';
 import {
   uintCV, boolCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV, noneCV,
@@ -69,6 +65,10 @@ const PLAN = {
   buy: { users: [mk(741), mk(742), mk(743)], totals: [12_000n, 60_000n, 40_000n] },
   sell: { users: [mk(744), mk(745), mk(746)], totals: [12_000_000n, 60_000_000n, 40_000_000n] },
 };
+const MODE = ['originator', 'deny', 'deny']; // per preset index
+const SIDE_LABEL = { buy: 'Buy STX', sell: 'Sell STX' };
+const PCM = { originator: PostConditionMode.Originator, deny: PostConditionMode.Deny };
+
 const TAKER_Y = mk(747), TAKER_X = mk(748);
 
 let sid, checks = 0, passed = 0;
@@ -112,14 +112,16 @@ const local = (cvs) => cvs.map((cv) => hexToCV(cvToHex(cv)));
 const events = (receipt) => (receipt?.events ?? []).map((e) => typeof e === 'string' ? JSON.parse(e) : e).filter((e) => e.committed !== false && e.contract_event);
 const printsFrom = (receipt, cid) => events(receipt).filter((e) => e.contract_event.contract_identifier === cid).map((e) => plain(deserializeCV(e.contract_event.raw_value)));
 
-/** Sign-and-run one call the way the page does: its post-conditions, allow mode. */
-async function sendCall(sender, call, pcs = call.postConditions) {
+/** Sign-and-run one call the way the page does: its post-conditions, its mode. */
+async function sendCall(sender, call, pcs = call.postConditions, mode = call.postConditionMode) {
+  if (!PCM[mode]) throw new Error(`no post-condition mode for ${mode}`);
   await retry(() => submitSimulationSteps(sid, { steps: [{ TenureExtend: { cause: 'Extended' } }] }));
   const tx = await makeUnsignedContractCall({
     contractAddress: call.contractAddress, contractName: call.contractName, functionName: call.functionName,
-    functionArgs: local(call.functionArgs), postConditions: pcs, postConditionMode: PostConditionMode.Allow,
+    functionArgs: local(call.functionArgs), postConditions: pcs, postConditionMode: PCM[mode],
     nonce: Number(await retry(() => getNonce(sid, sender))), fee: 0, network: 'mainnet', publicKey: '',
   });
+  if (tx.postConditionMode !== PCM[mode] || tx.postConditions.values.length !== pcs.length) throw new Error('tx lost its post-conditions');
   setSender(tx, sender);
   const out = await retry(() => submitSimulationSteps(sid, { steps: [{ Transaction: tx.serialize() }] }));
   const t = out.steps[0]?.Transaction;
@@ -178,9 +180,41 @@ async function settleRound(side, label) {
   return out;
 }
 
-async function depositRound(side, k) {
-  const preset = PRESETS[k], user = PLAN[side].users[k], total = PLAN[side].totals[k];
-  const label = `${side === 'buy' ? 'Sell sBTC' : 'Sell STX'} / ${preset}`;
+
+/** RungFunds for the deny set, read on the fork right before signing (the
+ *  page reads the same three numbers through its backend). */
+async function rungFunds(side, bpsList) {
+  const ids = bpsList.map((b) => L.rungId(side, b));
+  const reads = await evalMany(ids.flatMap((r) => [...bal(r), [r, '(get-state)']]));
+  return bpsList.map((bps, i) => {
+    const [sbtc, stx, st] = reads.slice(3 * i, 3 * i + 3);
+    return side === 'buy' ? { bps, input: sbtc, payout: stx, resting: st.resting } : { bps, input: stx, payout: sbtc, resting: st.resting };
+  });
+}
+async function pcFor(mode, side, bpsList) {
+  return mode === 'originator' ? { mode } : { mode, funds: await rungFunds(side, bpsList) };
+}
+const usedBps = (amounts) => L.LADDER_BPS.filter((_, i) => amounts[i] > 0n);
+const pcSummary = (call) => `${call.postConditionMode}: ${call.postConditions.map((p) => `${p.address.split('.').pop().replace('jing-', '').replace('-stx-spread', '')} ${p.condition} ${p.amount}${p.type === 'ft-postcondition' ? ' sats' : ' ustx'}`).join(', ')}`;
+/** the deny set must name the user (eq total), both assets of every leg rung, and the market */
+function denyShapeOk(side, call, user, total, bpsList) {
+  const pcs = call.postConditions;
+  const inFt = side === 'buy';
+  const isIn = (p) => (p.type === 'ft-postcondition') === inFt;
+  const userPcs = pcs.filter((p) => p.address === user);
+  const okUser = total == null ? userPcs.length === 0 : userPcs.length === 1 && userPcs[0].condition === 'eq' && BigInt(userPcs[0].amount) === total && isIn(userPcs[0]);
+  const okRungs = bpsList.every((b) => {
+    const mine = pcs.filter((p) => p.address === L.rungId(side, b));
+    return mine.length === 2 && mine.every((p) => p.condition === 'lte') && mine.some(isIn) && mine.some((p) => !isIn(p));
+  });
+  const m = pcs.filter((p) => p.address === MARKET);
+  return okUser && okRungs && m.length === 1 && m[0].condition === 'lte' && isIn(m[0]) && pcs.length === (total == null ? 0 : 1) + 2 * bpsList.length + 1;
+}
+
+async function depositRound(side, k, state, opts = {}) {
+  const preset = opts.preset ?? PRESETS[k], user = PLAN[side].users[k], total = opts.total ?? PLAN[side].totals[k];
+  const mode = opts.mode ?? MODE[k];
+  const label = `${SIDE_LABEL[side]} / ${preset} / ${state} / ${mode}${opts.tag ? ` / ${opts.tag}` : ''}`;
   console.log(`\n=== ${label}: ${total} ===`);
   const [mins] = await evalMany([[MARKET, '(get-min-deposits)']]);
   const marketMin = side === 'buy' ? mins['min-token-x'] : mins['min-token-y'];
@@ -189,24 +223,34 @@ async function depositRound(side, k) {
   const split = L.splitLadder(total, preset, rmins);
   const kept = split.amounts.map((a, i) => (a > 0n ? i : null)).filter((i) => i != null);
   check(`${label}: split adds up to the total, every kept share >= its rung minimum`, split.total === total && split.amounts.reduce((a, b) => a + b, 0n) === total && kept.every((i) => split.amounts[i] >= rmins[i]), show({ amounts: split.amounts, mins: rmins, dropped: split.dropped }));
-  if (preset === 'near' && k === 0) check(`${label}: far rungs under the market minimum are dropped and redistributed`, split.dropped.length > 0 && split.dropped.every((i) => i >= 5), show(split.dropped.map((i) => L.LADDER_BPS[i])));
+  if (preset === 'near' && state === 'one-step' && side === 'buy') check(`${label}: far rungs under the market minimum are dropped and redistributed`, split.dropped.length > 0 && split.dropped.every((i) => i >= 5), show(split.dropped.map((i) => L.LADDER_BPS[i])));
   if (preset === 'near') check(`${label}: weighted toward the tight rungs`, kept.every((i, j) => j === 0 || split.amounts[kept[j - 1]] >= split.amounts[i]), show(split.amounts));
   if (preset === 'wide') check(`${label}: weighted toward the far rungs`, kept.every((i, j) => j === 0 || split.amounts[kept[j - 1]] <= split.amounts[i]), show(split.amounts));
-  if (preset === 'even') check(`${label}: equal split (dust to the tightest)`, kept.length === 10 && kept.slice(1).every((i) => split.amounts[i] === total / 10n), show(split.amounts));
 
-  const call = L.ladderDepositCall(side, user, split.amounts);
-  check(`${label}: page builds ${call.contractName}.${call.functionName} (total, ${kept.length} legs), PC user sends exactly ${total}`,
-    call.contractName === 'jing-ladder-dispatch' && call.functionName === (side === 'buy' ? 'deposit-buy' : 'deposit-sell') && call.postConditions.length === 1 && BigInt(call.postConditions[0].amount) === total && call.postConditions[0].condition === 'eq',
-    `${cvToString(local(call.functionArgs)[0])} ${cvToString(local(call.functionArgs)[1]).slice(0, 300)}`);
+  const bpsList = usedBps(split.amounts);
+  const call = L.ladderDepositCall(side, user, split.amounts, await pcFor(mode, side, bpsList));
+  const shapeOk = mode === 'originator'
+    ? call.postConditions.length === 1 && call.postConditions[0].address === user && call.postConditions[0].condition === 'eq' && BigInt(call.postConditions[0].amount) === total
+    : denyShapeOk(side, call, user, total, bpsList);
+  check(`${label}: page builds ${call.functionName} (${kept.length} legs), ${mode} set`, call.contractName === 'jing-ladder-dispatch' && call.functionName === (side === 'buy' ? 'deposit-buy' : 'deposit-sell') && call.postConditionMode === mode && shapeOk, pcSummary(call).slice(0, 600));
 
-  if (k === 0) {
-    const bad = { ...call.postConditions[0], amount: (total - 1n).toString() };
-    const t = await sendCall(user, call, [bad]);
-    check(`${label}: a post-condition of total - 1 aborts (nothing moves)`, t.pcAborted, show({ res: t.res, pc: t.pcAborted }));
+  if (opts.tamperUser) {
+    const pcs = call.postConditions.map((p) => p.address === user ? { ...p, amount: (total - 1n).toString() } : p);
+    const t = await sendCall(user, call, pcs);
+    check(`${label}: user condition total - 1 aborts (${mode})`, t.pcAborted, show({ res: t.res, pc: t.pcAborted }));
   }
+  if (opts.tamperRung) {
+    // drop the input-asset bound of the first leg rung: its push to the market is now unlisted
+    const id = L.rungId(side, bpsList[0]);
+    const inFt = side === 'buy';
+    const pcs = call.postConditions.filter((p) => !(p.address === id && (p.type === 'ft-postcondition') === inFt));
+    const t = await sendCall(user, call, pcs);
+    check(`${label}: deny set without ${id.split('.')[1]}'s input bound aborts (stxer enforces deny on contract principals)`, t.pcAborted, show({ res: t.res, pc: t.pcAborted }));
+  }
+  const posBefore = await positions(side, user);
   const w0 = await balances(user);
   const t = await sendCall(user, call);
-  check(`${label}: ONE dispatch tx ok, ${kept.length} rungs`, !t.pcAborted && !t.vm && t.res?.ok?.rungs === BigInt(kept.length) && t.res.ok.amount === total, show(t.res).slice(0, 400));
+  check(`${label}: ONE dispatch tx ok under its ${mode} post-conditions, ${kept.length} rungs`, !t.pcAborted && !t.vm && t.res?.ok?.rungs === BigInt(kept.length) && t.res.ok.amount === total, show({ pc: t.pcAborted, vm: t.vm, res: t.res }).slice(0, 400));
   const w1 = await balances(user);
   const paid = side === 'buy' ? w0.sbtc - w1.sbtc : w0.stx - w1.stx;
   check(`${label}: user paid exactly the total`, paid === total, `${paid}`);
@@ -216,39 +260,56 @@ async function depositRound(side, k) {
   const s = L.marketSideOf(side);
   check(`${label}: a rung-deposit print per leg, member = user, amount = leg`, ladderPrints.length === kept.length && ladderPrints.every((p, j) => p.member === user && p.amount === split.amounts[kept[j]] && p.price === BigInt(L.LADDER_BPS[kept[j]])), show(ladderPrints.map((p) => [p.price, p.amount, p.pushed, p.held])));
   const live = core.filter((p) => p.event === `deposit-${s}`).length, pend = core.filter((p) => p.event === `pending-deposit-${s}`).length;
-  console.log(`  pushes: ${live} live, ${pend} pending, ${ladderPrints.filter((p) => !p.pushed).length} held in the rung`);
+  const held = ladderPrints.filter((p) => !p.pushed).length;
+  console.log(`  pushes: ${live} live, ${pend} pending, ${held} held in the rung`);
 
   const after = await rungBook(side);
   const pos = await positions(side, user);
+  const val = (p) => (side === 'buy' ? p.sbtc : p.stx);
   for (const i of kept) {
     const a = split.amounts[i], b = before[i], r = after[i];
     const grew = (r.live + r.parked + r.pending + r.held) - (b.live + b.parked + b.pending + b.held);
-    const val = side === 'buy' ? pos[i].sbtc : pos[i].stx;
-    check(`${label}: rung ${L.LADDER_BPS[i]} bps holds the leg ${a} (market + held), position worth ${val}`, grew >= a && pos[i].shares > 0n && val <= a && a - val <= 1n, show({ grew, live: r.live, pending: r.pending, held: r.held, pos: pos[i] }));
+    const added = val(pos[i]) - val(posBefore[i]);
+    check(`${label}: rung ${L.LADDER_BPS[i]} bps took the leg ${a} (market + held), position value +${added}`, grew >= a && pos[i].shares > 0n && added <= a && a - added <= 1n, show({ grew, live: r.live, pending: r.pending, held: r.held, pos: pos[i] }));
   }
-  for (const i of split.dropped) check(`${label}: dropped rung ${L.LADDER_BPS[i]} bps untouched, no position`, pos[i].shares === 0n && after[i].live === before[i].live, show(pos[i]));
-  return { t, live, pend };
+  for (const i of split.dropped) check(`${label}: dropped rung ${L.LADDER_BPS[i]} bps untouched`, val(pos[i]) === val(posBefore[i]) && after[i].live === before[i].live, show(pos[i]));
+  return { t, live, pend, held, kept };
 }
 
-async function withdrawSide(side) {
-  {
-    for (let k = 0; k < 3; k++) {
-      const user = PLAN[side].users[k], label = `${side === 'buy' ? 'Sell sBTC' : 'Sell STX'} / ${PRESETS[k]}`;
-      const pos = await positions(side, user);
-      const idx = heldIdx(pos);
-      if (!idx.length) { console.log(`  ${label}: nothing left to withdraw`); continue; }
-      const want = pos.reduce((a, p) => a + (side === 'buy' ? p.sbtc : p.stx), 0n);
-      const call = L.ladderWithdrawAllCall(side, idx, await freshUpdate());
-      const w0 = await balances(user);
-      const t = await sendCall(user, call);
-      const w1 = await balances(user);
-      const got = side === 'buy' ? w1.sbtc - w0.sbtc : w1.stx - w0.stx;
-      check(`${label}: Withdraw all = ${call.functionName} over ${idx.length} rungs ok, wallet = receipt, input back = resting value ${want}`,
-        t.res?.ok?.withdrawn === BigInt(idx.length) && w1.stx - w0.stx === t.res.ok.stx && w1.sbtc - w0.sbtc === t.res.ok.sbtc && got >= want && got - want <= BigInt(idx.length),
-        `got ${got} ${show(t.res?.ok ?? t.res).slice(0, 300)}`);
-      const left = await positions(side, user);
-      check(`${label}: no position left on any rung`, left.every((p) => !has(p)), show(left.filter(has)));
-    }
+async function claimOrWithdraw(kind, side, k, opts = {}) {
+  const user = opts.user ?? PLAN[side].users[k], mode = opts.mode ?? MODE[k];
+  const label = `${SIDE_LABEL[side]} / ${opts.tag ?? PRESETS[k]} / ${kind} / ${mode}`;
+  const pos = await positions(side, user);
+  const idx = heldIdx(pos);
+  if (!idx.length) { console.log(`  ${label}: nothing held`); return null; }
+  const pc = await pcFor(mode, side, idx);
+  const call = kind === 'claim' ? L.ladderClaimAllCall(side, idx, pc) : L.ladderWithdrawAllCall(side, idx, opts.noUpdate ? null : await freshUpdate(), pc);
+  const shapeOk = mode === 'originator' ? call.postConditions.length === 0 : denyShapeOk(side, call, user, null, idx);
+  check(`${label}: page builds ${call.functionName} over ${idx.length} rungs, ${mode} set`, call.postConditionMode === mode && shapeOk, pcSummary(call).slice(0, 600));
+  if (opts.tamperDrop) {
+    const pcs = call.postConditions.filter(opts.tamperDrop.keep);
+    const t = await sendCall(user, call, pcs);
+    check(`${label}: deny set without ${opts.tamperDrop.what} aborts`, t.pcAborted, show({ res: t.res, pc: t.pcAborted }));
+  }
+  const want = pos.reduce((a, p) => a + (side === 'buy' ? p.sbtc : p.stx), 0n);
+  const w0 = await balances(user);
+  const t = await sendCall(user, call);
+  const w1 = await balances(user);
+  return { t, w0, w1, idx, want, label, call };
+}
+
+async function withdrawSide(side, tamperK = -1) {
+  for (let k = 0; k < 3; k++) {
+    const opts = k === tamperK ? { tamperDrop: { what: 'the market bound', keep: (p) => p.address !== MARKET } } : {};
+    const r = await claimOrWithdraw('withdraw', side, k, opts);
+    if (!r) continue;
+    const { t, w0, w1, idx, want, label } = r;
+    const got = side === 'buy' ? w1.sbtc - w0.sbtc : w1.stx - w0.stx;
+    check(`${label}: ok under its post-conditions, wallet = receipt, input back = resting value ${want}`,
+      !t.pcAborted && t.res?.ok?.withdrawn === BigInt(idx.length) && w1.stx - w0.stx === t.res.ok.stx && w1.sbtc - w0.sbtc === t.res.ok.sbtc && got >= want && got - want <= BigInt(idx.length),
+      `got ${got} ${show({ pc: t.pcAborted, res: t.res?.ok ?? t.res }).slice(0, 300)}`);
+    const left = await positions(side, PLAN[side].users[k]);
+    check(`${label}: no position left on any rung`, left.every((p) => !has(p)), show(left.filter(has)));
   }
 }
 
@@ -260,7 +321,7 @@ async function main() {
 
   console.log('\n=== live state ===');
   const [sx, sy, mins] = await evalMany([[MARKET, '(get-seated-x)'], [MARKET, '(get-seated-y)'], [MARKET, '(get-min-deposits)']]);
-  check('market seated-x = the page\'s 10 Sell sBTC rungs (jing-buy-stx-spread-0..90), in order', show(sx) === show(L.ladderRungIds('buy')), show(sx));
+  check('market seated-x = the page\'s 10 Buy STX rungs (jing-buy-stx-spread-0..90), in order', show(sx) === show(L.ladderRungIds('buy')), show(sx));
   check('market seated-y = the page\'s 10 Sell STX rungs (jing-sell-stx-spread-0..90), in order', show(sy) === show(L.ladderRungIds('sell')), show(sy));
   check('market minimums 1000 sats / 1 STX', mins['min-token-x'] === 1000n && mins['min-token-y'] === 1_000_000n, show(mins));
   const reg = await evalMany([...L.ladderRungIds('buy').map((r) => [LADDER, `(is-band-x '${r})`]), ...L.ladderRungIds('sell').map((r) => [LADDER, `(is-band-y '${r})`])]);
@@ -268,86 +329,95 @@ async function main() {
 
   console.log('\n=== funding ===');
   for (const u of [...PLAN.buy.users, TAKER_X]) {
-    const t = await send(WHALE.x, SBTC, 'transfer', [uintCV(u === TAKER_X ? 30_000n : 100_000n), PR(WHALE.x), PR(u), noneCV()]);
+    const t = await send(WHALE.x, SBTC, 'transfer', [uintCV(u === TAKER_X ? 30_000n : 250_000n), PR(WHALE.x), PR(u), noneCV()]);
     check(`fund ${u.slice(0, 8)} with sBTC`, t.res?.ok === true, show(t.res));
   }
   for (const u of [...PLAN.sell.users, TAKER_Y]) {
-    const raw = await makeUnsignedSTXTokenTransfer({ recipient: u, amount: 150_000_000n, nonce: Number(await retry(() => getNonce(sid, WHALE.y))), network: 'mainnet', publicKey: '', fee: 0 });
+    const raw = await makeUnsignedSTXTokenTransfer({ recipient: u, amount: u === TAKER_Y ? 150_000_000n : 300_000_000n, nonce: Number(await retry(() => getNonce(sid, WHALE.y))), network: 'mainnet', publicKey: '', fee: 0 });
     setSender(raw, WHALE.y);
     const o = await retry(() => submitSimulationSteps(sid, { steps: [{ Transaction: raw.serialize() }] }));
-    check(`fund ${u.slice(0, 8)} with 150 STX`, cvToString(deserializeCV(o.steps[0].Transaction.Ok.result)) === '(ok true)');
+    check(`fund ${u.slice(0, 8)} with STX`, cvToString(deserializeCV(o.steps[0].Transaction.Ok.result)) === '(ok true)');
   }
 
-  // 1. Sell sBTC: the bid side is empty, every push rests at once
+  // 1. Buy STX, one-step: the bid side is empty, every push rests at once
   for (let k = 0; k < 3; k++) {
-    const r = await depositRound('buy', k);
-    check(`Sell sBTC / ${PRESETS[k]}: every leg live on the book at once (no pending)`, r.pend === 0 && r.live > 0, `${r.live} live`);
+    const r = await depositRound('buy', k, 'one-step', { tamperUser: k <= 1, tamperRung: k === 1 });
+    check(`Buy STX / ${PRESETS[k]} / one-step: every leg live on the book at once (no pending)`, r.pend === 0 && r.live > 0, `${r.live} live`);
   }
-  // 2. Sell STX: the ask side rests, each push goes pending for the keeper
+  // 2. Sell STX, pending: the ask side rests, each push goes pending
   for (let k = 0; k < 3; k++) {
-    const r = await depositRound('sell', k);
-    check(`Sell STX / ${PRESETS[k]}: rung pushes go PENDING (the ask side rests)`, r.pend > 0, `${r.pend} pending, ${r.live} live`);
+    const r = await depositRound('sell', k, 'pending', { tamperUser: k === 0, tamperRung: k === 2 });
+    check(`Sell STX / ${PRESETS[k]} / pending: rung pushes go PENDING (the ask side rests)`, r.pend > 0, `${r.pend} pending, ${r.live} live`);
+    if (k === 1) {
+      // the market already holds these rungs' escrows: a second push is refused, the leg waits in the rung
+      const r2 = await depositRound('sell', 1, 'escrow-pending', { mode: 'deny', total: 20_000_000n, preset: 'even', tag: 'second deposit' });
+      check('Sell STX / escrow-pending: rungs with a pending escrow hold the new leg (no push, no market transfer), deny set holds', r2.held > 0 && r2.pend === 0, `${r2.held} held, ${r2.pend} pending, ${r2.live} live`);
+    }
     await settleRound('sell', `Sell STX / ${PRESETS[k]}`);
   }
+  // 3. Buy STX, pending: the bids rest now
+  for (let k = 0; k < 3; k++) {
+    const r = await depositRound('buy', k, 'pending', { tamperUser: k === 0 });
+    check(`Buy STX / ${PRESETS[k]} / pending: rung pushes go PENDING (the bid side rests)`, r.pend > 0, `${r.pend} pending, ${r.live} live, ${r.held} held`);
+    await settleRound('buy', `Buy STX / ${PRESETS[k]}`);
+  }
 
-  // 3. takers, so the rungs earn proceeds
+  // 4. takers, so the rungs earn proceeds
   console.log('\n=== takers ===');
   const hex = await freshUpdate();
-  const MID = (LZ.px * 10n ** 8n) / LZ.py; // uSTX per sat x 1e10 (the market unit)
+  const MID = (LZ.px * 10n ** 8n) / LZ.py;
   const upd = bufferCV(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
   const T = [contractPrincipalCV(...SBTC.split('.')), stringAsciiCV('sbtc-token'), contractPrincipalCV(...WSTX.split('.')), stringAsciiCV('wstx')];
   const ty = await send(TAKER_Y, MARKET, 'swap', [uintCV(30_000_000n), uintCV(MID * 10_100n / 10_000n), upd, ...T, boolCV(false)]);
-  check('STX taker swaps 30 STX through the Sell sBTC rungs', ty.res?.ok != null, show(ty.res));
+  check('STX taker swaps 30 STX through the Buy STX rungs', ty.res?.ok != null, show(ty.res));
   const tx = await send(TAKER_X, MARKET, 'swap', [uintCV(15_000n), uintCV(MID * 9_900n / 10_000n), upd, ...T, boolCV(true)]);
   check('sBTC taker swaps 15,000 sats through the Sell STX rungs', tx.res?.ok != null, show(tx.res));
 
-  // 4. Claim all
+  // 5. Claim all
   const proceeds = { buy: 0n, sell: 0n };
   for (const side of ['buy', 'sell']) {
     for (let k = 0; k < 3; k++) {
-      const user = PLAN[side].users[k], label = `${side === 'buy' ? 'Sell sBTC' : 'Sell STX'} / ${PRESETS[k]}`;
-      const idx = heldIdx(await positions(side, user));
-      const call = L.ladderClaimAllCall(side, idx);
-      const w0 = await balances(user);
-      const t = await sendCall(user, call);
-      const w1 = await balances(user);
-      check(`${label}: Claim all = ${call.functionName} over ${idx.length} rungs, wallet moves by exactly the receipt`,
-        t.res?.ok?.claimed === BigInt(idx.length) && w1.stx - w0.stx === t.res.ok.stx && w1.sbtc - w0.sbtc === t.res.ok.sbtc, show(t.res?.ok ?? t.res).slice(0, 300));
+      const payoutFt = side === 'sell';
+      const opts = k === 1 ? { tamperDrop: { what: 'the rungs\' payout bounds', keep: (p) => (p.type === 'ft-postcondition') !== payoutFt || p.address === MARKET } } : {};
+      const r = await claimOrWithdraw('claim', side, k, opts);
+      const { t, w0, w1, idx, label } = r;
+      check(`${label}: ok under its post-conditions, wallet moves by exactly the receipt`,
+        !t.pcAborted && t.res?.ok?.claimed === BigInt(idx.length) && w1.stx - w0.stx === t.res.ok.stx && w1.sbtc - w0.sbtc === t.res.ok.sbtc, show({ pc: t.pcAborted, res: t.res?.ok ?? t.res }).slice(0, 300));
       proceeds[side] += side === 'buy' ? t.res.ok.stx : t.res.ok.sbtc;
-      const idx2 = heldIdx(await positions(side, user));
-      if (idx2.length) {
-        const again = await sendCall(user, L.ladderClaimAllCall(side, idx2));
-        check(`${label}: a second Claim all pays 0`, again.res?.ok?.stx === 0n && again.res.ok.sbtc === 0n, show(again.res?.ok ?? again.res).slice(0, 200));
-      }
+      if (k === 1) check(`${label}: proceeds > 0 (so the tamper above really dropped a moving transfer)`, (side === 'buy' ? t.res.ok.stx : t.res.ok.sbtc) > 0n, show(t.res.ok));
+      const again = await claimOrWithdraw('claim', side, k, { mode: 'deny', tag: `${PRESETS[k]} again` });
+      if (again) check(`${again.label}: a second Claim all pays 0`, !again.t.pcAborted && again.t.res?.ok?.stx === 0n && again.t.res.ok.sbtc === 0n, show(again.t.res?.ok ?? again.t.res).slice(0, 200));
     }
   }
-  check('Claim all paid proceeds on both sides (STX to Sell sBTC makers, sBTC to Sell STX makers)', proceeds.buy > 0n && proceeds.sell > 0n, show(proceeds));
+  check('Claim all paid proceeds on both sides', proceeds.buy > 0n && proceeds.sell > 0n, show(proceeds));
 
-  // 5. Withdraw all: the Sell STX side first, so 6. finds its rungs empty
-  // while the Sell sBTC side still rests (a new push then goes pending)
-  await withdrawSide('sell');
+  // 6. Withdraw all Sell STX
+  await withdrawSide('sell', 1);
 
-  // 6. Withdraw all with every rung pending
+  // 7. Withdraw all with every rung pending (deny)
   console.log('\n=== Withdraw all while pending ===');
   const user = PLAN.sell.users[1];
-  const [mm] = await evalMany([[MARKET, '(get-min-deposits)']]);
-  const book = await rungBook('sell');
-  const split = L.splitLadder(10_000_000n, 'even', book.map((r) => L.rungMinimum('sell', mm['min-token-y'], r.state.resting, r.held)));
-  const dep = await sendCall(user, L.ladderDepositCall('sell', user, split.amounts));
+  const dep = await depositRound('sell', 1, 'pending', { mode: 'deny', total: 10_000_000n, preset: 'even', tag: 'for pending exit' });
   const pendNow = (await rungBook('sell')).filter((r) => r.pending > 0n).length;
-  check('Sell STX / even 10 STX again: ok, rungs pending', dep.res?.ok != null && pendNow > 0, `${pendNow} pending`);
-  const idx = heldIdx(await positions('sell', user));
-  const noUpd = await sendCall(user, L.ladderWithdrawAllCall('sell', idx, null));
-  check('Withdraw all with no price update refuses (u7012: the rung must settle its escrow first)', noUpd.res?.err === 7012n, show(noUpd.res));
-  const w0 = await balances(user);
-  const ok = await sendCall(user, L.ladderWithdrawAllCall('sell', idx, await freshUpdate()));
-  const w1 = await balances(user);
-  check('Withdraw all with the page\'s Lazer update: escrow settled, full deposit back', ok.res?.ok?.withdrawn === BigInt(idx.length) && w1.stx - w0.stx === 10_000_000n, `${w1.stx - w0.stx} ${show(ok.res?.ok ?? ok.res).slice(0, 300)}`);
+  check('Sell STX 10 STX again: rungs pending', dep.pend > 0 && pendNow > 0, `${pendNow} pending`);
+  const noUpd = await claimOrWithdraw('withdraw', 'sell', 1, { mode: 'deny', noUpdate: true, tag: 'pending, no update' });
+  check('Withdraw all with no price update refuses (u7012)', noUpd.t.res?.err === 7012n, show(noUpd.t.res));
+  const ok = await claimOrWithdraw('withdraw', 'sell', 1, { mode: 'deny', tag: 'pending, with update', tamperDrop: { what: 'the market bound (escrow settle / refund leg)', keep: (p) => p.address !== MARKET } });
+  check('Withdraw all (deny) with the page\'s Lazer update: escrow settled, full deposit back', !ok.t.pcAborted && ok.t.res?.ok?.withdrawn === BigInt(ok.idx.length) && ok.w1.stx - ok.w0.stx === 10_000_000n, `${ok.w1.stx - ok.w0.stx} ${show({ pc: ok.t.pcAborted, res: ok.t.res?.ok ?? ok.t.res }).slice(0, 300)}`);
   const left = await positions('sell', user);
   check('no position left', left.every((p) => !has(p)), show(left.filter(has)));
 
+  // 8. Withdraw all Buy STX
+  await withdrawSide('buy', 2);
 
-  await withdrawSide('buy');
+  // 9. Sell STX one-step: the bid side is empty again
+  const [xdeps] = await evalMany([[MARKET, `(get-token-x-depositors (get-current-cycle))`]]);
+  console.log(`  x depositors now: ${xdeps.length}`);
+  for (let k = 0; k < 3; k++) {
+    const r = await depositRound('sell', k, 'one-step', {});
+    check(`Sell STX / ${PRESETS[k]} / one-step: every leg live on the book at once (no pending)`, r.pend === 0 && r.live > 0, `${r.live} live, ${r.pend} pending, ${r.held} held`);
+  }
+  await withdrawSide('sell');
 
   const states = await evalMany([...L.ladderRungIds('buy'), ...L.ladderRungIds('sell')].map((r) => [r, '(get-state)']));
   check('every rung has 0 members after everyone exits', states.every((s) => s.members === 0n), show(states.map((s) => s.members)));
