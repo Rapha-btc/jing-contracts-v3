@@ -8,7 +8,7 @@ jing-ladder-v1, 20 rungs). The Juice findings are in juicestx
 |---|---|---|---|---|
 | 1 | Rare Io | `settle-token-{x,y}-readmit` reverts u1010 instead of a clean refusal when the list is 50/50 with stale seats | Does not hold: the state cannot be reached | Rejected, no change |
 | 2 | Patient Reed | `settle-token-{x,y}-deposit` checks crossing on the pending top-up's limit, but the newer stored limit is the one kept | Holds, Low | Fixed in source, live market changes on next deploy |
-| 3 | Violet Reed | Exit-path cancel in the rungs never sets `escrow-cancelled-at`, so the 24h push cooldown is open | Holds, Low-Medium (griefing) | Fixed in source, live rungs change on redeploy |
+| 3 | Violet Reed | Exit-path cancel in the rungs never sets `escrow-cancelled-at`, so the 24h push cooldown is open | Holds, Low (griefing) | Accepted, not fixed (fix reverted) |
 | 4 | Inner Ozma | F-3 `log-jing-swap-reconciled` sets own equity; F-1 `log-withdraw` skips pause and clamps; F-8 `accept-owner` has no timelock | Does not hold: unreachable or stats only; F-8 by design | Rejected, no change |
 
 ## 1. Rare Io: readmit reverts u1010 at 50/50 with stale seats
@@ -155,3 +155,10 @@ records stats and events.
   `TIMELOCK_BURN_BLOCKS` (L11) is used only by `pause`/`unpause`; no constant
   promises an owner timelock. Ownership is a two-step propose/accept that
   only the current owner can start.
+
+**Decision (2026-10-15): not fixed, fix reverted.** The 1-line fix armed the
+cooldown on every exit-path cancel, so after a normal last-member exit new
+deposits stayed held for 24h (stxer rung harness, check 305). The issue
+itself is minor: the keeper settles pending escrows, and the FE attaches a
+Lazer update on withdraw, so a re-armed pending only costs an update. The
+new rungs keep the live behavior.
