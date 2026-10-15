@@ -86,6 +86,21 @@ re-run plans nothing, and a 1,000-sat deposit into buy-0 and a 1 STX deposit
 into sell-0 work: https://stxer.xyz/simulations/mainnet/a5b7c3894459a4b82d63c03128468ce8
 (harness `simulations/verify-init-jing-rungs-route.js`).
 
+**Ladder tab on jingswap.com/swap (2026-10-14).** One `jing-ladder-dispatch`
+`deposit-buy` / `deposit-sell` tx spreads an amount across the 10 rungs of a side
+(presets Even, Near the mid, Wide); Position offers Withdraw all / Claim all.
+Post-conditions, never allow mode: Leather and Xverse sign in originator mode
+(the user sends exactly the total on a deposit, nothing on withdraw / claim);
+other wallets sign in deny mode with the same user condition plus `willSendLte`
+bounds on each rung and the market, read just before signing. Proven on a stxer
+mainnet fork against the live rungs, 380/380: Buy and Sell x 3 presets, one-step
+and pending, a second deposit over pending escrows, Claim all, Withdraw all
+(also with a pending escrow), and every tampered post-condition aborting with
+`post_condition_aborted` while the contract itself returned `(ok ...)`:
+https://stxer.xyz/simulations/mainnet/8684ab7d5fdb496cd1b02b27951518df
+(harness `simulations/verify-ladder-tab-dispatch.js`; earlier allow-mode run
+178/178 `4fa7b8d6671b606a4d5c1a7d302eae4d`).
+
 The router binds the market as a literal and needs no init. Sequence
 reference: `simulations/verify-v6-3-dispatch.js`.
 
