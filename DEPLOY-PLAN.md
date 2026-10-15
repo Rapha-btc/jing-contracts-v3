@@ -71,9 +71,20 @@ Notes:
 | after 3 | `markets-sbtc-stx-jing-v6-3.sync-seat-count()` reads ladder max u10 | anyone (deployer) | `init-jingswap-market {action:"sync-seats", set:"v6-3"}` |
 | after 3 | `jing-core-v6.set-verified-contract(.markets-sbtc-stx-jing-v6-3)`. Wait for confirm | core owner | `{action:"verify-market", set:"v6-3"}` |
 | after verify | `markets-sbtc-stx-jing-v6-3.initialize(.markets-sbtc-stx-jing-v6-3, sbtc-token, token-stx-v-1-2, u1000, u1000000, u1, u45)`, which also calls `jing-core-v6.register` | market operator | `{action:"init-market", set:"v6-3"}` |
-| after the first rung of each side | `jing-ladder-v1.set-canonical("buy-band", .jing-buy-stx-spread-0)` and `set-canonical("sel-band", .jing-sell-stx-spread-0)`. **Required before any rung `initialize`** (else `ERR_NOT_VERIFIED`) | ladder owner | none (manual) |
-| after each rung | `<rung>.initialize(u<bps>, true)`. Registers, seats in the ladder, calls `market.sync-seat` | ladder owner (`tx-sender`) | none (manual) |
+| after the first rung of each side | `jing-ladder-v1.set-canonical("buy-band", .jing-buy-stx-spread-0)` and `set-canonical("sel-band", .jing-sell-stx-spread-0)`. **Required before any rung `initialize`** (else `ERR_NOT_VERIFIED`) | ladder owner | `POST /api/bot/init-jing-rungs {side}` (sends it if missing) |
+| after each rung | `<rung>.initialize(u<bps>, true)`. Registers, seats in the ladder, calls `market.sync-seat` | ladder owner (`tx-sender`) | `POST /api/bot/init-jing-rungs {side:"buy"|"sell", dryRun?}` |
 | optional | `jing-ladder-v1.set-max-band-per-side` only to change u10 | ladder owner | none |
+
+**Rung init route (2026-10-14).** faktory-dao `POST /api/bot/init-jing-rungs`
+(CRON_SECRET) does one side per call: `set-canonical` if that side has none,
+then `initialize(u<bps>, true)` for bps 0..90, skipping steps already done or
+pending. `dryRun: true` returns the plan and the on-chain state without
+broadcasting. Proven on a stxer mainnet fork against the live deployed rungs
+(nothing redeployed), 52/52: all 20 rungs initialized with the right spread and
+seated, ladder 10/10 per side, market seated-x / seated-y list the 10 rungs, a
+re-run plans nothing, and a 1,000-sat deposit into buy-0 and a 1 STX deposit
+into sell-0 work: https://stxer.xyz/simulations/mainnet/1ec63f731a4488c3a9a2977c07b163f4
+(harness `simulations/verify-init-jing-rungs-route.js`).
 
 The router binds the market as a literal and needs no init. Sequence
 reference: `simulations/verify-v6-3-dispatch.js`.
