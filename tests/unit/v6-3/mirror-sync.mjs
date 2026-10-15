@@ -1,10 +1,10 @@
-// The deployed market is the de-indented markets-sbtc-stx-jing-v6-3.clar.
+// The deployed market is the de-indented markets-sbtc-stx-jing-v6-3.clar
+// (and v6-4, the same market on jing-ladder-v2).
 // Its -formatted copy must be the same program: same token
 // stream once comments, whitespace and tuple trailing commas are ignored.
 // Prints the first divergence per copy (with line numbers) and exits 1 if any.
 //   node tests/unit/v6-3/mirror-sync.mjs
 import fs from 'node:fs';
-const base = 'contracts/markets-sbtc-stx-jing-v6-3';
 function tokens(path) {
   const s = fs.readFileSync(path, 'utf8'), out = [];
   let i = 0, line = 1;
@@ -22,17 +22,19 @@ function tokens(path) {
   }
   return out;
 }
-const reference = tokens(`${base}.clar`);
 let failed = false;
+for (const base of ['contracts/markets-sbtc-stx-jing-v6-3', 'contracts/markets-sbtc-stx-jing-v6-4']) {
+const reference = tokens(`${base}.clar`);
 for (const copy of ['-formatted']) {
   const other = tokens(`${base}${copy}.clar`);
   const n = Math.min(reference.length, other.length);
   let k = 0; while (k < n && reference[k][0] === other[k][0]) k++;
-  if (k === n && reference.length === other.length) { console.log(`${copy}: in sync (${reference.length} tokens)`); continue; }
+  if (k === n && reference.length === other.length) { console.log(`${base}${copy}: in sync (${reference.length} tokens)`); continue; }
   failed = true;
   const show = (t, at) => t.slice(at, at + 12).map(x => x[0]).join(' ');
-  console.log(`${copy}: DIVERGES at token ${k}: deploy copy line ${reference[k]?.[1]} vs ${copy} line ${other[k]?.[1]}`);
+  console.log(`${base}${copy}: DIVERGES at token ${k}: deploy copy line ${reference[k]?.[1]} vs ${copy} line ${other[k]?.[1]}`);
   console.log(`  deploy:  ${show(reference, k)}`);
   console.log(`  ${copy}: ${show(other, k)}`);
+}
 }
 process.exit(failed ? 1 : 0);
