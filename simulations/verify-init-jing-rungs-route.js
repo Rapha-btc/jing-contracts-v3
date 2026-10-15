@@ -121,18 +121,40 @@ async function main() {
   sid = await retry(() => b.run());
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}`);
 
+  // ---- plan both sides from the pre-broadcast state: the sell run is
+  // planned while the whole buy batch is still in the mempool ----
+  const plans = {};
   for (const side of ['buy', 'sell']) {
-    console.log(`\n=== ${side} side ===`);
     const band = P.ladderBandSide(side);
     const st = await readSideState(side);
     check(`${side}: all 10 rungs on chain at the fork tip, none initialized`, st.rungs.every((r) => r.deployed && !r.initialized), show(st.rungs.map((r) => [r.name, r.deployed, r.initialized])));
-    check(`${side}: ladder owner = deployer, canonical unset, 0/${st.maxBand} seats`, st.ladderOwner === DEP && st.canonical === null && st.bandCount === 0 && st.maxBand === 10, show(st));
-    const plan = P.planRungInit(side, st);
+    check(`${side}: ladder owner = deployer, canonical unset, 0/${st.maxBand} seats`, st.ladderOwner === DEP && st.canonical === null && st.bandCount === 0 && st.maxBand === 10, show({ ...st, rungs: undefined }));
+    plans[side] = P.planRungInit(side, st);
+  }
+  // the mempool as the Stacks API lists the pending buy batch (string-ascii
+  // repr is the quoted value)
+  const repr = (a) => a.type === 'ascii' ? `"${a.value}"` : a.type === 'uint' ? `u${a.value}` : a.type === 'principal' ? `'${a.value}` : String(a.value);
+  const buyMempool = new Set(plans.buy.calls.map((c) => P.mempoolKey({ contract_id: `${c.contractAddress}.${c.contractName}`, function_name: c.functionName, function_args: c.args.map((a) => ({ repr: repr(a) })) })));
+  plans.sell = P.dropPending(plans.sell, buyMempool);
+  check('sell planned while buy set-canonical("buy-band") is pending keeps its own set-canonical("sel-band")', plans.sell.calls.length === 11 && plans.sell.calls[0].functionName === 'set-canonical' && plans.sell.calls[0].args[0].value === 'sel-band', show(plans.sell.skipped));
+  const buyAgain = P.dropPending(plans.buy, buyMempool);
+  check('a buy re-run while the buy batch is pending drops all 11 (no double broadcast)', buyAgain.calls.length === 0 && buyAgain.skipped.length === 11, show(buyAgain.skipped));
+
+  for (const side of ['buy', 'sell']) {
+    console.log(`\n=== ${side} side ===`);
+    const band = P.ladderBandSide(side);
+    const plan = plans[side];
     const want = [`${P.JING_LADDER}.set-canonical(${band},${DEP}.${P.rungName(side, 0)})`, ...P.JING_RUNG_BPS.map((b) => `${P.rungName(side, b)}.initialize(${b},true)`)];
     const got = plan.calls.map((c) => `${c.contractName}.${c.functionName}(${c.args.map((a) => a.value).join(',')})`);
     check(`${side}: route plan = set-canonical + 10 initialize, no blockers`, plan.blockers.length === 0 && show(got) === show(want), got.join(' | '));
+  }
+  // back to back: buy batch then sell batch, sequential deployer nonces
+  await runRouteCalls('buy', plans.buy.calls);
+  await runRouteCalls('sell', plans.sell.calls);
 
-    await runRouteCalls(side, plan.calls);
+  for (const side of ['buy', 'sell']) {
+    console.log(`\n=== ${side} side: state after both batches ===`);
+    const band = P.ladderBandSide(side);
 
     const rungs = P.JING_RUNG_BPS.map((b) => `${DEP}.${P.rungName(side, b)}`);
     const reads = await evalMany([
