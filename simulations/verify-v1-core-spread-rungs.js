@@ -115,7 +115,7 @@ async function retry(fn) {
   for (let i = 0; ; i++) {
     try { return await fn(); } catch (e) {
       const m = String(e?.message ?? e);
-      if (i < 8 && /ECONNRESET|fetch failed|socket hang|timed? ?out|HTTP 50[0234]\b|\b(502|503|504|429)\b(?!,)|ETIMEDOUT|EAI_AGAIN/i.test(m)) { console.log(`  retry after: ${m.slice(0, 120)}`); await new Promise((r) => setTimeout(r, 5000 * (i + 1))); continue; }
+      if (i < 8 && /ECONNRESET|fetch failed|socket hang|timed? ?out|HTTP 50[0234]\b|\b(502|503|504|520|522|524|429)\b(?!,)|ETIMEDOUT|EAI_AGAIN/i.test(m)) { console.log(`  retry after: ${m.slice(0, 120)}`); await new Promise((r) => setTimeout(r, 5000 * (i + 1))); continue; }
       throw e;
     }
   }
@@ -365,7 +365,7 @@ class Model {
       m.pbal += gap; m.held = have + gap; return 'partial';
     }
     const refunded = msize(m);
-    m.pbal += refunded; m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; m.held = have + refunded; return 'cancel';
+    m.pbal += refunded; m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; m.held = have + refunded; m.cat = m.now; return 'cancel';
   }
   withdraw(who, amount, update, ev) {
     const m = this.m, r = this.r;
@@ -880,7 +880,8 @@ async function scenarioD() {
 }
 
 async function main() {
-  const b = SimulationBuilder.new({ stacksNodeAPI: NODE });
+  // pinned before the live jing-core-v6 (9210837): the v6-3 set deploys under its own names
+  const b = SimulationBuilder.new({ stacksNodeAPI: NODE }).useBlockHeight(Number(process.env.FORK_BLOCK ?? 9210830));
   b.withSender(DEP).addContractDeploy({ contract_name: 'jing-core-v6', source_code: src('jing-core-v6'), clarity_version: ClarityVersion.Clarity5 });
   sid = await retry(() => b.run());
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}`);

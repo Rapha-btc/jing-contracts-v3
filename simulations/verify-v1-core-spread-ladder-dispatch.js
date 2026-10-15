@@ -381,7 +381,7 @@ class Model {
       m.pbal += gap; m.held = have + gap; return 'partial';
     }
     const refunded = msize(m);
-    m.pbal += refunded; m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; m.held = have + refunded; return 'cancel';
+    m.pbal += refunded; m.live = 0n; m.parked = 0n; m.pend = 0n; m.pendAt = 0n; m.held = have + refunded; m.cat = m.now; return 'cancel';
   }
   claim(who, ev) {
     if (!this.m.pos.has(who)) throw new CErr(7006);
@@ -843,7 +843,8 @@ async function swapThrough(label, takerY, rungs, plan) {
 async function main() {
   const h0 = sha();
   console.log('sha256 at start:'); for (const [k, v] of Object.entries(h0)) console.log(`  ${v}  ${k}.clar`);
-  const b = SimulationBuilder.new({ stacksNodeAPI: NODE });
+  // pinned before the live jing-core-v6 (9210837): the v6-3 set deploys under its own names
+  const b = SimulationBuilder.new({ stacksNodeAPI: NODE }).useBlockHeight(Number(process.env.FORK_BLOCK ?? 9210830));
   b.withSender(DEP).addContractDeploy({ contract_name: 'jing-core-v6', source_code: src('jing-core-v6'), clarity_version: ClarityVersion.Clarity5 });
   sid = await retry(() => b.run());
   console.log(`View: https://stxer.xyz/simulations/mainnet/${sid}`);
