@@ -49,6 +49,7 @@
     "rv:router": "rv . swap-router-sbtc-stx-jing-v5 invariant --runs=500",
     "rv:router:props": "rv . swap-router-sbtc-stx-jing-v5 test --runs=500",
     "verify:creator-stx-stxer": "node simulations/verify-creator-stx-stxer.js",
+    "verify:settle-batch": "node simulations/verify-settle-batch.mjs",
     "test:v6-3": "vitest run --config vitest.v6-3.config.ts && node tests/unit/v6-3/coverage.mjs",
     "test:vault-v6-3": "vitest run --config vitest.vault-v6-3.config.ts",
     "test:v6-3:integration": "vitest run --config vitest.integration-v6-3.config.ts --reporter=default --reporter=json --outputFile=tests/unit/integration-v6-3/.build/results.json && node tests/unit/integration-v6-3/coverage.mjs",
