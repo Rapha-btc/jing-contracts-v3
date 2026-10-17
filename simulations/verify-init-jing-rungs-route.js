@@ -79,7 +79,7 @@ async function send(sender, cid, fn, args) {
 
 async function readSideState(side) {
   const band = P.ladderBandSide(side);
-  const names = P.JING_RUNG_BPS.map((b) => P.rungName(side, b));
+  const names = P.JING_RUNG_SETS.v1.bps.map((b) => P.rungName(side, b));
   const [owner, canonical, bandCount, maxBand, ...inits] = await evalMany([
     [LADDER, '(get-owner)'],
     [LADDER, `(get-canonical "${band}")`],
@@ -89,7 +89,7 @@ async function readSideState(side) {
   ]);
   return {
     ladderOwner: owner, canonical, bandCount: Number(bandCount), maxBand: Number(maxBand),
-    rungs: names.map((name, i) => ({ name, bps: P.JING_RUNG_BPS[i], deployed: typeof inits[i] === 'boolean', initialized: inits[i] === true })),
+    rungs: names.map((name, i) => ({ name, bps: P.JING_RUNG_SETS.v1.bps[i], deployed: typeof inits[i] === 'boolean', initialized: inits[i] === true })),
   };
 }
 
@@ -144,7 +144,7 @@ async function main() {
     console.log(`\n=== ${side} side ===`);
     const band = P.ladderBandSide(side);
     const plan = plans[side];
-    const want = [`${P.JING_LADDER}.set-canonical(${band},${DEP}.${P.rungName(side, 0)})`, ...P.JING_RUNG_BPS.map((b) => `${P.rungName(side, b)}.initialize(${b},true)`)];
+    const want = [`${P.JING_LADDER}.set-canonical(${band},${DEP}.${P.rungName(side, 0)})`, ...P.JING_RUNG_SETS.v1.bps.map((b) => `${P.rungName(side, b)}.initialize(${b},true)`)];
     const got = plan.calls.map((c) => `${c.contractName}.${c.functionName}(${c.args.map((a) => a.value).join(',')})`);
     check(`${side}: route plan = set-canonical + 10 initialize, no blockers`, plan.blockers.length === 0 && show(got) === show(want), got.join(' | '));
   }
@@ -156,13 +156,13 @@ async function main() {
     console.log(`\n=== ${side} side: state after both batches ===`);
     const band = P.ladderBandSide(side);
 
-    const rungs = P.JING_RUNG_BPS.map((b) => `${DEP}.${P.rungName(side, b)}`);
+    const rungs = P.JING_RUNG_SETS.v1.bps.map((b) => `${DEP}.${P.rungName(side, b)}`);
     const reads = await evalMany([
       [LADDER, `(get-canonical "${band}")`],
       [LADDER, `(get-band-count "${band}")`],
       ...rungs.flatMap((r) => [[r, '(var-get initialized)'], [r, '(get-spread-bps)']]),
       ...rungs.map((r) => [LADDER, `(get-registered '${r})`]),
-      ...P.JING_RUNG_BPS.map((b) => [LADDER, `(get-rung "${band}" u${b})`]),
+      ...P.JING_RUNG_SETS.v1.bps.map((b) => [LADDER, `(get-rung "${band}" u${b})`]),
       ...rungs.map((r) => [LADDER, side === 'buy' ? `(is-band-x '${r})` : `(is-band-y '${r})`]),
       [MARKET, side === 'buy' ? '(get-seated-x)' : '(get-seated-y)'],
     ]);
@@ -170,9 +170,9 @@ async function main() {
     check(`${side}: canonical ${band} = ${P.rungName(side, 0)}`, reads[i++] === `${DEP}.${P.rungName(side, 0)}`, show(reads[0]));
     check(`${side}: ladder band count = 10`, reads[i++] === 10n, show(reads[1]));
     const per = rungs.map((r, k) => ({ r, init: reads[i + 2 * k], bps: reads[i + 2 * k + 1] })); i += 2 * rungs.length;
-    check(`${side}: every rung initialized with its own spread-bps`, per.every((x, k) => x.init === true && x.bps === BigInt(P.JING_RUNG_BPS[k])), show(per.map((x) => [x.r.split('.')[1], x.init, x.bps])));
+    check(`${side}: every rung initialized with its own spread-bps`, per.every((x, k) => x.init === true && x.bps === BigInt(P.JING_RUNG_SETS.v1.bps[k])), show(per.map((x) => [x.r.split('.')[1], x.init, x.bps])));
     const reg = reads.slice(i, i + 10); i += 10;
-    check(`${side}: ladder registered {side ${band}, price bps} for each`, reg.every((x, k) => x?.side === band && x?.price === BigInt(P.JING_RUNG_BPS[k])), show(reg));
+    check(`${side}: ladder registered {side ${band}, price bps} for each`, reg.every((x, k) => x?.side === band && x?.price === BigInt(P.JING_RUNG_SETS.v1.bps[k])), show(reg));
     const seat = reads.slice(i, i + 10); i += 10;
     check(`${side}: ladder rung map (${band}, bps) -> rung, 10 seats`, seat.every((x, k) => x === rungs[k]), show(seat));
     const cur = reads.slice(i, i + 10); i += 10;

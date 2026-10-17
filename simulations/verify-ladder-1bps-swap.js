@@ -16,15 +16,26 @@
 //      0-bps ask, then the 1-bps ask
 //   F  every maker exits: new 1-bps members, old 0-bps members (both sides)
 // Run: node simulations/verify-ladder-1bps-swap.js   (no PYTH key needed)
+// ROUTE=1 npx tsx simulations/verify-ladder-1bps-swap.js: group C runs exactly
+// what faktory-dao POST /api/bot/init-jing-rungs {action:"replace",from:0,to:1}
+// broadcasts: state read on the fork, planned by the route's own planner
+// (backend/server/utils/jing-rungs-init.ts planRungReplace, imported; set
+// FAKTORY_DIR for a worktree), built as the route's txs (fee, deny mode, no
+// post-conditions, sequential deployer nonces, both calls in one batch). No
+// set-push-paused: the 0-bps rungs stay live for their members. The new
+// rungs are used as deployed on mainnet when the fork tip has them.
+import { homedir } from 'node:os';
 import {
   ClarityVersion, uintCV, bufferCV, stringAsciiCV, contractPrincipalCV, standardPrincipalCV,
   noneCV, someCV, boolCV, tupleCV, listCV, deserializeCV, cvToString, getAddressFromPrivateKey,
-  makeUnsignedSTXTokenTransfer, makeUnsignedContractDeploy, PostConditionMode,
+  makeUnsignedSTXTokenTransfer, makeUnsignedContractDeploy, makeUnsignedContractCall, PostConditionMode,
 } from '@stacks/transactions';
 import { SimulationBuilder, submitSimulationSteps, callContract, getNonce, setSender } from 'stxer';
 import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
 
 const NODE = 'http://77.42.3.101/stacks-api';
+const ROUTE = process.env.ROUTE === '1';
+const P = ROUTE ? await import(`${process.env.FAKTORY_DIR || `${homedir()}/projects/faktory-dao`}/backend/server/utils/jing-rungs-init.ts`) : null;
 const DEP = 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
 const LADDER = `${DEP}.jing-ladder-v1`;
 const DISPATCH = `${DEP}.jing-ladder-dispatch`;
@@ -169,18 +180,72 @@ async function main() {
   // ---------------------------------------------------------------- C ----
   group = 'C owner swaps 0 -> 1 bps';
   console.log(`\n=== ${group} ===`);
-  await deploy('jing-buy-stx-1', srcBuy);
-  await deploy('jing-sell-stx-1', srcSell);
+  const onChain = async (cid) => { try { return typeof (await evalIn(cid, '(var-get initialized)')) === 'boolean'; } catch { return false; } };
+  if (await onChain(B1)) check('jing-buy-stx-1 already deployed at the fork tip (mainnet)', true); else await deploy('jing-buy-stx-1', srcBuy);
+  if (await onChain(S1)) check('jing-sell-stx-1 already deployed at the fork tip (mainnet)', true); else await deploy('jing-sell-stx-1', srcSell);
   const h = await evalIn(LADDER, `{ b0: (contract-hash? '${B0}), b1: (contract-hash? '${B1}), s0: (contract-hash? '${S0}), s1: (contract-hash? '${S1}) }`);
   check('new rungs hash = live rungs hash (canonical unchanged)', show(h.b0) === show(h.b1) && show(h.s0) === show(h.s1), show(h));
   console.log(`  buy hash ${show(h.b1)}\n  sell hash ${show(h.s1)}`);
   await tx('initialize buy-stx-1 before retire -> u6011 band full', DEP, B1, 'initialize', [uintCV(1), boolCV(true)], { err: 6011n });
-  await tx('ladder retire-band("buy-band", u0)', DEP, LADDER, 'retire-band', [stringAsciiCV('buy-band'), uintCV(0)], { ok: true });
-  await tx('ladder retire-band("sel-band", u0)', DEP, LADDER, 'retire-band', [stringAsciiCV('sel-band'), uintCV(0)], { ok: true });
-  await tx('buy-stx-0 set-push-paused true', DEP, B0, 'set-push-paused', [boolCV(true)], { ok: true });
-  await tx('sell-stx-0 set-push-paused true', DEP, S0, 'set-push-paused', [boolCV(true)], { ok: true });
-  await tx('buy-stx-1 initialize(u1, true)', DEP, B1, 'initialize', [uintCV(1), boolCV(true)], { ok: true });
-  await tx('sell-stx-1 initialize(u1, true)', DEP, S1, 'initialize', [uintCV(1), boolCV(true)], { ok: true });
+  if (ROUTE) {
+    const readReplace = async (side) => {
+      const band = P.ladderBandSide(side), nw = side === 'buy' ? B1 : S1;
+      const st = await evalIn(LADDER, `{ owner: (get-owner), canon: (get-canonical "${band}"), n: (get-band-count "${band}"), max: (get-max-band-per-side), from: (get-rung "${band}" u0), to: (get-rung "${band}" u1), same: (is-eq (contract-hash? (unwrap-panic (get-canonical "${band}"))) (contract-hash? '${nw})) }`);
+      const init = await evalIn(nw, '(var-get initialized)');
+      return { ladderOwner: st.owner, bandCount: Number(st.n), maxBand: Number(st.max), fromHolder: st.from, toHolder: st.to,
+        newRung: { name: nw.split('.')[1], bps: 1, deployed: true, initialized: init === true }, sameCodeAsCanonical: st.same };
+    };
+    const plans = {};
+    for (const side of ['buy', 'sell']) {
+      const st = await readReplace(side);
+      check(`${side}: fork state = owner deployer, 10/10 seats, u0 held by the 0 rung, u1 free, new rung not initialized, same code`,
+        st.ladderOwner === DEP && st.bandCount === 10 && st.maxBand === 10 && st.fromHolder === (side === 'buy' ? B0 : S0) && st.toHolder === null && !st.newRung.initialized && st.sameCodeAsCanonical === true, show(st));
+      plans[side] = P.planRungReplace(side, 0, 1, st);
+      const got = plans[side].calls.map((c) => `${c.contractName}.${c.functionName}(${c.args.map((a) => a.value).join(',')})`);
+      const want = [`${P.JING_LADDER}.retire-band(${P.ladderBandSide(side)},0)`, `jing-${side}-stx-1.initialize(1,true)`];
+      check(`${side}: route plan = retire-band then initialize, no pause, no set-canonical, no blockers`, plans[side].blockers.length === 0 && show(got) === show(want), got.join(' | '));
+    }
+    // pure-planner pre-checks (no chain): every 409 case blocks
+    const base = await readReplace('buy');
+    const blk = (st, from = 0, to = 1) => P.planRungReplace('buy', from, to, { ...base, ...st }).blockers.length > 0;
+    check('planner blocks: new rung not deployed / already-held to seat / foreign from holder / wrong owner / code differs / band full / from = to',
+      blk({ newRung: { ...base.newRung, deployed: false } }) && blk({ toHolder: S0 }) && blk({ fromHolder: S0 }) && blk({ ladderOwner: WHALE.x })
+      && blk({ sameCodeAsCanonical: false }) && blk({ fromHolder: null }) && blk({}, 1, 1));
+    const half = P.planRungReplace('buy', 0, 1, { ...base, fromHolder: null, bandCount: 9 });
+    check('planner: from already retired -> skips retire, plans initialize only', half.blockers.length === 0 && half.calls.length === 1 && half.calls[0].functionName === 'initialize', show(half));
+    let nonce = Number(await retry(() => getNonce(sid, DEP)));
+    const all = [...plans.buy.calls, ...plans.sell.calls];
+    const steps = [];
+    for (const c of all) {
+      const t = await makeUnsignedContractCall({ contractAddress: c.contractAddress, contractName: c.contractName, functionName: c.functionName,
+        functionArgs: c.args.map((a) => a.type === 'ascii' ? stringAsciiCV(a.value) : a.type === 'uint' ? uintCV(a.value) : a.type === 'bool' ? boolCV(a.value) : P_(a.value)),
+        nonce: nonce++, fee: P.JING_RUNG_INIT_FEE, network: 'mainnet', publicKey: '', postConditionMode: PostConditionMode.Deny, postConditions: [] });
+      setSender(t, DEP);
+      steps.push({ Transaction: t.serialize() });
+    }
+    const out = await retry(() => submitSimulationSteps(sid, { steps: [{ TenureExtend: { cause: 'Extended' } }, ...steps] }));
+    all.forEach((c, i) => {
+      const t = out.steps[i + 1]?.Transaction?.Ok;
+      const res = t ? cvToString(deserializeCV(t.result)) : JSON.stringify(out.steps[i + 1]).slice(0, 300);
+      check(`route tx ${c.contractName}.${c.functionName} ${c.args.map((a) => a.value).join(' ')} (one batch, nonce order, deny mode)`, !!t && !t.vm_error && !t.post_condition_aborted && res === '(ok true)', res);
+    });
+    for (const side of ['buy', 'sell']) {
+      const again = P.planRungReplace(side, 0, 1, await readReplace(side));
+      check(`${side}: re-run plans nothing (idempotent), no blockers`, again.calls.length === 0 && again.blockers.length === 0 && again.skipped.length === 2, show(again.skipped));
+    }
+    const pb = await evalIn(B0, '(var-get push-paused)'), ps = await evalIn(S0, '(var-get push-paused)');
+    check('old 0-bps rungs NOT push-paused (stay live for their members)', pb === false && ps === false, show({ pb, ps }));
+    // informational: a direct deposit into the unseated, unpaused 0 rung
+    const dd = await send(WHALE.y, S0, 'deposit', [uintCV(1_000_000n)]);
+    console.log(`  info: direct deposit 1 STX into unseated sell-stx-0 -> ${show(dd.res)}; events ${show(prints(dd.receipt).map((p) => p.event))}`);
+  } else {
+    await tx('ladder retire-band("buy-band", u0)', DEP, LADDER, 'retire-band', [stringAsciiCV('buy-band'), uintCV(0)], { ok: true });
+    await tx('ladder retire-band("sel-band", u0)', DEP, LADDER, 'retire-band', [stringAsciiCV('sel-band'), uintCV(0)], { ok: true });
+    await tx('buy-stx-0 set-push-paused true', DEP, B0, 'set-push-paused', [boolCV(true)], { ok: true });
+    await tx('sell-stx-0 set-push-paused true', DEP, S0, 'set-push-paused', [boolCV(true)], { ok: true });
+    await tx('buy-stx-1 initialize(u1, true)', DEP, B1, 'initialize', [uintCV(1), boolCV(true)], { ok: true });
+    await tx('sell-stx-1 initialize(u1, true)', DEP, S1, 'initialize', [uintCV(1), boolCV(true)], { ok: true });
+  }
   const lad = await evalIn(LADDER, `{ nb: (get-band-count "buy-band"), ns: (get-band-count "sel-band"), b1: (get-rung "buy-band" u1), s1: (get-rung "sel-band" u1), b0: (get-rung "buy-band" u0), s0: (get-rung "sel-band" u0), b0x: (is-band-x '${B0}), s0y: (is-band-y '${S0}), b0reg: (is-registered '${B0}), s0reg: (is-registered '${S0}) }`);
   check('ladder: 10/10 seats, u1 -> new rungs, u0 empty, old rungs unseated but still registered',
     lad.nb === 10n && lad.ns === 10n && lad.b1 === B1 && lad.s1 === S1 && lad.b0 === null && lad.s0 === null && !lad.b0x && !lad.s0y && lad.b0reg && lad.s0reg, show(lad));
@@ -253,7 +318,9 @@ async function main() {
   for (const m of [...OLD_SELL_MEMBERS, WHALE.y]) {
     const pos = await evalIn(S0, `(get-position '${m})`);
     if (pos.shares === 0n) continue;
-    await ex(`old sell-stx-0 member ${m.slice(0, 8)}`, m, S0, false, noneCV());
+    // ROUTE: the unpaused 0 rung pushed the info deposit as a pending bid, so
+    // withdraw needs a price update (u7012 without one)
+    await ex(`old sell-stx-0 member ${m.slice(0, 8)}`, m, S0, false, ROUTE ? someCV(upd()) : noneCV());
   }
   const s0end = await evalIn(S0, '(get-state)');
   check('sell-stx-0 empty: no members', s0end.members === 0n, `${show(s0end)} balance ${await stxBal(S0)}`);
