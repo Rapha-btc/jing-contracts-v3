@@ -24,5 +24,6 @@ main({
   sell: 80_000_000n,     // uSTX for the leg-1 loop
   soldOut: 6_000_000n,   // uSTX for the sold-out rung test
   resetDust: 1_000n,     // RESET_DUST_SATS
+  donation: 2_000n,      // sats donated straight to a rung (F2)
   evilPay: 8_000n,       // sats the hostile rung pays on claim
 });

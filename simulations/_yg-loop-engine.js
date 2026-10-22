@@ -13,6 +13,10 @@
 //      fill 1, owner rung-withdraw after fill 2; harness recomputes fill
 //      price, VWAP and the cap/floor; maker fee + rebate measured
 //   F  rung sold out -> rung epoch rolls -> claim books the old-epoch payout
+//   F2 a donation of proceeds to a rung the vault is in: claim books nothing,
+//      the extra sits untracked, owner withdraws it
+//   J  guard proof: after a fill, every vault entry point as the first call
+//      books consumed only together with proceeds (no real sale dropped)
 //   G  leg 2: buy-back sits out beyond the cap/floor, reprice brings it in,
 //      top-up, forced partial fill (fee + rebate measured), pro-rata
 //      reconcile across a market cycle roll, cancel, re-post, full fill,
@@ -334,6 +338,117 @@ const capOf = (st, edge = EDGE) => {
       await freshUpd();
       await tx('owner rung-withdraw rung-30 (fill skipped)', OWNER, VAULT, 'rung-withdraw', [P_(R30), uintCV(10n ** 15n), someCV(updCV())], OK);
     }
+  }
+
+  // ---------------------------------------------------------------- F2 ---
+  setGroup('F2 donation to a rung is not booked');
+  {
+    const R = RUNG(40), tag = `${cfg.rungPrefix}40`;
+    await tx(`keeper sell ${cfg.perRung} into ${tag}`, KEEPER, VAULT, 'sell', [P_(R), uintCV(cfg.perRung)], { ok: cfg.perRung });
+    await settlePending(sold, R, tag);
+    const members = (await evalIn(R, '(get-state)')).members;
+    const i0 = await state(), g0 = await bal(got, VAULT), p0 = await rp(R);
+    // donate the proceeds token straight to the deployed rung
+    await fund(got, R, cfg.donation);
+    const cl = await tx(`keeper claim(${tag}) after a ${cfg.donation} ${got} donation (no fill)`, KEEPER, VAULT, 'claim', [P_(R)], OK);
+    const gIn = (await bal(got, VAULT)) - g0;
+    const i1 = await state();
+    console.log(`  donation: rung members ${members}, vault received ${gIn} ${got}, claim -> ${show(cl.res)}`);
+    check('rung paid (part of) the donation to the vault as proceeds', gIn > 0n && gIn <= cfg.donation, `${gIn} of ${cfg.donation} (members ${members})`);
+    check('claim books 0 consumed; principal unchanged', cl.res?.ok === 0n && (await rp(R)) === p0, `${show(cl.res)}, principal ${p0} -> ${await rp(R)}`);
+    check('inventory stays paired: inv-stx and inv-sats both unchanged', i1['inv-stx'] === i0['inv-stx'] && i1['inv-sats'] === i0['inv-sats'], show({ i0: [i0['inv-stx'], i0['inv-sats']], i1: [i1['inv-stx'], i1['inv-sats']] }));
+    const bk = prints(cl.receipt).find((p) => p.event === 'yg-rung-booked');
+    check('yg-rung-booked shows the proceeds but 0 consumed, fill-price 0', bk && bk[cfg.posKey === 'sbtc' ? 'sats-consumed' : 'stx-consumed'] === 0n && bk['fill-price'] === 0n, show(bk));
+    // untracked extra: reconcile leaves it alone, owner can take it out
+    await tx('keeper reconcile with the untracked extra in the vault', KEEPER, VAULT, 'reconcile', [], OK);
+    const i2 = await state();
+    check('reconcile does not raise inventory with the extra', i2['inv-stx'] === i0['inv-stx'] && i2['inv-sats'] === i0['inv-sats'], show({ i2: [i2['inv-stx'], i2['inv-sats']] }));
+    const o0 = await bal(got, OWNER);
+    await tx(`owner withdraws the donated ${gIn} ${got}`, OWNER, VAULT, got === 'x' ? 'withdraw-sbtc' : 'withdraw-stx', [uintCV(gIn)], { ok: gIn });
+    const i3 = await state();
+    check('owner received the donation; inventory still unchanged', (await bal(got, OWNER)) === o0 + gIn && i3['inv-stx'] === i0['inv-stx'] && i3['inv-sats'] === i0['inv-sats'], show({ i3: [i3['inv-stx'], i3['inv-sats']] }));
+    await freshUpd();
+    await tx(`keeper rung-withdraw ${tag}`, KEEPER, VAULT, 'rung-withdraw', [P_(R), uintCV(10n ** 15n), someCV(updCV())], { ok: 0n });
+    check(`${tag} principal 0; inventory unchanged`, (await rp(R)) === 0n && show(await state()) === show({ ...(await state()), 'inv-stx': i0['inv-stx'], 'inv-sats': i0['inv-sats'] }));
+  }
+
+  // ---------------------------------------------------------------- J ----
+  // Guard proof: book-rung books only when proceeds AND consumed are > 0 in
+  // the same call. Hunt for a call that observes consumed > 0 with no
+  // proceeds (a real sale that would now be dropped), across every vault
+  // entry point as the FIRST call after a fill.
+  setGroup('J guard proof: every fill books in the call that sees it');
+  {
+    const inKey = got === 'y' ? 'stx-in' : 'sbtc-in';
+    const conKey = sold === 'x' ? 'sats-consumed' : 'stx-consumed';
+    const dropped = [];
+    async function booked(label, sender, R, fn, args, sentNow = 0n) {
+      const exp = (await rp(R)) + sentNow, g0 = await bal(got, VAULT), b0 = await bal(sold, VAULT), i0 = await state();
+      const r = await tx(label, sender, VAULT, fn, args, OK);
+      const gIn = (await bal(got, VAULT)) - g0;
+      const back = (await bal(sold, VAULT)) + sentNow - b0;
+      const left = await rr(R);
+      const conH = exp - left - back;
+      const bk = prints(r.receipt).find((p) => p.event === 'yg-rung-booked') ?? {};
+      const i1 = await state();
+      const dGot = i1[invGot] - i0[invGot], dSold = i1[invSold] - i0[invSold];
+      console.log(`  ${label}: print ${conKey} ${bk[conKey]} ${inKey} ${bk[inKey]}; harness consumed ${conH}, got ${gIn}, back ${back}, left ${left}; inv +(${dGot} ${got}, ${dSold} ${sold})`);
+      check(`${label}: print consumed = harness consumed, print proceeds = balance delta`, bk[conKey] === conH && bk[inKey] === gIn, show({ print: [bk[conKey], bk[inKey]], harness: [conH, gIn] }));
+      if (conH > 0n && gIn === 0n) dropped.push(`${label}: consumed ${conH} ${sold} with 0 ${got}`);
+      check(`${label}: consumed > 0 implies proceeds > 0 in the same call`, !(conH > 0n && gIn === 0n), `consumed ${conH}, proceeds ${gIn}`);
+      const want = conH > 0n && gIn > 0n ? [gIn, conH] : [0n, 0n];
+      check(`${label}: inventory delta = (proceeds, consumed) when both > 0, else 0`, dGot === want[0] && dSold === want[1], show({ dGot, dSold, want }));
+      return { conH, gIn };
+    }
+    const tot = { recv: 0n, sold: 0n, invGot: 0n, invSold: 0n };
+    const soldOf = (f) => (sold === 'x' ? f.sx : f.sy);
+    const addFill = (f) => { if (f) { tot.recv += f.received; tot.sold += soldOf(f); } };
+    const addBook = (b) => { if (b.conH > 0n && b.gIn > 0n) { tot.invGot += b.gIn; tot.invSold += b.conH; } };
+    const P = cfg.sell / 2n;
+
+    // rung A: vault alone; each fill is followed by a different first call
+    const RA = RUNG(50), ta = `${cfg.rungPrefix}50`;
+    must(`${ta} has no members (vault alone)`, (await evalIn(RA, '(get-state)')).members === 0n);
+    await tx(`keeper sell ${P} into ${ta}`, KEEPER, VAULT, 'sell', [P_(RA), uintCV(P)], { ok: P });
+    await settlePending(sold, RA, ta);
+    let f = await forceFill(sold, RA, 0.3, 'J1 fill ~30%'); addFill(f);
+    // J1: first call = sell more (deposit); the top-up stays pending on the market
+    addBook(await booked('J1 first call after fill = sell more', KEEPER, RA, 'sell', [P_(RA), uintCV(cfg.perRung)], cfg.perRung));
+    const pend = await pendOf(sold, RA);
+    check('J2 setup: the top-up is still pending on the market', !!pend, show(pend));
+    f = await forceFill(sold, RA, 0.3, 'J2 fill ~30% while a top-up is pending'); addFill(f);
+    addBook(await booked('J2 first call after fill (top-up pending) = claim', KEEPER, RA, 'claim', [P_(RA)]));
+    await settlePending(sold, RA, ta);
+    f = await forceFill(sold, RA, 0.3, 'J3 fill ~30%'); addFill(f);
+    await freshUpd();
+    const part = (await rr(RA)) / 3n;
+    addBook(await booked(`J3 first call after fill = partial rung-withdraw ${part}`, KEEPER, RA, 'rung-withdraw', [P_(RA), uintCV(part), someCV(updCV())]));
+    f = await forceFill(sold, RA, 0.3, 'J4 fill ~30% (cycle roll 1)'); addFill(f);
+    const f4b = await forceFill(sold, RA, 0.3, 'J4 fill ~30% (cycle roll 2)'); addFill(f4b);
+    if (f && f4b) check('J4: two market cycle rolls before the first vault call', f4b.c1 >= f.c0 + 2n, `${f.c0} -> ${f4b.c1}`);
+    await freshUpd();
+    addBook(await booked('J4 first call after two fills = full rung-withdraw', OWNER, RA, 'rung-withdraw', [P_(RA), uintCV(10n ** 15n), someCV(updCV())]));
+    check(`${ta}: principal 0 after full withdraw`, (await rp(RA)) === 0n);
+
+    // rung B: sold out (rung epoch roll) before the first vault call, which is a sell
+    const RB = RUNG(60), tb = `${cfg.rungPrefix}60`;
+    must(`${tb} has no members`, (await evalIn(RB, '(get-state)')).members === 0n);
+    await tx(`keeper sell ${cfg.soldOut} into ${tb}`, KEEPER, VAULT, 'sell', [P_(RB), uintCV(cfg.soldOut)], { ok: cfg.soldOut });
+    await settlePending(sold, RB, tb);
+    const e0 = (await evalIn(RB, '(get-state)')).epoch;
+    f = await forceFill(sold, RB, 1, 'J5 fill rung-60 fully (sold out)', { full: true }); addFill(f);
+    addBook(await booked('J5 first call after sold out = sell more (rolls the rung epoch)', KEEPER, RB, 'sell', [P_(RB), uintCV(cfg.perRung)], cfg.perRung));
+    check(`J5: rung-60 epoch rolled (${e0} -> ${(await evalIn(RB, '(get-state)')).epoch})`, (await evalIn(RB, '(get-state)')).epoch > e0);
+    await settlePending(sold, RB, tb);
+    await freshUpd();
+    addBook(await booked('J5 cleanup: full rung-withdraw of the new deposit', KEEPER, RB, 'rung-withdraw', [P_(RB), uintCV(10n ** 15n), someCV(updCV())]));
+
+    // totals: every fill on the vault-only rungs reached inventory
+    console.log(`  J totals: fills sold ${tot.sold} ${sold} for ${tot.recv} ${got}; inventory booked ${tot.invSold} ${sold} / ${tot.invGot} ${got}`);
+    check('J: inventory booked = sum of independently matched fills (sold side, rounding <= 1 unit per call)', tot.invSold <= tot.sold && tot.sold - tot.invSold <= 8n, `${tot.invSold} vs ${tot.sold}`);
+    check('J: inventory proceeds = sum of rung receipts (rounding <= 1 unit per call)', tot.invGot <= tot.recv && tot.recv - tot.invGot <= 8n, `${tot.invGot} vs ${tot.recv}`);
+
+    note(dropped.length ? `${cfg.side} DROPPED SALES: ${dropped.join(' | ')}` : `${cfg.side} J: no sale dropped in any case`);
   }
 
   // ---------------------------------------------------------------- G ----
