@@ -36,5 +36,9 @@ On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a r
 
 ## Tests
 
-- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`).
+- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`). Latest run on 068ee68 / a9d71e6: 351/351 each.
+  - sell-sbtc: https://stxer.xyz/simulations/mainnet/c3e42abbf6d46b8680ae3de751898b73
+  - sell-stx: https://stxer.xyz/simulations/mainnet/777971274dc2dbb14536c2f477988c1e
+  - Covers all 10 rungs per side, bad rungs, auth (owner / keeper / stranger, pause), edge-bps, both legs with measured fee and rebate, partial fills, reconcile and dust reset, rung epoch rollover, owner exits, two-step ownership, and hostile-contract allowance checks.
+- Audit bounty (7,000 sats, closes 2026-10-29): https://aibtc.com/bounties, id `mviz88od905e87317769`.
 - Clarinet SDK: `tests/unit/mm-loop-sell-sbtc.test.ts` and `-sell-stx.test.ts`.
