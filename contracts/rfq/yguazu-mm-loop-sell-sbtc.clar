@@ -260,6 +260,7 @@
     (map-set rung-principal rung left)
     (and
       (> stx-in u0)
+      (> consumed u0)
       (begin
         (var-set inv-stx (+ (var-get inv-stx) stx-in))
         (var-set inv-sats (+ (var-get inv-sats) consumed))
