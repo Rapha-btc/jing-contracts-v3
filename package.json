@@ -63,7 +63,7 @@
     "check:v6-3-mirrors": "node tests/unit/v6-3/mirror-sync.mjs"
   },
   "dependencies": {
-    "@stacks/clarinet-sdk": "^3.21.0",
+    "@stacks/clarinet-sdk": "^3.25.0",
     "@stacks/transactions": "^7.6.0",
     "stxer": "^0.8.0",
     "tsx": "^4.19.0",
