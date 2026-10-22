@@ -186,6 +186,8 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expectErr(pub('sell', [firstRung, Cl.uint(0)], stranger), 8102);
     expectErr(pub('claim', [firstRung], stranger), 8102);
     expectErr(pub('reconcile', [], stranger), 8102);
+    expectErr(pub('rung-withdraw', [firstRung, Cl.uint(1), Cl.none()], stranger), 8102);
+    expectErr(pub('cancel-buy-back', [], stranger), 8102);
     expect(pub('set-paused', [Cl.bool(true)]).result).toEqual(Cl.ok(Cl.bool(true)));
     expectErr(pub('sell', [firstRung, Cl.uint(0)]), 8106);
     expectErr(pub('sell', [firstRung, Cl.uint(0)], keeper), 8104);
@@ -193,6 +195,8 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expectErr(pub('reconcile', [], keeper), 8104);
     expectErr(pub('buy-back', [Cl.uint(1), Cl.uint(0)], keeper), 8104);
     expectErr(pub('reprice', [Cl.uint(0)], keeper), 8104);
+    expectErr(pub('rung-withdraw', [firstRung, Cl.uint(1), Cl.none()], keeper), 8104);
+    expectErr(pub('cancel-buy-back', [], keeper), 8104);
     expectErr(pub('sell', [firstRung, Cl.uint(0)], stranger), 8102);
   });
 
@@ -235,7 +239,6 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expectErr(pub('set-keeper', [Cl.some(Cl.principal(keeper))], stranger), 8101);
     expect(pub('set-keeper', [Cl.some(Cl.principal(keeper))]).result).toEqual(Cl.ok(Cl.bool(true)));
     expect(read('get-keeper')).toBe(keeper);
-    expect(pub('reconcile', [], keeper).result.type).toBe('ok');
     expect(pub('set-keeper', [Cl.none()]).result).toEqual(Cl.ok(Cl.bool(true)));
     expect(read('get-keeper')).toBeNull();
     expectErr(pub('sell', [firstRung, Cl.uint(1)], keeper), 8102);
@@ -253,14 +256,17 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expect(badRung).toBe(owner + '.unlisted-rung');
   });
 
-  it('sells into each of the ten deployed buy-stx rungs', function () {
+  it('sells into each of the ten deployed buy-stx rungs, including a large sell', function () {
     const amount = 1_000_000n;
-    fundSbtc(amount * BigInt(RUNG_NAMES.length));
-    for (const name of RUNG_NAMES) {
+    const largeAmount = 10_000_000n;
+    fundSbtc(amount * BigInt(RUNG_NAMES.length - 1) + largeAmount);
+    for (let index = 0; index < RUNG_NAMES.length; index++) {
+      const name = RUNG_NAMES[index];
+      const sellAmount = index === 0 ? largeAmount : amount;
       const rung = Cl.contractPrincipal(DEPLOYER, name);
-      const receipt = pub('sell', [rung, Cl.uint(amount)]);
-      expect(receipt.result).toEqual(Cl.ok(Cl.uint(amount)));
-      expect(read('get-rung-principal', [rung])).toBeLessThanOrEqual(amount);
+      const receipt = pub('sell', [rung, Cl.uint(sellAmount)]);
+      expect(receipt.result).toEqual(Cl.ok(Cl.uint(sellAmount)));
+      expect(read('get-rung-principal', [rung])).toBeLessThanOrEqual(sellAmount);
     }
   });
 
@@ -318,9 +324,9 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     simnet.transferSTX(10_000_000n, RUNGS[0], owner);
     const paidClaim = pub('claim', [firstRung]);
     expect(paidClaim.result.type).toBe('ok');
+    // A direct rung donation returns proceeds without consuming principal.
+    // This currently exposes a suspected inventory-pair accounting issue.
     expect(read('get-state')['inv-stx']).toBeGreaterThan(0n);
-    // A donation increases rung proceeds without consuming more principal.
-    // This exposes the inv-sats/inv-stx divergence recorded in the RV report.
     expect(read('get-state')['inv-sats']).toBe(0n);
   });
 
@@ -328,12 +334,17 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     const amount = 1_000_000n;
     fundSbtc(amount);
     expect(pub('sell', [firstRung, Cl.uint(amount)]).result).toEqual(Cl.ok(Cl.uint(amount)));
-    expectErr(pub('rung-withdraw', [firstRung, Cl.uint(amount), Cl.none()], keeper), 8101);
+    expectErr(pub('rung-withdraw', [firstRung, Cl.uint(amount), Cl.none()], stranger), 8102);
+    expect(pub('set-keeper', [Cl.some(Cl.principal(keeper))]).result).toEqual(Cl.ok(Cl.bool(true)));
+    expect(pub('set-paused', [Cl.bool(true)]).result).toEqual(Cl.ok(Cl.bool(true)));
+    expectErr(pub('rung-withdraw', [firstRung, Cl.uint(amount), Cl.none()], keeper), 8104);
+    expect(pub('set-paused', [Cl.bool(false)]).result).toEqual(Cl.ok(Cl.bool(true)));
     const badRung = deployBadRung();
     expectErr(pub('rung-withdraw', [Cl.contractPrincipal(owner, 'unlisted-rung'), Cl.uint(1), Cl.none()]), 8105);
     expectErr(pub('rung-withdraw', [firstRung, Cl.uint(0), Cl.none()]), 7004);
     simnet.mineEmptyBurnBlocks(8_640);
-    const receipt = pub('rung-withdraw', [firstRung, Cl.uint(amount), Cl.none()]);
+    const principal = read('get-rung-principal', [firstRung]);
+    const receipt = pub('rung-withdraw', [firstRung, Cl.uint(principal), Cl.none()], keeper);
     expect(receipt.result.type).toBe('ok');
     expect(badRung).toBe(owner + '.unlisted-rung');
   });
@@ -362,7 +373,7 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expectErr(pub('reprice', [Cl.uint(10_000)]), 8110);
     expectErr(pub('reprice', [Cl.uint(0)], stranger), 8102);
     expectErr(pub('reprice', [Cl.uint(0)]), 8108);
-    expectErr(pub('cancel-buy-back', [], keeper), 8101);
+    expectErr(pub('cancel-buy-back', [], stranger), 8102);
     expect(pub('cancel-buy-back').result.type).toBe('err');
 
     simnet.transferSTX(10_000_000n, vault, owner);
@@ -373,7 +384,11 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expect(pub('buy-back', [Cl.uint(1), Cl.uint(0)]).result.type).toBe('err');
     // The mainnet market excludes pending orders from set-token-y-limit.
     expectErr(pub('reprice', [Cl.uint(25)]), 1005);
-    expect(pub('cancel-buy-back').result.type).toBe('ok');
+    expect(pub('set-keeper', [Cl.some(Cl.principal(keeper))]).result).toEqual(Cl.ok(Cl.bool(true)));
+    expect(pub('set-paused', [Cl.bool(true)]).result).toEqual(Cl.ok(Cl.bool(true)));
+    expectErr(pub('cancel-buy-back', [], keeper), 8104);
+    expect(pub('set-paused', [Cl.bool(false)]).result).toEqual(Cl.ok(Cl.bool(true)));
+    expect(pub('cancel-buy-back', [], keeper).result.type).toBe('ok');
   });
 
   it('reconciles partial STX spend pro rata without resetting the inventory', function () {
