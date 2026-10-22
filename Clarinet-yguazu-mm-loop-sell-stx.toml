@@ -1,0 +1,66 @@
+[project]
+name = "yguazu-mm-loop-sell-stx"
+description = "Per-user MM loop vault: STX into the ten sell-stx rungs, sBTC ask back on markets v6-4 over VWAP + 25 bps"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# The vault names the live market, rung trait and the ten rungs by full SPV9K21... principal;
+# remote_data resolves them from mainnet. If api.hiro.so rate-limits, run
+# node simulations/_api-proxy.mjs and set api_url = "http://127.0.0.1:8787".
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-1"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-10"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-20"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-30"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-40"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-50"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-60"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-70"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-80"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-90"
+
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
+
+[contracts.yguazu-mm-loop-sell-stx]
+path = "contracts/rfq/yguazu-mm-loop-sell-stx.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.remote_data]
+enabled = true
+initial_height = 9274000
+api_url = 'http://127.0.0.1:8787'
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
