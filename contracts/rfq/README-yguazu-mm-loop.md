@@ -30,15 +30,22 @@ They exist to compute the most the buy-back may pay, so it never buys back at a 
 
 `reconcile-inner` runs **before** every rung call. Once fresh proceeds land in the balance, they would hide what was spent, and that part of the inventory would never be closed.
 
+## Booking rule
+
+`book-rung` adds to inventory only when both sides moved: proceeds arrived **and** sats (or STX) left the rung. One side alone is not a sale: rounding dust from a pooled rung's shares, or a donation sent straight to a rung (the rung counts any balance gain as proceeds). That amount stays in the vault as untracked extra, which `reconcile-inner` ignores and the owner can withdraw.
+
 ## Fees
 
 On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a rebate (20 bps, up to 70 when the oracle is stale) paid to the resting maker. Both vault legs rest, so each nets about +10 bps. A loop at 25 bps edge measured about 53 bps on the stxer fork.
 
 ## Tests
 
-- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`). Latest run on 068ee68 / a9d71e6: 351/351 each.
-  - sell-sbtc: https://stxer.xyz/simulations/mainnet/c3e42abbf6d46b8680ae3de751898b73
-  - sell-stx: https://stxer.xyz/simulations/mainnet/777971274dc2dbb14536c2f477988c1e
+- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`). Latest run on 91665cf: sell-sbtc 425/425, sell-stx 431/431.
+  - sell-sbtc: https://stxer.xyz/simulations/mainnet/8214d90bac74b65f669e3c4def291be5
+  - sell-stx: https://stxer.xyz/simulations/mainnet/c314e9810291df1301345574c4c60881
+  - Donations (group F2): proceeds sent straight to a rung reach the vault at claim but stay out of inventory; the owner withdraws them exactly.
+  - No real sale dropped (group J): after a taker fill, the first vault call (sell, claim, partial or full rung-withdraw, rung epoch roll) always receives the proceeds in the same call that sees the sats leave, because the rung's sync pays out as it lowers the position. Booked inventory equals the sum of real fills to the unit.
   - Covers all 10 rungs per side, bad rungs, auth (owner / keeper / stranger, pause), edge-bps, both legs with measured fee and rebate, partial fills, reconcile and dust reset, rung epoch rollover, owner exits, two-step ownership, and hostile-contract allowance checks.
 - Audit bounty (7,000 sats, closes 2026-10-29): https://aibtc.com/bounties, id `mviz88od905e87317769`.
-- Clarinet SDK: `tests/unit/mm-loop-sell-sbtc.test.ts` and `-sell-stx.test.ts`.
+- Clarinet SDK: `tests/unit/mm-loop-sell-sbtc.test.ts` (16/16) and `-sell-stx.test.ts` (18/18), 100% branch coverage, see `tests/unit/mm-loop-sell-COVERAGE.md`.
+- Rendezvous: `tests/rv/mm-loop-sell/`, 500 invariant + 500 property runs per contract.
