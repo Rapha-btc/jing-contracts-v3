@@ -31,3 +31,14 @@ The donation reproduction now passes for both fixtures:
 | STX vault | Sell 1 uSTX, donate 2 satoshis to rung 1, claim | `inv-sats = u0`, `inv-stx = u0` | True |
 
 The donation extra remains outside inventory accounting; the unit tests verify the owner can withdraw it. The random tests use strict local rung, token, and market fixtures in place of remote deployments.
+
+## Mainnet-fork simulation reruns
+
+After the `book-rung` guard was tightened to require both proceeds and consumed principal to be positive, the stxer mainnet-fork simulations passed all 366 checks for each vault:
+
+| Contract | Checks | Simulation |
+| --- | ---: | --- |
+| sBTC vault | 366/366 | [stxer run](https://stxer.xyz/simulations/mainnet/b15b96cf6b1bbfa8e60f685c7c4471ba) |
+| STX vault | 366/366 | [stxer run](https://stxer.xyz/simulations/mainnet/443f3fc25f7b2b63b6bc4e5e2bc57da) |
+
+Both runs include the unpaired donation scenario: the rung returns donated output while consuming zero principal, the vault's paired inventory remains unchanged through claim and reconciliation, and the owner recovers the untracked extra through the token withdrawal. The ordinary fill scenarios also pass, confirming that same-call proceeds and consumed principal continue to book together and are not dropped by the guard.
