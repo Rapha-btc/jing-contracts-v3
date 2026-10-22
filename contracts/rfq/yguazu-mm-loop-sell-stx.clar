@@ -66,6 +66,10 @@
 (define-data-var keeper (optional principal) none)
 (define-data-var paused bool false)
 (define-data-var edge-bps uint DEFAULT_EDGE_BPS)
+;; most uSTX a rung-withdraw may pay for the oracle update it carries (the
+;; rung settles its pending order with it). The fee is 0 today; the owner
+;; raises this only if the oracle starts charging.
+(define-data-var max-oracle-fee uint u0)
 
 ;; Why these two: they set the least the buy-back ask may accept, so it never
 ;; buys STX back at a loss. Only their ratio matters: VWAP sell = inv-stx *
@@ -151,6 +155,7 @@
     keeper: (var-get keeper),
     paused: (var-get paused),
     edge-bps: (var-get edge-bps),
+    max-oracle-fee: (var-get max-oracle-fee),
     inv-sats: (var-get inv-sats),
     inv-stx: (var-get inv-stx),
     vwap-sell: (vwap-sell),
@@ -244,6 +249,55 @@
   )
 )
 
+;; A sale booked while the ask rests can raise the floor above the ask's
+;; limit. The market keeps the old limit: reprice cannot reach a pending ask
+;; and only queues the change on a live one. Pull the ask back to the vault,
+;; so the keeper re-posts it at the new floor. A failed cancel is printed and
+;; never blocks booking a real sale. A limit of 0 means no such order.
+(define-private (below-floor (limit uint) (floor uint))
+  (and (> limit u0) (< limit floor))
+)
+
+(define-private (drop-stale-buy-back)
+  (let (
+      (floor (buy-back-floor))
+      (live (contract-call? MARKET get-token-x-limit current-contract))
+      (pending (default-to u0
+        (get limit (contract-call? MARKET get-token-x-pending-deposit current-contract))
+      ))
+      (queued (default-to u0
+        (get limit (contract-call? MARKET get-token-x-pending-limit current-contract))
+      ))
+    )
+    (if (and
+        (> (sats-on-market) u0)
+        (or
+          (below-floor live floor)
+          (below-floor pending floor)
+          (below-floor queued floor)
+        )
+      )
+      (begin
+        (print {
+          event: "yg-stale-buy-back-cancel",
+          floor: floor,
+          live: live,
+          pending: pending,
+          queued: queued,
+          cancelled: (match (as-contract? ()
+              (is-ok (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+            )
+            done done
+            e false
+          ),
+        })
+        true
+      )
+      true
+    )
+  )
+)
+
 ;; Book a rung interaction from balance deltas.
 ;; expected = rung principal before the call + uSTX sent in this call.
 ;; consumed = expected - still in rung - STX returned to the vault.
@@ -269,7 +323,7 @@
       (begin
         (var-set inv-sats (+ (var-get inv-sats) sbtc-in))
         (var-set inv-stx (+ (var-get inv-stx) consumed))
-        true
+        (drop-stale-buy-back)
       )
     )
     (print {
@@ -351,7 +405,7 @@
     (amount uint)
     (update (optional (buff 8192)))
   )
-  (as-contract? ()
+  (as-contract? ((with-stx (var-get max-oracle-fee)))
     (try! (contract-call? rung withdraw amount update))
   )
 )
@@ -503,7 +557,11 @@
     (try! (rung-withdraw-inner rung amount update))
     (let (
         (sbtc-in (- (sbtc-held) sbtc0))
-        (stx-back (- (stx-get-balance current-contract) stx0))
+        ;; an oracle fee paid from the vault can leave less STX than before
+        (stx-back (if (> (stx-get-balance current-contract) stx0)
+          (- (stx-get-balance current-contract) stx0)
+          u0
+        ))
       )
       (print {
         event: "yg-rung-withdraw",
@@ -595,6 +653,18 @@
     (print {
       event: "yg-set-edge-bps",
       bps: bps,
+    })
+    (ok true)
+  )
+)
+
+(define-public (set-max-oracle-fee (fee uint))
+  (begin
+    (try! (check-owner))
+    (var-set max-oracle-fee fee)
+    (print {
+      event: "yg-set-max-oracle-fee",
+      fee: fee,
     })
     (ok true)
   )

@@ -34,6 +34,28 @@ They exist to compute the most the buy-back may pay, so it never buys back at a 
 
 `book-rung` adds to inventory only when both sides moved: proceeds arrived **and** sats (or STX) left the rung. One side alone is not a sale: rounding dust from a pooled rung's shares, or a donation sent straight to a rung (the rung counts any balance gain as proceeds). That amount stays in the vault as untracked extra, which `reconcile-inner` ignores and the owner can withdraw.
 
+## Stale buy-back
+
+A new sale can move the cap down (sell-sbtc) or the floor up (sell-stx) while a buy-back already rests on the market. The market keeps the order's old limit. Example: sell 1 sat for 2 STX, bid at cap 2; sell 1 more sat for 1 STX, cap is now 1.5; the bid still fills at up to 2, and the books then close more sats than were really bought back.
+
+The market can hold three limits for the vault's order. Any of them can become the one it enforces:
+
+- **live**: the limit of the order on the book now.
+- **pending**: the limit of a deposit not yet on the book. It applies when anyone settles that deposit.
+- **queued**: a `reprice` the market has not applied yet. It applies when anyone settles it with a newer price.
+
+So `reprice` cannot fix it: a pending order refuses it (u1005), and a live one only queues it.
+
+The fix, in short: when a sale moves the cap down (or the floor up), cancel the order and re-deposit it at the new price.
+
+- It runs in `book-rung`, in the same transaction that books the sale: if the vault has an order on the market and any of the three limits is past the new cap or floor, it cancels the order. So there is never a moment where the books are blended and the old limit is still live.
+- The cancel removes the old limit everywhere, so nothing can fill at the old, dirty price. The keeper re-posts at the new, clean price with `buy-back`. Until that re-post settles there is no order, which is safe.
+- Settling instead of cancelling would not work: a queued limit only applies with a price signed after it was queued, so in a later block, and the order could fill at the old limit before then.
+- When a sale moves the cap up (or the floor down), nothing is cancelled. The old order is only stricter than it needs to be, which is safe; the keeper can `reprice` to loosen it and wait for the settle.
+- A failed cancel is printed (`yg-stale-buy-back-cancel`, `cancelled: false`) and never blocks booking the sale.
+
+It happens in normal looping: each time a sale is booked while an order rests and the new sale is cheaper than the average (sell-sbtc) or dearer (sell-stx), so roughly whenever the mid drifts against the order between two sales.
+
 ## Fees
 
 On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a rebate (20 bps, up to 70 when the oracle is stale) paid to the resting maker. Both vault legs rest, so each nets about +10 bps. A loop at 25 bps edge measured about 53 bps on the stxer fork.

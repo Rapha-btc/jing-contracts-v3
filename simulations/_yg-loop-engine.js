@@ -24,13 +24,17 @@
 //   H  owner exits (withdraws only to owner; rung-withdraw + cancel are operator paths) + two-step ownership handover
 //   I  allowances: a variant of the vault with jing-*-stx-90 and the market
 //      swapped for hostile contracts; every over-pull must abort
+//   K  oracle-fee allowance: max-oracle-fee auth; fee 0 update path; none
+//      while pending < 24 h (u7012); oracle fee > 0 (governance impersonated)
+//      needs the owner's cap; the 24 h path cancels the pending order
 import { readFileSync } from 'node:fs';
 import { uintCV, boolCV, someCV, noneCV } from '@stacks/transactions';
 import {
   DEP, MARKET, SBTC, WHALE, BANDS, BPS, EDGE, SCALE, P_, T, A, mk, Stop, S, show,
   setGroup, check, must, note, startSim, evalIn, call, tx, E, OK, prints, matches,
-  stxTransfer, sbtcTransfer, deploy, sbtcBal, stxBal, freshUpd, updCV, curCycle, summary,
+  stxTransfer, sbtcTransfer, deploy, sbtcBal, stxBal, freshUpd, updCV, curCycle, summary, blockTime,
 } from './_yg-loop-common.js';
+import { submitSimulationSteps } from 'stxer';
 
 const MAX_UINT = 2n ** 128n - 1n;
 const other = (t) => (t === 'x' ? 'y' : 'x');
@@ -648,6 +652,96 @@ const capOf = (st, edge = EDGE) => {
     a = await snap();
     r = await call(OWNER, VV, sold === 'x' ? 'withdraw-sbtc' : 'withdraw-stx', [uintCV(a.vs + 1n)]);
     check('owner withdraw more than the vault holds aborts', (r.res?.err !== undefined || r.vm) && same(a, await snap()), show(r.res ?? r.vm));
+  }
+
+  // ---------------------------------------------------------------- K ----
+  // rung-withdraw carries a Lazer update the rung uses to settle its own
+  // pending market order; the oracle charges its fee to tx-sender (the
+  // vault). max-oracle-fee is the STX allowance for that fee. The owner is
+  // NEW_OWNER after group H. K5 (fee > 0) runs before K4 (synthetic +25 h
+  // makes every real Lazer update stale).
+  setGroup('K oracle-fee allowance');
+  {
+    const ORACLE = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle';
+    const ORACLE_GOV = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8';
+    const RK = RUNG(70), RF = RUNG(80), tk = `${cfg.rungPrefix}70`, tf = `${cfg.rungPrefix}80`;
+    const ALL = uintCV(10n ** 15n);
+    must(`${tk} and ${tf}: vault has no principal left`, (await rr(RK)) === 0n && (await rp(RK)) === 0n && (await rr(RF)) === 0n && (await rp(RF)) === 0n);
+    // K1
+    check('K1 get-state max-oracle-fee = u0', (await state())['max-oracle-fee'] === 0n);
+    await tx('K1 keeper set-max-oracle-fee -> NOT_OWNER', KEEPER, VAULT, 'set-max-oracle-fee', [uintCV(1n)], e(ERR.NOT_OWNER));
+    await tx('K1 stranger set-max-oracle-fee -> NOT_OWNER', STRANGER, VAULT, 'set-max-oracle-fee', [uintCV(1n)], e(ERR.NOT_OWNER));
+    const s0k = await tx('K1 owner set-max-oracle-fee 0', NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(0n)], { ok: true });
+    check('K1 print yg-set-max-oracle-fee', prints(s0k.receipt).some((p) => p.event === 'yg-set-max-oracle-fee' && p.fee === 0n));
+    check('K1 oracle fee is 0 on the fork', (await evalIn(ORACLE, '(get-fee)')) === 0n);
+    await fund(sold, VAULT, cfg.perRung * 4n);
+    // sell into a rung; true when the rung's own order is left pending on the market
+    const sellPending = async (R, label) => {
+      await tx(`${label}: keeper sell ${cfg.perRung} into ${R.split('.')[1]}`, KEEPER, VAULT, 'sell', [P_(R), uintCV(cfg.perRung)], { ok: cfg.perRung });
+      const p = await pendOf(sold, R);
+      must(`${label}: the rung's market order is pending`, !!p, show(p));
+      return p;
+    };
+    // K2: fee 0, the update settles the pending order, withdraw goes through at once
+    await sellPending(RK, 'K2');
+    await freshUpd();
+    let v0 = await bal(sold, VAULT);
+    await tx('K2 fee 0: keeper rung-withdraw all with (some update) -> ok', KEEPER, VAULT, 'rung-withdraw', [P_(RK), ALL, someCV(updCV())], OK);
+    let v1 = await bal(sold, VAULT);
+    check('K2 rung order no longer pending; vault principal 0', !(await pendOf(sold, RK)) && (await rp(RK)) === 0n && (await rr(RK)) === 0n);
+    check(`K2 vault got its ${sold} back (loss <= 1 unit)`, v1 >= v0 + cfg.perRung - 1n && v1 <= v0 + cfg.perRung, `${v0} -> ${v1}`);
+    // K3: fee 0, no update while the pending order is under 24 h old
+    const pK = await sellPending(RK, 'K3');
+    await tx('K3 rung-withdraw with none while pending < 24 h -> rung ERR_UPDATE_REQUIRED u7012', KEEPER, VAULT, 'rung-withdraw', [P_(RK), ALL, noneCV()], E(7012));
+    // K5: fee > 0 (oracle governance impersonated on the fork)
+    const gov = await evalIn(ORACLE, `(has-role '${ORACLE_GOV} 0x00)`);
+    if (!gov) note(`K5 skipped: ${ORACLE_GOV} no longer holds oracle governance`);
+    else {
+      const F = 1_000n;
+      const RCP = await evalIn(ORACLE, '(get-fee-recipient)');
+      await tx(`K5 oracle governance set-fee ${F}`, ORACLE_GOV, ORACLE, 'set-fee', [uintCV(F)], { ok: true });
+      check(`K5 oracle fee = ${F}`, (await evalIn(ORACLE, '(get-fee)')) === F);
+      if ((await stxBal(VAULT)) < F * 5n) await stxTransfer(WHALE.y, VAULT, F * 10n);
+      await sellPending(RF, 'K5');
+      await freshUpd();
+      const snapK = async () => ({ vs: await bal(sold, VAULT), vstx: await stxBal(VAULT), rcp: await stxBal(RCP), left: await rr(RF), pend: show(await pendOf(sold, RF)) });
+      const a = await snapK();
+      const r0 = await call(KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())]);
+      const b = await snapK();
+      check('K5 fee > 0, max-oracle-fee 0: rung-withdraw with update aborts, nothing moves', (r0.res?.err !== undefined || r0.vm) && show(a) === show(b), show(r0.res ?? r0.vm));
+      await tx(`K5 owner set-max-oracle-fee ${F}`, NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(F)], { ok: true });
+      check(`K5 get-state max-oracle-fee = ${F}`, (await state())['max-oracle-fee'] === F);
+      const r1 = await tx('K5 rung-withdraw with update after the owner raised the cap -> ok', KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())], OK);
+      const c = await snapK();
+      check(`K5 fee recipient got exactly ${F} uSTX`, c.rcp === b.rcp + F, `${b.rcp} -> ${c.rcp}`);
+      const back = sold === 'y' ? b.left - F : b.left; // sell-stx: the fee comes out of the returned STX
+      check(`K5 vault got its ${sold} back${sold === 'y' ? ' minus the fee' : ''} (loss <= 1 unit), rung order no longer pending, principal 0`, c.vs >= b.vs + back - 1n && c.vs <= b.vs + back && c.left === 0n && (await rp(RF)) === 0n && !(await pendOf(sold, RF)), show({ b, c }));
+      if (sold === 'x') check(`K5 vault STX dropped by exactly the fee ${F}`, c.vstx === b.vstx - F, `${b.vstx} -> ${c.vstx}`);
+      else check(`K5 vault STX = before + principal back - fee ${F}`, c.vstx === b.vstx + b.left - F || c.vstx === b.vstx + b.left - 1n - F, `${b.vstx} -> ${c.vstx} (principal ${b.left})`);
+      const ev = prints(r1.receipt).find((p) => p.event === 'yg-rung-booked');
+      note(`K5 yg-rung-booked after a paid fee: ${show(ev)}`);
+      await tx(`K5 cap ${F - 1n} < fee: set`, NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(F - 1n)], { ok: true });
+      await sellPending(RF, 'K5b');
+      await freshUpd();
+      const a2 = await snapK();
+      const r2 = await call(KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())]);
+      check('K5b cap below the fee: rung-withdraw with update aborts, nothing moves', (r2.res?.err !== undefined || r2.vm) && show(a2) === show(await snapK()), show(r2.res ?? r2.vm));
+      await tx('K5 oracle governance set-fee 0 (restore)', ORACLE_GOV, ORACLE, 'set-fee', [uintCV(0n)], { ok: true });
+      await tx('K5 owner set-max-oracle-fee 0 (restore)', NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(0n)], { ok: true });
+      await freshUpd();
+      await tx(`K5b cleanup: rung-withdraw ${tf} with update at fee 0`, KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())], OK);
+    }
+    // K4: the 24 h path, no oracle: the rung cancels its own pending order
+    const t0 = await blockTime();
+    const adv = await submitSimulationSteps(S.sid, { steps: [{ AdvanceBlocks: { bitcoin_blocks: 1, stacks_blocks_per_bitcoin: 1, bitcoin_interval_secs: 90000 } }] });
+    const t1 = await blockTime();
+    must('K4 fork clock moved >= 86400 s past the pending order', t1 >= Number(pK['submitted-at']) + 86400, `${t0} -> ${t1}, submitted ${pK['submitted-at']} :: ${JSON.stringify(adv.steps?.[0]).slice(0, 300)}`);
+    v0 = await bal(sold, VAULT);
+    const left = await rr(RK);
+    await tx('K4 after 24 h: rung-withdraw all with none -> ok', KEEPER, VAULT, 'rung-withdraw', [P_(RK), ALL, noneCV()], OK);
+    v1 = await bal(sold, VAULT);
+    check('K4 the rung cancelled its pending order itself; vault principal 0', !(await pendOf(sold, RK)) && (await rp(RK)) === 0n && (await rr(RK)) === 0n);
+    check(`K4 vault got its ${sold} back (loss <= 1 unit)`, v1 >= v0 + left - 1n && v1 <= v0 + left, `${v0} -> ${v1} (left ${left})`);
   }
 
   function evilRung() {
