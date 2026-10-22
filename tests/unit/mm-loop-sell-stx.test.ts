@@ -326,19 +326,28 @@ describe('yguazu-mm-loop-sell-stx', function () {
     expect(read('get-state')['inv-sats']).toBe(0n);
   });
 
-  it('claims a real rung position both before and after proceeds arrive', function () {
+  it('leaves donated rung proceeds untracked and lets the owner recover them', function () {
     const amount = 100_000_000n;
     simnet.transferSTX(amount, vault, owner);
     expect(pub('sell', [firstRung, Cl.uint(amount)]).result).toEqual(Cl.ok(Cl.uint(amount)));
     const emptyClaim = pub('claim', [firstRung]);
     expect(emptyClaim.result.type).toBe('ok');
 
+    const vaultSbtcBeforeDonation = sbtcBalance(vault);
     fundSbtcTo(10_000n, firstRung);
     const paidClaim = pub('claim', [firstRung]);
     expect(paidClaim.result.type).toBe('ok');
-    // A direct rung donation returns proceeds without consuming principal.
-    // This currently exposes a suspected inventory-pair accounting issue.
-    expect(read('get-state')['inv-sats']).toBeGreaterThan(0n);
+    const state = read('get-state');
+    const donatedSats = sbtcBalance(vault) - vaultSbtcBeforeDonation;
+    expect(donatedSats).toBeGreaterThan(0n);
+    expect(state['inv-sats']).toBe(0n);
+    expect(state['inv-stx']).toBe(0n);
+
+    const ownerSbtcBeforeRecovery = sbtcBalance(owner);
+    expect(pub('withdraw-sbtc', [Cl.uint(donatedSats)]).result).toEqual(Cl.ok(Cl.uint(donatedSats)));
+    expect(sbtcBalance(owner)).toBe(ownerSbtcBeforeRecovery + donatedSats);
+    expect(sbtcBalance(vault)).toBe(vaultSbtcBeforeDonation);
+    expect(read('get-state')['inv-sats']).toBe(0n);
     expect(read('get-state')['inv-stx']).toBe(0n);
   });
 
@@ -360,20 +369,16 @@ describe('yguazu-mm-loop-sell-stx', function () {
     expect(badRung).toBe(owner + '.unlisted-rung');
   });
 
-  it('returns zero-amount, no-inventory, over-inventory, and zero-floor errors', function () {
+  it('returns amount and inventory errors; the zero-floor guard is unreachable with paired inventory', function () {
     expectErr(pub('sell', [firstRung, Cl.uint(0)]), 8206);
     expect(pub('sell', [firstRung, Cl.uint(1)]).result.type).toBe('err');
     expectErr(pub('buy-back', [Cl.uint(1), Cl.uint(0)]), 8208);
-
-    fundSbtc(1_000n);
-    seedInventory(1_000n, 0n);
     expect(read('vwap-sell')).toBe(0n);
     expect(read('buy-back-floor')).toBe(0n);
-    expectErr(pub('buy-back', [Cl.uint(1), Cl.uint(0)]), 8211);
-    expectErr(pub('reprice', [Cl.uint(0)]), 8211);
 
     fundSbtc(1_000n);
     seedInventory(1_000n, 1_000n);
+    expect(read('buy-back-floor')).toBeGreaterThan(0n);
     expectErr(pub('buy-back', [Cl.uint(2_001), Cl.uint(0)]), 8209);
   });
 

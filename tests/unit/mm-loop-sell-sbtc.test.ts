@@ -314,19 +314,28 @@ describe('yguazu-mm-loop-sell-sbtc', function () {
     expect(read('get-state')['inv-sats']).toBe(0n);
   });
 
-  it('claims a real rung position both before and after proceeds arrive', function () {
+  it('leaves donated rung proceeds untracked and lets the owner recover them', function () {
     const amount = 1_000_000n;
     fundSbtc(amount);
     expect(pub('sell', [firstRung, Cl.uint(amount)]).result).toEqual(Cl.ok(Cl.uint(amount)));
     const emptyClaim = pub('claim', [firstRung]);
     expect(emptyClaim.result.type).toBe('ok');
 
+    const vaultStxBeforeDonation = stxBalance(vault);
     simnet.transferSTX(10_000_000n, RUNGS[0], owner);
     const paidClaim = pub('claim', [firstRung]);
     expect(paidClaim.result.type).toBe('ok');
-    // A direct rung donation returns proceeds without consuming principal.
-    // This currently exposes a suspected inventory-pair accounting issue.
-    expect(read('get-state')['inv-stx']).toBeGreaterThan(0n);
+    const state = read('get-state');
+    const donatedStx = stxBalance(vault) - vaultStxBeforeDonation;
+    expect(donatedStx).toBeGreaterThan(0n);
+    expect(state['inv-stx']).toBe(0n);
+    expect(state['inv-sats']).toBe(0n);
+
+    const ownerStxBeforeRecovery = stxBalance(owner);
+    expect(pub('withdraw-stx', [Cl.uint(donatedStx)]).result).toEqual(Cl.ok(Cl.uint(donatedStx)));
+    expect(stxBalance(owner)).toBe(ownerStxBeforeRecovery + donatedStx);
+    expect(stxBalance(vault)).toBe(vaultStxBeforeDonation);
+    expect(read('get-state')['inv-stx']).toBe(0n);
     expect(read('get-state')['inv-sats']).toBe(0n);
   });
 

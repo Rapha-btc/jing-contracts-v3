@@ -11,8 +11,9 @@ for (const side of ['sbtc', 'stx']) {
     [Cl.uint(0), Cl.uint(1)],
     sender,
   );
-  const state = runtime.raw.callReadOnlyFn('vault', 'get-state', [], runtime.owner).result;
-  const booking = runtime.raw.callReadOnlyFn(runtime.harnessName, 'invariant-rung-booking', [], runtime.owner).result;
+  const state = cvToString(runtime.raw.callReadOnlyFn('vault', 'get-state', [], runtime.owner).result);
+  const booking = cvToString(runtime.raw.callReadOnlyFn(runtime.harnessName, 'invariant-rung-booking', [], runtime.owner).result);
+  const pairIntact = state.includes('(inv-sats u0)') && state.includes('(inv-stx u0)') && booking === 'true';
   const output = {
     side,
     sequence: [
@@ -22,8 +23,10 @@ for (const side of ['sbtc', 'stx']) {
       '  -> claim; rung returns proceeds without consuming principal',
     ],
     result: cvToString(receipt.result),
-    state: cvToString(state),
-    bookingInvariant: cvToString(booking),
+    state,
+    bookingInvariant: booking,
+    pairIntact,
   };
   console.log(JSON.stringify(output, null, 2));
+  if (!pairIntact) throw new Error(`${side} donation changed paired inventory: ${state}; booking invariant ${booking}`);
 }
