@@ -71,9 +71,13 @@ On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a r
 
 ## Tests
 
-- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`). Latest run on 91665cf: sell-sbtc 425/425, sell-stx 431/431.
-  - sell-sbtc: https://stxer.xyz/simulations/mainnet/8214d90bac74b65f669e3c4def291be5
-  - sell-stx: https://stxer.xyz/simulations/mainnet/c314e9810291df1301345574c4c60881
+- stxer mainnet fork: `simulations/verify-yguazu-mm-loop-sell-sbtc.js` and `-sell-stx.js` (shared engine `_yg-loop-engine.js`).
+  - 2026-10-22, deploy bytes (d015036, comment-stripped + `clarinet format`, as in the fakdao BE templates):
+    - sell-sbtc 464/464: https://stxer.xyz/simulations/mainnet/e5ad0d378659741e30aa3bb83a0be8d5
+    - sell-stx 267/268: https://stxer.xyz/simulations/mainnet/6b1ffdbc13c39930e0e55a4a2d4b2155. The one failure is a fixture precondition, not the contract: group J needs a `jing-sell-stx` rung where the vault is the only member, and on mainnet every rung except `-1` now has one other member. So group J did not run for sell-stx.
+  - 91665cf (before the stale buy-back cancel b03d312): sell-sbtc 425/425, sell-stx 431/431.
+    - sell-sbtc: https://stxer.xyz/simulations/mainnet/8214d90bac74b65f669e3c4def291be5
+    - sell-stx: https://stxer.xyz/simulations/mainnet/c314e9810291df1301345574c4c60881
   - Donations (group F2): proceeds sent straight to a rung reach the vault at claim but stay out of inventory; the owner withdraws them exactly.
   - No real sale dropped (group J): after a taker fill, the first vault call (sell, claim, partial or full rung-withdraw, rung epoch roll) always receives the proceeds in the same call that sees the sats leave, because the rung's sync pays out as it lowers the position. Booked inventory equals the sum of real fills to the unit.
   - Covers all 10 rungs per side, bad rungs, auth (owner / keeper / stranger, pause), edge-bps, both legs with measured fee and rebate, partial fills, reconcile and dust reset, rung epoch rollover, owner exits, two-step ownership, and hostile-contract allowance checks.
