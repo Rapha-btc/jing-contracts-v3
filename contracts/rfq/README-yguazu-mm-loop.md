@@ -21,6 +21,8 @@ They exist to compute the most the buy-back may pay, so it never buys back at a 
 - Only their ratio matters: `vwap-sell = inv-stx * 1e10 / inv-sats`. The cap or floor is that price with the edge (`edge-bps`, owner-set, default 25) applied.
 - `claim` adds the real amounts of each sale, so several sales at different prices blend into one average.
 - `reconcile-inner` removes the same share of both as the proceeds are spent, so the average of what is left stays its real sell price.
+- An owner deposit never changes them. Example (sell-sbtc): the owner deposits sBTC, the keeper puts it in a rung, and only when a taker fills it and the vault claims do they go up, by the sats sold and the STX received. They go down only when the proceeds are spent (buy-back fills or owner withdraws).
+- `reconcile-inner` rounds the share it closes down, so a tiny fill can close 0 of the other side (bounty finding, Info). This does not need fixing: it can only make the cap slightly stricter (sell-sbtc) or the floor slightly higher (sell-stx), never looser, so the vault does not lose money.
 - They are bookkeeping, not funds held. What the buy-back really gets lands in the vault balance. Getting more than was sold is the profit.
 
 ## Fresh vs spent
@@ -33,6 +35,12 @@ They exist to compute the most the buy-back may pay, so it never buys back at a 
 ## Booking rule
 
 `book-rung` adds to inventory only when both sides moved: proceeds arrived **and** sats (or STX) left the rung. One side alone is not a sale: rounding dust from a pooled rung's shares, or a donation sent straight to a rung (the rung counts any balance gain as proceeds). That amount stays in the vault as untracked extra, which `reconcile-inner` ignores and the owner can withdraw.
+
+Accepted (bounty finding, Low): a gift that reaches the rung before a real fill is paid out in the same claim and booked with that sale. The average sell price then looks higher than it was (cap up on sell-sbtc, floor down on sell-stx). The vault is never poorer: the gift is in its balance, so the round trip still gets back at least what it sold. What matters is that the vault does not lose money, and it does not, so this does not need fixing. (Telling a gift from a fill would also need a market price inside `book-rung`, and a stale price would skip real sales.)
+
+## Dust reset
+
+When less than the dust limit is left (1 STX on sell-sbtc, 1,000 sats on sell-stx), the inventory resets to 0. The dust can still rest on the market at its old limit, and `reprice` now returns no inventory (u8108 / u8208). This does not need fixing: if the dust fills, that is fine, and if it fills after a new loop started, the books close the same share of both sides, so the average and the cap do not change. At most the dust ends up untracked in the vault balance, which the owner can withdraw. The vault does not lose money. The keeper may call `cancel-buy-back` when it sees `yg-inventory-reset` to take the dust back.
 
 ## Stale buy-back
 
@@ -53,12 +61,13 @@ The fix, in short: when a sale moves the cap down (or the floor up), cancel the 
 - Settling instead of cancelling would not work: a queued limit only applies with a price signed after it was queued, so in a later block, and the order could fill at the old limit before then.
 - When a sale moves the cap up (or the floor down), nothing is cancelled. The old order is only stricter than it needs to be, which is safe; the keeper can `reprice` to loosen it and wait for the settle.
 - A failed cancel is printed (`yg-stale-buy-back-cancel`, `cancelled: false`) and never blocks booking the sale.
+- `reprice` returns `(ok cap)` even when the market only queued the change; the `yg-reprice` event's `applied-now` says which. This does not need fixing: a cap that drops is handled by the cancel above, so a queued `reprice` only waits to loosen the price, and until then the order keeps the stricter one.
 
 It happens in normal looping: each time a sale is booked while an order rests and the new sale is cheaper than the average (sell-sbtc) or dearer (sell-stx), so roughly whenever the mid drifts against the order between two sales.
 
 ## Fees
 
-On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a rebate (20 bps, up to 70 when the oracle is stale) paid to the resting maker. Both vault legs rest, so each nets about +10 bps. A loop at 25 bps edge measured about 53 bps on the stxer fork.
+On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a rebate (20 bps, up to 70 when the oracle is stale) paid to the resting maker. Both vault legs rest, so each nets about +10 bps. A loop at 25 bps edge measured about 53 bps on the stxer fork. `edge-bps` 0 is allowed on purpose: the two resting legs still net about +20 bps, so no lower bound is needed.
 
 ## Tests
 

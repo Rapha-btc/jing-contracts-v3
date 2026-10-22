@@ -538,7 +538,7 @@
   )
 )
 
-;; ---------------------------------------------------------------- owner only
+;; ---------------------------------------------------------------- exits (rung-withdraw, cancel-buy-back: keeper or owner; the rest: owner only)
 
 (define-public (rung-withdraw
     (rung <rung-trait>)
