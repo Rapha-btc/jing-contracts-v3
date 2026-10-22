@@ -17,7 +17,7 @@
 //      top-up, forced partial fill (fee + rebate measured), pro-rata
 //      reconcile across a market cycle roll, cancel, re-post, full fill,
 //      reset at dust
-//   H  owner exits (withdraws only to owner) + two-step ownership handover
+//   H  owner exits (withdraws only to owner; rung-withdraw + cancel are operator paths) + two-step ownership handover
 //   I  allowances: a variant of the vault with jing-*-stx-90 and the market
 //      swapped for hostile contracts; every over-pull must abort
 import { readFileSync } from 'node:fs';
@@ -200,13 +200,15 @@ const capOf = (st, edge = EDGE) => {
   for (const [who, nm] of [[KEEPER, 'keeper'], [STRANGER, 'stranger']]) {
     await tx(`${nm} withdraw-sbtc -> NOT_OWNER`, who, VAULT, 'withdraw-sbtc', [uintCV(1n)], e(ERR.NOT_OWNER));
     await tx(`${nm} withdraw-stx -> NOT_OWNER`, who, VAULT, 'withdraw-stx', [uintCV(1n)], e(ERR.NOT_OWNER));
-    await tx(`${nm} rung-withdraw -> NOT_OWNER`, who, VAULT, 'rung-withdraw', [P_(R1), uintCV(1n), noneCV()], e(ERR.NOT_OWNER));
-    await tx(`${nm} cancel-buy-back -> NOT_OWNER`, who, VAULT, 'cancel-buy-back', [], e(ERR.NOT_OWNER));
     await tx(`${nm} propose-owner -> NOT_OWNER`, who, VAULT, 'propose-owner', [someCV(P_(who))], e(ERR.NOT_OWNER));
     await tx(`${nm} set-keeper -> NOT_OWNER`, who, VAULT, 'set-keeper', [someCV(P_(who))], e(ERR.NOT_OWNER));
     await tx(`${nm} set-paused -> NOT_OWNER`, who, VAULT, 'set-paused', [boolCV(true)], e(ERR.NOT_OWNER));
     await tx(`${nm} set-edge-bps -> NOT_OWNER`, who, VAULT, 'set-edge-bps', [uintCV(0n)], e(ERR.NOT_OWNER));
   }
+  await tx('stranger rung-withdraw -> NOT_AUTHORIZED', STRANGER, VAULT, 'rung-withdraw', [P_(R1), uintCV(1n), noneCV()], e(ERR.NOT_AUTH));
+  await tx('stranger cancel-buy-back -> NOT_AUTHORIZED', STRANGER, VAULT, 'cancel-buy-back', [], e(ERR.NOT_AUTH));
+  await tx('keeper rung-withdraw passes auth (no position -> rung ERR_NO_POSITION u7006)', KEEPER, VAULT, 'rung-withdraw', [P_(R1), uintCV(1n), noneCV()], E(7006));
+  await tx('keeper cancel-buy-back passes auth (nothing on the book -> market error, not 82xx/81xx)', KEEPER, VAULT, 'cancel-buy-back', [], (v) => v?.err !== undefined && (v.err < BigInt(cfg.errBase) || v.err > BigInt(cfg.errBase + 99)));
   await tx('stranger sell -> NOT_AUTHORIZED', STRANGER, VAULT, 'sell', [P_(R1), uintCV(cfg.perRung)], e(ERR.NOT_AUTH));
   await tx('stranger claim -> NOT_AUTHORIZED', STRANGER, VAULT, 'claim', [P_(R1)], e(ERR.NOT_AUTH));
   await tx('stranger buy-back -> NOT_AUTHORIZED', STRANGER, VAULT, 'buy-back', [uintCV(1000n), uintCV(30n)], e(ERR.NOT_AUTH));
@@ -228,7 +230,7 @@ const capOf = (st, edge = EDGE) => {
     check('large unfilled sell books no inventory', i1['inv-stx'] === i0['inv-stx'] && i1['inv-sats'] === i0['inv-sats'], show({ i0: [i0['inv-stx'], i0['inv-sats']], i1: [i1['inv-stx'], i1['inv-sats']] }));
     await settlePending(sold, R, 'large sell');
     await freshUpd();
-    await tx('owner rung-withdraw the large sell', OWNER, VAULT, 'rung-withdraw', [P_(R), uintCV(10n ** 15n), someCV(updCV())], OK);
+    await tx('keeper rung-withdraw the large sell (operator path)', KEEPER, VAULT, 'rung-withdraw', [P_(R), uintCV(10n ** 15n), someCV(updCV())], OK);
     const v1 = await bal(sold, VAULT);
     check(`large sell came back (loss <= 1 unit); principal 0`, v1 >= v0 - 1n && v1 <= v0 && (await rp(R)) === 0n, `${v0} -> ${v1}`);
     await call(OWNER, VAULT, sold === 'x' ? 'withdraw-sbtc' : 'withdraw-stx', [uintCV(big - 1n)]);
@@ -240,6 +242,8 @@ const capOf = (st, edge = EDGE) => {
   await tx('keeper claim while paused -> PAUSED', KEEPER, VAULT, 'claim', [P_(R1)], e(ERR.PAUSED));
   await tx('keeper buy-back while paused -> PAUSED', KEEPER, VAULT, 'buy-back', [uintCV(1000n), uintCV(30n)], e(ERR.PAUSED));
   await tx('keeper reprice while paused -> PAUSED', KEEPER, VAULT, 'reprice', [uintCV(30n)], e(ERR.PAUSED));
+  await tx('keeper rung-withdraw while paused -> PAUSED', KEEPER, VAULT, 'rung-withdraw', [P_(R1), uintCV(1n), noneCV()], e(ERR.PAUSED));
+  await tx('keeper cancel-buy-back while paused -> PAUSED', KEEPER, VAULT, 'cancel-buy-back', [], e(ERR.PAUSED));
   await tx('keeper reconcile while paused -> PAUSED', KEEPER, VAULT, 'reconcile', [], e(ERR.PAUSED));
   await tx('stranger while paused still NOT_AUTHORIZED (auth before pause)', STRANGER, VAULT, 'reconcile', [], e(ERR.NOT_AUTH));
   await tx('owner reconcile while paused -> ok (owner bypasses pause)', OWNER, VAULT, 'reconcile', [], OK);
@@ -422,7 +426,7 @@ const capOf = (st, edge = EDGE) => {
     const on = await evalIn(VAULT, `(${cfg.onMarketFn})`);
     const s1 = await state();
     const g0 = await bal(got, VAULT);
-    await tx('owner cancel-buy-back', OWNER, VAULT, 'cancel-buy-back', [], { ok: on });
+    await tx('keeper cancel-buy-back (operator path)', KEEPER, VAULT, 'cancel-buy-back', [], { ok: on });
     check(`vault ${got} += cancelled order`, (await bal(got, VAULT)) === g0 + on);
     await tx('keeper reconcile after cancel', KEEPER, VAULT, 'reconcile', [], OK);
     const s2 = await state();
