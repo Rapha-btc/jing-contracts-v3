@@ -1,0 +1,28 @@
+[project]
+name = "kairan-seat-lab-ocifarsito-v2"
+description = "Kairan's Seat v2: 2,000 USDCx target + STX/sBTC reserve for LAB; owner-approved seat receipt; full USDCx refund after the deadline"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[contracts.kairan-seat-lab-ocifarsito-v2]
+path = "contracts/charity/kairan-seat-lab-ocifarsito-v2.clar"
+clarity_version = 5
+epoch = "latest"
+
+# remote_data resolves usdcx and sbtc-token from mainnet. If
+# api.hiro.so rate-limits (the 100-donor test looks up 100 fresh accounts),
+# run node simulations/_api-proxy.mjs and set api_url = "http://127.0.0.1:8787".
+[repl.remote_data]
+enabled = true
+initial_height = 9274000
+api_url = 'http://127.0.0.1:8787'
+
+[repl.analysis]
+passes = []

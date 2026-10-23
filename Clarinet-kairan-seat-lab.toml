@@ -1,5 +1,5 @@
 [project]
-name = "kairan-seat-lab"
+name = "kairan-seat-lab-ocifarsito"
 description = "Kairan's Seat: donations held for Let Africa Build, claimed with on-chain terms + receipts"
 authors = []
 telemetry = false
@@ -8,8 +8,8 @@ cache_dir = "./.cache"
 [[project.requirements]]
 contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
 
-[contracts.kairan-seat-lab]
-path = "contracts/charity/kairan-seat-lab.clar"
+[contracts.kairan-seat-lab-ocifarsito]
+path = "contracts/charity/kairan-seat-lab-ocifarsito.clar"
 clarity_version = 5
 epoch = "latest"
 
