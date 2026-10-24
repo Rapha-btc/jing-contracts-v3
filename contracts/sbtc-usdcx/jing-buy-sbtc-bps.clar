@@ -16,14 +16,16 @@
 (define-constant ERR_ESCROW_COOLDOWN (err u7015))
 (define-constant ERR_TOO_MANY_SHARES (err u7016))
 
-(define-constant SOLD_OUT_DUST u10)
+(define-constant SOLD_OUT_DUST u10000)
 
 (define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4)
 (define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant SIDE "buy-band")
-(define-constant NAME_PREFIX "jing-buy-stx-")
+(define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
+(define-constant WSTX_NAME "wstx")
+(define-constant SIDE "sel-band")
+(define-constant NAME_PREFIX "jing-sell-stx-")
 (define-constant BPS_PRECISION u10000)
 (define-constant PRICE_NUMERATOR u1000000000000000000)
 
@@ -39,22 +41,22 @@
   )
 )
 
-(define-read-only (current-floor)
-  (/ (miner-mid) u2)
+(define-read-only (current-cap)
+  (* (miner-mid) u2)
 )
 
 (define-read-only (min-market)
-  (get min-token-x
+  (get min-token-y
     (contract-call?
       'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
       get-min-deposits
     ))
 )
-(define-constant MIN_DEPOSIT u100)
+(define-constant MIN_DEPOSIT u100000)
 
 (define-data-var initialized bool false)
 (define-data-var spread-bps uint u0)
-(define-data-var floor uint u0)
+(define-data-var cap uint u0)
 (define-data-var total-shares uint u0)
 (define-data-var members uint u0)
 (define-data-var scale uint u0)
@@ -81,13 +83,13 @@
 )
 (define-data-var unfilled-index uint SCALE)
 (define-data-var proceeds-index uint u0)
-(define-data-var held-sats uint u0)
-(define-data-var reserved-sats uint u0)
+(define-data-var held-ustx uint u0)
+(define-data-var reserved-ustx uint u0)
 (define-map epoch-final-unfilled
   uint
   uint
 )
-(define-data-var stx-accounted uint u0)
+(define-data-var sats-accounted uint u0)
 (define-data-var current-proceeds uint u0)
 (define-data-var proceeds-carry uint u0)
 (define-data-var push-paused bool false)
@@ -107,23 +109,23 @@
   (var-get spread-bps)
 )
 
-(define-read-only (get-floor)
-  (var-get floor)
+(define-read-only (get-cap)
+  (var-get cap)
 )
 
 (define-read-only (get-state)
   {
     spread-bps: (var-get spread-bps),
-    floor: (var-get floor),
+    cap: (var-get cap),
     epoch: (var-get epoch),
     total-shares: (var-get total-shares),
     members: (var-get members),
     scale: (var-get scale),
     unfilled-index: (var-get unfilled-index),
     proceeds-index: (var-get proceeds-index),
-    held-sats: (var-get held-sats),
+    held-ustx: (var-get held-ustx),
     resting: (market-size),
-    pooled: (pooled-sbtc),
+    pooled: (pooled-stx),
   }
 )
 
@@ -140,7 +142,7 @@
         ))
         (sh (carried stored from to))
         (input (if (and current (is-eq (var-get members) u1))
-          (+ (market-size) (var-get held-sats))
+          (+ (market-size) (var-get held-ustx))
           (/
             (* sh
               (if current
@@ -160,14 +162,14 @@
       )
       {
         shares: sh,
-        sbtc: (get input payout),
-        stx: (get proceeds payout),
+        stx: (get input payout),
+        sbtc: (get proceeds payout),
       }
     )
     {
       shares: u0,
-      sbtc: u0,
       stx: u0,
+      sbtc: u0,
     }
   )
 )
@@ -283,7 +285,7 @@
   (+
     (contract-call?
       'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
-      get-token-x-deposit
+      get-token-y-deposit
       (contract-call?
         'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
         get-current-cycle
@@ -292,18 +294,18 @@
     )
     (contract-call?
       'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
-      get-token-x-parked current-contract
+      get-token-y-parked current-contract
     )
     (default-to u0
       (get amount
         (contract-call?
           'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
-          get-token-x-pending-deposit current-contract
+          get-token-y-pending-deposit current-contract
         ))
     ))
 )
 
-(define-read-only (pooled-sbtc)
+(define-read-only (pooled-stx)
   (/ (* (var-get total-shares) (var-get unfilled-index)) SCALE)
 )
 
@@ -352,16 +354,14 @@
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
-        (var-get reserved-sats)
-      ))
+      (local (- (stx-get-balance current-contract) (var-get reserved-ustx)))
       (actual (+ (market-size) local))
-      (recorded (pooled-sbtc))
-      (stx-now (stx-get-balance current-contract))
-      (gained (- stx-now (var-get stx-accounted)))
+      (recorded (pooled-stx))
+      (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
+      (gained (- sbtc-now (var-get sats-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-    (var-set held-sats local)
+    (var-set held-ustx local)
     (if (is-eq shares u0)
       (ok true)
       (let (
@@ -373,7 +373,7 @@
           (new-proceeds (+ (var-get proceeds-index) (/ scaled shares)))
         )
         (var-set proceeds-index new-proceeds)
-        (var-set stx-accounted stx-now)
+        (var-set sats-accounted sbtc-now)
         (var-set current-proceeds (+ (var-get current-proceeds) gained))
         (var-set proceeds-carry (mod scaled shares))
         (if (or (< actual SOLD_OUT_DUST) (< new-index (/ MINT_FLOOR RESCALE)))
@@ -410,11 +410,11 @@
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
-      (try! (contract-call? SBTC transfer amount member current-contract none))
+      (try! (stx-transfer? amount member current-contract))
       (let (
-          (to-push (+ amount (var-get held-sats)))
+          (to-push (+ amount (var-get held-ustx)))
           (orphan (if (is-eq (var-get total-shares) u0)
-            (+ (market-size) (var-get held-sats))
+            (+ (market-size) (var-get held-ustx))
             u0
           ))
           (shares (/ (* (+ amount orphan) SCALE) (var-get unfilled-index)))
@@ -429,8 +429,8 @@
             (>= (+ to-push (market-size)) (min-market))
             (is-ok (push-to-market to-push))
           )
-          (var-set held-sats u0)
-          (var-set held-sats to-push)
+          (var-set held-ustx u0)
+          (var-set held-ustx to-push)
         )
         (map-set positions member {
           epoch: epo,
@@ -442,7 +442,7 @@
         (var-set total-shares (+ (var-get total-shares) shares))
         (and joining (var-set members (+ (var-get members) u1)))
         (is-ok (contract-call? LADDER log-deposit member amount shares epo
-          (is-eq (var-get held-sats) u0) (var-get held-sats)
+          (is-eq (var-get held-ustx) u0) (var-get held-ustx)
         ))
         (ok {
           amount: amount,
@@ -461,7 +461,7 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (try! (sync))
     (let (
-        (to-push (var-get held-sats))
+        (to-push (var-get held-ustx))
         (pushed (and
           (> to-push u0)
           (>= (+ to-push (market-size)) (min-market))
@@ -469,11 +469,11 @@
         ))
       )
       (if pushed
-        (var-set held-sats u0)
+        (var-set held-ustx u0)
         true
       )
       (is-ok (contract-call? LADDER log-push tx-sender to-push pushed
-        (var-get held-sats)
+        (var-get held-ustx)
       ))
       (ok pushed)
     )
@@ -508,7 +508,7 @@
               partial
             ))
             (take (if (and full (is-eq (var-get members) u1))
-              (+ (market-size) (var-get held-sats))
+              (+ (market-size) (var-get held-ustx))
               (if full
                 mine
                 amount
@@ -520,11 +520,11 @@
             (> take u0)
             (begin
               (try! (escrow-for take update))
-              (try! (pull-to-held-sats take))
-              (try! (as-contract? ((with-ft SBTC SBTC_NAME take))
-                (try! (contract-call? SBTC transfer take current-contract member none))
+              (try! (pull-to-held-ustx take))
+              (try! (as-contract? ((with-stx take))
+                (try! (stx-transfer? take current-contract member))
               ))
-              (var-set held-sats (- (var-get held-sats) take))
+              (var-set held-ustx (- (var-get held-ustx) take))
               true
             )
           )
@@ -552,11 +552,11 @@
             )
           )
           (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
-            (var-get held-sats)
+            (var-get held-ustx)
           ))
           (ok {
-            sbtc: take,
-            stx: (get stx paid),
+            stx: take,
+            sbtc: (get sbtc paid),
           })
         )
       )
@@ -596,23 +596,21 @@
     (if (> (market-size) u0)
       (begin
         (try! (as-contract? ()
-          (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
         ))
         true
       )
       true
     )
     (let (
-        (free (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
-          (var-get reserved-sats)
-        ))
+        (free (- (stx-get-balance current-contract) (var-get reserved-ustx)))
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)
       (map-set epoch-final-unfilled epo (var-get unfilled-index))
       (map-set epoch-final-scale epo (var-get scale))
-      (var-set reserved-sats (+ (var-get reserved-sats) free))
-      (var-set held-sats u0)
+      (var-set reserved-ustx (+ (var-get reserved-ustx) free))
+      (var-set held-ustx u0)
       (map-set epoch-reserve epo {
         left: (var-get members),
         reserve: free,
@@ -682,11 +680,11 @@
       )
       (and
         (> owed u0)
-        (try! (as-contract? ((with-stx owed))
-          (try! (stx-transfer? owed current-contract who))
+        (try! (as-contract? ((with-ft SBTC SBTC_NAME owed))
+          (try! (contract-call? SBTC transfer owed current-contract who none))
         ))
       )
-      (var-set stx-accounted (- (var-get stx-accounted) owed))
+      (var-set sats-accounted (- (var-get sats-accounted) owed))
       (and current (var-set current-proceeds (- (var-get current-proceeds) owed)))
       (and
         current
@@ -695,11 +693,11 @@
       )
       (and
         (> back u0)
-        (try! (as-contract? ((with-ft SBTC SBTC_NAME back))
-          (try! (contract-call? SBTC transfer back current-contract who none))
+        (try! (as-contract? ((with-stx back))
+          (try! (stx-transfer? back current-contract who))
         ))
       )
-      (var-set reserved-sats (- (var-get reserved-sats) back))
+      (var-set reserved-ustx (- (var-get reserved-ustx) back))
       (and (not current) (count-reserve-claim pos-epoch back owed))
       (if current
         (map-set positions who
@@ -716,8 +714,8 @@
         (is-ok (contract-call? LADDER log-payout who owed back pos-epoch))
       )
       (ok {
-        stx: owed,
-        sbtc: back,
+        sbtc: owed,
+        stx: back,
       })
     )
     (ok {
@@ -728,45 +726,45 @@
 )
 
 (define-private (push-to-market (to-push uint))
-  (let ((g (current-floor)))
+  (let ((g (current-cap)))
     (asserts! (not (var-get push-paused)) ERR_PUSH_PAUSED)
     (asserts! (>= stacks-block-time (+ (var-get escrow-cancelled-at) u86400))
       ERR_ESCROW_COOLDOWN
     )
     (asserts! (> g u0) ERR_ZERO_PRICE)
-    (var-set floor g)
-    (as-contract? ((with-ft SBTC SBTC_NAME to-push))
-      (try! (contract-call? MARKET deposit-token-x to-push g
-        (some (var-get spread-bps)) SBTC SBTC_NAME
+    (var-set cap g)
+    (as-contract? ((with-stx to-push))
+      (try! (contract-call? MARKET deposit-token-y to-push g
+        (some (var-get spread-bps)) WSTX WSTX_NAME
       ))
     )
   )
 )
 
 (define-public (refresh-guard)
-  (let ((g (current-floor)))
+  (let ((g (current-cap)))
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (> g u0) ERR_ZERO_PRICE)
-    (var-set floor g)
+    (var-set cap g)
     (as-contract? ()
-      (try! (contract-call? MARKET set-token-x-limit g (some (var-get spread-bps))))
+      (try! (contract-call? MARKET set-token-y-limit g (some (var-get spread-bps))))
     )
   )
 )
 
 (define-private (settle-escrow (update (optional (buff 8192))))
-  (match (contract-call? MARKET get-token-x-pending-deposit current-contract)
+  (match (contract-call? MARKET get-token-y-pending-deposit current-contract)
     pending (if (>= stacks-block-time (+ (get submitted-at pending) u86400))
       (let ((refunded (try! (as-contract? ()
-          (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
         ))))
-        (var-set held-sats (+ (var-get held-sats) refunded))
+        (var-set held-ustx (+ (var-get held-ustx) refunded))
         (var-set escrow-cancelled-at stacks-block-time)
         (ok true)
       )
       (begin
-        (try! (contract-call? MARKET settle-token-x-deposit current-contract
-          (unwrap! update ERR_UPDATE_REQUIRED) SBTC SBTC_NAME
+        (try! (contract-call? MARKET settle-token-y-deposit current-contract
+          (unwrap! update ERR_UPDATE_REQUIRED) WSTX WSTX_NAME
         ))
         (ok true)
       )
@@ -777,10 +775,10 @@
 
 (define-private (on-book)
   (+
-    (contract-call? MARKET get-token-x-deposit
+    (contract-call? MARKET get-token-y-deposit
       (contract-call? MARKET get-current-cycle) current-contract
     )
-    (contract-call? MARKET get-token-x-parked current-contract)
+    (contract-call? MARKET get-token-y-parked current-contract)
   )
 )
 
@@ -788,7 +786,7 @@
     (take uint)
     (update (optional (buff 8192)))
   )
-  (if (<= take (+ (var-get held-sats) (on-book)))
+  (if (<= take (+ (var-get held-ustx) (on-book)))
     (ok true)
     (begin
       (try! (settle-escrow update))
@@ -797,8 +795,8 @@
   )
 )
 
-(define-private (pull-to-held-sats (amount uint))
-  (let ((have (var-get held-sats)))
+(define-private (pull-to-held-ustx (amount uint))
+  (let ((have (var-get held-ustx)))
     (if (>= have amount)
       (ok true)
       (let (
@@ -809,15 +807,15 @@
         (if (>= (- on-market gap) (min-market))
           (begin
             (try! (as-contract? ()
-              (try! (contract-call? MARKET withdraw-token-x gap SBTC SBTC_NAME))
+              (try! (contract-call? MARKET withdraw-token-y gap WSTX WSTX_NAME))
             ))
-            (var-set held-sats (+ have gap))
+            (var-set held-ustx (+ have gap))
             (ok true)
           )
           (let ((refunded (try! (as-contract? ()
-              (try! (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+              (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
             ))))
-            (var-set held-sats (+ have refunded))
+            (var-set held-ustx (+ have refunded))
             (ok true)
           )
         )
