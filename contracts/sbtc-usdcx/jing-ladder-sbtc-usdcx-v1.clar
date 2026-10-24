@@ -13,14 +13,14 @@
 
 (define-constant TIMELOCK_BURN_BLOCKS u144)
 
-(define-constant SIDE_BUY_STX "buy-stx")
-(define-constant SIDE_SELL_STX "sell-stx")
+(define-constant SIDE_SELL_SBTC "sel-sbtc")
+(define-constant SIDE_BUY_SBTC "buy-sbtc")
 
+(define-constant SIDE_SELL_PEG "sel-peg")
 (define-constant SIDE_BUY_PEG "buy-peg")
-(define-constant SIDE_SELL_PEG "sell-peg")
 
-(define-constant SIDE_BUY_BAND "buy-band")
 (define-constant SIDE_SELL_BAND "sel-band")
+(define-constant SIDE_BUY_BAND "buy-band")
 
 (define-constant MAX_SEATS_PER_SIDE u50)
 (define-data-var max-band-per-side uint u10)
@@ -94,7 +94,7 @@
   (default-to u0 (map-get? band-count side))
 )
 (define-private (is-band-side (side (string-ascii 8)))
-  (or (is-eq side SIDE_BUY_BAND) (is-eq side SIDE_SELL_BAND))
+  (or (is-eq side SIDE_SELL_BAND) (is-eq side SIDE_BUY_BAND))
 )
 
 (define-private (is-band-current
@@ -116,10 +116,10 @@
   )
 )
 (define-read-only (is-band-x (who principal))
-  (is-band-current who SIDE_BUY_BAND)
+  (is-band-current who SIDE_SELL_BAND)
 )
 (define-read-only (is-band-y (who principal))
-  (is-band-current who SIDE_SELL_BAND)
+  (is-band-current who SIDE_BUY_BAND)
 )
 
 (define-private (is-current
@@ -161,12 +161,12 @@
 
 (define-private (valid-side (side (string-ascii 8)))
   (or
-    (is-eq side SIDE_BUY_STX)
-    (is-eq side SIDE_SELL_STX)
-    (is-eq side SIDE_BUY_PEG)
+    (is-eq side SIDE_SELL_SBTC)
+    (is-eq side SIDE_BUY_SBTC)
     (is-eq side SIDE_SELL_PEG)
-    (is-eq side SIDE_BUY_BAND)
+    (is-eq side SIDE_BUY_PEG)
     (is-eq side SIDE_SELL_BAND)
+    (is-eq side SIDE_BUY_BAND)
   )
 )
 
@@ -305,8 +305,8 @@
 
     (asserts!
       (and
-        (>= n (get-band-count SIDE_BUY_BAND))
         (>= n (get-band-count SIDE_SELL_BAND))
+        (>= n (get-band-count SIDE_BUY_BAND))
         (< n MAX_SEATS_PER_SIDE)
       )
       ERR_BAND_FULL

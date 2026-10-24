@@ -18,14 +18,14 @@
 
 (define-constant SOLD_OUT_DUST u10000)
 
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4)
-(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4)
+(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-sbtc-usdcx-v1)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
-(define-constant WSTX_NAME "wstx")
-(define-constant SIDE "sel-band")
-(define-constant NAME_PREFIX "jing-sell-stx-")
+(define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
+(define-constant USDCX_NAME "usdcx-token")
+(define-constant SIDE "buy-band")
+(define-constant NAME_PREFIX "jing-buy-sbtc-")
 (define-constant BPS_PRECISION u10000)
 (define-constant PRICE_NUMERATOR u1000000000000000000)
 
@@ -33,10 +33,10 @@
 (define-constant PROCEEDS_SCALE u1000000000000000000)
 (define-read-only (miner-mid)
   (match (contract-call?
-    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3
-    get-native-price
+    'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
+    get-value "BTC/USD"
   )
-    p p
+    p (get value p)
     e u0
   )
 )
@@ -48,7 +48,7 @@
 (define-read-only (min-market)
   (get min-token-y
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-min-deposits
     ))
 )
@@ -284,22 +284,22 @@
 (define-read-only (market-size)
   (+
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-token-y-deposit
       (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
         get-current-cycle
       )
       current-contract
     )
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-token-y-parked current-contract
     )
     (default-to u0
       (get amount
         (contract-call?
-          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
           get-token-y-pending-deposit current-contract
         ))
     ))
@@ -354,7 +354,7 @@
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (stx-get-balance current-contract) (var-get reserved-ustx)))
+      (local (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-ustx)))
       (actual (+ (market-size) local))
       (recorded (pooled-stx))
       (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
@@ -410,7 +410,7 @@
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
     (let ((paid (try! (settle-proceeds member))))
-      (try! (stx-transfer? amount member current-contract))
+      (try! (contract-call? USDCX transfer amount member current-contract none))
       (let (
           (to-push (+ amount (var-get held-ustx)))
           (orphan (if (is-eq (var-get total-shares) u0)
@@ -521,8 +521,8 @@
             (begin
               (try! (escrow-for take update))
               (try! (pull-to-held-ustx take))
-              (try! (as-contract? ((with-stx take))
-                (try! (stx-transfer? take current-contract member))
+              (try! (as-contract? ((with-ft USDCX USDCX_NAME take))
+                (try! (contract-call? USDCX transfer take current-contract member none))
               ))
               (var-set held-ustx (- (var-get held-ustx) take))
               true
@@ -596,14 +596,14 @@
     (if (> (market-size) u0)
       (begin
         (try! (as-contract? ()
-          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
+          (try! (contract-call? MARKET cancel-token-y-deposit USDCX USDCX_NAME))
         ))
         true
       )
       true
     )
     (let (
-        (free (- (stx-get-balance current-contract) (var-get reserved-ustx)))
+        (free (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-ustx)))
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)
@@ -693,8 +693,8 @@
       )
       (and
         (> back u0)
-        (try! (as-contract? ((with-stx back))
-          (try! (stx-transfer? back current-contract who))
+        (try! (as-contract? ((with-ft USDCX USDCX_NAME back))
+          (try! (contract-call? USDCX transfer back current-contract who none))
         ))
       )
       (var-set reserved-ustx (- (var-get reserved-ustx) back))
@@ -733,9 +733,9 @@
     )
     (asserts! (> g u0) ERR_ZERO_PRICE)
     (var-set cap g)
-    (as-contract? ((with-stx to-push))
+    (as-contract? ((with-ft USDCX USDCX_NAME to-push))
       (try! (contract-call? MARKET deposit-token-y to-push g
-        (some (var-get spread-bps)) WSTX WSTX_NAME
+        (some (var-get spread-bps)) USDCX USDCX_NAME
       ))
     )
   )
@@ -756,7 +756,7 @@
   (match (contract-call? MARKET get-token-y-pending-deposit current-contract)
     pending (if (>= stacks-block-time (+ (get submitted-at pending) u86400))
       (let ((refunded (try! (as-contract? ()
-          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
+          (try! (contract-call? MARKET cancel-token-y-deposit USDCX USDCX_NAME))
         ))))
         (var-set held-ustx (+ (var-get held-ustx) refunded))
         (var-set escrow-cancelled-at stacks-block-time)
@@ -764,7 +764,7 @@
       )
       (begin
         (try! (contract-call? MARKET settle-token-y-deposit current-contract
-          (unwrap! update ERR_UPDATE_REQUIRED) WSTX WSTX_NAME
+          (unwrap! update ERR_UPDATE_REQUIRED) USDCX USDCX_NAME
         ))
         (ok true)
       )
@@ -807,13 +807,13 @@
         (if (>= (- on-market gap) (min-market))
           (begin
             (try! (as-contract? ()
-              (try! (contract-call? MARKET withdraw-token-y gap WSTX WSTX_NAME))
+              (try! (contract-call? MARKET withdraw-token-y gap USDCX USDCX_NAME))
             ))
             (var-set held-ustx (+ have gap))
             (ok true)
           )
           (let ((refunded (try! (as-contract? ()
-              (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
+              (try! (contract-call? MARKET cancel-token-y-deposit USDCX USDCX_NAME))
             ))))
             (var-set held-ustx (+ have refunded))
             (ok true)

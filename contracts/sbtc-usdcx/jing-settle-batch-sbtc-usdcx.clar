@@ -1,9 +1,9 @@
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4)
 
 (define-constant TOKEN_X 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant TOKEN_X_NAME "sbtc-token")
-(define-constant TOKEN_Y 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
-(define-constant TOKEN_Y_NAME "wstx")
+(define-constant TOKEN_Y 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
+(define-constant TOKEN_Y_NAME "usdcx-token")
 
 (define-constant KIND_DEPOSIT u0)
 (define-constant KIND_LIMIT u1)

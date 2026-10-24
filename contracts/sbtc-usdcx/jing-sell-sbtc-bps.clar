@@ -18,12 +18,14 @@
 
 (define-constant SOLD_OUT_DUST u10)
 
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4)
-(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4)
+(define-constant LADDER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-sbtc-usdcx-v1)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
-(define-constant SIDE "buy-band")
-(define-constant NAME_PREFIX "jing-buy-stx-")
+(define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
+(define-constant USDCX_NAME "usdcx-token")
+(define-constant SIDE "sel-band")
+(define-constant NAME_PREFIX "jing-sell-sbtc-")
 (define-constant BPS_PRECISION u10000)
 (define-constant PRICE_NUMERATOR u1000000000000000000)
 
@@ -31,10 +33,10 @@
 (define-constant PROCEEDS_SCALE u1000000000000000000)
 (define-read-only (miner-mid)
   (match (contract-call?
-    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3
-    get-native-price
+    'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
+    get-value "BTC/USD"
   )
-    p p
+    p (get value p)
     e u0
   )
 )
@@ -46,7 +48,7 @@
 (define-read-only (min-market)
   (get min-token-x
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-min-deposits
     ))
 )
@@ -282,22 +284,22 @@
 (define-read-only (market-size)
   (+
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-token-x-deposit
       (contract-call?
-        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
         get-current-cycle
       )
       current-contract
     )
     (contract-call?
-      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       get-token-x-parked current-contract
     )
     (default-to u0
       (get amount
         (contract-call?
-          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
           get-token-x-pending-deposit current-contract
         ))
     ))
@@ -357,7 +359,7 @@
       ))
       (actual (+ (market-size) local))
       (recorded (pooled-sbtc))
-      (stx-now (stx-get-balance current-contract))
+      (stx-now (unwrap-panic (contract-call? USDCX get-balance current-contract)))
       (gained (- stx-now (var-get stx-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
@@ -682,8 +684,8 @@
       )
       (and
         (> owed u0)
-        (try! (as-contract? ((with-stx owed))
-          (try! (stx-transfer? owed current-contract who))
+        (try! (as-contract? ((with-ft USDCX USDCX_NAME owed))
+          (try! (contract-call? USDCX transfer owed current-contract who none))
         ))
       )
       (var-set stx-accounted (- (var-get stx-accounted) owed))
