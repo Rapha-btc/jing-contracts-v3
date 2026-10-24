@@ -84,3 +84,25 @@ On v6-4 each side pays a 10 bps fee on what it receives, and the taker funds a r
 - Audit bounty (7,000 sats, closes 2026-10-29): https://aibtc.com/bounties, id `mviz88od905e87317769`.
 - Clarinet SDK: `tests/unit/mm-loop-sell-sbtc.test.ts` (16/16) and `-sell-stx.test.ts` (18/18), 100% branch coverage, see `tests/unit/mm-loop-sell-COVERAGE.md`.
 - Rendezvous: `tests/rv/mm-loop-sell/`, 500 invariant + 500 property runs per contract.
+
+## Next iteration (ideas from the first live run)
+
+First live run, sell-stx vault, 2026-10-22 23:20 UTC to 2026-10-24: 2,000 STX in, +49.15 STX realized over 10 closed loops (9 market buy-back fills during the STX dip from ~400 to ~385 sats/STX, 1 manual owner loop +2.04 STX), checked against on-chain balances. Live view: jingswap.com/loop.
+
+### 1. Rest as a fixed limit when the peg is off
+
+Today the buy-back is a pegged order (mid +/- spread, capped by the floor). `pegged-ask` / `pegged-bid` in markets-sbtc-stx-jing-v6-4 recompute its price from the current Pyth mid on every fill; when that price is past the floor the market returns MAX_UINT / u0, so the order is switched off: it does not quote and no taker can reach it, even one walking the book with slippage.
+
+Improvement: while the peg would be off, the vault holds the same sats as a plain limit order at the floor (no spread). A taker who walks the book can then fill it, and every such fill is at or better than the floor, so it is still a profitable close. When the mid comes back inside the floor, the vault switches back to the pegged order (better price, earns the maker rebate).
+
+Where: in the vault, not the market (v6-4 is deployed). The vault (or the keeper, through a new vault entry point) chooses between `set-token-x-limit` with `(some spread-bps)` (pegged) and with `none` at the floor (fixed), based on mid vs floor. Needs a new vault version and a funds migration; test on the stxer fork that a walking taker fills the fixed limit at the floor and never below it, and that the switch back to pegged keeps the booked inventory exact.
+
+### 2. Run both directions together
+
+The sell-stx loop earns when STX dips after it sells (buy-back fills under the floor); in a steady STX rise its buy-back stays off and the vault waits in sBTC. The sell-sbtc loop is the mirror: it earns when STX bounces after it buys. Running both is two-sided market making: each profits from the oscillation, and together they hedge a trend in either direction. Track realized PnL per vault and combined.
+
+### 3. Keeper and ops lessons
+
+- Self-settle (keeper 74df208): the keeper settles every pending order it creates right after the sell / buy-back confirms, plus a backstop each pass. Before this, a rung deposit sat pending 13.5 h because the backend cron only reads the latest 50 jing-core events and arb txs pushed the print out of that window (the SL fast trigger has been silent since 2026-10-19).
+- Self-push (keeper 1b9b372): a rung's deposit falls back to `held-ustx` when the market already has a pending deposit for it; 1,515 STX sat idle that way. The keeper now calls the rung's permissionless `push` whenever a rung holds STX and has nothing pending, then settles it.
+- Owner tools on jingswap.com/loop: claim now, post buy-back, sell idle STX, buy back now (claim, withdraw, router swap, send STX back), settle now, push to market, ask-the-keeper signals.
