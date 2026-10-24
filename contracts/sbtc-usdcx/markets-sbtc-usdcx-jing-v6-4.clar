@@ -31,6 +31,8 @@ TAKER_REBATE_BPS
 (define-data-var initialized bool false)
 (define-data-var feed-id-x uint u0)
 (define-data-var feed-id-y uint u0)
+(define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
+(define-constant USDCX_NAME "usdcx-token")
 (define-constant LAZER_ORACLE 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle)
 (define-constant LAZER_DECODER 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1)
 (define-constant MICROS_PER_SECOND u1000000)
@@ -1252,7 +1254,7 @@ ERR_QUEUE_FULL
 (try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount cycle price
 (var-get token-x) tok-y
 ))
-(and (not escrowed) (try! (stx-transfer? amount who current-contract)))
+(and (not escrowed) (try! (contract-call? USDCX transfer amount who current-contract none)))
 (map-delete token-y-deposits {
 cycle: cycle,
 depositor: smallest-who,
@@ -1280,7 +1282,7 @@ limit-price cycle spread-bps carry (some smallest-who) smallest-amount
 true
 )
 (and (> carry u0) (map-delete token-y-parked who))
-(and (not escrowed) (try! (stx-transfer? amount who current-contract)))
+(and (not escrowed) (try! (contract-call? USDCX transfer amount who current-contract none)))
 (map-set token-y-deposits {
 cycle: cycle,
 depositor: who,
@@ -1335,7 +1337,7 @@ stacks-block-time parked u0 false t asset-name
 (ok amount)
 )
 (begin
-(try! (stx-transfer? amount tx-sender current-contract))
+(try! (contract-call? USDCX transfer amount tx-sender current-contract none))
 (map-set token-y-pending-deposits tx-sender {
 amount: amount,
 limit: limit-price,
@@ -1391,8 +1393,8 @@ full
 )
 )
 (begin
-(try! (as-contract? ((with-stx amount))
-(try! (stx-transfer? amount current-contract who))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+(try! (contract-call? USDCX transfer amount current-contract who none))
 ))
 (is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price
 (if crosses
@@ -1412,8 +1414,8 @@ bumped (match (deposit-token-y-core who true amount limit-price spread-bps
 deposited (ok deposited)
 deposit-error (begin
 (asserts! (is-eq (err deposit-error) ERR_QUEUE_FULL) (err deposit-error))
-(try! (as-contract? ((with-stx amount))
-(try! (stx-transfer? amount current-contract who))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+(try! (contract-call? USDCX transfer amount current-contract who none))
 ))
 (is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price "queue-full"
 (var-get token-x) (var-get token-y)
@@ -1423,8 +1425,8 @@ deposit-error (begin
 )
 park-error (begin
 (asserts! (is-eq (err park-error) ERR_QUEUE_FULL) (err park-error))
-(try! (as-contract? ((with-stx amount))
-(try! (stx-transfer? amount current-contract who))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+(try! (contract-call? USDCX transfer amount current-contract who none))
 ))
 (is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price "queue-full"
 (var-get token-x) (var-get token-y)
@@ -1709,8 +1711,8 @@ ERR_NOTHING_TO_WITHDRAW
 )
 (if (> pending-amount u0)
 (begin
-(try! (as-contract? ((with-stx pending-amount))
-(try! (stx-transfer? pending-amount current-contract caller))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME pending-amount))
+(try! (contract-call? USDCX transfer pending-amount current-contract caller none))
 ))
 (map-delete token-y-pending-deposits caller)
 (is-ok (contract-call? .jing-core-v6 log-pending-refund-y caller pending-amount u0
@@ -1725,8 +1727,8 @@ true
 (map-delete token-y-deposit-limits caller)
 (if (> parked u0)
 (begin
-(try! (as-contract? ((with-stx parked))
-(try! (stx-transfer? parked current-contract caller))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME parked))
+(try! (contract-call? USDCX transfer parked current-contract caller none))
 ))
 (map-delete token-y-parked caller)
 (is-ok (contract-call? .jing-core-v6 log-refund-y caller parked cycle (var-get token-x)
@@ -1738,8 +1740,8 @@ true
 )
 (if (> amount u0)
 (begin
-(try! (as-contract? ((with-stx amount))
-(try! (stx-transfer? amount current-contract caller))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+(try! (contract-call? USDCX transfer amount current-contract caller none))
 ))
 (map-delete token-y-deposits {
 cycle: cycle,
@@ -1869,8 +1871,8 @@ amount
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (< amount have) ERR_USE_CANCEL)
 (asserts! (>= remaining (var-get min-token-y-deposit)) ERR_DEPOSIT_TOO_SMALL)
-(try! (as-contract? ((with-stx amount))
-(try! (stx-transfer? amount current-contract caller))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+(try! (contract-call? USDCX transfer amount current-contract caller none))
 ))
 (if on-live
 (begin
@@ -2317,7 +2319,7 @@ set-at: stacks-block-time,
 ))
 (and
 (> rebate u0)
-(try! (stx-transfer? rebate tx-sender current-contract))
+(try! (contract-call? USDCX transfer rebate tx-sender current-contract none))
 )
 (var-set pending-rebate-y rebate)
 (var-set pending-rebate-bps-y bps)
@@ -2799,7 +2801,7 @@ price bumped tx-trait tx-name
 ))
 )
 (begin
-(and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
+(and (> rebate u0) (try! (contract-call? USDCX transfer rebate tx-sender current-contract none)))
 (var-set pending-rebate-y rebate)
 (var-set pending-rebate-bps-y (rebate-bps-for-age (get age aged)))
 (try! (deposit-token-y-core tx-sender false net limit-price none stacks-block-time u0
@@ -2897,10 +2899,10 @@ u0
 (begin
 (var-set pending-rebate-y (- (var-get pending-rebate-y) reb-y))
 (var-set pending-rebate-x (- (var-get pending-rebate-x) reb-x))
-(try! (as-contract? ((with-stx (+ y-traded reb-y)))
-(try! (stx-transfer? (+ (- y-traded y-fee) reb-y) current-contract x-who))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME (+ y-traded reb-y)))
+(try! (contract-call? USDCX transfer (+ (- y-traded y-fee) reb-y) current-contract x-who none))
 (if (> y-fee u0)
-(try! (stx-transfer? y-fee current-contract (var-get treasury)))
+(try! (contract-call? USDCX transfer y-fee current-contract (var-get treasury) none))
 true
 )))
 (try! (as-contract? ((with-ft (contract-of t) tx-name (+ x-traded reb-x)))
@@ -2956,8 +2958,8 @@ depositor: x-who,
 )
 (if (> y-refund u0)
 (begin
-(try! (as-contract? ((with-stx y-refund))
-(try! (stx-transfer? y-refund current-contract y-who))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME y-refund))
+(try! (contract-call? USDCX transfer y-refund current-contract y-who none))
 ))
 (try! (contract-call? .jing-core-v6 log-refund-y y-who y-refund cycle (var-get token-x)
 (var-get token-y)
@@ -3336,8 +3338,8 @@ true
 )
 (and
 (> left u0)
-(try! (as-contract? ((with-stx left))
-(try! (stx-transfer? left current-contract swapper))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME left))
+(try! (contract-call? USDCX transfer left current-contract swapper none))
 ))
 )
 (var-set pending-rebate-y u0)
@@ -3345,8 +3347,8 @@ true
 (and
 (> rem u0)
 (begin
-(try! (as-contract? ((with-stx rem))
-(try! (stx-transfer? rem current-contract swapper))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME rem))
+(try! (contract-call? USDCX transfer rem current-contract swapper none))
 ))
 (map-delete token-y-deposits {
 cycle: cycle,
@@ -3551,8 +3553,8 @@ token-x-fee: token-x-fee,
 settled-at: stacks-block-height,
 })
 (if (> token-y-fee u0)
-(try! (as-contract? ((with-stx token-y-fee))
-(try! (stx-transfer? token-y-fee current-contract (var-get treasury)))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME token-y-fee))
+(try! (contract-call? USDCX transfer token-y-fee current-contract (var-get treasury) none))
 ))
 true
 )
@@ -3659,8 +3661,8 @@ true
 (map-delete token-y-deposit-limits depositor)
 (if (> my-refund u0)
 (begin
-(try! (as-contract? ((with-stx my-refund))
-(try! (stx-transfer? my-refund current-contract depositor))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME my-refund))
+(try! (contract-call? USDCX transfer my-refund current-contract depositor none))
 ))
 (try! (contract-call? .jing-core-v6 log-refund-y depositor my-refund cycle
 (var-get token-x) (var-get token-y)
@@ -3733,8 +3735,8 @@ true
 true
 )
 (if (> my-token-y-received u0)
-(try! (as-contract? ((with-stx my-token-y-received))
-(try! (stx-transfer? my-token-y-received current-contract depositor))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME my-token-y-received))
+(try! (contract-call? USDCX transfer my-token-y-received current-contract depositor none))
 ))
 true
 )
@@ -3799,8 +3801,8 @@ total-token-y: (+ (get total-token-y next-totals) acc-token-y-rol),
 total-token-x: (+ (get total-token-x next-totals) acc-token-x-rol),
 })
 (if (> token-y-dust u0)
-(try! (as-contract? ((with-stx token-y-dust))
-(try! (stx-transfer? token-y-dust current-contract (var-get treasury)))
+(try! (as-contract? ((with-ft USDCX USDCX_NAME token-y-dust))
+(try! (contract-call? USDCX transfer token-y-dust current-contract (var-get treasury) none))
 ))
 true
 )
@@ -3835,6 +3837,7 @@ ERR_NOT_AUTHORIZED
 )
 (asserts! (not (var-get initialized)) ERR_ALREADY_INITIALIZED)
 (asserts! (and (> min-x u0) (> min-y u0)) ERR_ZERO_MIN_DEPOSIT)
+(asserts! (is-eq y USDCX) ERR_WRONG_TRAIT)
 (var-set token-x x)
 (var-set token-y y)
 (var-set min-token-x-deposit min-x)
