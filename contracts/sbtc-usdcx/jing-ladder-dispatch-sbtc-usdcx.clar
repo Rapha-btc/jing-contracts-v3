@@ -33,8 +33,8 @@
     (asserts! (is-none (index-of? (get seen state) who)) ERR_DUPLICATE)
     (asserts!
       (if (get buy state)
-        (contract-call? LADDER is-band-x who)
         (contract-call? LADDER is-band-y who)
+        (contract-call? LADDER is-band-x who)
       )
       ERR_NOT_SEATED
     )

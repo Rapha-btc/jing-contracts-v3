@@ -83,8 +83,8 @@
 )
 (define-data-var unfilled-index uint SCALE)
 (define-data-var proceeds-index uint u0)
-(define-data-var held-ustx uint u0)
-(define-data-var reserved-ustx uint u0)
+(define-data-var held-uusdcx uint u0)
+(define-data-var reserved-uusdcx uint u0)
 (define-map epoch-final-unfilled
   uint
   uint
@@ -123,9 +123,9 @@
     scale: (var-get scale),
     unfilled-index: (var-get unfilled-index),
     proceeds-index: (var-get proceeds-index),
-    held-ustx: (var-get held-ustx),
+    held-uusdcx: (var-get held-uusdcx),
     resting: (market-size),
-    pooled: (pooled-stx),
+    pooled: (pooled-usdcx),
   }
 )
 
@@ -142,7 +142,7 @@
         ))
         (sh (carried stored from to))
         (input (if (and current (is-eq (var-get members) u1))
-          (+ (market-size) (var-get held-ustx))
+          (+ (market-size) (var-get held-uusdcx))
           (/
             (* sh
               (if current
@@ -305,7 +305,7 @@
     ))
 )
 
-(define-read-only (pooled-stx)
+(define-read-only (pooled-usdcx)
   (/ (* (var-get total-shares) (var-get unfilled-index)) SCALE)
 )
 
@@ -354,14 +354,14 @@
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-ustx)))
+      (local (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-uusdcx)))
       (actual (+ (market-size) local))
-      (recorded (pooled-stx))
+      (recorded (pooled-usdcx))
       (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
       (gained (- sbtc-now (var-get sats-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
-    (var-set held-ustx local)
+    (var-set held-uusdcx local)
     (if (is-eq shares u0)
       (ok true)
       (let (
@@ -412,9 +412,9 @@
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? USDCX transfer amount member current-contract none))
       (let (
-          (to-push (+ amount (var-get held-ustx)))
+          (to-push (+ amount (var-get held-uusdcx)))
           (orphan (if (is-eq (var-get total-shares) u0)
-            (+ (market-size) (var-get held-ustx))
+            (+ (market-size) (var-get held-uusdcx))
             u0
           ))
           (shares (/ (* (+ amount orphan) SCALE) (var-get unfilled-index)))
@@ -429,8 +429,8 @@
             (>= (+ to-push (market-size)) (min-market))
             (is-ok (push-to-market to-push))
           )
-          (var-set held-ustx u0)
-          (var-set held-ustx to-push)
+          (var-set held-uusdcx u0)
+          (var-set held-uusdcx to-push)
         )
         (map-set positions member {
           epoch: epo,
@@ -442,7 +442,7 @@
         (var-set total-shares (+ (var-get total-shares) shares))
         (and joining (var-set members (+ (var-get members) u1)))
         (is-ok (contract-call? LADDER log-deposit member amount shares epo
-          (is-eq (var-get held-ustx) u0) (var-get held-ustx)
+          (is-eq (var-get held-uusdcx) u0) (var-get held-uusdcx)
         ))
         (ok {
           amount: amount,
@@ -461,7 +461,7 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (try! (sync))
     (let (
-        (to-push (var-get held-ustx))
+        (to-push (var-get held-uusdcx))
         (pushed (and
           (> to-push u0)
           (>= (+ to-push (market-size)) (min-market))
@@ -469,11 +469,11 @@
         ))
       )
       (if pushed
-        (var-set held-ustx u0)
+        (var-set held-uusdcx u0)
         true
       )
       (is-ok (contract-call? LADDER log-push tx-sender to-push pushed
-        (var-get held-ustx)
+        (var-get held-uusdcx)
       ))
       (ok pushed)
     )
@@ -508,7 +508,7 @@
               partial
             ))
             (take (if (and full (is-eq (var-get members) u1))
-              (+ (market-size) (var-get held-ustx))
+              (+ (market-size) (var-get held-uusdcx))
               (if full
                 mine
                 amount
@@ -520,11 +520,11 @@
             (> take u0)
             (begin
               (try! (escrow-for take update))
-              (try! (pull-to-held-ustx take))
+              (try! (pull-to-held-uusdcx take))
               (try! (as-contract? ((with-ft USDCX USDCX_NAME take))
                 (try! (contract-call? USDCX transfer take current-contract member none))
               ))
-              (var-set held-ustx (- (var-get held-ustx) take))
+              (var-set held-uusdcx (- (var-get held-uusdcx) take))
               true
             )
           )
@@ -552,7 +552,7 @@
             )
           )
           (is-ok (contract-call? LADDER log-withdraw member take shares-out epo
-            (var-get held-ustx)
+            (var-get held-uusdcx)
           ))
           (ok {
             stx: take,
@@ -603,14 +603,14 @@
       true
     )
     (let (
-        (free (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-ustx)))
+        (free (- (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-uusdcx)))
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)
       (map-set epoch-final-unfilled epo (var-get unfilled-index))
       (map-set epoch-final-scale epo (var-get scale))
-      (var-set reserved-ustx (+ (var-get reserved-ustx) free))
-      (var-set held-ustx u0)
+      (var-set reserved-uusdcx (+ (var-get reserved-uusdcx) free))
+      (var-set held-uusdcx u0)
       (map-set epoch-reserve epo {
         left: (var-get members),
         reserve: free,
@@ -697,7 +697,7 @@
           (try! (contract-call? USDCX transfer back current-contract who none))
         ))
       )
-      (var-set reserved-ustx (- (var-get reserved-ustx) back))
+      (var-set reserved-uusdcx (- (var-get reserved-uusdcx) back))
       (and (not current) (count-reserve-claim pos-epoch back owed))
       (if current
         (map-set positions who
@@ -758,7 +758,7 @@
       (let ((refunded (try! (as-contract? ()
           (try! (contract-call? MARKET cancel-token-y-deposit USDCX USDCX_NAME))
         ))))
-        (var-set held-ustx (+ (var-get held-ustx) refunded))
+        (var-set held-uusdcx (+ (var-get held-uusdcx) refunded))
         (var-set escrow-cancelled-at stacks-block-time)
         (ok true)
       )
@@ -786,7 +786,7 @@
     (take uint)
     (update (optional (buff 8192)))
   )
-  (if (<= take (+ (var-get held-ustx) (on-book)))
+  (if (<= take (+ (var-get held-uusdcx) (on-book)))
     (ok true)
     (begin
       (try! (settle-escrow update))
@@ -795,8 +795,8 @@
   )
 )
 
-(define-private (pull-to-held-ustx (amount uint))
-  (let ((have (var-get held-ustx)))
+(define-private (pull-to-held-uusdcx (amount uint))
+  (let ((have (var-get held-uusdcx)))
     (if (>= have amount)
       (ok true)
       (let (
@@ -809,13 +809,13 @@
             (try! (as-contract? ()
               (try! (contract-call? MARKET withdraw-token-y gap USDCX USDCX_NAME))
             ))
-            (var-set held-ustx (+ have gap))
+            (var-set held-uusdcx (+ have gap))
             (ok true)
           )
           (let ((refunded (try! (as-contract? ()
               (try! (contract-call? MARKET cancel-token-y-deposit USDCX USDCX_NAME))
             ))))
-            (var-set held-ustx (+ have refunded))
+            (var-set held-uusdcx (+ have refunded))
             (ok true)
           )
         )

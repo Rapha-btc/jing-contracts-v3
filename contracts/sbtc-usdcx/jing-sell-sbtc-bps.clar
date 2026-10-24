@@ -89,7 +89,7 @@
   uint
   uint
 )
-(define-data-var stx-accounted uint u0)
+(define-data-var usdcx-accounted uint u0)
 (define-data-var current-proceeds uint u0)
 (define-data-var proceeds-carry uint u0)
 (define-data-var push-paused bool false)
@@ -359,8 +359,8 @@
       ))
       (actual (+ (market-size) local))
       (recorded (pooled-sbtc))
-      (stx-now (unwrap-panic (contract-call? USDCX get-balance current-contract)))
-      (gained (- stx-now (var-get stx-accounted)))
+      (usdcx-now (unwrap-panic (contract-call? USDCX get-balance current-contract)))
+      (gained (- usdcx-now (var-get usdcx-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (var-set held-sats local)
@@ -375,7 +375,7 @@
           (new-proceeds (+ (var-get proceeds-index) (/ scaled shares)))
         )
         (var-set proceeds-index new-proceeds)
-        (var-set stx-accounted stx-now)
+        (var-set usdcx-accounted usdcx-now)
         (var-set current-proceeds (+ (var-get current-proceeds) gained))
         (var-set proceeds-carry (mod scaled shares))
         (if (or (< actual SOLD_OUT_DUST) (< new-index (/ MINT_FLOOR RESCALE)))
@@ -688,7 +688,7 @@
           (try! (contract-call? USDCX transfer owed current-contract who none))
         ))
       )
-      (var-set stx-accounted (- (var-get stx-accounted) owed))
+      (var-set usdcx-accounted (- (var-get usdcx-accounted) owed))
       (and current (var-set current-proceeds (- (var-get current-proceeds) owed)))
       (and
         current
