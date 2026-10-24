@@ -110,8 +110,7 @@ TAKER_REBATE_BPS
 )
 (define-private (refresh-seat-count)
 (let ((n (contract-call? .jing-ladder-v1 get-max-band-per-side)))
-(var-set seats-per-side
-(if (> n MAX_DEPOSITORS)
+(var-set seats-per-side (if (> n MAX_DEPOSITORS)
 MAX_DEPOSITORS
 n
 ))
@@ -793,9 +792,7 @@ dead (park-token-y cycle price dead depositors)
 (if edge
 (let ((last (unwrap-panic (element-at? top (- n u1)))))
 (match (get found outside)
-small (if (> (get-token-y-deposit cycle (get who last))
-(get smallest outside)
-)
+small (if (> (get-token-y-deposit cycle (get who last)) (get smallest outside))
 (park-token-y cycle price small depositors)
 (park-token-y cycle price (get who last) depositors)
 )
@@ -884,9 +881,7 @@ dead (park-token-x cycle price dead depositors)
 (if edge
 (let ((last (unwrap-panic (element-at? top (- n u1)))))
 (match (get found outside)
-small (if (> (get-token-x-deposit cycle (get who last))
-(get smallest outside)
-)
+small (if (> (get-token-x-deposit cycle (get who last)) (get smallest outside))
 (park-token-x cycle price small depositors)
 (park-token-x cycle price (get who last) depositors)
 )
@@ -921,14 +916,12 @@ cycle: cycle,
 depositor: who,
 })
 (var-set bumped-token-y-principal who)
-(map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y depositors)
-)
+(map-set token-y-depositor-list cycle (filter not-eq-bumped-token-y depositors))
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
 )
-(try! (contract-call? .jing-core-v6 log-park-y who amount cycle price
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-park-y who amount cycle price (var-get token-x)
+(var-get token-y)
 ))
 (ok true)
 )
@@ -949,14 +942,12 @@ cycle: cycle,
 depositor: who,
 })
 (var-set bumped-token-x-principal who)
-(map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x depositors)
-)
+(map-set token-x-depositor-list cycle (filter not-eq-bumped-token-x depositors))
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
 )
-(try! (contract-call? .jing-core-v6 log-park-x who amount cycle price
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-park-x who amount cycle price (var-get token-x)
+(var-get token-y)
 ))
 (ok true)
 )
@@ -1042,8 +1033,7 @@ prev-publish-time: u0,
 (feeds (get price-feeds decoded))
 (publish-time (/ (get timestamp decoded) MICROS_PER_SECOND))
 (fx (unwrap!
-(get found
-(fold pick-feed feeds {
+(get found (fold pick-feed feeds {
 id: (var-get feed-id-x),
 found: none,
 })
@@ -1051,8 +1041,7 @@ found: none,
 ERR_FEED_MISSING
 ))
 (fy (unwrap!
-(get found
-(fold pick-feed feeds {
+(get found (fold pick-feed feeds {
 id: (var-get feed-id-y),
 found: none,
 })
@@ -1066,10 +1055,19 @@ feed-y: (try! (shape-feed fy publish-time)),
 })
 )
 )
-(define-private (feed-age (pub-x uint) (pub-y uint))
-  (let ((oldest (if (< pub-x pub-y) pub-x pub-y)))
-    (if (> oldest stacks-block-time) u0 (- stacks-block-time oldest))
-  )
+(define-private (feed-age
+(pub-x uint)
+(pub-y uint)
+)
+(let ((oldest (if (< pub-x pub-y)
+pub-x
+pub-y
+)))
+(if (> oldest stacks-block-time)
+u0
+(- stacks-block-time oldest)
+)
+)
 )
 
 (define-private (fresh-classification-price-aged (update (buff 8192)))
@@ -1077,8 +1075,6 @@ feed-y: (try! (shape-feed fy publish-time)),
 (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))
 )
 )
-;; Same checks as fresh-classification-price-aged, on feeds the caller
-;; already verified with lazer-feeds (swap and reprice-or-swap verify once).
 (define-private (fresh-classification-from-feeds
 (feed-x {
 price: int,
@@ -1113,9 +1109,7 @@ pub-y
 (asserts! (> (get price feed-x) 0) ERR_ZERO_PRICE)
 (asserts! (> (get price feed-y) 0) ERR_ZERO_PRICE)
 (ok {
-price: (/ (* (to-uint (get price feed-x)) PRICE_PRECISION)
-(to-uint (get price feed-y))
-),
+price: (/ (* (to-uint (get price feed-x)) PRICE_PRECISION) (to-uint (get price feed-y))),
 age: (feed-age pub-x pub-y),
 at: oldest,
 })
@@ -1250,16 +1244,13 @@ smallest-principal: who,
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
 (var-set bumped-token-y-principal smallest-who)
 (map-set token-y-depositor-list cycle
-(unwrap!
-(as-max-len?
-(append (filter not-eq-bumped-token-y depositors) who) u50
-)
+(unwrap! (as-max-len? (append (filter not-eq-bumped-token-y depositors) who) u50)
 ERR_QUEUE_FULL
 ))
 (and (> carry u0) (map-delete token-y-parked who))
 (map-set token-y-parked smallest-who smallest-amount)
-(try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount
-cycle price (var-get token-x) tok-y
+(try! (contract-call? .jing-core-v6 log-park-y smallest-who smallest-amount cycle price
+(var-get token-x) tok-y
 ))
 (and (not escrowed) (try! (stx-transfer? amount who current-contract)))
 (map-delete token-y-deposits {
@@ -1269,15 +1260,14 @@ depositor: smallest-who,
 (map-set token-y-deposits {
 cycle: cycle,
 depositor: who,
-}
-(+ carry amount)
+} (+ carry amount)
 )
 (put-limit-y who limit-price spread-bps instr-at)
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (- (get total-token-y totals) smallest-amount) carry amount) })
 )
-(try! (contract-call? .jing-core-v6 log-deposit-y who (+ carry amount)
-amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount
+(try! (contract-call? .jing-core-v6 log-deposit-y who (+ carry amount) amount
+limit-price cycle spread-bps carry (some smallest-who) smallest-amount
 (var-get token-x) tok-y
 ))
 (ok amount)
@@ -1285,9 +1275,8 @@ amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount
 (begin
 (if (is-eq existing u0)
 (map-set token-y-depositor-list cycle
-(unwrap! (as-max-len? (append depositors who) u50)
-ERR_QUEUE_FULL
-))
+(unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
+)
 true
 )
 (and (> carry u0) (map-delete token-y-parked who))
@@ -1302,9 +1291,8 @@ depositor: who,
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (+ (get total-token-y totals) carry amount) })
 )
-(try! (contract-call? .jing-core-v6 log-deposit-y who
-(+ existing carry amount) amount limit-price cycle spread-bps carry none u0
-(var-get token-x) tok-y
+(try! (contract-call? .jing-core-v6 log-deposit-y who (+ existing carry amount) amount
+limit-price cycle spread-bps carry none u0 (var-get token-x) tok-y
 ))
 (ok amount)
 )
@@ -1327,7 +1315,9 @@ depositor: who,
 (full (side-full-y depositors tx-sender))
 )
 (asserts! (not (var-get paused)) ERR_PAUSED)
-(asserts! (is-none (map-get? token-y-pending-deposits tx-sender)) ERR_ALREADY_PENDING)
+(asserts! (is-none (map-get? token-y-pending-deposits tx-sender))
+ERR_ALREADY_PENDING
+)
 (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
 (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (asserts! (is-eq (contract-of t) (var-get token-y)) ERR_WRONG_TRAIT)
@@ -1339,7 +1329,9 @@ ERR_DEPOSIT_TOO_SMALL
 (not (and new-maker full))
 )
 (begin
-(try! (deposit-token-y-core tx-sender false amount limit-price spread-bps stacks-block-time parked u0 false t asset-name))
+(try! (deposit-token-y-core tx-sender false amount limit-price spread-bps
+stacks-block-time parked u0 false t asset-name
+))
 (ok amount)
 )
 (begin
@@ -1350,8 +1342,8 @@ limit: limit-price,
 spread-bps: spread-bps,
 submitted-at: stacks-block-time,
 })
-(try! (contract-call? .jing-core-v6 log-pending-deposit-y tx-sender amount
-limit-price spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-pending-deposit-y tx-sender amount limit-price
+spread-bps stacks-block-time (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1370,7 +1362,10 @@ limit-price spread-bps stacks-block-time (var-get token-x) (var-get token-y)
 (price (get price fresh))
 (amount (get amount pending))
 (newer (match (map-get? token-y-deposit-limits who)
-current (if (> (get set-at current) (get submitted-at pending)) (some current) none)
+current (if (> (get set-at current) (get submitted-at pending))
+(some current)
+none
+)
 none
 ))
 (limit-price (default-to (get limit pending) (get limit newer)))
@@ -1389,7 +1384,11 @@ none
 (map-delete token-y-pending-deposits who)
 (if (or
 crosses
-(and new-maker full (is-eq bid u0))
+(and
+new-maker
+full
+(is-eq bid u0)
+)
 )
 (begin
 (try! (as-contract? ((with-stx amount))
@@ -1399,8 +1398,7 @@ crosses
 (if crosses
 "crossing"
 "queue-full"
-)
-(var-get token-x) (var-get token-y)
+) (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1408,32 +1406,28 @@ crosses
 (park-tenth-token-y cycle price bid (+ amount parked) depositors)
 (ok false)
 )
-bumped
-(match (deposit-token-y-core who true amount limit-price spread-bps (get submitted-at pending) parked price
-bumped t asset-name
+bumped (match (deposit-token-y-core who true amount limit-price spread-bps
+(get submitted-at pending) parked price bumped t asset-name
 )
 deposited (ok deposited)
-deposit-error
-(begin
+deposit-error (begin
 (asserts! (is-eq (err deposit-error) ERR_QUEUE_FULL) (err deposit-error))
 (try! (as-contract? ((with-stx amount))
 (try! (stx-transfer? amount current-contract who))
 ))
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price
-"queue-full"
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price "queue-full"
 (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
 )
-park-error
-(begin
+park-error (begin
 (asserts! (is-eq (err park-error) ERR_QUEUE_FULL) (err park-error))
 (try! (as-contract? ((with-stx amount))
 (try! (stx-transfer? amount current-contract who))
 ))
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price
-"queue-full" (var-get token-x) (var-get token-y)
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-y who amount price "queue-full"
+(var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1497,16 +1491,13 @@ smallest-principal: who,
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
 (var-set bumped-token-x-principal smallest-who)
 (map-set token-x-depositor-list cycle
-(unwrap!
-(as-max-len?
-(append (filter not-eq-bumped-token-x depositors) who) u50
-)
+(unwrap! (as-max-len? (append (filter not-eq-bumped-token-x depositors) who) u50)
 ERR_QUEUE_FULL
 ))
 (and (> carry u0) (map-delete token-x-parked who))
 (map-set token-x-parked smallest-who smallest-amount)
-(try! (contract-call? .jing-core-v6 log-park-x smallest-who smallest-amount
-cycle price tok-x (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-park-x smallest-who smallest-amount cycle price
+tok-x (var-get token-y)
 ))
 (and (not escrowed) (try! (contract-call? t transfer amount who current-contract none)))
 (map-delete token-x-deposits {
@@ -1516,15 +1507,14 @@ depositor: smallest-who,
 (map-set token-x-deposits {
 cycle: cycle,
 depositor: who,
-}
-(+ carry amount)
+} (+ carry amount)
 )
 (put-limit-x who limit-price spread-bps instr-at)
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (- (get total-token-x totals) smallest-amount) carry amount) })
 )
-(try! (contract-call? .jing-core-v6 log-deposit-x who (+ carry amount)
-amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount tok-x
+(try! (contract-call? .jing-core-v6 log-deposit-x who (+ carry amount) amount
+limit-price cycle spread-bps carry (some smallest-who) smallest-amount tok-x
 (var-get token-y)
 ))
 (ok amount)
@@ -1532,9 +1522,8 @@ amount limit-price cycle spread-bps carry (some smallest-who) smallest-amount to
 (begin
 (if (is-eq existing u0)
 (map-set token-x-depositor-list cycle
-(unwrap! (as-max-len? (append depositors who) u50)
-ERR_QUEUE_FULL
-))
+(unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
+)
 true
 )
 (and (> carry u0) (map-delete token-x-parked who))
@@ -1549,9 +1538,8 @@ depositor: who,
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (+ (get total-token-x totals) carry amount) })
 )
-(try! (contract-call? .jing-core-v6 log-deposit-x who
-(+ existing carry amount) amount limit-price cycle spread-bps carry none u0 tok-x
-(var-get token-y)
+(try! (contract-call? .jing-core-v6 log-deposit-x who (+ existing carry amount) amount
+limit-price cycle spread-bps carry none u0 tok-x (var-get token-y)
 ))
 (ok amount)
 )
@@ -1574,7 +1562,9 @@ depositor: who,
 (full (side-full-x depositors tx-sender))
 )
 (asserts! (not (var-get paused)) ERR_PAUSED)
-(asserts! (is-none (map-get? token-x-pending-deposits tx-sender)) ERR_ALREADY_PENDING)
+(asserts! (is-none (map-get? token-x-pending-deposits tx-sender))
+ERR_ALREADY_PENDING
+)
 (asserts! (valid-spread spread-bps) ERR_BAD_SPREAD)
 (asserts! (> limit-price u0) ERR_LIMIT_REQUIRED)
 (asserts! (is-eq (contract-of t) (var-get token-x)) ERR_WRONG_TRAIT)
@@ -1586,7 +1576,9 @@ ERR_DEPOSIT_TOO_SMALL
 (not (and new-maker full))
 )
 (begin
-(try! (deposit-token-x-core tx-sender false amount limit-price spread-bps stacks-block-time parked u0 false t asset-name))
+(try! (deposit-token-x-core tx-sender false amount limit-price spread-bps
+stacks-block-time parked u0 false t asset-name
+))
 (ok amount)
 )
 (begin
@@ -1597,8 +1589,8 @@ limit: limit-price,
 spread-bps: spread-bps,
 submitted-at: stacks-block-time,
 })
-(try! (contract-call? .jing-core-v6 log-pending-deposit-x tx-sender amount
-limit-price spread-bps stacks-block-time (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-pending-deposit-x tx-sender amount limit-price
+spread-bps stacks-block-time (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1617,7 +1609,10 @@ limit-price spread-bps stacks-block-time (var-get token-x) (var-get token-y)
 (price (get price fresh))
 (amount (get amount pending))
 (newer (match (map-get? token-x-deposit-limits who)
-current (if (> (get set-at current) (get submitted-at pending)) (some current) none)
+current (if (> (get set-at current) (get submitted-at pending))
+(some current)
+none
+)
 none
 ))
 (limit-price (default-to (get limit pending) (get limit newer)))
@@ -1636,7 +1631,11 @@ none
 (map-delete token-x-pending-deposits who)
 (if (or
 crosses
-(and new-maker full (is-eq ask MAX_UINT))
+(and
+new-maker
+full
+(is-eq ask MAX_UINT)
+)
 )
 (begin
 (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
@@ -1646,8 +1645,7 @@ crosses
 (if crosses
 "crossing"
 "queue-full"
-)
-(var-get token-x) (var-get token-y)
+) (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1655,32 +1653,28 @@ crosses
 (park-tenth-token-x cycle price ask (+ amount parked) depositors)
 (ok false)
 )
-bumped
-(match (deposit-token-x-core who true amount limit-price spread-bps (get submitted-at pending) parked price
-bumped t asset-name
+bumped (match (deposit-token-x-core who true amount limit-price spread-bps
+(get submitted-at pending) parked price bumped t asset-name
 )
 deposited (ok deposited)
-deposit-error
-(begin
+deposit-error (begin
 (asserts! (is-eq (err deposit-error) ERR_QUEUE_FULL) (err deposit-error))
 (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
 (try! (contract-call? t transfer amount current-contract who none))
 ))
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-x who amount price
-"queue-full"
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-x who amount price "queue-full"
 (var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
 )
-park-error
-(begin
+park-error (begin
 (asserts! (is-eq (err park-error) ERR_QUEUE_FULL) (err park-error))
 (try! (as-contract? ((with-ft (contract-of t) asset-name amount))
 (try! (contract-call? t transfer amount current-contract who none))
 ))
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-x who amount price
-"queue-full" (var-get token-x) (var-get token-y)
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-x who amount price "queue-full"
+(var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1703,18 +1697,24 @@ park-error
 (tok-y (var-get token-y))
 )
 (asserts! (is-eq (contract-of t) tok-y) ERR_WRONG_TRAIT)
-(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)
-      (is-some (map-get? token-y-pending-limits caller))
-      (is-some (map-get? token-y-pending-readmits caller)))
-      ERR_NOTHING_TO_WITHDRAW)
+(asserts!
+(or
+(> amount u0)
+(> parked u0)
+(> pending-amount u0)
+(is-some (map-get? token-y-pending-limits caller))
+(is-some (map-get? token-y-pending-readmits caller))
+)
+ERR_NOTHING_TO_WITHDRAW
+)
 (if (> pending-amount u0)
 (begin
 (try! (as-contract? ((with-stx pending-amount))
 (try! (stx-transfer? pending-amount current-contract caller))
 ))
 (map-delete token-y-pending-deposits caller)
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-y caller pending-amount
-u0 "cancel" (var-get token-x) (var-get token-y)
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-y caller pending-amount u0
+"cancel" (var-get token-x) (var-get token-y)
 ))
 true
 )
@@ -1729,8 +1729,8 @@ true
 (try! (stx-transfer? parked current-contract caller))
 ))
 (map-delete token-y-parked caller)
-(is-ok (contract-call? .jing-core-v6 log-refund-y caller parked cycle
-(var-get token-x) tok-y
+(is-ok (contract-call? .jing-core-v6 log-refund-y caller parked cycle (var-get token-x)
+tok-y
 ))
 true
 )
@@ -1752,8 +1752,8 @@ depositor: caller,
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
 )
-(is-ok (contract-call? .jing-core-v6 log-refund-y caller amount cycle
-(var-get token-x) tok-y
+(is-ok (contract-call? .jing-core-v6 log-refund-y caller amount cycle (var-get token-x)
+tok-y
 ))
 true
 )
@@ -1777,18 +1777,24 @@ true
 (tok-x (var-get token-x))
 )
 (asserts! (is-eq (contract-of t) tok-x) ERR_WRONG_TRAIT)
-(asserts! (or (> amount u0) (> parked u0) (> pending-amount u0)
-      (is-some (map-get? token-x-pending-limits caller))
-      (is-some (map-get? token-x-pending-readmits caller)))
-      ERR_NOTHING_TO_WITHDRAW)
+(asserts!
+(or
+(> amount u0)
+(> parked u0)
+(> pending-amount u0)
+(is-some (map-get? token-x-pending-limits caller))
+(is-some (map-get? token-x-pending-readmits caller))
+)
+ERR_NOTHING_TO_WITHDRAW
+)
 (if (> pending-amount u0)
 (begin
 (try! (as-contract? ((with-ft (contract-of t) asset-name pending-amount))
 (try! (contract-call? t transfer pending-amount current-contract caller none))
 ))
 (map-delete token-x-pending-deposits caller)
-(is-ok (contract-call? .jing-core-v6 log-pending-refund-x caller pending-amount
-u0 "cancel" (var-get token-x) (var-get token-y)
+(is-ok (contract-call? .jing-core-v6 log-pending-refund-x caller pending-amount u0
+"cancel" (var-get token-x) (var-get token-y)
 ))
 true
 )
@@ -1871,8 +1877,7 @@ amount
 (map-set token-y-deposits {
 cycle: cycle,
 depositor: caller,
-}
-remaining
+} remaining
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
@@ -1921,8 +1926,7 @@ amount
 (map-set token-x-deposits {
 cycle: cycle,
 depositor: caller,
-}
-remaining
+} remaining
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
@@ -1936,16 +1940,14 @@ remaining
 (ok remaining)
 )
 )
-(define-public (readmit-token-y
-(who principal)
-)
+(define-public (readmit-token-y (who principal))
 (let ((amount (get-token-y-parked who)))
 (asserts! (not (var-get paused)) ERR_PAUSED)
 (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
 (asserts! (is-none (map-get? token-y-pending-readmits who)) ERR_ALREADY_PENDING)
 (map-set token-y-pending-readmits who stacks-block-time)
-(try! (contract-call? .jing-core-v6 log-pending-readmit-y who amount
-stacks-block-time (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-pending-readmit-y who amount stacks-block-time
+(var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -1970,7 +1972,11 @@ stacks-block-time (var-get token-x) (var-get token-y)
 (asserts! (not (var-get paused)) ERR_PAUSED)
 (asserts! (> (get at fresh) submitted-at) ERR_PRICE_BEFORE_ORDER)
 (map-delete token-y-pending-readmits who)
-(if (or gone full crosses)
+(if (or
+gone
+full
+crosses
+)
 (begin
 (try! (contract-call? .jing-core-v6 log-settle-refused-y who "readmit"
 (if gone
@@ -1978,8 +1984,9 @@ stacks-block-time (var-get token-x) (var-get token-y)
 (if full
 "queue-full"
 "crossing"
-))
-amount price (var-get token-x) (var-get token-y)
+)
+) amount price
+(var-get token-x) (var-get token-y)
 ))
 (ok u0)
 )
@@ -1987,8 +1994,7 @@ amount price (var-get token-x) (var-get token-y)
 (map-set token-y-deposits {
 cycle: cycle,
 depositor: who,
-}
-amount
+} amount
 )
 (map-set token-y-depositor-list cycle
 (unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
@@ -2005,16 +2011,14 @@ amount
 )
 )
 )
-(define-public (readmit-token-x
-(who principal)
-)
+(define-public (readmit-token-x (who principal))
 (let ((amount (get-token-x-parked who)))
 (asserts! (not (var-get paused)) ERR_PAUSED)
 (asserts! (> amount u0) ERR_NOTHING_TO_READMIT)
 (asserts! (is-none (map-get? token-x-pending-readmits who)) ERR_ALREADY_PENDING)
 (map-set token-x-pending-readmits who stacks-block-time)
-(try! (contract-call? .jing-core-v6 log-pending-readmit-x who amount
-stacks-block-time (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-pending-readmit-x who amount stacks-block-time
+(var-get token-x) (var-get token-y)
 ))
 (ok amount)
 )
@@ -2039,7 +2043,11 @@ stacks-block-time (var-get token-x) (var-get token-y)
 (asserts! (not (var-get paused)) ERR_PAUSED)
 (asserts! (> (get at fresh) submitted-at) ERR_PRICE_BEFORE_ORDER)
 (map-delete token-x-pending-readmits who)
-(if (or gone full crosses)
+(if (or
+gone
+full
+crosses
+)
 (begin
 (try! (contract-call? .jing-core-v6 log-settle-refused-x who "readmit"
 (if gone
@@ -2047,8 +2055,9 @@ stacks-block-time (var-get token-x) (var-get token-y)
 (if full
 "queue-full"
 "crossing"
-))
-amount price (var-get token-x) (var-get token-y)
+)
+) amount price
+(var-get token-x) (var-get token-y)
 ))
 (ok u0)
 )
@@ -2056,8 +2065,7 @@ amount price (var-get token-x) (var-get token-y)
 (map-set token-x-deposits {
 cycle: cycle,
 depositor: who,
-}
-amount
+} amount
 )
 (map-set token-x-depositor-list cycle
 (unwrap! (as-max-len? (append depositors who) u50) ERR_QUEUE_FULL)
@@ -2130,9 +2138,7 @@ current (> (get set-at current) (get submitted-at pending))
 false
 ))
 )
-(asserts! (> (get at fresh) (get submitted-at pending))
-ERR_PRICE_BEFORE_ORDER
-)
+(asserts! (> (get at fresh) (get submitted-at pending)) ERR_PRICE_BEFORE_ORDER)
 (map-delete token-y-pending-limits who)
 (if (or
 crosses
@@ -2150,8 +2156,8 @@ stale
 "stale"
 "gone"
 )
-)
-u0 price (var-get token-x) (var-get token-y)
+) u0 price (var-get token-x)
+(var-get token-y)
 ))
 (ok false)
 )
@@ -2225,9 +2231,7 @@ current (> (get set-at current) (get submitted-at pending))
 false
 ))
 )
-(asserts! (> (get at fresh) (get submitted-at pending))
-ERR_PRICE_BEFORE_ORDER
-)
+(asserts! (> (get at fresh) (get submitted-at pending)) ERR_PRICE_BEFORE_ORDER)
 (map-delete token-x-pending-limits who)
 (if (or
 crosses
@@ -2245,8 +2249,8 @@ stale
 "stale"
 "gone"
 )
-)
-u0 price (var-get token-x) (var-get token-y)
+) u0 price (var-get token-x)
+(var-get token-y)
 ))
 (ok false)
 )
@@ -2282,21 +2286,24 @@ set-at: (get submitted-at pending),
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-;; Verify once; a crossing settles on the same feeds.
 (match (if (> (len (get-token-x-depositors cycle)) u0)
 (let (
 (feeds (try! (lazer-feeds update)))
 (aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
 )
-(if (would-take-as-y (get price aged) (order-y-price limit-price spread-bps (get price aged)))
-(some { feeds: feeds, age: (get age aged) })
+(if (would-take-as-y (get price aged)
+(order-y-price limit-price spread-bps (get price aged))
+)
+(some {
+feeds: feeds,
+age: (get age aged),
+})
 none
 )
 )
 none
 )
-verified
-(let (
+verified (let (
 (bps (rebate-bps-for-age (get age verified)))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
@@ -2320,9 +2327,7 @@ set-at: stacks-block-time,
 (get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
 ))))
 (ok (swap-result-y result
-(try! (cross-remainder-as-y limit-price (get token-y-rolled result)
-tx-trait tx-name
-))
+(try! (cross-remainder-as-y limit-price (get token-y-rolled result) tx-trait tx-name))
 ))
 )
 )
@@ -2378,21 +2383,24 @@ rebate-refunded: u0,
 (asserts! (> amount u0) ERR_NOTHING_TO_WITHDRAW)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-;; Verify once; a crossing settles on the same feeds.
 (match (if (> (len (get-token-y-depositors cycle)) u0)
 (let (
 (feeds (try! (lazer-feeds update)))
 (aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
 )
-(if (would-take-as-x (get price aged) (order-x-price limit-price spread-bps (get price aged)))
-(some { feeds: feeds, age: (get age aged) })
+(if (would-take-as-x (get price aged)
+(order-x-price limit-price spread-bps (get price aged))
+)
+(some {
+feeds: feeds,
+age: (get age aged),
+})
 none
 )
 )
 none
 )
-verified
-(let (
+verified (let (
 (bps (rebate-bps-for-age (get age verified)))
 (rebate (/ (* amount bps) BPS_PRECISION))
 )
@@ -2406,9 +2414,7 @@ set-at: stacks-block-time,
 ))
 (and
 (> rebate u0)
-(try! (contract-call? tx-trait transfer rebate tx-sender current-contract
-none
-))
+(try! (contract-call? tx-trait transfer rebate tx-sender current-contract none))
 )
 (var-set pending-rebate-x rebate)
 (var-set pending-rebate-bps-x bps)
@@ -2418,9 +2424,7 @@ none
 (get feed-y (get feeds verified)) tx-trait tx-name ty-trait ty-name
 ))))
 (ok (swap-result-x result
-(try! (cross-remainder-as-x limit-price (get token-x-rolled result)
-tx-trait tx-name
-))
+(try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait tx-name))
 ))
 )
 )
@@ -2468,19 +2472,20 @@ rebate-refunded: u0,
 (totals-next (get-cycle-totals next-cycle))
 )
 (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-y) MIN_SHARE_BPS))
-(if (and (var-get crossing) (not (var-get crossing-x)) (is-eq depositor tx-sender))
+(if (and
+(var-get crossing)
+(not (var-get crossing-x))
+(is-eq depositor tx-sender)
+)
 (ok (var-set taker-too-small true))
 (begin
 (map-set token-y-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-amount
+} amount
 )
 (map-set token-y-depositor-list next-cycle
-(unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor)
-u50
-))
+(unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor) u50))
 )
 (map-set cycle-totals next-cycle
 (merge totals-next { total-token-y: (+ (get total-token-y totals-next) amount) })
@@ -2496,8 +2501,8 @@ depositor: depositor,
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- total-token-y amount) })
 )
-(try! (contract-call? .jing-core-v6 log-small-share-roll-y depositor cycle
-amount (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-small-share-roll-y depositor cycle amount
+(var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -2516,19 +2521,20 @@ amount (var-get token-x) (var-get token-y)
 (totals-next (get-cycle-totals next-cycle))
 )
 (if (< (* amount BPS_PRECISION) (* (var-get small-share-base-x) MIN_SHARE_BPS))
-(if (and (var-get crossing) (var-get crossing-x) (is-eq depositor tx-sender))
+(if (and
+(var-get crossing)
+(var-get crossing-x)
+(is-eq depositor tx-sender)
+)
 (ok (var-set taker-too-small true))
 (begin
 (map-set token-x-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-amount
+} amount
 )
 (map-set token-x-depositor-list next-cycle
-(unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor)
-u50
-))
+(unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor) u50))
 )
 (map-set cycle-totals next-cycle
 (merge totals-next { total-token-x: (+ (get total-token-x totals-next) amount) })
@@ -2544,8 +2550,8 @@ depositor: depositor,
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- total-token-x amount) })
 )
-(try! (contract-call? .jing-core-v6 log-small-share-roll-x depositor cycle
-amount (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-small-share-roll-x depositor cycle amount
+(var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -2569,8 +2575,7 @@ amount (var-get token-x) (var-get token-y)
 (map-set token-y-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-amount
+} amount
 )
 (map-set token-y-depositor-list next-cycle
 (unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor) u50))
@@ -2589,8 +2594,8 @@ depositor: depositor,
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
 )
-(try! (contract-call? .jing-core-v6 log-limit-roll-y depositor cycle amount
-limit clearing (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-limit-roll-y depositor cycle amount limit
+clearing (var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -2613,8 +2618,7 @@ limit clearing (var-get token-x) (var-get token-y)
 (map-set token-x-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-amount
+} amount
 )
 (map-set token-x-depositor-list next-cycle
 (unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor) u50))
@@ -2633,8 +2637,8 @@ depositor: depositor,
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
 )
-(try! (contract-call? .jing-core-v6 log-limit-roll-x depositor cycle amount
-limit clearing (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-limit-roll-x depositor cycle amount limit
+clearing (var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -2659,9 +2663,6 @@ tx-name ty-trait ty-name
 )
 )
 )
-;; Body of settle-with-refresh after its trait checks and lazer-feeds.
-;; Callers must check both traits first (settle-with-refresh, swap,
-;; reprice-or-swap-token-x/y).
 (define-private (settle-with-verified-feeds
 (feed-x {
 price: int,
@@ -2733,10 +2734,7 @@ token-x-rolled: (var-get caller-token-x-rolled),
 (let (
 (feeds (try! (lazer-feeds update)))
 (aged (try! (fresh-classification-from-feeds (get feed-x feeds) (get feed-y feeds))))
-;; net = amount / (1 + bps): the pot is net * bps, what the fills pay.
-(net (/ (* amount BPS_PRECISION)
-(+ BPS_PRECISION (rebate-bps-for-age (get age aged)))
-))
+(net (/ (* amount BPS_PRECISION) (+ BPS_PRECISION (rebate-bps-for-age (get age aged)))))
 (rebate (- amount net))
 (cycle (var-get current-cycle))
 (depositors (if deposit-x
@@ -2769,12 +2767,13 @@ ERR_HAS_RESTING_POSITION
 (if deposit-x
 (get-token-x-parked tx-sender)
 (get-token-y-parked tx-sender)
-)
-u0
+) u0
 )
 ERR_HAS_RESTING_POSITION
 )
-(asserts! (>= net (if deposit-x
+(asserts!
+(>= net
+(if deposit-x
 (var-get min-token-x-deposit)
 (var-get min-token-y-deposit)
 ))
@@ -2791,22 +2790,20 @@ full
 (begin
 (and
 (> rebate u0)
-(try! (contract-call? tx-trait transfer rebate tx-sender current-contract
-none
-))
+(try! (contract-call? tx-trait transfer rebate tx-sender current-contract none))
 )
 (var-set pending-rebate-x rebate)
 (var-set pending-rebate-bps-x (rebate-bps-for-age (get age aged)))
-(try! (deposit-token-x-core tx-sender false net limit-price none stacks-block-time u0 price bumped
-tx-trait tx-name
+(try! (deposit-token-x-core tx-sender false net limit-price none stacks-block-time u0
+price bumped tx-trait tx-name
 ))
 )
 (begin
 (and (> rebate u0) (try! (stx-transfer? rebate tx-sender current-contract)))
 (var-set pending-rebate-y rebate)
 (var-set pending-rebate-bps-y (rebate-bps-for-age (get age aged)))
-(try! (deposit-token-y-core tx-sender false net limit-price none stacks-block-time u0 price bumped
-ty-trait ty-name
+(try! (deposit-token-y-core tx-sender false net limit-price none stacks-block-time u0
+price bumped ty-trait ty-name
 ))
 )
 )
@@ -2815,19 +2812,15 @@ ty-trait ty-name
 (var-set crossing-x deposit-x)
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
-(let ((result (try! (settle-with-verified-feeds (get feed-x feeds) (get feed-y feeds)
-tx-trait tx-name ty-trait ty-name
+(let ((result (try! (settle-with-verified-feeds (get feed-x feeds) (get feed-y feeds) tx-trait
+tx-name ty-trait ty-name
 ))))
 (if deposit-x
 (ok (swap-result-x result
-(try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait
-tx-name
-))
+(try! (cross-remainder-as-x limit-price (get token-x-rolled result) tx-trait tx-name))
 ))
 (ok (swap-result-y result
-(try! (cross-remainder-as-y limit-price (get token-y-rolled result) tx-trait
-tx-name
-))
+(try! (cross-remainder-as-y limit-price (get token-y-rolled result) tx-trait tx-name))
 ))
 )
 )
@@ -2911,13 +2904,11 @@ u0
 true
 )))
 (try! (as-contract? ((with-ft (contract-of t) tx-name (+ x-traded reb-x)))
-(try! (contract-call? t transfer (+ (- x-traded x-fee) reb-x)
-current-contract y-who none
-))
-(if (> x-fee u0)
-(try! (contract-call? t transfer x-fee current-contract (var-get treasury)
+(try! (contract-call? t transfer (+ (- x-traded x-fee) reb-x) current-contract y-who
 none
 ))
+(if (> x-fee u0)
+(try! (contract-call? t transfer x-fee current-contract (var-get treasury) none))
 true
 )))
 (var-set walk-taker-received
@@ -2942,8 +2933,7 @@ depositor: y-who,
 (map-set token-y-deposits {
 cycle: cycle,
 depositor: y-who,
-}
-y-left
+} y-left
 )
 )
 (if (or (is-eq x-left u0) (> x-refund u0))
@@ -2961,8 +2951,7 @@ depositor: x-who,
 (map-set token-x-deposits {
 cycle: cycle,
 depositor: x-who,
-}
-x-left
+} x-left
 )
 )
 (if (> y-refund u0)
@@ -2970,8 +2959,8 @@ x-left
 (try! (as-contract? ((with-stx y-refund))
 (try! (stx-transfer? y-refund current-contract y-who))
 ))
-(try! (contract-call? .jing-core-v6 log-refund-y y-who y-refund cycle
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-refund-y y-who y-refund cycle (var-get token-x)
+(var-get token-y)
 ))
 )
 true
@@ -2981,8 +2970,8 @@ true
 (try! (as-contract? ((with-ft (contract-of t) tx-name x-refund))
 (try! (contract-call? t transfer x-refund current-contract x-who none))
 ))
-(try! (contract-call? .jing-core-v6 log-refund-x x-who x-refund cycle
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-refund-x x-who x-refund cycle (var-get token-x)
+(var-get token-y)
 ))
 )
 true
@@ -2993,17 +2982,19 @@ total-token-y: (- (get total-token-y totals) (+ y-traded y-refund)),
 total-token-x: (- (get total-token-x totals) (+ x-traded x-refund)),
 })
 )
-(try! (contract-call? .jing-core-v6 log-match
-(if y-is-taker
+(try! (contract-call? .jing-core-v6 log-match (if y-is-taker
 y-who
 x-who
 )
 (if y-is-taker
 x-who
 y-who
-) y-is-taker
-x-traded y-traded (if y-is-taker (+ (- y-traded y-fee) reb-y) (+ (- x-traded x-fee) reb-x)) price mid (- cycle u1) (var-get token-x)
-(var-get token-y)
+) y-is-taker x-traded y-traded
+(if y-is-taker
+(+ (- y-traded y-fee) reb-y)
+(+ (- x-traded x-fee) reb-x)
+) price
+mid (- cycle u1) (var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -3082,8 +3073,8 @@ st (let (
 )
 (ok st)
 (begin
-(try! (execute-fill cycle maker m-amt takr rem l (get mid st) false
-(get t st) (get name st)
+(try! (execute-fill cycle maker m-amt takr rem l (get mid st) false (get t st)
+(get name st)
 ))
 (ok st)
 )
@@ -3327,8 +3318,7 @@ rebate-refunded: (get left cross),
 (walked (and
 (> rolled u0)
 (begin
-(try! (fold walk-x-book-step
-(sorted-asks cycle (var-get settle-clearing-price) limit)
+(try! (fold walk-x-book-step (sorted-asks cycle (var-get settle-clearing-price) limit)
 (ok {
 t: t,
 name: tx-name,
@@ -3370,8 +3360,8 @@ depositor: swapper,
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem) })
 )
-(try! (contract-call? .jing-core-v6 log-refund-y swapper rem cycle
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-refund-y swapper rem cycle (var-get token-x)
+(var-get token-y)
 ))
 true
 )
@@ -3397,8 +3387,7 @@ walk-received: (var-get walk-taker-received),
 (walked (and
 (> rolled u0)
 (begin
-(try! (fold walk-y-book-step
-(sorted-bids cycle (var-get settle-clearing-price) limit)
+(try! (fold walk-y-book-step (sorted-bids cycle (var-get settle-clearing-price) limit)
 (ok {
 t: t,
 name: tx-name,
@@ -3440,8 +3429,8 @@ depositor: swapper,
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem) })
 )
-(try! (contract-call? .jing-core-v6 log-refund-x swapper rem cycle
-(var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-refund-x swapper rem cycle (var-get token-x)
+(var-get token-y)
 ))
 true
 )
@@ -3498,22 +3487,14 @@ ERR_NOTHING_TO_SETTLE
 (asserts! (> price-y u0) ERR_ZERO_PRICE)
 (asserts! (> (get publish-time feed-x) min-freshness) ERR_STALE_PRICE)
 (asserts! (> (get publish-time feed-y) min-freshness) ERR_STALE_PRICE)
-(asserts! (< (get conf feed-x) (/ price-x MAX_CONF_RATIO))
-ERR_PRICE_UNCERTAIN
-)
-(asserts! (< (get conf feed-y) (/ price-y MAX_CONF_RATIO))
-ERR_PRICE_UNCERTAIN
-)
+(asserts! (< (get conf feed-x) (/ price-x MAX_CONF_RATIO)) ERR_PRICE_UNCERTAIN)
+(asserts! (< (get conf feed-y) (/ price-y MAX_CONF_RATIO)) ERR_PRICE_UNCERTAIN)
 (asserts! (is-eq (get expo feed-x) (get expo feed-y)) ERR_EXPO_MISMATCH)
 (let ((oracle-price (/ (* price-x PRICE_PRECISION) price-y)))
 (asserts! (> oracle-price u0) ERR_ZERO_PRICE)
 (var-set settle-clearing-price oracle-price)
-(map filter-limit-violating-token-y-depositor
-(get-token-y-depositors cycle)
-)
-(map filter-limit-violating-token-x-depositor
-(get-token-x-depositors cycle)
-)
+(map filter-limit-violating-token-y-depositor (get-token-y-depositors cycle))
+(map filter-limit-violating-token-x-depositor (get-token-x-depositors cycle))
 (var-set taker-too-small false)
 (let ((base (get-cycle-totals cycle)))
 (var-set small-share-base-y (get total-token-y base))
@@ -3577,8 +3558,8 @@ true
 )
 (if (> token-x-fee u0)
 (try! (as-contract? ((with-ft (contract-of tx-trait) tx-name token-x-fee))
-(try! (contract-call? tx-trait transfer token-x-fee current-contract
-(var-get treasury) none
+(try! (contract-call? tx-trait transfer token-x-fee current-contract (var-get treasury)
+none
 ))
 ))
 true
@@ -3587,18 +3568,13 @@ true
 (var-set settle-token-x-cleared token-x-clearing)
 (var-set settle-total-token-y total-token-y)
 (var-set settle-total-token-x total-token-x)
-(var-set settle-token-x-after-fee
-(+ (- token-x-clearing token-x-fee) ride-x)
-)
-(var-set settle-token-y-after-fee
-(+ (- token-y-clearing token-y-fee) ride-y)
-)
+(var-set settle-token-x-after-fee (+ (- token-x-clearing token-x-fee) ride-x))
+(var-set settle-token-y-after-fee (+ (- token-y-clearing token-y-fee) ride-y))
 (var-set pending-rebate-x (- rebate-x ride-x))
 (var-set pending-rebate-y (- rebate-y ride-y))
-(try! (contract-call? .jing-core-v6 log-settlement cycle oracle-price
-oracle-price token-x-clearing token-y-clearing token-x-unfilled
-token-y-unfilled token-x-fee token-y-fee ride-x ride-y
-token-x-is-binding (var-get token-x) (var-get token-y)
+(try! (contract-call? .jing-core-v6 log-settlement cycle oracle-price oracle-price
+token-x-clearing token-y-clearing token-x-unfilled token-y-unfilled token-x-fee
+token-y-fee ride-x ride-y token-x-is-binding (var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -3633,7 +3609,11 @@ u0
 (my-refund (if (and
 (> my-token-y-unfilled u0)
 (< my-token-y-unfilled (var-get min-token-y-deposit))
-(not (and (var-get crossing) (not (var-get crossing-x)) (is-eq depositor tx-sender)))
+(not (and
+(var-get crossing)
+(not (var-get crossing-x))
+(is-eq depositor tx-sender)
+))
 )
 my-token-y-unfilled
 u0
@@ -3659,9 +3639,7 @@ true
 (if (> my-token-x-received u0)
 (try! (as-contract?
 ((with-ft (contract-of tt) (get name unwrapped) my-token-x-received))
-(try! (contract-call? tt transfer my-token-x-received current-contract
-depositor none
-))
+(try! (contract-call? tt transfer my-token-x-received current-contract depositor none))
 ))
 true
 )
@@ -3670,8 +3648,7 @@ true
 (map-set token-y-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-my-roll
+} my-roll
 )
 (map-set token-y-depositor-list next-cycle
 (unwrap-panic (as-max-len? (append (get-token-y-depositors next-cycle) depositor) u50))
@@ -3728,7 +3705,11 @@ u0
 (my-refund (if (and
 (> my-token-x-unfilled u0)
 (< my-token-x-unfilled (var-get min-token-x-deposit))
-(not (and (var-get crossing) (var-get crossing-x) (is-eq depositor tx-sender)))
+(not (and
+(var-get crossing)
+(var-get crossing-x)
+(is-eq depositor tx-sender)
+))
 )
 my-token-x-unfilled
 u0
@@ -3762,8 +3743,7 @@ true
 (map-set token-x-deposits {
 cycle: next-cycle,
 depositor: depositor,
-}
-my-roll
+} my-roll
 )
 (map-set token-x-depositor-list next-cycle
 (unwrap-panic (as-max-len? (append (get-token-x-depositors next-cycle) depositor) u50))
@@ -3774,11 +3754,8 @@ true
 (map-delete token-x-deposit-limits depositor)
 (if (> my-refund u0)
 (begin
-(try! (as-contract?
-((with-ft (contract-of tt) (get name unwrapped) my-refund))
-(try! (contract-call? tt transfer my-refund current-contract depositor
-none
-))
+(try! (as-contract? ((with-ft (contract-of tt) (get name unwrapped) my-refund))
+(try! (contract-call? tt transfer my-refund current-contract depositor none))
 ))
 (try! (contract-call? .jing-core-v6 log-refund-x depositor my-refund cycle
 (var-get token-x) (var-get token-y)
@@ -3837,8 +3814,7 @@ true
 )
 (try! (contract-call? .jing-core-v6 log-sweep-dust acc-token-x-rol acc-token-y-rol
 token-x-dust token-x-payout-dust token-x-roll-dust token-y-dust
-token-y-payout-dust token-y-roll-dust (var-get token-x)
-(var-get token-y)
+token-y-payout-dust token-y-roll-dust (var-get token-x) (var-get token-y)
 ))
 (ok true)
 )
@@ -4016,24 +3992,43 @@ acc
 )
 )
 
-;; Largest gross whose swap net, floor(gross * BPS / (BPS + rebate)), fits net.
-;; A fee-free, unverified sizing hint. Swap verifies the signed envelope.
-;; Missing/undecodable hints preserve the historical 20-bps quote.
 (define-private (capacity-rebate-hint (update (buff 8192)))
-  (let (
-      (payload (unwrap! (slice? update u71 (len update)) none))
-      (decoded (unwrap! (contract-call? 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1 decode-lazer-payload payload) none))
-      (feeds (get price-feeds decoded))
-      (fx (unwrap! (get found (fold pick-feed feeds { id: (var-get feed-id-x), found: none })) none))
-      (fy (unwrap! (get found (fold pick-feed feeds { id: (var-get feed-id-y), found: none })) none))
-      (pub-x (/ (unwrap! (get feed-update-timestamp fx) none) MICROS_PER_SECOND))
-      (pub-y (/ (unwrap! (get feed-update-timestamp fy) none) MICROS_PER_SECOND))
-    )
-    (some (rebate-bps-for-age (feed-age pub-x pub-y)))
-  )
+(let (
+(payload (unwrap! (slice? update u71 (len update)) none))
+(decoded (unwrap!
+(contract-call? 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1
+decode-lazer-payload payload
+)
+none
+))
+(feeds (get price-feeds decoded))
+(fx (unwrap!
+(get found (fold pick-feed feeds {
+id: (var-get feed-id-x),
+found: none,
+})
+)
+none
+))
+(fy (unwrap!
+(get found (fold pick-feed feeds {
+id: (var-get feed-id-y),
+found: none,
+})
+)
+none
+))
+(pub-x (/ (unwrap! (get feed-update-timestamp fx) none) MICROS_PER_SECOND))
+(pub-y (/ (unwrap! (get feed-update-timestamp fy) none) MICROS_PER_SECOND))
+)
+(some (rebate-bps-for-age (feed-age pub-x pub-y)))
+)
 )
 
-(define-private (gross-up (net uint) (bps uint))
+(define-private (gross-up
+(net uint)
+(bps uint)
+)
 (if (is-eq net u0)
 u0
 (/ (- (* (+ net u1) (+ BPS_PRECISION bps)) u1) BPS_PRECISION)
@@ -4048,7 +4043,10 @@ u0
 )
 (let (
 (cycle (var-get current-cycle))
-(bps (match update v (default-to TAKER_REBATE_BPS (capacity-rebate-hint v)) TAKER_REBATE_BPS))
+(bps (match update
+v (default-to TAKER_REBATE_BPS (capacity-rebate-hint v))
+TAKER_REBATE_BPS
+))
 (bids (fold cap-bid-fold (get-token-y-depositors cycle) {
 cycle: cycle,
 mid: mid,
@@ -4072,18 +4070,34 @@ in-range: u0,
 walk: u0,
 }))
 (opposite (if deposit-x
-(/ (* (get kept (fold cap-kept-bid-fold (get-token-y-depositors cycle) {
+(/
+(*
+(get kept
+(fold cap-kept-bid-fold (get-token-y-depositors cycle) {
 cycle: cycle,
 mid: mid,
 total: (get in-range bids),
 kept: u0,
-})) (cap-scale)) mid)
-(/ (* (get kept (fold cap-kept-ask-fold (get-token-x-depositors cycle) {
+})
+)
+(cap-scale)
+)
+mid
+)
+(/
+(*
+(get kept
+(fold cap-kept-ask-fold (get-token-x-depositors cycle) {
 cycle: cycle,
 mid: mid,
 total: (get in-range asks),
 kept: u0,
-})) mid) (cap-scale))
+})
+)
+mid
+)
+(cap-scale)
+)
 ))
 (own (if deposit-x
 (get in-range asks)
