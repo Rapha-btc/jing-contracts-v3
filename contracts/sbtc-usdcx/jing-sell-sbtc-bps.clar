@@ -43,8 +43,9 @@
   )
 )
 
+(define-constant GUARD_BPS u2000)
 (define-read-only (current-floor)
-  (/ (miner-mid) u2)
+  (/ (* (miner-mid) (- BPS_PRECISION GUARD_BPS)) BPS_PRECISION)
 )
 
 (define-read-only (min-market)

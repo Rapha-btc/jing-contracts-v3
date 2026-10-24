@@ -100,8 +100,8 @@ try {
   const dia = await evalIn(BUY(10), '(miner-mid)');
   console.log(`  DIA BTC/USD (8 dp) ${dia} = $${Number(dia) / 1e8}`);
   check('DIA BTC/USD is live and in $20k..$500k', dia > 2_000_000_000_000n && dia < 50_000_000_000_000n, dia);
-  check('buy-sbtc current-cap = DIA * 10500 / 10000', (await evalIn(BUY(10), '(current-cap)')) === dia * 10500n / BPS);
-  check('sell-sbtc current-floor = DIA * 9500 / 10000', (await evalIn(SELL(10), '(current-floor)')) === dia * 9500n / BPS);
+  check('buy-sbtc current-cap = DIA * 12000 / 10000', (await evalIn(BUY(10), '(current-cap)')) === dia * 12000n / BPS);
+  check('sell-sbtc current-floor = DIA * 8000 / 10000', (await evalIn(SELL(10), '(current-floor)')) === dia * 8000n / BPS);
 
   group('dispatch deposits');
   await fresh();
@@ -113,8 +113,8 @@ try {
   await tx('deposit-sell 3 x 0.002 sBTC into jing-sell-sbtc-*', WHALE.x, C.dispatch, 'deposit-sell', [uintCV(X_PER * 3n), alloc(BANDS.map(SELL), X_PER)], (v) => v?.ok !== undefined);
   check('USDCx left the buyer: 600.000000', yw0.us - (await bal(USDCX, USDC_WHALE)) === Y_PER * 3n);
   check('sBTC left the seller: 0.006', xw0.sb - (await bal(SBTC, WHALE.x)) === X_PER * 3n);
-  check('buy-sbtc-10 get-cap = DIA * 10500 / 10000 after push', (await evalIn(BUY(10), '(get-cap)')) === dia * 10500n / BPS);
-  check('sell-sbtc-10 get-floor = DIA * 9500 / 10000 after push', (await evalIn(SELL(10), '(get-floor)')) === dia * 9500n / BPS);
+  check('buy-sbtc-10 get-cap = DIA * 12000 / 10000 after push', (await evalIn(BUY(10), '(get-cap)')) === dia * 12000n / BPS);
+  check('sell-sbtc-10 get-floor = DIA * 8000 / 10000 after push', (await evalIn(SELL(10), '(get-floor)')) === dia * 8000n / BPS);
   const pend = [];
   for (const bp of BANDS) { if (await pendY(BUY(bp))) pend.push(req(BUY(bp), false)); if (await pendX(SELL(bp))) pend.push(req(SELL(bp), true)); }
   console.log(`  pendings after push: ${pend.length}`);
