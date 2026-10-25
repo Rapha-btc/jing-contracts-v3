@@ -13,7 +13,7 @@ Diff against the fork sources: `git diff 863921d -- contracts/sbtc-usdcx` (renam
 | `jing-buy-sbtc-<bps>` (`jing-buy-sbtc-bps.clar`) | `jing-sell-stx-<bps>` | rests USDCx, proceeds in sBTC; cap = DIA BTC/USD x 1.20 |
 | `jing-ladder-dispatch-sbtc-usdcx` | `jing-ladder-dispatch` | binds the new ladder; deposit-buy = USDCx into buy-sbtc rungs, deposit-sell = sBTC into sell-sbtc rungs |
 | `jing-settle-batch-sbtc-usdcx` | `jing-settle-batch` | binds the new market, token y = USDCx |
-| `swap-router-sbtc-usdcx-jing-v5-5` | `swap-router-sbtc-stx-jing-v5-5` | Jing book + Bitflow DLMM sbtc-usdcx pools (ids 1, 2, 17; x = sBTC); xyk/Velar removed (amounts must be 0, else u3003); `*-sbtc-for-usdcx` / `*-usdcx-for-sbtc` |
+| `swap-router-sbtc-usdcx-jing-v5-5` | `swap-router-sbtc-stx-jing-v5-5` | Jing book + Bitflow DLMM sbtc-usdcx pools (ids 1, 2, 17; x = sBTC; each pool quoted at its own bin step: 10, 1, 10); xyk/Velar removed (amounts must be 0, else u3003); `*-sbtc-for-usdcx` / `*-usdcx-for-sbtc` |
 
 Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait keeps its `stx` / `stx-paid` keys (they carry USDCx amounts here).
 
@@ -27,7 +27,7 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 ## Pricing
 
 - Market mid: Pyth Lazer BTC/USD (feed 1) / USDC/USD (feed 7), one signed update, both expo -8. Keyless fetch: `GET /api/auction/pyth-lazer-update?pair=sbtc-usdcx` on the faktory-dao backend.
-- Rung fat-finger guard: DIA `get-value "BTC/USD"` (8 dp = the market price unit). DIA posts every ~15 min (max gap ~18 min); guard = +/-20% (`GUARD_BPS u2000`), u0 (no push) when DIA is >24h stale. The guard is refreshed on push or by anyone via `refresh-guard`.
+- Rung fat-finger guard: DIA `get-value "BTC/USD"` (8 dp = the market price unit). DIA posts every ~15 min (max gap ~18 min); guard = +/-20% (`GUARD_BPS u2000`), u0 (no push) when DIA is >2h stale. The guard is refreshed on push or by anyone via `refresh-guard`.
 - sBTC = BTC and USDCx = USDC are assumed; a bridge depeg is handled by pausing the market (keeper).
 
 ## stxer simulations (mainnet fork)
@@ -40,3 +40,13 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 
 Run: `node simulations/<harness>` (keyless; Hiro 429s -> `simulations/_api-proxy.mjs`).
 Not covered: the 24h DIA staleness path (a fork cannot make DIA stale). A 0 bps rung cannot run on both sides at once (the second crosses the first at mid and is refunded, by design).
+
+## Audit: bounty mvlqxozz934e1c757f88 (fork at `f01bffc`)
+
+| # | Finding | Reporter | Verdict | Action |
+|---|---|---|---|---|
+| 1 | Router hard-coded `DLMM_BIN_STEP u10`; pool 2 (`v-1-bps-1`) has bin-step 1 on chain, so `dlmm-out` quoted it 0 and `dlmm-pick` never chose it while another pool was eligible. Same root: on an all-zero tie `dlmm-pick` could return pool 1 while ineligible (benign, `dlmm-stage` caps it to 0). | Swift Bot Labs (Ruby Gorilla), first | Holds, Low. No loss today: pools 2/3 hold dust (2026-10-25: pool 1 2.84 BTC + 91.8k USDCx, pool 2 61 USDCx, pool 3 20k sats) and fail the 1% depth filter | Fixed `93c8ec6`: `dlmm-out` fetches the factors for the pool's own bin step, `dlmm-pick` returns only an eligible pool |
+| 2 | The +/-20% DIA guard is a snapshot: the rung stores cap (DIA x 1.2) / floor (DIA x 0.8) only on `push` or `refresh-guard`. After a move past 20% the resting order stops filling until a refresh; after a move the other way the guard gets looser. | Frosty Narwhal | Holds, Low (liveness only, no funds at risk) | No contract change: the keeper calls the permissionless `refresh-guard` on each rung when DIA drifts past ~5% from the stored guard. If DIA stops posting (>24h stale) the guard reads 0, `push` / `refresh-guard` abort `ERR_ZERO_PRICE`, no new funds reach the market; `deposit` / `withdraw` / `claim` / `sync` never read DIA, so users can always exit. No owner switch to turn DIA off (that would let the owner drop the guard). |
+| 3 | DIA staleness bound of 24h is ~100x DIA's ~15 min cadence: a frozen feed keeps anchoring the guard for a day | Frosty Narwhal | Holds, Info | `miner-mid` in both rungs: `u86400` -> `u7200` (2h, ~8 missed DIA posts). Rung code hash changes: regen ladder canonical hashes / BE templates |
+| - | `dlmm-threshold` 100x too small | Ionic Zephyr | Refuted: the x100 is the 8 dp / 6 dp conversion after the x/y flip (Ancient Osprey, Valiant Sable) | none |
+| - | Router "eats" xyk/Velar legs, funds lost | Iron Hub | Refuted: non-zero amounts abort with u3003 and the whole tx reverts; only the fee is spent | none |

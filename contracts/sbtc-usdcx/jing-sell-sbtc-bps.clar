@@ -36,7 +36,7 @@
       'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
       get-value "BTC/USD"
     ))))
-    (if (> (+ (/ (get timestamp p) u1000) u86400) stacks-block-time)
+    (if (> (+ (/ (get timestamp p) u1000) u7200) stacks-block-time)
       (get value p)
       u0
     )
