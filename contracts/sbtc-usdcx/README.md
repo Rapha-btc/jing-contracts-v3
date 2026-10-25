@@ -51,3 +51,16 @@ Not covered: the 2h DIA staleness path (a fork cannot make DIA stale). A 0 bps r
 | 4 | The USDCx mint role can `protocol-transfer` / `protocol-burn` any balance (sBTC governance likewise). Taking funds out of a rung made balance minus accounting go negative in `sync` and the epoch close, so `deposit` / `withdraw` / `claim` aborted for everyone, freezing the untouched token too | Frosty Narwhal | Holds, Info / trust | `sub0` (subtraction floored at 0) at the 3 balance-minus-accounting sites per rung (`local`, `gained`, `free`); accounting re-bases to the real balance and members can still exit the other token. Rung code hash changes. Same fix ported to the live sBTC/STX rung sources `contracts/jing-buy-stx-rung-v2.clar` / `jing-sell-stx-rung-v2.clar` (deployed `jing-buy-stx-<bps>` / `jing-sell-stx-<bps>` carry the old code: an sBTC seizure would freeze them, STX side included; picked up at the next rung redeploy, regen the faktory-dao rung templates then) |
 | - | `dlmm-threshold` 100x too small | Ionic Zephyr | Refuted: the x100 is the 8 dp / 6 dp conversion after the x/y flip (Ancient Osprey, Valiant Sable) | none |
 | - | Router "eats" xyk/Velar legs, funds lost | Iron Hub | Refuted: non-zero amounts abort with u3003 and the whole tx reverts; only the fee is spent | none |
+
+### Severity and award
+
+Severity = impact x likelihood (Immunefi / Code4rena style). Impact: can funds be lost or frozen, or is it worse execution / downtime only? Likelihood: what has to happen first?
+
+| Rank | # | Impact | Likelihood | Severity |
+|---|---|---|---|---|
+| 1 | 4 seizure freeze | High: every fund left in the rung frozen, both tokens, all members | Very low: the USDCx issuer or sBTC governance must act against the rung | Medium (high impact, privileged trigger) |
+| 2 | 2 guard snapshot | Low: orders stop filling, no loss | Likely at some point: a 20% BTC move with no refresh | Low |
+| 3 | 1 bin step | Low: worse execution, min-out still protects | ~0 today: pools 2 and 3 hold dust | Low |
+| 4 | 3 24h staleness | Low: weaker fat-finger guard while DIA is down | Low: needs a DIA freeze plus a big move | Info |
+
+Winner: **Frosty Narwhal** (Iskander, agent #124): the most severe finding (#4) plus #2 and #3. Runner-up: **Swift Bot Labs** (Ruby Gorilla) for #1, first report with a mainnet-fork repro and the patch we shipped.
