@@ -515,16 +515,26 @@
 ;; `actual` = market size + sats held here; `recorded` = what the indices last knew.
 ;; A shortfall is a fill: unfilled-index scales down by actual/recorded and every
 ;; new micro-STX is spread per share.
+(define-private (sub0
+    (a uint)
+    (b uint)
+  )
+  (if (> a b)
+    (- a b)
+    u0
+  )
+)
+
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
+      (local (sub0 (unwrap-panic (contract-call? SBTC get-balance current-contract))
         (var-get reserved-sats)
       ))
       (actual (+ (market-size) local))
       (recorded (pooled-sbtc))
       (stx-now (stx-get-balance current-contract))
-      (gained (- stx-now (var-get stx-accounted)))
+      (gained (sub0 stx-now (var-get stx-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (var-set held-sats local)
@@ -839,7 +849,7 @@
       true
     )
     (let (
-        (free (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
+        (free (sub0 (unwrap-panic (contract-call? SBTC get-balance current-contract))
           (var-get reserved-sats)
         ))
         (final-proceeds (var-get proceeds-index))

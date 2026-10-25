@@ -354,16 +354,26 @@
   )
 )
 
+(define-private (sub0
+    (a uint)
+    (b uint)
+  )
+  (if (> a b)
+    (- a b)
+    u0
+  )
+)
+
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
+      (local (sub0 (unwrap-panic (contract-call? SBTC get-balance current-contract))
         (var-get reserved-sats)
       ))
       (actual (+ (market-size) local))
       (recorded (pooled-sbtc))
       (usdcx-now (unwrap-panic (contract-call? USDCX get-balance current-contract)))
-      (gained (- usdcx-now (var-get usdcx-accounted)))
+      (gained (sub0 usdcx-now (var-get usdcx-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (var-set held-sats local)
@@ -608,7 +618,7 @@
       true
     )
     (let (
-        (free (- (unwrap-panic (contract-call? SBTC get-balance current-contract))
+        (free (sub0 (unwrap-panic (contract-call? SBTC get-balance current-contract))
           (var-get reserved-sats)
         ))
         (final-proceeds (var-get proceeds-index))

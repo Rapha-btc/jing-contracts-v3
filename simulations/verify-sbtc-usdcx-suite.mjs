@@ -70,8 +70,13 @@ try {
   await deploy(DEP, N.ladder, src(N.ladder));
   check('ladder owner = DEP', (await evalIn(C.ladder, '(get-owner)')) === DEP);
   await deploy(DEP, N.market, src(N.market));
-  await tx('core set-verified-contract(market)', DEP, CORE, 'set-verified-contract', [P_(C.market)], (v) => v?.ok !== undefined);
-  await tx('market initialize(sbtc, usdcx, 1, 7)', DEP, C.market, 'initialize', [P_(C.market), TX, TY, uintCV(1_000n), uintCV(1_000_000n), uintCV(1), uintCV(7)], { ok: true });
+  // jing-core-v6 is owned by the Juice multisig since 2026-10-24: verify as whoever owns it
+  await tx('core set-verified-contract(market)', await evalIn(CORE, '(get-contract-owner)'), CORE, 'set-verified-contract', [P_(C.market)], (v) => v?.ok !== undefined);
+  // initialize needs tx-sender = operator = core owner: hand the operator to the multisig, initialize, hand it back
+  const CORE_OWNER = await evalIn(CORE, '(get-contract-owner)');
+  await tx('market set-operator -> core owner', DEP, C.market, 'set-operator', [P_(CORE_OWNER)], { ok: true });
+  await tx('market initialize(sbtc, usdcx, 1, 7)', CORE_OWNER, C.market, 'initialize', [P_(C.market), TX, TY, uintCV(1_000n), uintCV(1_000_000n), uintCV(1), uintCV(7)], { ok: true });
+  await tx('market set-operator -> DEP', CORE_OWNER, C.market, 'set-operator', [P_(DEP)], { ok: true });
   const buySrc = src('jing-buy-sbtc-bps'), sellSrc = src('jing-sell-sbtc-bps');
   for (const bp of BANDS) { await deploy(DEP, `jing-buy-sbtc-${bp}`, buySrc); await deploy(DEP, `jing-sell-sbtc-${bp}`, sellSrc); }
   await tx('ladder set-canonical buy-band = jing-buy-sbtc-10', DEP, C.ladder, 'set-canonical', [stringAsciiCV('buy-band'), P_(BUY(10))], { ok: true });

@@ -482,14 +482,24 @@
 ;; ---------- sync ----------
 
 ;; `actual` = market size + micro-STX held here; fills shrink it and put sBTC here.
+(define-private (sub0
+    (a uint)
+    (b uint)
+  )
+  (if (> a b)
+    (- a b)
+    u0
+  )
+)
+
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (- (stx-get-balance current-contract) (var-get reserved-ustx)))
+      (local (sub0 (stx-get-balance current-contract) (var-get reserved-ustx)))
       (actual (+ (market-size) local))
       (recorded (pooled-stx))
       (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
-      (gained (- sbtc-now (var-get sats-accounted)))
+      (gained (sub0 sbtc-now (var-get sats-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (var-set held-ustx local)
@@ -796,7 +806,7 @@
       true
     )
     (let (
-        (free (- (stx-get-balance current-contract) (var-get reserved-ustx)))
+        (free (sub0 (stx-get-balance current-contract) (var-get reserved-ustx)))
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)

@@ -68,9 +68,16 @@ try {
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
 
   group('setup');
+  // the market binds jing-ladder-sbtc-usdcx-v1, so the ladder deploys first
+  await deploy(DEP, 'jing-ladder-sbtc-usdcx-v1', src('jing-ladder-sbtc-usdcx-v1'));
   await deploy(DEP, MKT_NAME, src(MKT_NAME));
-  await tx('core set-verified-contract(market)', DEP, CORE, 'set-verified-contract', [P_(MKT)], (v) => v?.ok !== undefined);
-  await tx('initialize(sbtc, usdcx, feeds 1/7)', DEP, MKT, 'initialize', [P_(MKT), TX, TY, uintCV(1_000n), uintCV(1_000_000n), uintCV(1), uintCV(7)], { ok: true });
+  // jing-core-v6 is owned by the Juice multisig since 2026-10-24: verify as whoever owns it
+  await tx('core set-verified-contract(market)', await evalIn(CORE, '(get-contract-owner)'), CORE, 'set-verified-contract', [P_(MKT)], (v) => v?.ok !== undefined);
+  // initialize needs tx-sender = operator = core owner: hand the operator to the multisig, initialize, hand it back
+  const CORE_OWNER = await evalIn(CORE, '(get-contract-owner)');
+  await tx('market set-operator -> core owner', DEP, MKT, 'set-operator', [P_(CORE_OWNER)], { ok: true });
+  await tx('initialize(sbtc, usdcx, feeds 1/7)', CORE_OWNER, MKT, 'initialize', [P_(MKT), TX, TY, uintCV(1_000n), uintCV(1_000_000n), uintCV(1), uintCV(7)], { ok: true });
+  await tx('market set-operator -> DEP', CORE_OWNER, MKT, 'set-operator', [P_(DEP)], { ok: true });
   await deploy(DEP, RT_NAME, src(RT_NAME));
   must('fund taker sBTC', (await call(WHALE.x, SBTC, 'transfer', [uintCV(1_000_000n), P_(WHALE.x), P_(TAKER), noneCV()])).res?.ok === true);
   must('fund taker USDCx', (await call(USDC_WHALE, USDCX, 'transfer', [uintCV(1_000_000_000n), P_(USDC_WHALE), P_(TAKER), noneCV()])).res?.ok === true);
