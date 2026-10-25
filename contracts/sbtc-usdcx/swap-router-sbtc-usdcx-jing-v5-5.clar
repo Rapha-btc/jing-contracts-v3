@@ -575,23 +575,22 @@
         )
       )
       (let (
-          (factors (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step DLMM_BIN_STEP))))
           (o1 (if e1
-            (dlmm-out u1 amount sell-sbtc factors limit)
+            (dlmm-out u1 amount sell-sbtc limit)
             u0
           ))
           (o2 (if e2
-            (dlmm-out u2 amount sell-sbtc factors limit)
+            (dlmm-out u2 amount sell-sbtc limit)
             u0
           ))
           (o3 (if e3
-            (dlmm-out u3 amount sell-sbtc factors limit)
+            (dlmm-out u3 amount sell-sbtc limit)
             u0
           ))
         )
-        (if (and (>= o1 o2) (>= o1 o3))
+        (if (and e1 (>= o1 o2) (>= o1 o3))
           u1
-          (if (>= o2 o3)
+          (if (and e2 (>= o2 o3))
             u2
             u3
           )
@@ -600,8 +599,6 @@
     )
   )
 )
-
-(define-constant DLMM_BIN_STEP u10)
 
 (define-private (dlmm-threshold
     (limit uint)
@@ -620,7 +617,6 @@
     (pool uint)
     (amount uint)
     (sell-sbtc bool)
-    (factors (list 1001 uint))
     (limit uint)
   )
   (let (
@@ -634,7 +630,7 @@
         )
       ))
     )
-    (if (is-eq (get bin-step info) DLMM_BIN_STEP)
+    (if (> (get bin-step info) u0)
       (let (
           (aid (to-uint (+ (get active-bin-id info) DLMM_CENTER_BIN)))
           (lo (if (not sell-sbtc)
@@ -666,7 +662,7 @@
             up: (not sell-sbtc),
             threshold: threshold,
             initial-price: (get initial-price info),
-            factors: (unwrap-panic (slice? factors lo hi)),
+            factors: (unwrap-panic (slice? (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step (get bin-step info)))) lo hi)),
             base: lo,
             fee: fee,
             left: amount,
