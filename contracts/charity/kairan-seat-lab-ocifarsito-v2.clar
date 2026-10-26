@@ -101,6 +101,7 @@
 (define-constant ERR_TOO_LATE (err u113)) ;; raising / seat path past its window
 (define-constant ERR_SEAT_CLAIMED (err u114)) ;; no refunds after the seat claim
 (define-constant ERR_REQUEST_CHANGED (err u115)) ;; seat request is not the one OWNER reviewed
+(define-constant ERR_NOT_CLOSED (err u116)) ;; sweep before the claim or before every refund
 
 (define-data-var total uint u0) ;; USDCx given through donate
 (define-data-var unrefunded uint u0) ;; gifts not refunded yet
@@ -450,6 +451,33 @@
     (record-claim "reserve" "" "" url extra stx sats)
     (ok {
       usdcx: extra,
+      stx: stx,
+      sats: sats,
+    })
+  )
+)
+
+;; After the claim (and, on failure, once every gift is refunded), OWNER
+;; sends anything sent straight to the contract since to LAB. Pays only LAB.
+(define-public (sweep)
+  (let (
+      (usdcx (usdcx-balance))
+      (stx (reserve-stx))
+      (sats (reserve-sats))
+    )
+    (asserts! (is-eq contract-caller OWNER) ERR_NOT_OWNER)
+    (asserts! (is-some (var-get claim)) ERR_NOT_CLOSED)
+    (asserts! (is-eq (var-get unrefunded) u0) ERR_NOT_CLOSED)
+    (asserts! (or (> usdcx u0) (> stx u0) (> sats u0)) ERR_AMOUNT_ZERO)
+    (try! (pay usdcx stx sats LAB))
+    (print {
+      event: "sweep",
+      usdcx: usdcx,
+      stx: stx,
+      sats: sats,
+    })
+    (ok {
+      usdcx: usdcx,
       stx: stx,
       sats: sats,
     })
