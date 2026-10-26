@@ -10,7 +10,7 @@
         (concat
           (concat
             (concat
-              u"Kairan's Seat at Let Africa Build (LAB) is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito). "
+              u"Kairan's First Mile at Let Africa Build (LAB) is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito). "
               u"The reserve is the STX and sBTC that the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F deposits into this contract before LAB's claim; only that wallet can deposit. "
             )
             u"LAB requests the reserve with a description of what the funds will be used for, recorded on-chain; the owner then releases the whole reserve to LAB, once. The owner reviews the description in good faith and to the best of its ability, but does not verify or guarantee it; LAB alone is responsible for the accuracy of its description and for how the funds are used, and neither the owner nor UASU Inc. is liable or responsible for either. "
