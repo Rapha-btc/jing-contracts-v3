@@ -25,11 +25,12 @@
 (define-constant TARGET u2000000000) ;; 2,000 USDCx (6 decimals)
 (define-constant DEADLINE u1025386) ;; Bitcoin block: 972,826 (Oct 23, 2026) + 52,560
 (define-constant SEAT_WINDOW u12960) ;; ~90 days from reached-at to claim the seat
+(define-constant REVIEW_WINDOW u1008) ;; ~7 days: last request leaves OWNER this long to release
 (define-constant TERMS (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat u"Target: 2,000 USDCx for one Kairan's Seat, newly raised. "
   u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; STX or sBTC sent straight to the contract is added to the reserve. ")
   u"Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ")
   u"Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. ")
-  u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
+  u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
   u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
@@ -63,7 +64,7 @@
   u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; STX or sBTC sent straight to the contract is added to the reserve. ")
   u"Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ")
   u"Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. ")
-  u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
+  u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
   u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
@@ -352,7 +353,9 @@
 ;; failure-at: builder (name or handle of the builder taking Kairan's Seat),
 ;; repo (link to their repo) and grant (link to LAB's public post announcing
 ;; the grant, amount and what it funds, crediting ocifarsito.com). A new
-;; request replaces the old one. Moves no funds.
+;; request replaces the old one. It must land REVIEW_WINDOW before
+;; failure-at, so OWNER always has time to review and release. Moves no
+;; funds.
 (define-public (request-seat
     (builder (string-ascii 128))
     (repo (string-ascii 256))
@@ -364,6 +367,7 @@
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
     (asserts! (is-eq (var-get total) TARGET) ERR_TARGET_NOT_REACHED)
     (try! (check-seat))
+    (asserts! (< (+ burn-block-height REVIEW_WINDOW) (failure-at)) ERR_TOO_LATE)
     (asserts! (> (len builder) u0) ERR_URL_EMPTY)
     (asserts! (> (len repo) u0) ERR_URL_EMPTY)
     (asserts! (> (len grant) u0) ERR_URL_EMPTY)
