@@ -1,0 +1,25 @@
+[project]
+name = "kairan-seat-lab-ocifarsito-v3"
+description = "Kairan's Seat v3: STX/sBTC reserve only; fundraiser deposits, LAB claims the whole balance with a use-of-funds description (repeatable)"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[contracts.kairan-seat-lab-ocifarsito-v3]
+path = "contracts/charity/kairan-seat-lab-ocifarsito-v3.clar"
+clarity_version = 5
+epoch = "latest"
+
+# remote_data resolves sbtc-token and the fundraiser's balances from mainnet.
+# If api.hiro.so rate-limits, run node simulations/_api-proxy.mjs (listens on
+# http://127.0.0.1:8787) and point api_url at it.
+[repl.remote_data]
+enabled = true
+initial_height = 9274000
+api_url = 'http://127.0.0.1:8787'
+
+[repl.analysis]
+passes = []
