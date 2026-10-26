@@ -14,7 +14,7 @@
 ;; it; USDCx sent straight to the contract goes to LAB with its claim.
 ;; LAB may claim-reserve any time from failure-at (no expiry).
 ;; Funds only ever go to LAB (claims) or back to donors (refunds). OWNER's
-;; only power is release-seat, which can only pay LAB.
+;; only powers are release-seat and sweep, which can only pay LAB.
 (define-constant OWNER tx-sender) ;; deployer: releases the seat to LAB, nothing else
 (define-constant LAB 'SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF)
 (define-constant FUNDRAISER 'SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F) ;; first-10K wallet: deposits the reserve
@@ -26,13 +26,13 @@
 (define-constant DEADLINE u1025386) ;; Bitcoin block: 972,826 (Oct 23, 2026) + 52,560
 (define-constant SEAT_WINDOW u12960) ;; ~90 days from reached-at to claim the seat
 (define-constant TERMS (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat u"Target: 2,000 USDCx for one Kairan's Seat, newly raised. "
-  u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; no one else can add to the reserve. ")
+  u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; STX or sBTC sent straight to the contract is added to the reserve. ")
   u"Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ")
   u"Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. ")
   u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
-  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only power is to release the seat to LAB after reviewing LAB's seat receipt. ")
+  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
   u"The contract enforces all of this. ")
   u"Kairan's Seat at Let Africa Build (LAB) is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito). ")
   u"Ocifarsito asks for new gifts mainly in the 1 to 2 weeks before a 10K that RaphaStacks and friends of the Kairan team run with RunThrough USA or similar organizations. ")
@@ -60,13 +60,13 @@
   u"UASU Inc. (Ocifarsito) only raises and forwards gifts; once LAB claims, LAB alone is responsible for how those funds are used, and UASU Inc. has no liability for it. ")
   u"These terms are governed by the laws of the State of Delaware, USA, and any dispute is resolved only in the courts of Delaware."))
 (define-constant DONOR_TERMS (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat (concat u"Target: 2,000 USDCx for one Kairan's Seat, newly raised. "
-  u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; no one else can add to the reserve. ")
+  u"Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; STX or sBTC sent straight to the contract is added to the reserve. ")
   u"Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ")
   u"Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. ")
   u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
-  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only power is to release the seat to LAB after reviewing LAB's seat receipt. ")
+  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
   u"The contract enforces all of this. ")
   u"Kairan's Seat is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito); by giving through this contract you accept these donor terms. ")
   u"Gifts are voluntary. ")
