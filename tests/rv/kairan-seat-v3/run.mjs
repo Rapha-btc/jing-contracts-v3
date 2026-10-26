@@ -1,10 +1,14 @@
 // RV campaign for kairan-seat-lab-ocifarsito-v3. RV keeps one simnet per
-// process, so one process = one lifecycle (open -> release -> closed). The
+// process, so one process = one lifecycle (open -> release or recoup -> closed). The
 // campaign runs several seeds on three release-gate profiles, each a fresh
 // build, so the release lands early, mid and late in the campaign:
 //   early  RV_RELEASE_GATE 4   (release soon; long closed phase)
 //   mid    RV_RELEASE_GATE 16
 //   late   RV_RELEASE_GATE 64  (many deposits / requests before the release)
+//   recoup RV_RELEASE_GATE 0   (no helper releases; RV mines past DEADLINE
+//                               and FUNDRAISER's recoup-reserve pays out)
+// DEADLINE stays deploy + 12960: RV mines random empty burn blocks between
+// calls, so every campaign of 600 runs crosses it.
 // Each job's log is scanned for the contract's print events so summary.json
 // shows which paths every profile reached.
 //
@@ -15,7 +19,7 @@ import { spawnSync } from 'node:child_process';
 
 const DIR = 'tests/rv/kairan-seat-v3';
 const RES = `${DIR}/.build/results`;
-const PROFILES = { early: '4', mid: '16', late: '64' };
+const PROFILES = { early: '4', mid: '16', late: '64', recoup: '0' };
 const [modeArg = 'both', runs = '600', seedBase = '20261026', perProfile = '3', only] = process.argv.slice(2);
 const modes = modeArg === 'both' ? ['invariant', 'test'] : [modeArg];
 const strip = s => s.replace(/\x1b\[[0-9;]*m/g, '');

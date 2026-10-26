@@ -2,8 +2,11 @@
 // SELF-VERIFYING stxer mainnet-fork harness for
 // contracts/charity/kairan-seat-lab-ocifarsito-v3.clar (reserve-only seat:
 // FUNDRAISER deposits STX + sBTC, LAB files a use-of-funds request, OWNER
-// releases the whole balance to LAB once). Deploys the LOCAL source as
-// chavita.btc (OWNER) three times:
+// releases the whole balance to LAB once, before DEADLINE = deploy burn
+// height + 12960; a request must land more than REVIEW_WINDOW = 1008 blocks
+// before DEADLINE; from DEADLINE, if nothing was released, FUNDRAISER
+// recoups the whole balance). Deploys the LOCAL source as chavita.btc
+// (OWNER) six times, all at the same burn height (same DEADLINE):
 //  A. MAIN: whales top up the fundraiser wallet on the fork; the fundraiser
 //     deposits three times (STX only, sBTC only, then the rest of its live
 //     STX + sBTC); STX and sBTC are also sent straight to the contract; LAB
@@ -15,9 +18,23 @@
 //  B. EMPTY: LAB requests, release with nothing to pay -> u102; STX sent
 //     straight to the contract -> release pays LAB that STX only.
 //  C. SATS: sBTC-only deposit -> release pays sBTC only.
+//  D. RECOUP: deposits + direct sends; recoup before DEADLINE -> u112 (also
+//     one block before); LAB files a request at the last allowed block
+//     (DEADLINE - 1009), one block later -> u113; at DEADLINE the owner's
+//     release -> u113 even with that request, FUNDRAISER recoups exactly the
+//     whole STX + sBTC balance (Deny-mode PCs), claim { to: FUNDRAISER,
+//     description: "" }; then deposit / request / release / recoup -> u106.
+//  E. DEADLINE: LAB requests at DEADLINE - 1009 (ok), DEADLINE - 1008
+//     (u113); the owner releases at DEADLINE - 1 (ok, pays LAB); recoup
+//     after that -> u106.
+//  F. RECOUP-EMPTY: recoup at DEADLINE with nothing -> u102; a deposit after
+//     DEADLINE still lands; recoup pays it to FUNDRAISER.
+// The burn clock is moved with addAdvanceBlocks (exact block counts, each
+// boundary checked with (- DEADLINE burn-block-height) evals).
 // Attacks: every function from the wrong principals, and through a proxy
 // contract the right principal signs (contract-caller != the principal),
-// including an as-contract? hop.
+// including an as-contract? hop; recoup from every non-FUNDRAISER principal
+// and through the proxy -> u105.
 // Deny-mode post-conditions (the builder only emits Allow txs, so the
 // marked steps are re-encoded in Deny mode with explicit PCs right before
 // submit): deposits pin the fundraiser's exact outflow; a Deny-mode deposit
@@ -82,6 +99,9 @@ const NAME_C = "kairan-seat-lab-ocifarsito-v3-sats";
 const A = `${DEPLOYER}.${NAME_A}`;
 const B = `${DEPLOYER}.${NAME_B}`;
 const C = `${DEPLOYER}.${NAME_C}`;
+const D = `${DEPLOYER}.kairan-seat-lab-ocifarsito-v3-recoup`;
+const E = `${DEPLOYER}.kairan-seat-lab-ocifarsito-v3-deadline`;
+const F_ = `${DEPLOYER}.kairan-seat-lab-ocifarsito-v3-zero`;
 const LAB = "SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF";
 const FUNDRAISER = "SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F";
 const OCIFARSITO = "SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q"; // UASU Inc.: must never receive funds
@@ -100,7 +120,20 @@ const DIRECT_STX = 2_000_000n; // straight to A before the release
 const DIRECT_SATS = 300n;
 const B_STX = 3_000_000n; // straight to B
 const LATE_STX = 1_000_000n; // straight to A after the release
-
+const TOPUP2_STX = 20_000_000n; // second whale -> fundraiser top-up (for D / F)
+const TOPUP2_SATS = 2_000n;
+const D_DEP_STX = 15_000_000n; // fundraiser deposit into D
+const D_DEP_SATS = 1_500n;
+const D_DIRECT_STX = 1_000_000n; // whale straight to D
+const D_DIRECT_SATS = 100n;
+const D_STX = D_DEP_STX + D_DIRECT_STX;
+const D_SATS = D_DEP_SATS + D_DIRECT_SATS;
+const E_STX = 2_000_000n; // whale straight to E
+const E_SATS = 200n;
+const Z_SATS = 300n; // fundraiser deposit into F after DEADLINE
+const Z_STX = 500_000n; // whale straight to F after DEADLINE
+const DEADLINE_OFFSET = 12960;
+const REVIEW_WINDOW = 1008;
 const D1 = "Kairan's Seat: one builder stipend, 6 months, Lagos cohort, laptop and data plan";
 const D2 = (() => {
   const base = "Kairan's Seat at LAB 2027: stipend for one full-time Stacks builder for 12 months (monthly in STX), a laptop, mobile data, and travel to two LAB build weeks; any rest goes to the LAB builder fund pool. Milestones and receipts are posted on letafricabuild.com/journal. ";
@@ -127,6 +160,10 @@ const PROXY_SRC = `
   (contract-call? '${A} release-reserve "${D2}"))
 (define-public (proxy-release-as-contract)
   (as-contract? () (try! (contract-call? '${A} release-reserve "${D2}"))))
+(define-public (proxy-recoup)
+  (contract-call? '${D} recoup-reserve))
+(define-public (proxy-recoup-as-contract)
+  (as-contract? () (try! (contract-call? '${D} recoup-reserve))))
 `;
 
 let API;
@@ -159,10 +196,10 @@ function deploy(label, deployer, name, src) {
   b.withSender(deployer).addContractDeploy({ contract_name: name, source_code: src, clarity_version: ClarityVersion.Clarity5 });
   plan.push({ kind: "deploy", label });
 }
-function call(label, sender, contract, fn, args, expect, pcs) {
+function call(label, sender, contract, fn, args, expect, pcs, evs) {
   if (pcs) pcSteps.set(plan.length, { fn, pcs });
   b.withSender(sender).addContractCall({ contract_id: contract, function_name: fn, function_args: args });
-  plan.push({ kind: "tx", label: pcs ? `[deny ${pcs.length} PC] ${label}` : label, expect });
+  plan.push({ kind: "tx", label: pcs ? `[deny ${pcs.length} PC] ${label}` : label, expect, evs });
 }
 function stxSend(label, sender, recipient, amount) {
   b.withSender(sender).addSTXTransfer({ recipient, amount: Number(amount) });
@@ -174,14 +211,20 @@ function evalc(label, code, { capture, expect, on = A } = {}) {
   b.addEvalCode(on, code);
   plan.push({ kind: "eval", label, capture, expect });
 }
+let clock = 0; // burn blocks since the deploys
 function advance(n) {
   b.addAdvanceBlocks({ bitcoin_blocks: n, stacks_blocks_per_bitcoin: 1, bitcoin_interval_secs: 1 });
-  plan.push({ kind: "advance", label: `advance ${n} Bitcoin blocks` });
+  clock += n;
+  plan.push({ kind: "advance", label: `advance ${n} Bitcoin blocks (clock ${clock}, burn - DEADLINE = ${clock - DEADLINE_OFFSET})` });
 }
+// the burn clock as the contract sees it: DEADLINE - burn-block-height
+const clockCheck = (label) => evalc(`clock ${label}: DEADLINE - burn-block-height = ${DEADLINE_OFFSET - clock}`,
+  "(- DEADLINE burn-block-height)", { expect: `u${DEADLINE_OFFSET - clock}`, on: E });
 const has = (...parts) => (s) => parts.every((p) => s.includes(p));
 const pcAbort = (s) => s.startsWith("PC-ABORT");
 const status = (label, fields, on = A) => evalc(`get-status ${label}`, "(get-status)", { expect: has(...fields), on });
 const deltas = []; // [label, afterKey, beforeKey, want]
+const ranges = []; // [label, afterKey, beforeKey, lo (exclusive), hi (inclusive)]
 const equals = []; // [label, keyA, keyB]
 function snap(tag, who, on) {
   for (const [k, a] of Object.entries(who)) {
@@ -207,11 +250,20 @@ function build(F) {
   deploy("deploy kairan-seat-lab-ocifarsito-v3 (A, chavita.btc, Clarity 5)", DEPLOYER, NAME_A, source);
   deploy("deploy kairan-seat-lab-ocifarsito-v3-empty (B)", DEPLOYER, NAME_B, source);
   deploy("deploy kairan-seat-lab-ocifarsito-v3-sats (C)", DEPLOYER, NAME_C, source);
+  deploy("deploy kairan-seat-lab-ocifarsito-v3-recoup (D)", DEPLOYER, D.split(".")[1], source);
+  deploy("deploy kairan-seat-lab-ocifarsito-v3-deadline (E)", DEPLOYER, E.split(".")[1], source);
+  deploy("deploy kairan-seat-lab-ocifarsito-v3-zero (F)", DEPLOYER, F_.split(".")[1], source);
   deploy("deploy attack contract kairan-v3-proxy", ATTACKER, "kairan-v3-proxy", PROXY_SRC);
+  for (const [k, c] of Object.entries({ A, B, C, D, E, F: F_ })) {
+    evalc(`${k}: DEADLINE = deploy burn height + ${DEADLINE_OFFSET} = get-status deadline`,
+      `(and (is-eq DEADLINE (+ burn-block-height u${DEADLINE_OFFSET})) (is-eq (get deadline (get-status)) DEADLINE))`, { expect: "true", on: c });
+  }
+  evalc("REVIEW_WINDOW = u1008", "REVIEW_WINDOW", { expect: `u${REVIEW_WINDOW}` });
+  clockCheck("at deploy");
   evalc("fork: fundraiser STX = live read", stxOf(FUNDRAISER), { expect: `u${F.stx}` });
   evalc("fork: fundraiser sats = live read", ftOf(SBTC, FUNDRAISER), { expect: `u${F.sats}` });
-  evalc("get-terms", "(get-terms)", { expect: has("only that wallet can deposit", "the owner then releases the whole reserve to LAB, once", "Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF", "courts of Delaware.") });
-  status("A fresh", [`(lab ${LAB})`, `(owner ${DEPLOYER})`, `(fundraiser ${FUNDRAISER})`, "(stx u0)", "(sats u0)", "(claimed false)"]);
+  evalc("get-terms", "(get-terms)", { expect: has("only that wallet can deposit", "the owner then releases the whole reserve to LAB, once, before the deadline", "at least 7 days (1,008 Bitcoin blocks) before the deadline, about 90 days (12,960 Bitcoin blocks)", "Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF, or, if the reserve was not released to LAB by the deadline, back to the fundraiser wallet", "courts of Delaware.") });
+  status("A fresh", [`(lab ${LAB})`, `(owner ${DEPLOYER})`, `(fundraiser ${FUNDRAISER})`, "(deadline u", "(stx u0)", "(sats u0)", "(claimed false)"]);
   evalc("A fresh: get-request none", "(get-request)", { expect: "none" });
   evalc("A fresh: get-claim none", "(get-claim)", { expect: "none" });
 
@@ -226,6 +278,9 @@ function build(F) {
   call("ATTACK fundraiser signs proxy-deposit -> u105", FUNDRAISER, PROXY, "proxy-deposit", [], "(err u105)");
   call("ATTACK fundraiser signs proxy-deposit-as-contract -> u105", FUNDRAISER, PROXY, "proxy-deposit-as-contract", [], "(err u105)");
   call("fundraiser deposit-reserve 0 0 -> u102", FUNDRAISER, A, "deposit-reserve", [uintCV(0), uintCV(0)], "(err u102)");
+  call("A: fundraiser recoup before DEADLINE (empty) -> u112 (deadline checked before amount)", FUNDRAISER, A, "recoup-reserve", [], "(err u112)");
+  call("ATTACK LAB recoup -> u105", LAB, A, "recoup-reserve", [], "(err u105)");
+  call("ATTACK owner recoup -> u105", DEPLOYER, A, "recoup-reserve", [], "(err u105)");
 
   stxSend(`fund: STX whale sends the fundraiser ${TOPUP_STX} uSTX`, STX_WHALE, FUNDRAISER, TOPUP_STX);
   satsSend(`fund: sBTC whale sends the fundraiser ${TOPUP_SATS} sats`, SBTC_WHALE, FUNDRAISER, TOPUP_SATS);
@@ -272,6 +327,7 @@ function build(F) {
   call("Deny mode, PC 1 uSTX short: owner release D2 -> aborted, rolled back", DEPLOYER, A, "release-reserve", [stringAsciiCV(D2)], pcAbort,
     [sendsStx(A, A_STX - 1n), sendsSats(A, A_SATS)]);
   status("A untouched after the aborted release", [`(stx u${A_STX})`, `(sats u${A_SATS})`, "(claimed false)"]);
+  call("A: fundraiser recoup with a full balance before DEADLINE -> u112", FUNDRAISER, A, "recoup-reserve", [], "(err u112)");
   evalc("A: claim still none", "(get-claim)", { expect: "none" });
 
   const watch = { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, fr: FUNDRAISER, atk: ATTACKER, c: A };
@@ -285,7 +341,7 @@ function build(F) {
   delta("release", "owner", "apre", "apost", { sats: 0n });
   delta("release", "fr", "apre", "apost", { stx: 0n, sats: 0n });
   delta("release", "atk", "apre", "apost", { stx: 0n, sats: 0n });
-  evalc("get-claim = D2 + amounts", "(get-claim)", { capture: "claim1", expect: has(`(description "${D2}")`, `(sats u${A_SATS})`, `(stx u${A_STX})`, "(burn-height u") });
+  evalc("get-claim = to LAB, D2 + amounts", "(get-claim)", { capture: "claim1", expect: has(`(to ${LAB})`, `(description "${D2}")`, `(sats u${A_SATS})`, `(stx u${A_STX})`, "(burn-height u") });
   evalc("claim burn-height = this burn block", "(is-eq (get burn-height (unwrap-panic (get-claim))) burn-block-height)", { expect: "true" });
   status("A closed", ["(stx u0)", "(sats u0)", "(claimed true)"]);
 
@@ -299,6 +355,8 @@ function build(F) {
   call("CLOSED LAB request D1 -> u106", LAB, A, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u106)");
   call("CLOSED LAB request terms false -> u106", LAB, A, "request-reserve", [stringAsciiCV(D1), boolCV(false)], "(err u106)");
   call("CLOSED LAB request empty -> u106", LAB, A, "request-reserve", [stringAsciiCV(""), boolCV(true)], "(err u106)");
+  call("CLOSED fundraiser recoup -> u106 (released to LAB)", FUNDRAISER, A, "recoup-reserve", [], "(err u106)");
+  call("CLOSED attacker recoup -> u105", ATTACKER, A, "recoup-reserve", [], "(err u105)");
   evalc("CLOSED request still D2", "(get-request)", { expect: `(some "${D2}")` });
   stxSend(`LATE direct STX ${LATE_STX} to A after the release`, STX_WHALE, A, LATE_STX);
   satsSend("LATE direct sBTC 50 sats to A after the release", SBTC_WHALE, A, 50n);
@@ -329,7 +387,127 @@ function build(F) {
   snap("cpost", { lab: LAB, c: C }, C);
   delta("C release", "lab", "cpre", "cpost", { stx: 0n, sats: C_SATS });
   delta("C release", "c", "cpre", "cpost", { stx: 0n, sats: -C_SATS });
-  evalc("C: claim records D1, 0 STX", "(get-claim)", { expect: has(`(description "${D1}")`, `(sats u${C_SATS})`, "(stx u0)"), on: C });
+  evalc("C: claim records to LAB, D1, 0 STX", "(get-claim)", { expect: has(`(to ${LAB})`, `(description "${D1}")`, `(sats u${C_SATS})`, "(stx u0)"), on: C });
+
+  // ===== D / E / F: the deadline =====
+  clockCheck("after A/B/C");
+  stxSend(`fund: STX whale sends the fundraiser ${TOPUP2_STX} uSTX more`, STX_WHALE, FUNDRAISER, TOPUP2_STX);
+  satsSend(`fund: sBTC whale sends the fundraiser ${TOPUP2_SATS} sats more`, SBTC_WHALE, FUNDRAISER, TOPUP2_SATS);
+  call(`D: fundraiser deposits ${D_DEP_STX} uSTX + ${D_DEP_SATS} sats`, FUNDRAISER, D, "deposit-reserve", [uintCV(D_DEP_STX), uintCV(D_DEP_SATS)], "(ok true)",
+    [sendsStx(FUNDRAISER, D_DEP_STX), sendsSats(FUNDRAISER, D_DEP_SATS)]);
+  stxSend(`D: direct STX ${D_DIRECT_STX} straight to D`, STX_WHALE, D, D_DIRECT_STX);
+  satsSend(`D: direct sBTC ${D_DIRECT_SATS} straight to D`, SBTC_WHALE, D, D_DIRECT_SATS);
+  status("D funded", [`(stx u${D_STX})`, `(sats u${D_SATS})`, "(claimed false)"], D);
+  call("D: fundraiser recoup long before DEADLINE -> u112", FUNDRAISER, D, "recoup-reserve", [], "(err u112)");
+  call("ATTACK D: LAB recoup -> u105", LAB, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: owner recoup -> u105", DEPLOYER, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: attacker recoup -> u105", ATTACKER, D, "recoup-reserve", [], "(err u105)");
+  stxSend(`E: direct STX ${E_STX} straight to E`, STX_WHALE, E, E_STX);
+  satsSend(`E: direct sBTC ${E_SATS} straight to E`, SBTC_WHALE, E, E_SATS);
+  call("E: LAB request D1 early", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(ok true)");
+
+  // the last block a request can land: burn-block-height + 1008 < DEADLINE
+  const LAST_REQ = DEADLINE_OFFSET - REVIEW_WINDOW - 1;
+  for (let left = LAST_REQ - clock; left > 0; left -= Math.min(4000, left)) advance(Math.min(4000, left));
+  clockCheck("last request block");
+  evalc("burn-block-height + REVIEW_WINDOW < DEADLINE (still open)", "(< (+ burn-block-height REVIEW_WINDOW) DEADLINE)", { expect: "true", on: E });
+  call("E: LAB request D2 at DEADLINE - 1009 -> ok (replaces D1)", LAB, E, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
+  call("D: LAB request D2 at DEADLINE - 1009 -> ok", LAB, D, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
+  evalc("E: get-request = D2", "(get-request)", { expect: `(some "${D2}")`, on: E });
+  evalc("D: get-request = D2", "(get-request)", { expect: `(some "${D2}")`, on: D });
+  advance(1);
+  clockCheck("first late block");
+  call("E: LAB request D1 at DEADLINE - 1008 -> u113", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("D: LAB request D1 at DEADLINE - 1008 -> u113", LAB, D, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("F: LAB first request at DEADLINE - 1008 -> u113", LAB, F_, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("E: LAB late request terms false -> u103 (terms checked before the deadline)", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(false)], "(err u103)");
+  call("E: LAB late request empty -> u104 (description checked before the deadline)", LAB, E, "request-reserve", [stringAsciiCV(""), boolCV(true)], "(err u104)");
+  call("ATTACK E: attacker late request -> u101", ATTACKER, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u101)");
+  evalc("E: request still D2 after the late tries", "(get-request)", { expect: `(some "${D2}")`, on: E });
+  evalc("F: still no request", "(get-request)", { expect: "none", on: F_ });
+  call("D: fundraiser recoup in the review window -> u112", FUNDRAISER, D, "recoup-reserve", [], "(err u112)");
+
+  advance(DEADLINE_OFFSET - 1 - clock);
+  clockCheck("one block before DEADLINE");
+  call("D: fundraiser recoup at DEADLINE - 1 -> u112", FUNDRAISER, D, "recoup-reserve", [], "(err u112)");
+  call("F: fundraiser recoup at DEADLINE - 1 (empty) -> u112", FUNDRAISER, F_, "recoup-reserve", [], "(err u112)");
+  call("E: owner release with the old D1 -> u115", DEPLOYER, E, "release-reserve", [stringAsciiCV(D1)], "(err u115)");
+  snap("epre", { lab: LAB, fr: FUNDRAISER, c: E }, E);
+  call(`E: owner release D2 at DEADLINE - 1: LAB gets ${E_STX} uSTX + ${E_SATS} sats`, DEPLOYER, E, "release-reserve", [stringAsciiCV(D2)], tupleOk(E_STX, E_SATS),
+    [sendsStx(E, E_STX), sendsSats(E, E_SATS)], [`stx ${E_STX} ${E} -> ${LAB}`, `ft ${E_SATS} ${E} -> ${LAB}`]);
+  snap("epost", { lab: LAB, fr: FUNDRAISER, c: E }, E);
+  delta("E release", "lab", "epre", "epost", { stx: E_STX, sats: E_SATS });
+  delta("E release", "c", "epre", "epost", { stx: -E_STX, sats: -E_SATS });
+  delta("E release", "fr", "epre", "epost", { stx: 0n, sats: 0n });
+  evalc("E: claim to LAB, D2, at DEADLINE - 1", "(get-claim)", { expect: has(`(to ${LAB})`, `(description "${D2}")`, `(stx u${E_STX})`, `(sats u${E_SATS})`), on: E });
+  evalc("E: claim burn-height = DEADLINE - 1", "(is-eq (get burn-height (unwrap-panic (get-claim))) (- DEADLINE u1))", { expect: "true", on: E });
+
+  advance(1);
+  clockCheck("at DEADLINE");
+  call("D: owner release D2 at DEADLINE (request filed in time) -> u113", DEPLOYER, D, "release-reserve", [stringAsciiCV(D2)], "(err u113)");
+  call("D: owner release unrelated description at DEADLINE -> u113 (deadline before request)", DEPLOYER, D, "release-reserve", [stringAsciiCV("x")], "(err u113)");
+  call("D: LAB request at DEADLINE -> u113", LAB, D, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("E: fundraiser recoup after the release -> u106", FUNDRAISER, E, "recoup-reserve", [], "(err u106)");
+  call("E: owner release again -> u106", DEPLOYER, E, "release-reserve", [stringAsciiCV(D2)], "(err u106)");
+  call("ATTACK D: LAB recoup at DEADLINE -> u105", LAB, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: owner recoup at DEADLINE -> u105", DEPLOYER, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: attacker recoup at DEADLINE -> u105", ATTACKER, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: STX whale recoup at DEADLINE -> u105", STX_WHALE, D, "recoup-reserve", [], "(err u105)");
+  call("ATTACK D: fundraiser signs proxy-recoup -> u105", FUNDRAISER, PROXY, "proxy-recoup", [], "(err u105)");
+  call("ATTACK D: fundraiser signs proxy-recoup-as-contract -> u105", FUNDRAISER, PROXY, "proxy-recoup-as-contract", [], "(err u105)");
+  call("Deny mode, no PCs: fundraiser recoup -> aborted, rolled back", FUNDRAISER, D, "recoup-reserve", [], pcAbort, []);
+  call("Deny mode, PC 1 sat short: fundraiser recoup -> aborted, rolled back", FUNDRAISER, D, "recoup-reserve", [], pcAbort,
+    [sendsStx(D, D_STX), sendsSats(D, D_SATS - 1n)]);
+  status("D untouched after the aborted recoups", [`(stx u${D_STX})`, `(sats u${D_SATS})`, "(claimed false)"], D);
+  evalc("D: claim still none", "(get-claim)", { expect: "none", on: D });
+
+  const dwatch = { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, fr: FUNDRAISER, atk: ATTACKER, c: D };
+  snap("rpre", dwatch, D);
+  call(`D: fundraiser recoup at DEADLINE: FUNDRAISER gets ${D_STX} uSTX + ${D_SATS} sats (deposit + direct)`, FUNDRAISER, D, "recoup-reserve", [], tupleOk(D_STX, D_SATS),
+    [sendsStx(D, D_STX), sendsSats(D, D_SATS)], [`stx ${D_STX} ${D} -> ${FUNDRAISER}`, `ft ${D_SATS} ${D} -> ${FUNDRAISER}`, `event "recoup-reserve"`]);
+  snap("rpost", dwatch, D);
+  delta("recoup", "c", "rpre", "rpost", { stx: -D_STX, sats: -D_SATS });
+  delta("recoup", "fr", "rpre", "rpost", { sats: D_SATS });
+  ranges.push(["recoup: fr STX delta = recoup less its own tx fee", "rpost.fr.stx", "rpre.fr.stx", D_STX - 1_000_000n, D_STX]);
+  delta("recoup", "lab", "rpre", "rpost", { stx: 0n, sats: 0n });
+  delta("recoup", "oci", "rpre", "rpost", { stx: 0n, sats: 0n });
+  delta("recoup", "owner", "rpre", "rpost", { stx: 0n, sats: 0n });
+  delta("recoup", "atk", "rpre", "rpost", { stx: 0n, sats: 0n });
+  evalc("D: get-claim = to FUNDRAISER, empty description, amounts", "(get-claim)", { capture: "claimD1",
+    expect: has(`(to ${FUNDRAISER})`, `(description "")`, `(stx u${D_STX})`, `(sats u${D_SATS})`), on: D });
+  evalc("D: claim burn-height = DEADLINE", "(is-eq (get burn-height (unwrap-panic (get-claim))) DEADLINE)", { expect: "true", on: D });
+  status("D closed", ["(stx u0)", "(sats u0)", "(claimed true)"], D);
+
+  call("D CLOSED: fundraiser recoup again -> u106", FUNDRAISER, D, "recoup-reserve", [], "(err u106)");
+  call("D CLOSED: attacker recoup -> u105", ATTACKER, D, "recoup-reserve", [], "(err u105)");
+  call("D CLOSED: fundraiser deposit -> u106", FUNDRAISER, D, "deposit-reserve", [uintCV(1), uintCV(0)], "(err u106)");
+  call("D CLOSED: LAB request -> u106", LAB, D, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u106)");
+  call("D CLOSED: owner release D2 -> u106 (claim checked before the deadline)", DEPLOYER, D, "release-reserve", [stringAsciiCV(D2)], "(err u106)");
+  stxSend("D CLOSED: direct 700000 uSTX to D after the recoup", STX_WHALE, D, 700_000n);
+  call("D CLOSED: fundraiser recoup with a new balance -> u106", FUNDRAISER, D, "recoup-reserve", [], "(err u106)");
+  status("D keeps the late send (no sweep)", ["(stx u700000)", "(sats u0)", "(claimed true)"], D);
+  evalc("D CLOSED: request still D2", "(get-request)", { expect: `(some "${D2}")`, on: D });
+  evalc("D CLOSED: claim unchanged", "(get-claim)", { capture: "claimD2", on: D });
+  equals.push(["D: claim never changes after the recoup", "claimD1", "claimD2"]);
+
+  call("F: fundraiser recoup at DEADLINE with nothing -> u102", FUNDRAISER, F_, "recoup-reserve", [], "(err u102)");
+  evalc("F: no claim after u102", "(get-claim)", { expect: "none", on: F_ });
+  call(`F: fundraiser deposits ${Z_SATS} sats after DEADLINE -> ok`, FUNDRAISER, F_, "deposit-reserve", [uintCV(0), uintCV(Z_SATS)], "(ok true)", [sendsSats(FUNDRAISER, Z_SATS)]);
+  stxSend(`F: direct STX ${Z_STX} straight to F`, STX_WHALE, F_, Z_STX);
+  snap("fpre", { fr: FUNDRAISER, lab: LAB, c: F_ }, F_);
+  call(`F: fundraiser recoup pays ${Z_STX} uSTX + ${Z_SATS} sats`, FUNDRAISER, F_, "recoup-reserve", [], tupleOk(Z_STX, Z_SATS),
+    [sendsStx(F_, Z_STX), sendsSats(F_, Z_SATS)], [`stx ${Z_STX} ${F_} -> ${FUNDRAISER}`, `ft ${Z_SATS} ${F_} -> ${FUNDRAISER}`]);
+  snap("fpost", { fr: FUNDRAISER, lab: LAB, c: F_ }, F_);
+  delta("F recoup", "c", "fpre", "fpost", { stx: -Z_STX, sats: -Z_SATS });
+  delta("F recoup", "fr", "fpre", "fpost", { sats: Z_SATS });
+  delta("F recoup", "lab", "fpre", "fpost", { stx: 0n, sats: 0n });
+  evalc("F: claim to FUNDRAISER, empty description", "(get-claim)", { expect: has(`(to ${FUNDRAISER})`, `(description "")`, `(stx u${Z_STX})`, `(sats u${Z_SATS})`), on: F_ });
+  call("F CLOSED: fundraiser deposit -> u106", FUNDRAISER, F_, "deposit-reserve", [uintCV(0), uintCV(1)], "(err u106)");
+  advance(5);
+  evalc("clock past DEADLINE: burn-block-height - DEADLINE = 5", "(- burn-block-height DEADLINE)", { expect: "u5", on: E });
+  call("F CLOSED: fundraiser recoup later -> u106", FUNDRAISER, F_, "recoup-reserve", [], "(err u106)");
+  call("F CLOSED: owner release later -> u106", DEPLOYER, F_, "release-reserve", [stringAsciiCV(D1)], "(err u106)");
+
   evalc("proxy got nothing (STX)", stxOf(PROXY), { expect: "u0" });
   evalc("proxy got nothing (sats)", ftOf(SBTC, PROXY), { expect: "u0" });
 }
@@ -384,7 +562,9 @@ async function main() {
       ok ? pass++ : (fail++, fails.push(p.label));
     } else if (p.kind === "tx") {
       const d = decodeTx(s);
-      const ok = check(p.expect, d.str);
+      const missing = (p.evs ?? []).filter((w) => !d.events.some((e) => e.includes(w)));
+      const ok = check(p.expect, d.str) && missing.length === 0;
+      if (missing.length) console.log(`        MISSING EVENTS: ${missing.join(" | ")}`);
       console.log(`${ok ? "PASS" : "FAIL"} [${i}] ${p.label}\n        got ${d.str.length > 400 ? d.str.slice(0, 400) + "..." : d.str}${ok ? "" : `  EXPECTED ${typeof p.expect === "function" ? "<predicate>" : p.expect}`}`);
       for (const e of d.events) console.log(`          ev: ${e.length > 300 ? e.slice(0, 300) + "..." : e}`);
       ok ? pass++ : (fail++, fails.push(p.label));
@@ -407,6 +587,12 @@ async function main() {
     const got = U(cap[a]) - U(cap[bk]);
     const ok = got === want;
     console.log(`${ok ? "PASS" : "FAIL"} ${label} = ${got} (want ${want})`);
+    ok ? pass++ : (fail++, fails.push(label));
+  }
+  for (const [label, a, bk, lo, hi] of ranges) {
+    const got = U(cap[a]) - U(cap[bk]);
+    const ok = got > lo && got <= hi;
+    console.log(`${ok ? "PASS" : "FAIL"} ${label} = ${got} (want (${lo}, ${hi}])`);
     ok ? pass++ : (fail++, fails.push(label));
   }
   for (const [label, x, y] of equals) {
