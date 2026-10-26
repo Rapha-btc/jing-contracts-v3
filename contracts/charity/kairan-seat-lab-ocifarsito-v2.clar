@@ -100,6 +100,7 @@
 (define-constant ERR_TOO_EARLY (err u112)) ;; failure path before failure-at
 (define-constant ERR_TOO_LATE (err u113)) ;; raising / seat path past its window
 (define-constant ERR_SEAT_CLAIMED (err u114)) ;; no refunds after the seat claim
+(define-constant ERR_REQUEST_CHANGED (err u115)) ;; seat request is not the one OWNER reviewed
 
 (define-data-var total uint u0) ;; USDCx given through donate
 (define-data-var unrefunded uint u0) ;; gifts not refunded yet
@@ -380,9 +381,14 @@
 ;; SUCCESS, before failure-at: OWNER reviews LAB's pending seat receipt and
 ;; releases the seat in one tx: LAB receives all the USDCx (TARGET plus any
 ;; USDCx sent straight to the contract) and the whole reserve, and the claim
-;; is recorded with the three receipt fields. Pays only LAB. Closes the
-;; contract.
-(define-public (release-seat)
+;; is recorded with the three receipt fields. OWNER passes the receipt it
+;; reviewed; if LAB replaced the request since, the release fails. Pays only
+;; LAB. Closes the contract.
+(define-public (release-seat
+    (builder (string-ascii 128))
+    (repo (string-ascii 256))
+    (grant (string-ascii 256))
+  )
   (let (
       (stx (reserve-stx))
       (sats (reserve-sats))
@@ -392,6 +398,14 @@
     (let (
         (request (unwrap! (var-get seat-request) ERR_NO_REQUEST))
         (usdcx (usdcx-balance))
+      )
+      (asserts!
+        (is-eq request {
+          builder: builder,
+          repo: repo,
+          grant: grant,
+        })
+        ERR_REQUEST_CHANGED
       )
       (try! (pay usdcx stx sats LAB))
       (var-set unrefunded u0)
