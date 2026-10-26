@@ -71,7 +71,7 @@
   u"Kairan's Seat is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito); by giving through this contract you accept these donor terms. ")
   u"Gifts are voluntary. ")
   u"Gifts are final except for the full USDCx refund if LAB does not claim the seat in time. ")
-  u"A gift may not exceed the amount still needed to reach the target. ")
+  u"A gift above the amount still needed to reach the target is reduced to that amount. ")
   u"If 2,000 USDCx is not raised by the deadline, or LAB does not claim the seat within its 90-day window, anyone may trigger the refunds in batches, and every USDCx gift made through this contract is returned in full to the wallet that sent it. ")
   u"Reserve deposits and USDCx sent straight to the contract are not gifts and are not refunded. ")
   u"Gifts are not tax-deductible: UASU Inc. is a for-profit company and Let Africa Build (LAB) is not a US 501(c)(3) charity. ")
@@ -292,17 +292,21 @@
 )
 
 ;; Anyone gives USDCx up to the remaining amount, accepting DONOR_TERMS,
-;; before DEADLINE. The print event (donor, amount) is how the page and
-;; keepers list donors for refund-many.
+;; before DEADLINE; a gift above the remaining amount is capped to it. The
+;; print event (donor, amount) is how the page and keepers list donors for
+;; refund-many.
 (define-public (donate
-    (amount uint)
+    (want uint)
     (agree-to-terms bool)
   )
-  (begin
+  (let (
+      (remaining (- TARGET (var-get total)))
+      (amount (if (< want remaining) want remaining))
+    )
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
-    (asserts! (> amount u0) ERR_AMOUNT_ZERO)
+    (asserts! (> want u0) ERR_AMOUNT_ZERO)
     (try! (check-raising))
-    (asserts! (<= amount (- TARGET (var-get total))) ERR_OVER_TARGET)
+    (asserts! (> amount u0) ERR_OVER_TARGET)
     (map-set gifts tx-sender (+ (default-to u0 (map-get? gifts tx-sender)) amount))
     (try! (contract-call? USDCX_TOKEN transfer amount tx-sender current-contract none))
     (var-set total (+ (var-get total) amount))
