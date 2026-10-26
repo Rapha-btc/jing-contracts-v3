@@ -39,7 +39,20 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 | `simulations/verify-sbtc-usdcx-suite.mjs` | full suite: deploy order, band seating per side, DIA guard, dispatch deposits, settle-batch, router fills into rungs, payouts/decimals, partial withdraws, no residual | 72/72 [e3483205](https://stxer.xyz/simulations/mainnet/e3483205a22f03233c3bc06a1537abc9) (audit fixes #1, #3, #4; multisig init) |
 
 Run: `node simulations/<harness>` (keyless; Hiro 429s -> `simulations/_api-proxy.mjs`).
-Not covered: the 2h DIA staleness path (a fork cannot make DIA stale). A 0 bps rung cannot run on both sides at once (the second crosses the first at mid and is refunded, by design).
+The stxer harnesses do not age DIA; the Clarinet fork test below covers the 2h stale-feed path. A 0 bps rung cannot run on both sides at once (the second crosses the first at mid and is refunded, by design).
+
+## Clarinet SDK (pinned mainnet fork)
+
+Run the dedicated suite with `npx vitest run -c vitest.sbtc-usdcx.config.ts`. Its manifest pins remote state to block `9318170`; the saved Pyth Lazer fixture makes the update reproducible. The full suite passed 4/4 after bounty fixes `93c8ec6`, `40130de`, and `f31fae8`.
+
+| Case | Coverage |
+|---|---|
+| Deploy and trade | Ladder-first deployment, core verification and multisig operator handoff, token-y pin, both swap directions, market/DLMM split, rung payouts and withdrawals, token decimals, and zero router balances |
+| Pool 2 | Adds LP through Bitflow's public core call on the disposable fork, then verifies the step-1 pool's positive quote wins and `dlmm-pick` selects pool 2 |
+| DIA staleness | Advances burn blocks past 7200 seconds and verifies rung `miner-mid` returns `u0` and the guard rejects refresh |
+| USDCx protocol burn | Burns from the rung through a test-only `as-contract?` probe, then verifies `sync`, `claim`, and `withdraw` remain usable. The probe is appended only to this test deployment; the checked-in rung source is unchanged. |
+
+`clarinet format --manifest-path Clarinet-sbtc-usdcx.toml --dry-run` passes. `clarinet check` currently reports the remote `pyth-lazer-decoder-v1` requirement as unresolved, although the Vitest fork loads and executes it successfully.
 
 ## Audit: bounty mvlqxozz934e1c757f88 (fork at `f01bffc`)
 
