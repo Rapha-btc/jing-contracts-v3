@@ -1,0 +1,75 @@
+[project]
+name = "jing-contracts-v3-sbtc-usdcx-fork-tests"
+description = "Clarinet mainnet-fork integration tests for the sbtc-usdcx deployment set"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v6"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx-v1"
+
+[[project.requirements]]
+contract_id = "SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle"
+
+[[project.requirements]]
+contract_id = "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-1"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-2-bps-10"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2"
+
+[[project.requirements]]
+contract_id = "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1"
+
+# These three local declarations make `clarinet check` type-check the exact
+# core/ladder/market sources. The Vitest suite separately deploys fresh copies
+# from those source files under the production SPV9 issuer.
+[contracts.jing-core-v6]
+path = "contracts/jing-core-v6.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-ladder-sbtc-usdcx-v1]
+path = "contracts/sbtc-usdcx/jing-ladder-sbtc-usdcx-v1.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.markets-sbtc-usdcx-jing-v6-4]
+path = "contracts/sbtc-usdcx/markets-sbtc-usdcx-jing-v6-4.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.remote_data]
+enabled = true
+initial_height = 9318170
+api_url = "https://api.hiro.so"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
