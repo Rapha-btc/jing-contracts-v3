@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { Cl, privateKeyToAddress } from '@stacks/transactions';
+import { Buffer } from 'node:buffer';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 const CONTRACT = 'kairan-seat-lab-ocifarsito-v2';
 const LAB = 'SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF';
 const OCIFARSITO = 'SP1BP036PHHJMZG6G2YYVKW4GH15KRD7YNKT6VW8Q'; // UASU Inc.: never receives funds
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
+const USDCX_V1 = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx-v1';
 const SBTC = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
 const USDCX_WHALE = 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ';
 const SBTC_WHALE = 'SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2';
@@ -15,6 +18,8 @@ const POOL_URL = 'https://letafricabuild.com/journal/builder-fund-pool-kairan';
 const TARGET = 2_000_000_000n;
 const DEADLINE = 1_025_386;
 const SEAT_WINDOW = 12_960;
+const REVIEW_WINDOW = 1_008;
+const MAINNET_TEST_DEPLOYER = 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
 const RSTX = 500_000_000n; // 500 STX from the fundraiser wallet
 const RSATS = 30_000n;
 
@@ -69,8 +74,12 @@ function sendUsdcx(from: string, to: string, amount: bigint) {
   expect(simnet.callPublicFn(USDCX, 'transfer', [Cl.uint(amount), Cl.principal(from), Cl.principal(to), Cl.none()], from).result).toBeOk(Cl.bool(true));
 }
 
-function donate(amount: bigint | number, sender: string, agree = true) {
-  return call('donate', [Cl.uint(amount), Cl.bool(agree)], sender);
+function sendSbtc(from: string, to: string, amount: bigint) {
+  expect(simnet.callPublicFn(SBTC, 'transfer', [Cl.uint(amount), Cl.principal(from), Cl.principal(to), Cl.none()], from).result).toBeOk(Cl.bool(true));
+}
+
+function donate(want: bigint | number, sender: string, agree = true) {
+  return call('donate', [Cl.uint(want), Cl.bool(agree)], sender);
 }
 
 function give(amount: bigint, sender: string) {
@@ -85,8 +94,12 @@ function requestSeat(sender = LAB, builder = BUILDER, repo = REPO, grant = SEAT_
   return call('request-seat', [Cl.stringAscii(builder), Cl.stringAscii(repo), Cl.stringAscii(grant), Cl.bool(agree)], sender);
 }
 
-function release(sender = owner()) {
-  return call('release-seat', [], sender);
+function release(sender = owner(), builder = BUILDER, repo = REPO, grant = SEAT_URL) {
+  return call('release-seat', [Cl.stringAscii(builder), Cl.stringAscii(repo), Cl.stringAscii(grant)], sender);
+}
+
+function sweep(sender = owner()) {
+  return call('sweep', [], sender);
 }
 
 function claimReserve(url = POOL_URL, sender = LAB, agree = true) {
@@ -113,7 +126,7 @@ function deployProxy() {
 (define-public (proxy-request)
   (contract-call? '${contractId()} request-seat "evil" "https://evil.example" "https://evil.example" true))
 (define-public (proxy-release)
-  (contract-call? '${contractId()} release-seat))
+  (contract-call? '${contractId()} release-seat "${BUILDER}" "${REPO}" "${SEAT_URL}"))
 (define-public (proxy-reserve)
   (contract-call? '${contractId()} claim-reserve "https://evil.example" true))
 (define-public (proxy-deposit)
@@ -133,13 +146,13 @@ function reserve(s = RSTX, b = RSATS) {
 
 const OPEN =
   "Target: 2,000 USDCx for one Kairan's Seat, newly raised. " +
-  'Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; no one else can add to the reserve. ' +
+  'Reserve: the STX and sBTC raised for the first 10K in the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F (about $200 at Oct 23, 2026 prices), which that wallet deposits once, in full minus STX network fees, into this contract with deposit-reserve; STX or sBTC sent straight to the contract is added to the reserve. ' +
   'Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ' +
   "Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. " +
-  'Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ' +
+  'Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ' +
   "Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. " +
   'Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ' +
-  "No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only power is to release the seat to LAB after reviewing LAB's seat receipt. " +
+  "No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. " +
   'The contract enforces all of this. ';
 
 const RISKS = [
@@ -186,7 +199,10 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
       expect(t).toContain(part);
     for (const part of [
       'Gifts are voluntary. ',
-      'may not exceed the amount still needed',
+      'A gift above the amount still needed to reach the target is reduced to that amount. ',
+      'STX or sBTC sent straight to the contract is added to the reserve. ',
+      "the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ",
+      'at least 7 days (1,008 Bitcoin blocks) before that window ends',
       'Reserve deposits and USDCx sent straight to the contract are not gifts',
       'Gifts are not tax-deductible: UASU Inc. is a for-profit company and Let Africa Build (LAB) is not a US 501(c)(3) charity. ',
       'Donors receive no goods or services in return for a gift. ',
@@ -194,22 +210,21 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
       expect(d).toContain(part);
   });
 
-  it('donate: terms, zero, capped at the remaining amount, books donors, prints donor + amount', function () {
-    const a = wallet(1), b = wallet(2);
+  it('donate: terms, zero, caps a want at the remainder, books donors, prints donor + amount', function () {
+    const a = wallet(1);
     fund(a, TARGET + 10n);
     expect(donate(1, a, false).result).toBeErr(Cl.uint(103));
     expect(donate(0, a).result).toBeErr(Cl.uint(102));
-    expect(donate(TARGET + 1n, a).result).toBeErr(Cl.uint(110));
     const r = donate(1_500_000_000n, a);
     expect(r.result).toBeOk(Cl.uint(1_500_000_000n));
     const ev = r.events.find((e: any) => e.event === 'print_event').data.value.value;
     expect(ev.donor).toBePrincipal(a);
     expect(ev.amount).toBeUint(1_500_000_000n);
-    expect(donate(500_000_001n, a).result).toBeErr(Cl.uint(110));
-    expect(donate(100_000_000n, a).result).toBeOk(Cl.uint(1_600_000_000n));
-    expect(give(400_000_000n, b).result).toBeOk(Cl.uint(TARGET));
-    expect(donate(1, a).result).toBeErr(Cl.uint(110));
-    expect(ro('get-donor', [Cl.principal(a)])).toBeSome(Cl.uint(1_600_000_000n));
+    const capped = donate(500_000_001n, a);
+    expect(capped.result).toBeOk(Cl.uint(TARGET));
+    expect(capped.events.find((e: any) => e.event === 'print_event').data.value.value.amount).toBeUint(500_000_000n);
+    expect(donate(1, a).result).toBeErr(Cl.uint(110)); // only when nothing remains
+    expect(ro('get-donor', [Cl.principal(a)])).toBeSome(Cl.uint(TARGET));
     const s = status();
     expect(s.total).toBeUint(TARGET);
     expect(s.unrefunded).toBeUint(TARGET);
@@ -219,9 +234,10 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     expect(s['failure-at']).toBeUint(reached + SEAT_WINDOW); // target reached: 90-day seat window
     expect(s['refunds-open']).toBeBool(false);
     expect(s.closed).toBeBool(false);
+    expect(usdcx(contractId())).toBe(TARGET); // the extra requested unit was not transferred
   });
 
-  it('deposit-reserve: FUNDRAISER only, once, non-zero, before DEADLINE; contract-caller checked', function () {
+  it('deposit-reserve: FUNDRAISER only, once, non-zero; contract-caller checked', function () {
     expect(call('deposit-reserve', [Cl.uint(1), Cl.uint(0)], wallet(1)).result).toBeErr(Cl.uint(105));
     expect(call('deposit-reserve', [Cl.uint(1), Cl.uint(0)], owner()).result).toBeErr(Cl.uint(105));
     const p = deployProxy();
@@ -236,9 +252,36 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     expect(s.total).toBeUint(0);
   });
 
-  it('deposit-reserve after DEADLINE -> u113; one asset alone is fine', function () {
+  it('deposit-reserve works after DEADLINE before a claim; one asset alone is fine', function () {
     toBurn(DEADLINE);
-    expect(reserve().result).toBeErr(Cl.uint(113));
+    expect(reserve(RSTX, 0n).result).toBeOk(Cl.bool(true));
+  });
+
+  it('deposit-reserve after any claim returns u106', function () {
+    toBurn(DEADLINE);
+    expect(claimReserve().result).toBeOk(Cl.tuple({ usdcx: Cl.uint(0), stx: Cl.uint(0), sats: Cl.uint(0) }));
+    expect(reserve().result).toBeErr(Cl.uint(106));
+  });
+
+  it('claim-reserve floors extra at zero after a USDCx protocol-burn and still pays the reserve', function () {
+    const a = wallet(1);
+    // The simulator needs a mainnet-versioned test deployment for this contract-to-contract burn.
+    const burnContract = `${MAINNET_TEST_DEPLOYER}.kairan-seat-burn-test`;
+    const source = readFileSync(`contracts/charity/${CONTRACT}.clar`, 'utf8') +
+      `\n(define-public (test-protocol-burn (amount uint))\n  (begin\n    (try! (as-contract? ((with-ft USDCX_TOKEN ASSET_USDCX amount))\n      (try! (contract-call? '${USDCX_V1} burn amount u0 0x${Buffer.alloc(32).toString('hex')}))))\n    (ok true)))\n`;
+    expect(simnet.deployContract('kairan-seat-burn-test', source, { clarityVersion: 5 }, MAINNET_TEST_DEPLOYER).result).toEqual(Cl.bool(true));
+    expect(simnet.callPublicFn(burnContract, 'deposit-reserve', [Cl.uint(RSTX), Cl.uint(RSATS)], FUNDRAISER).result).toBeOk(Cl.bool(true));
+    fund(a, 10_000_000n);
+    expect(simnet.callPublicFn(burnContract, 'donate', [Cl.uint(10_000_000n), Cl.bool(true)], a).result).toBeOk(Cl.uint(10_000_000n));
+    expect(simnet.callPublicFn(burnContract, 'test-protocol-burn', [Cl.uint(10_000_000n)], a).result).toBeOk(Cl.bool(true));
+    expect(usdcx(burnContract)).toBe(0n);
+    expect(simnet.callReadOnlyFn(burnContract, 'get-status', [], owner()).result.value.unrefunded).toBeUint(10_000_000n);
+    toBurn(DEADLINE);
+    const l = { s: stx(LAB), b: sats(LAB) };
+    expect(simnet.callPublicFn(burnContract, 'claim-reserve', [Cl.stringAscii(POOL_URL), Cl.bool(true)], LAB).result)
+      .toBeOk(Cl.tuple({ usdcx: Cl.uint(0), stx: Cl.uint(RSTX), sats: Cl.uint(RSATS) }));
+    expect(stx(LAB) - l.s).toBe(RSTX);
+    expect(sats(LAB) - l.b).toBe(RSATS);
   });
 
   it('request-seat: LAB only, accepts TERMS, needs the target and 3 non-empty fields; a new request replaces the old', function () {
@@ -262,6 +305,15 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     expect(usdcx(contractId())).toBe(TARGET); // a request moves no funds
   });
 
+  it('request-seat requires more than 1,008 blocks before failure-at', function () {
+    give(TARGET, wallet(1));
+    const failureAt = Number(status()['failure-at'].value);
+    toBurn(failureAt - REVIEW_WINDOW - 1);
+    expect(requestSeat().result).toBeOk(Cl.bool(true));
+    toBurn(failureAt - REVIEW_WINDOW + 8); // 1,000 blocks remain
+    expect(requestSeat(LAB, 'Replacement Builder', REPO, SEAT_URL).result).toBeErr(Cl.uint(113));
+  });
+
   it('SUCCESS: LAB gets 2,000 USDCx + any direct USDCx + the whole reserve; nothing to Ocifarsito; closed for good', function () {
     const a = wallet(1), b = wallet(2);
     expect(reserve().result).toBeOk(Cl.bool(true));
@@ -273,6 +325,7 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     expect(release().result).toBeErr(Cl.uint(107)); // no receipt yet
     requestSeat();
     for (const who of [LAB, a, OCIFARSITO, FUNDRAISER]) expect(release(who).result).toBeErr(Cl.uint(100));
+    expect(release(owner(), BUILDER, REPO, 'https://letafricabuild.com/journal/swapped-receipt').result).toBeErr(Cl.uint(115));
     const l = { u: usdcx(LAB), s: stx(LAB), b: sats(LAB) };
     const oU = usdcx(OCIFARSITO);
     const ownerU = usdcx(owner());
@@ -297,6 +350,61 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     toBurn(DEADLINE);
     expect(refundMany([a, b]).result).toBeErr(Cl.uint(114));
     expect(claimReserve().result).toBeErr(Cl.uint(106));
+  });
+
+  it('sweep: only the owner, only after closure, and late success-path transfers go to LAB', function () {
+    const a = wallet(1), b = wallet(2);
+    expect(sweep(a).result).toBeErr(Cl.uint(100));
+    expect(sweep().result).toBeErr(Cl.uint(116)); // no claim yet
+    reserve();
+    give(1_000_000_000n, a);
+    give(1_000_000_000n, b);
+    requestSeat();
+    expect(release().result).toBeOk(Cl.tuple({ usdcx: Cl.uint(TARGET), stx: Cl.uint(RSTX), sats: Cl.uint(RSATS) }));
+    expect(sweep().result).toBeErr(Cl.uint(102)); // release-seat already swept the balances
+
+    const lateUsdcx = 17n, lateStx = 234, lateSats = 345n;
+    fund(a, lateUsdcx);
+    sendUsdcx(a, contractId(), lateUsdcx);
+    simnet.transferSTX(lateStx, contractId(), a);
+    sendSbtc(SBTC_WHALE, contractId(), lateSats);
+    const l = { u: usdcx(LAB), s: stx(LAB), b: sats(LAB) };
+    const nonLab = { u: usdcx(OCIFARSITO), s: stx(OCIFARSITO), b: sats(OCIFARSITO) };
+    expect(sweep().result).toBeOk(Cl.tuple({ usdcx: Cl.uint(lateUsdcx), stx: Cl.uint(lateStx), sats: Cl.uint(lateSats) }));
+    expect(usdcx(LAB) - l.u).toBe(lateUsdcx);
+    expect(stx(LAB) - l.s).toBe(BigInt(lateStx));
+    expect(sats(LAB) - l.b).toBe(lateSats);
+    expect(usdcx(OCIFARSITO)).toBe(nonLab.u);
+    expect(stx(OCIFARSITO)).toBe(nonLab.s);
+    expect(sats(OCIFARSITO)).toBe(nonLab.b);
+    expect(usdcx(contractId())).toBe(0n);
+    expect(stx(contractId())).toBe(0n);
+    expect(sats(contractId())).toBe(0n);
+  });
+
+  it('sweep on the failure path waits for every gift to be refunded', function () {
+    const donor = wallet(1);
+    give(5_000_000n, donor);
+    toBurn(DEADLINE);
+    expect(claimReserve().result).toBeOk(Cl.tuple({ usdcx: Cl.uint(0), stx: Cl.uint(0), sats: Cl.uint(0) }));
+    expect(sweep().result).toBeErr(Cl.uint(116)); // reserve claim exists, but gifts remain owed
+
+    const lateUsdcx = 91n, lateStx = 321, lateSats = 654n;
+    fund(donor, lateUsdcx);
+    sendUsdcx(donor, contractId(), lateUsdcx);
+    simnet.transferSTX(lateStx, contractId(), donor);
+    sendSbtc(SBTC_WHALE, contractId(), lateSats);
+    expect(sweep().result).toBeErr(Cl.uint(116));
+    expect(refundMany([donor]).result).toBeOk(Cl.uint(5_000_000n));
+    expect(status().unrefunded).toBeUint(0);
+
+    const l = { u: usdcx(LAB), s: stx(LAB), b: sats(LAB) };
+    const donorAfterRefund = usdcx(donor);
+    expect(sweep().result).toBeOk(Cl.tuple({ usdcx: Cl.uint(lateUsdcx), stx: Cl.uint(lateStx), sats: Cl.uint(lateSats) }));
+    expect(usdcx(LAB) - l.u).toBe(lateUsdcx);
+    expect(stx(LAB) - l.s).toBe(BigInt(lateStx));
+    expect(sats(LAB) - l.b).toBe(lateSats);
+    expect(usdcx(donor)).toBe(donorAfterRefund);
   });
 
   it('seat window: claim at reached-at + 12959 succeeds', function () {
@@ -469,10 +577,10 @@ describe('kairan-seat-lab-ocifarsito-v2 (USDCx + reserve, no owner power over fu
     expect(status().closed).toBeBool(true);
   });
 
-  it('OWNER has no power over funds: no withdraw function, proxies cannot act as LAB / OWNER / FUNDRAISER', function () {
+  it('public function list includes sweep; proxies cannot act as LAB / OWNER / FUNDRAISER', function () {
     const iface = simnet.getContractsInterfaces().get(contractId())!;
     const names = iface.functions.filter((f: any) => f.access === 'public').map((f: any) => f.name).sort();
-    expect(names).toEqual(['claim-reserve', 'deposit-reserve', 'donate', 'refund-many', 'release-seat', 'request-seat']);
+    expect(names).toEqual(['claim-reserve', 'deposit-reserve', 'donate', 'refund-many', 'release-seat', 'request-seat', 'sweep']);
     give(TARGET, wallet(2));
     const p = deployProxy();
     expect(simnet.callPublicFn(p, 'proxy-request', [], LAB).result).toBeErr(Cl.uint(101));

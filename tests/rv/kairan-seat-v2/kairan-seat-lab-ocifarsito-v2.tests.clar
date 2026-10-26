@@ -48,6 +48,34 @@
 (define-data-var rv-refunded-at-seat (optional uint) none) ;; donor refunds when the seat was released
 (define-data-var rv-open-total uint u0) ;; total last seen while raising was open
 (define-data-var rv-reserve-deposits uint u0) ;; successful deposit-reserve calls
+(define-data-var rv-swept-usdcx uint u0) ;; sweep transfers to LAB, excluded from refund accounting
+(define-data-var rv-sweep-safe bool true)
+(define-data-var rv-sweep-snapshot {
+  initialized: bool,
+  usdcx-contract: uint,
+  usdcx-lab: uint,
+  stx-contract: uint,
+  stx-lab: uint,
+  sats-contract: uint,
+  sats-lab: uint,
+} {
+  initialized: false,
+  usdcx-contract: u0,
+  usdcx-lab: u0,
+  stx-contract: u0,
+  stx-lab: u0,
+  sats-contract: u0,
+  sats-lab: u0,
+})
+
+(define-private (rv-sweep-transfer-ok
+    (contract-before uint) (contract-after uint)
+    (lab-before uint) (lab-after uint))
+  (or
+    (and (is-eq contract-before contract-after) (is-eq lab-before lab-after))
+    (and (is-eq contract-after u0) (is-eq lab-after (+ lab-before contract-before)))
+  )
+)
 
 (define-private (rv-observe)
   (begin
@@ -70,15 +98,49 @@
     true))
 
 (define-public (update-context (function-name (string-ascii 100)) (called uint))
+  (let (
+      (previous (var-get rv-sweep-snapshot))
+      (usdcx-contract (usdcx-balance))
+      (usdcx-lab (rv-bal LAB))
+      (stx-contract (stx-get-balance current-contract))
+      (stx-lab (stx-get-balance LAB))
+      (sats-contract (reserve-sats))
+      (sats-lab (rv-sats-of LAB))
+    )
   (begin
     (map-set context function-name { called: called })
 ;; RV seeds the context with called = 0 for every function before the run
+    (if (and (var-get rv-sweep-safe) (get initialized previous)
+        (> called u0) (is-eq function-name "sweep"))
+      (var-set rv-sweep-safe
+        (and
+          (rv-sweep-transfer-ok (get usdcx-contract previous) usdcx-contract
+            (get usdcx-lab previous) usdcx-lab)
+          (rv-sweep-transfer-ok (get stx-contract previous) stx-contract
+            (get stx-lab previous) stx-lab)
+          (rv-sweep-transfer-ok (get sats-contract previous) sats-contract
+            (get sats-lab previous) sats-lab)))
+      true)
+    (if (and (get initialized previous) (> called u0) (is-eq function-name "sweep")
+        (> (get usdcx-contract previous) u0) (is-eq usdcx-contract u0)
+        (is-eq usdcx-lab (+ (get usdcx-lab previous) (get usdcx-contract previous))))
+      (var-set rv-swept-usdcx (+ (var-get rv-swept-usdcx) (get usdcx-contract previous)))
+      true)
+    (var-set rv-sweep-snapshot {
+      initialized: true,
+      usdcx-contract: usdcx-contract,
+      usdcx-lab: usdcx-lab,
+      stx-contract: stx-contract,
+      stx-lab: stx-lab,
+      sats-contract: sats-contract,
+      sats-lab: sats-lab,
+    })
     (if (and (> called u0)
         (or (is-eq function-name "deposit-reserve") (is-eq function-name "rv-deposit-reserve")))
       (var-set rv-reserve-deposits (+ (var-get rv-reserve-deposits) u1))
       true)
     (rv-observe)
-    (ok true)))
+    (ok true))))
 
 ;; ---------------------------------------------------------------------------
 ;; Ledger helpers (all from the mock flow ledgers)
@@ -94,9 +156,11 @@
 ;; USDCx a principal gave through donate
 (define-read-only (rv-given (who principal))
   (- (contract-call? .usdcx get-flow who current-contract) (default-to u0 (map-get? rv-direct who))))
-;; USDCx the contract sent a principal that was not a claim (i.e. refunds)
+;; USDCx paid back to a donor, excluding claims and owner sweeps to LAB
 (define-read-only (rv-refunded (who principal))
-  (- (contract-call? .usdcx get-flow current-contract who) (rv-claim-usdcx-to who)))
+  (-
+    (- (contract-call? .usdcx get-flow current-contract who) (rv-claim-usdcx-to who))
+    (if (is-eq who LAB) (var-get rv-swept-usdcx) u0)))
 
 (define-private (rv-sum-gift (who principal) (acc uint)) (+ acc (rv-gift who)))
 (define-private (rv-sum-given (who principal) (acc uint)) (+ acc (rv-given who)))
@@ -150,7 +214,7 @@
 
 ;; Funds leave only to LAB (claims) or donors (refunds <= their gifts): every
 ;; USDCx the contract sent went to a known account; sBTC and STX only to LAB,
-;; and exactly the recorded claim; after a claim the reserve is empty.
+;; including later sweeps; after a claim the reserve is empty.
 (define-read-only (invariant-funds-only-to-lab-or-donors)
   (let ((c (var-get claim)))
     (and
@@ -158,9 +222,24 @@
       (fold rv-account-ok RV_ACCOUNTS true)
       (is-eq (contract-call? .sbtc-token get-out-total current-contract)
         (contract-call? .sbtc-token get-flow current-contract LAB))
-      (is-eq (contract-call? .sbtc-token get-out-total current-contract) (match c x (get sats x) u0))
-      (is-eq (stx-get-balance LAB) (+ RV_LAB_STX0 (match c x (get stx x) u0)))
+      (>= (contract-call? .sbtc-token get-out-total current-contract) (match c x (get sats x) u0))
+      (>= (stx-get-balance LAB) (+ RV_LAB_STX0 (match c x (get stx x) u0)))
       (match c x (and (is-eq (reserve-stx) u0) (is-eq (reserve-sats) u0)) true))))
+
+;; Any observed sweep either leaves balances unchanged (it failed) or drains
+;; every asset balance from the contract into LAB. USDCx and sBTC flow ledgers
+;; also make any unknown recipient visible in invariant-funds-only-to-lab-or-donors.
+(define-read-only (invariant-sweep-never-pays-anyone-but-lab)
+  (and
+    (var-get rv-sweep-safe)
+    (is-eq (contract-call? .sbtc-token get-out-total current-contract)
+      (contract-call? .sbtc-token get-flow current-contract LAB))
+    (match (var-get claim)
+      c (and
+        (>= (contract-call? .usdcx get-flow current-contract LAB) (get usdcx c))
+        (>= (contract-call? .sbtc-token get-out-total current-contract) (get sats c))
+        (>= (stx-get-balance LAB) (+ RV_LAB_STX0 (get stx c))))
+      true)))
 
 ;; at most one claim, never overwritten; seat/reserve claims only on their path
 (define-read-only (invariant-single-claim)
@@ -195,6 +274,7 @@
 (define-read-only (rv-all-invariants)
   (and (invariant-total-capped) (invariant-reached-at) (invariant-unrefunded-backed)
     (invariant-refunds-bounded) (invariant-funds-only-to-lab-or-donors)
+    (invariant-sweep-never-pays-anyone-but-lab)
     (invariant-single-claim) (invariant-no-refund-after-seat)
     (invariant-no-gifts-after-close) (invariant-reserve-once)))
 
@@ -250,6 +330,8 @@
 (define-private (rv-check-donate (amount uint) (agree bool))
   (let (
       (t0 (var-get total))
+      (remaining (- TARGET (var-get total)))
+      (accepted (if (< amount remaining) amount remaining))
       (g0 (rv-gift tx-sender))
       (un0 (var-get unrefunded))
       (r0 (var-get reached-at))
@@ -258,16 +340,16 @@
     )
     (rv-finish
       (match res
-        new-total (and (not closed) agree (> amount u0) (<= (+ t0 amount) TARGET)
-          (is-eq new-total (+ t0 amount))
-          (is-eq (rv-gift tx-sender) (+ g0 amount))
-          (is-eq (var-get unrefunded) (+ un0 amount))
+        new-total (and (not closed) agree (> amount u0) (> remaining u0)
+          (is-eq new-total (+ t0 accepted))
+          (is-eq (rv-gift tx-sender) (+ g0 accepted))
+          (is-eq (var-get unrefunded) (+ un0 accepted))
           (if (is-eq new-total TARGET)
             (and (is-none r0) (is-eq (var-get reached-at) (some burn-block-height)))
             (is-eq (var-get reached-at) r0)))
         e (and (is-eq (var-get total) t0) (is-eq (var-get reached-at) r0)
           ;; a gift that should land must not bounce
-          (or closed (not agree) (is-eq amount u0) (> (+ t0 amount) TARGET))))
+          (or closed (not agree) (is-eq amount u0) (is-eq remaining u0))))
       u9001)))
 
 (define-public (test-donate (amount uint) (agree bool)) (rv-check-donate amount agree))
@@ -280,7 +362,7 @@
     (rv-finish (and (is-eq (usdcx-balance) (+ b0 amount)) (is-eq (var-get total) t0)
       (is-eq (var-get unrefunded) un0)) u9002)))
 
-;; deposit-reserve: once, FUNDRAISER only, while raising and before failure-at
+;; deposit-reserve: once, FUNDRAISER only, any time before a claim
 (define-public (test-deposit-reserve (stx-raw uint) (sats-raw uint))
   (let (
       (stx (mod stx-raw u1000000000))
@@ -288,8 +370,7 @@
       (s0 (reserve-stx))
       (k0 (reserve-sats))
       (expect (and (is-eq tx-sender FUNDRAISER) (not (var-get reserve-deposited))
-        (or (> stx u0) (> sats u0)) (is-none (var-get claim))
-        (< burn-block-height DEADLINE) (< burn-block-height (failure-at))))
+        (or (> stx u0) (> sats u0)) (is-none (var-get claim))))
       (res (deposit-reserve stx sats))
     )
     (if (is-ok res) (var-set rv-reserve-deposits (+ (var-get rv-reserve-deposits) u1)) true)
@@ -304,7 +385,8 @@
   (let (
       (q0 (var-get seat-request))
       (expect (and (is-eq tx-sender LAB) agree (is-eq (var-get total) TARGET) (is-none (var-get claim))
-        (< burn-block-height (failure-at)) (> (len builder) u0) (> (len repo) u0) (> (len grant) u0)))
+        (< burn-block-height (failure-at)) (< (+ burn-block-height REVIEW_WINDOW) (failure-at))
+        (> (len builder) u0) (> (len repo) u0) (> (len grant) u0)))
       (res (request-seat builder repo grant agree))
     )
     (rv-finish
@@ -328,7 +410,9 @@
       (r0 (var-get reached-at))
       (expect (and (is-eq tx-sender OWNER) (is-none (var-get claim)) (< burn-block-height (failure-at))
         (is-some (var-get seat-request))))
-      (res (release-seat))
+      (res (match (var-get seat-request)
+        request (release-seat (get builder request) (get repo request) (get grant request))
+        (err u107)))
     )
     (rv-finish
       (and (is-eq (is-ok res) expect)
@@ -367,6 +451,53 @@
 
 (define-public (test-claim-reserve (url (string-ascii 256)) (agree bool)) (rv-check-claim-reserve url agree))
 (define-public (test-claim-reserve-fixed) (rv-check-claim-reserve "https://letafricabuild.com/pool" true))
+
+;; sweep: OWNER only, after claim and all refunds; each balance goes to LAB.
+(define-public (test-sweep)
+  (let (
+      (u-before (usdcx-balance))
+      (s-before (reserve-stx))
+      (k-before (reserve-sats))
+      (lab-u-before (rv-bal LAB))
+      (lab-s-before (stx-get-balance LAB))
+      (lab-k-before (rv-sats-of LAB))
+      (usdcx-out-before (contract-call? .usdcx get-out-total current-contract))
+      (usdcx-to-lab-before (contract-call? .usdcx get-flow current-contract LAB))
+      (sats-out-before (contract-call? .sbtc-token get-out-total current-contract))
+      (sats-to-lab-before (contract-call? .sbtc-token get-flow current-contract LAB))
+      (expect (and (is-eq tx-sender OWNER) (is-some (var-get claim))
+        (is-eq (var-get unrefunded) u0)
+        (or (> u-before u0) (> s-before u0) (> k-before u0))))
+      (res (sweep))
+    )
+    (begin
+      (if (and (is-ok res) (> u-before u0))
+        (var-set rv-swept-usdcx (+ (var-get rv-swept-usdcx) u-before))
+        true)
+      (rv-finish
+        (match res
+          paid (and expect
+            (is-eq paid { usdcx: u-before, stx: s-before, sats: k-before })
+            (is-eq (usdcx-balance) u0)
+            (is-eq (reserve-stx) u0) (is-eq (reserve-sats) u0)
+            (is-eq (rv-bal LAB) (+ lab-u-before u-before))
+            (is-eq (stx-get-balance LAB) (+ lab-s-before s-before))
+            (is-eq (rv-sats-of LAB) (+ lab-k-before k-before))
+            (is-eq (- (contract-call? .usdcx get-out-total current-contract) usdcx-out-before) u-before)
+            (is-eq (- (contract-call? .usdcx get-flow current-contract LAB) usdcx-to-lab-before) u-before)
+            (is-eq (- (contract-call? .sbtc-token get-out-total current-contract) sats-out-before) k-before)
+            (is-eq (- (contract-call? .sbtc-token get-flow current-contract LAB) sats-to-lab-before) k-before))
+          e (and (not expect)
+            (is-eq (usdcx-balance) u-before)
+            (is-eq (reserve-stx) s-before) (is-eq (reserve-sats) k-before)
+            (is-eq (rv-bal LAB) lab-u-before)
+            (is-eq (stx-get-balance LAB) lab-s-before)
+            (is-eq (rv-sats-of LAB) lab-k-before)
+            (is-eq (contract-call? .usdcx get-out-total current-contract) usdcx-out-before)
+            (is-eq (contract-call? .usdcx get-flow current-contract LAB) usdcx-to-lab-before)
+            (is-eq (contract-call? .sbtc-token get-out-total current-contract) sats-out-before)
+            (is-eq (contract-call? .sbtc-token get-flow current-contract LAB) sats-to-lab-before)))
+        u9009))))
 
 ;; refund-many: each listed donor gets exactly their gift once; others untouched
 (define-private (rv-refund-ok (who principal) (g0 uint) (b0 uint) (listed (list 100 principal)))
