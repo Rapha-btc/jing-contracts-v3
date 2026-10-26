@@ -5,8 +5,12 @@ AIBTC bounty `mvllpuv02f876aa9c4be` (6,000 sats), on
 lists the findings that held, what changed, and what was rejected or
 refuted. 32 submissions; credit goes to the first reporter of each finding.
 
-Tests (clarinet suites, RV, stxer sim) are not yet updated for these fixes;
-they are rerun after the review.
+Stxer mainnet fork: `simulations/verify-kairan-seat-lab-v2.js` passes
+898/898 on the fixed contract
+([845c5845](https://stxer.xyz/simulations/mainnet/845c584556ae502573ab079ed3e07acf)),
+with steps for fixes 1, 3, 4, 5, 6 and 7. Fix 2 (underflow floor) has no
+fork step, since the harness cannot burn USDCx from the contract; it is
+covered in the clarinet suite. Clarinet suites and RV: pending.
 
 ## Accepted and fixed
 
