@@ -317,8 +317,7 @@
   )
 )
 
-;; FUNDRAISER deposits the STX + sBTC reserve, once, before DEADLINE and
-;; before failure-at.
+;; FUNDRAISER deposits the STX + sBTC reserve, once, any time before a claim.
 ;; Not a gift: never refunded.
 (define-public (deposit-reserve
     (stx uint)
@@ -328,8 +327,7 @@
     (asserts! (is-eq contract-caller FUNDRAISER) ERR_NOT_FUNDRAISER)
     (asserts! (not (var-get reserve-deposited)) ERR_RESERVE_DEPOSITED)
     (asserts! (or (> stx u0) (> sats u0)) ERR_AMOUNT_ZERO)
-    (try! (check-raising))
-    (asserts! (< burn-block-height (failure-at)) ERR_TOO_LATE)
+    (asserts! (is-none (var-get claim)) ERR_CLAIMED)
     (and (> stx u0) (try! (stx-transfer? stx tx-sender current-contract)))
     (and (> sats u0)
       (try! (contract-call? SBTC_TOKEN transfer sats tx-sender current-contract none))
