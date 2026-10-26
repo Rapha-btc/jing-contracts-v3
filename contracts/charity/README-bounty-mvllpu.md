@@ -67,3 +67,29 @@ covered in the clarinet suite. Clarinet suites and RV: pending.
 - Token pause blocks release / fee-on-transfer USDCx: not how live usdcx and
   sbtc-token behave.
 - `refund-many` cost: 100 donors measured at ~4.7% of the read budget.
+
+## v3: reserve-only contract (Kairan's First Mile)
+
+`contracts/charity/kairan-seat-lab-ocifarsito-v3.clar`, deployed as
+`SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.kairans-first-mile-lab-ocifarsito`
+(chavita.btc is OWNER). FUNDRAISER deposits STX + sBTC any time before the
+release; LAB files a use-of-funds description with `request-reserve`
+(replaceable); OWNER passes the reviewed description to `release-reserve`,
+which pays LAB the whole balance once (u115 if the request changed).
+Round-2 audit: AIBTC bounty `mvpsdbgk51aa6064f7a2`.
+
+Tests (commit `76a38ee`), no contract bug found:
+
+- Stxer mainnet fork, `simulations/verify-kairan-seat-lab-v3.js`: 113/113
+  ([4609d5d8](https://stxer.xyz/simulations/mainnet/4609d5d87a0cdbbdd7feed7101ea71d6)).
+  Every error code (u100-u107, u115), request swap, exact whole-balance
+  payout to LAB including direct sends, wrong signers and proxy contracts,
+  everything closed after release, deny-mode post-conditions.
+- Rendezvous, `tests/rv/kairan-seat-v3/` (`node tests/rv/kairan-seat-v3/run.mjs`):
+  18 jobs (3 release-timing profiles x invariant/property x 3 seeds x 600
+  runs), 0 failing. Invariants: funds leave only to LAB, claim and request
+  frozen after release, release pays the full balance. All 4 deliberately
+  broken copies of the contract were caught.
+
+Known by design: STX/sBTC sent straight to the contract after the release
+has no exit (v3 has no sweep).
