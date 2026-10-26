@@ -419,7 +419,9 @@
   (let (
       (stx (reserve-stx))
       (sats (reserve-sats))
-      (extra (- (usdcx-balance) (var-get unrefunded)))
+      (bal (usdcx-balance))
+      (owed (var-get unrefunded))
+      (extra (if (> bal owed) (- bal owed) u0))
     )
     (asserts! (is-eq contract-caller LAB) ERR_NOT_LAB)
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
