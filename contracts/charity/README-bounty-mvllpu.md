@@ -95,8 +95,9 @@ to be rerun), no contract bug found:
   balance. All 4 deliberately
   broken copies of the contract were caught.
 
-Known by design: STX/sBTC sent straight to the contract after the release
-has no exit (v3 has no sweep).
+STX/sBTC sent straight to the contract after the release or recoup: anyone
+may `sweep` it to the claim's recipient (LAB after a release, FUNDRAISER
+after a recoup); u116 before any claim (round-2, Patient Reed F-3).
 
 Not a practical risk (round-2 N-1, Diamond Lance): a 1-uSTX direct send
 makes a release signed with an exact `willSendEq` amount abort. It only

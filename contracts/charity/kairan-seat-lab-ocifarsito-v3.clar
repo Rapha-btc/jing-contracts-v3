@@ -17,7 +17,7 @@
             )
             u"LAB requests the reserve with a description of what the funds will be used for, recorded on-chain, at least 7 days (1,008 Bitcoin blocks) before the deadline, about 90 days (12,960 Bitcoin blocks) after this contract is deployed; the owner then releases the whole reserve to LAB, once, before the deadline. The owner reviews the description in good faith and to the best of its ability, but does not verify or guarantee it; LAB alone is responsible for the accuracy of its description and for how the funds are used, and neither the owner nor UASU Inc. is liable or responsible for either. "
           )
-          u"Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF, or, if the reserve was not released to LAB by the deadline, back to the fundraiser wallet, which may then recoup the whole reserve at any time and refunds each donor's wallet manually from it; LAB is solely responsible for that wallet's keys and for how claimed funds are used, and UASU Inc. has no liability for either. "
+          u"Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF, or, if the reserve was not released to LAB by the deadline, back to the fundraiser wallet, which may then recoup the whole reserve at any time and refunds each donor's wallet manually from it; after the release or recoup, anyone may sweep STX or sBTC sent straight to the contract to the same wallet; LAB is solely responsible for that wallet's keys and for how claimed funds are used, and UASU Inc. has no liability for either. "
         )
         u"STX and sBTC are held as tokens and their value can go up or down; sBTC is a third-party token whose peg to bitcoin is outside UASU's control, and UASU is not liable for any loss of value or depeg. "
       )
@@ -39,6 +39,7 @@
 (define-constant ERR_TOO_EARLY (err u112))
 (define-constant ERR_TOO_LATE (err u113))
 (define-constant ERR_REQUEST_CHANGED (err u115))
+(define-constant ERR_NOT_CLOSED (err u116))
 
 (define-data-var request (optional (string-ascii 512)) none)
 (define-data-var claim (optional {
@@ -194,6 +195,36 @@
     )
     (print {
       event: "recoup-reserve",
+      stx: stx,
+      sats: sats,
+    })
+    (ok {
+      stx: stx,
+      sats: sats,
+    })
+  )
+)
+
+(define-public (sweep)
+  (let (
+      (to (get to (unwrap! (var-get claim) ERR_NOT_CLOSED)))
+      (stx (stx-get-balance current-contract))
+      (sats (reserve-sats))
+    )
+    (asserts! (or (> stx u0) (> sats u0)) ERR_AMOUNT_ZERO)
+    (try! (as-contract?
+      (
+        (with-stx stx)
+        (with-ft SBTC_TOKEN ASSET_SBTC sats)
+      )
+      (and (> stx u0) (try! (stx-transfer? stx current-contract to)))
+      (and
+        (> sats u0)
+        (try! (contract-call? SBTC_TOKEN transfer sats current-contract to none))
+      )))
+    (print {
+      event: "sweep",
+      to: to,
       stx: stx,
       sats: sats,
     })
