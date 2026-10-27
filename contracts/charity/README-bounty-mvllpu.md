@@ -75,10 +75,13 @@ covered in the clarinet suite. Clarinet suites and RV: pending.
 (chavita.btc is OWNER). FUNDRAISER deposits STX + sBTC any time before the
 release; LAB files a use-of-funds description with `request-reserve`
 (replaceable); OWNER passes the reviewed description to `release-reserve`,
-which pays LAB the whole balance once (u115 if the request changed).
+which pays LAB the whole balance once (u115 if the request changed),
+before DEADLINE (~90 days after deploy). From DEADLINE, if nothing was
+released, FUNDRAISER may `recoup-reserve` the whole balance instead.
 Round-2 audit: AIBTC bounty `mvpsdbgk51aa6064f7a2`.
 
-Tests (commit `76a38ee`), no contract bug found:
+Tests (commit `76a38ee`, before the DEADLINE/recoup change in `cf4024c`;
+to be rerun), no contract bug found:
 
 - Stxer mainnet fork, `simulations/verify-kairan-seat-lab-v3.js`: 113/113
   ([4609d5d8](https://stxer.xyz/simulations/mainnet/4609d5d87a0cdbbdd7feed7101ea71d6)).
@@ -87,8 +90,9 @@ Tests (commit `76a38ee`), no contract bug found:
   everything closed after release, deny-mode post-conditions.
 - Rendezvous, `tests/rv/kairan-seat-v3/` (`node tests/rv/kairan-seat-v3/run.mjs`):
   18 jobs (3 release-timing profiles x invariant/property x 3 seeds x 600
-  runs), 0 failing. Invariants: funds leave only to LAB, claim and request
-  frozen after release, release pays the full balance. All 4 deliberately
+  runs), 0 failing. Invariants: funds leave only to LAB (now: LAB, or FUNDRAISER from
+  DEADLINE), claim and request frozen after release, release pays the full
+  balance. All 4 deliberately
   broken copies of the contract were caught.
 
 Known by design: STX/sBTC sent straight to the contract after the release
