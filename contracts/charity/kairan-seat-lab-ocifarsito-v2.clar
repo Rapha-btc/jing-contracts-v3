@@ -31,7 +31,7 @@
   u"Deadline: Bitcoin block 1,025,386 (about one year from Oct 23, 2026). ")
   u"Success: as soon as 2,000 USDCx is raised, LAB may claim it with a seat receipt naming the builder who takes Kairan's Seat, with links to their repo and to the grant post, crediting ocifarsito.com, plus the reserve as a bonus; gifts above the target are not accepted. ")
   u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
-  u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
+  u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. If USDCx leaves the contract other than by refund (for example an issuer burn), the last refunds are paid only what is left. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
   u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
   u"The contract enforces all of this. ")
@@ -45,7 +45,7 @@
   u"The seat receipt is the name or handle of the builder who takes Kairan's Seat, a link to their repo, and a link to LAB's public post announcing the grant (amount and what it funds, crediting ocifarsito.com). ")
   u"The builder who receives the seat is announced as holding \"Kairan's Seat\", with ocifarsito.com credited, in LAB's receipt and public posts. The owner reviews LAB's seat receipt in good faith and to the best of its ability before releasing the seat, but does not guarantee it; LAB alone is responsible for the accuracy of its receipts, and UASU Inc. is not liable if a receipt is wrong or misrepresented. ")
   u"The reserve claim on failure can only happen once refunds open, if LAB did not claim the seat; it needs a public pool receipt link and names no builder. ")
-  u"If 2,000 USDCx is not raised by the deadline, or LAB does not claim the seat within its 90-day window, anyone may trigger the refunds in batches, and every USDCx gift made through this contract is returned in full to the wallet that sent it. ")
+  u"If 2,000 USDCx is not raised by the deadline, or LAB does not claim the seat within its 90-day window, anyone may trigger the refunds in batches, and every USDCx gift made through this contract is returned in full to the wallet that sent it. If USDCx leaves the contract other than by refund (for example an issuer burn), the last refunds are paid only what is left. ")
   u"USDCx sent to the contract without donate is not refundable and goes to LAB with its claim. ")
   u"This contract funds one Kairan's Seat; the next seat uses a new contract. ")
   u"Each quarter, LAB publishes a Builder Fund report listing every grant, its recipient, amount and repo links, crediting Kairan's Seat. ")
@@ -489,8 +489,10 @@
 )
 
 ;; Pays one donor back their unrefunded gift in full and zeroes it; unknown
-;; or already refunded donors are skipped. Runs inside refund-many's
-;; as-contract?.
+;; or already refunded donors are skipped. If the USDCx balance is short of
+;; the gift (USDCx left the contract other than by refund, e.g. an issuer
+;; burn), the donor gets what is left and the whole gift is booked, so
+;; unrefunded still reaches 0. Runs inside refund-many's as-contract?.
 (define-private (refund-one
     (who principal)
     (acc (response uint uint))
@@ -498,15 +500,20 @@
   (let (
       (paid (try! acc))
       (gift (default-to u0 (map-get? gifts who)))
+      (bal (usdcx-balance))
+      (amount (if (< bal gift) bal gift))
     )
     (if (> gift u0)
       (begin
-        (try! (contract-call? USDCX_TOKEN transfer gift current-contract who none))
+        (and (> amount u0)
+          (try! (contract-call? USDCX_TOKEN transfer amount current-contract who none))
+        )
         (map-set gifts who u0)
         (print {
           event: "refund",
           donor: who,
-          amount: gift,
+          amount: amount,
+          gift: gift,
         })
         (ok (+ paid gift))
       )
