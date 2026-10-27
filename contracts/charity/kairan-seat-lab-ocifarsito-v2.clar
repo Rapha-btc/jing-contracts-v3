@@ -144,8 +144,13 @@
   DONOR_TERMS
 )
 
+;; A gift still owed to its donor; 0 once nothing is owed (after
+;; release-seat, unrefunded is 0 and gifts are paid to LAB, not refunded).
 (define-read-only (get-donor (who principal))
-  (map-get? gifts who)
+  (match (map-get? gifts who)
+    gift (some (if (is-eq (var-get unrefunded) u0) u0 gift))
+    none
+  )
 )
 
 (define-read-only (get-seat-request)
