@@ -104,3 +104,47 @@ makes a release signed with an exact `willSendEq` amount abort. It only
 matters if someone beats every release attempt for a week or more, and the
 owner can simply sign with `willSendGte` ("sends at least"). Rated Info.
 The harness now signs releases with `willSendGte`.
+
+## Round 2: decisions (bounty `mvpsdbgk51aa6064f7a2`)
+
+21 submissions on v2 (post-fix) and v3 at `cf4024c`. No one found a path
+that moves funds anywhere except LAB, the right donor, or FUNDRAISER after
+DEADLINE. Credit goes to the first reporter of each finding that held.
+
+| # | Contract | Finding | First reporter | Severity | Decision | Commit |
+|---|---|---|---|---|---|---|
+| 1 | v2 + v3 | Request window used a strict `<`, so a request at exactly 1,008 blocks before the end failed, against TERMS | Frosty Narwhal (F2, v2); Giant Moth (F1, v3) | Low | Fixed: `<=` | `2231a47` |
+| 2 | v2 | After a USDCx issuer burn, the last refund reverted forever, `unrefunded` never reached 0 and `sweep` stayed u116 | Frosty Narwhal (F1) | Low | Fixed: pay min(gift, balance), book the whole gift; TERMS say the last refunds get what is left | `e0cc4c5` |
+| 3 | v3 | A 1-uSTX direct send aborts a release signed with an exact `willSendEq` | Diamond Lance (N-1) | Info | Not a practical risk: the owner signs with `willSendGte`; harness switched. No credit | `a2ec294` |
+| 4 | v2 | `sweep` was OWNER-only with no discretion, so a lost owner key froze late funds again | Ivory Rabbit (H-1) | Low | Fixed: anyone may sweep, still pays only LAB | `0f59920` |
+| 5 | v3 | TERMS said the reserve is only what FUNDRAISER deposits; release and recoup pay the whole balance | Frosty Narwhal (F3) | Info | Fixed: TERMS say direct sends are added to the reserve | `61451b2` |
+| 6 | v3 | README invariant "funds only to LAB" and test evidence predated the DEADLINE/recoup change | Giant Moth (also Patient Reed F-1) | Info | Fixed: README covers the recoup path; tests rerun | `4a8c74b` |
+| 7 | v3 | STX/sBTC sent after a release or recoup had no exit | Patient Reed (F-3) | Info | Fixed: new permissionless `sweep` pays the claim's recipient | `22e19d1` |
+| 8 | v2 | A gift routed through a relayer using `as-contract?` is refunded to the relayer | Ivory Rabbit (H-2) | - | Rejected: whoever sends the USDCx gets it back; that is normal | - |
+| 9 | v2 | `get-donor` showed donors as owed after `release-seat` | Ivory Rabbit (H-3) | Info | Fixed: returns 0 once nothing is owed | `b30d009` |
+| 10 | v2 | TERMS still said gifts above the target are not accepted; `donate` caps them | Jade Stork (R2-4) | Info | Fixed: TERMS and DONOR_TERMS say the gift is reduced | `bd8badc` |
+
+### Winner
+
+**Frosty Narwhal**: first reporter of 3 findings that held (#1 on v2, #2,
+#5), including #2, the only finding where donor funds could stay frozen
+for good. Also credited: Giant Moth (#1 on v3, #6), Ivory Rabbit (#4, #9),
+Patient Reed (#7), Jade Stork (#10).
+
+### Rejected or refuted in round 2
+
+- Iron Hub F1 (ghost donors): a failed `fold` reverts the gift-map writes
+  too. F2 (DEADLINE is a constant): the intended 90-day window. F3: same as #2.
+- Jade Stork R2-1 (unlisted donor): anyone can refund that donor later.
+  R2-2: same as #2. R2-3: same as #9. R2-9: same as #7.
+- Serene Loom R2-01 (late deposit): FUNDRAISER recoups its own deposit at
+  DEADLINE, by design. R2-02: same as #5. R2-03: the accepted change-1
+  caveat. R2-04: replacement requests work. R2-05: harmless.
+- Ionic Zephyr F1: same as #2. F2 (no release fallback): `cf4024c` added
+  DEADLINE and recoup.
+- Frosty Reed (release of an unfunded reserve): needs the owner's own mistake.
+- Zealous Turtle, Jade Ferret F1: the post-release case, now covered by #7.
+- Grim Cypher: same as #7; get-status/request is a style preference.
+  Tiny Tower: documentation preferences.
+- Devoted Frog: no details. Light Leopard: empty submission.
+- No-findings reviews: Young Throne, Glowing Vector, Hex Tess, Jade Ferret.
