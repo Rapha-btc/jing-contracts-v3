@@ -94,9 +94,8 @@ Tests (commit `76a38ee`), no contract bug found:
 Known by design: STX/sBTC sent straight to the contract after the release
 has no exit (v3 has no sweep).
 
-Signing the release: `release-reserve` pays the whole balance, and only to
-LAB, so the owner signs it with `willSendGte` (at least the reviewed amount),
-not `willSendEq`. With an exact amount, anyone can send 1 uSTX to the
-contract just before the release and make it abort, again and again until
-DEADLINE, when the reserve goes back to FUNDRAISER instead (round-2 N-1,
-Diamond Lance).
+Not a practical risk (round-2 N-1, Diamond Lance): a 1-uSTX direct send
+makes a release signed with an exact `willSendEq` amount abort. It only
+matters if someone beats every release attempt for a week or more, and the
+owner can simply sign with `willSendGte` ("sends at least"). Rated Info.
+The harness now signs releases with `willSendGte`.

@@ -13,7 +13,7 @@
           (concat
             (concat
               u"Kairan's First Mile at Let Africa Build (LAB) is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito). "
-              u"The reserve is the STX and sBTC that the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F deposits into this contract before the reserve is released or recouped; only that wallet can deposit. "
+              u"The reserve is the STX and sBTC that the fundraiser wallet SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F deposits into this contract before the reserve is released or recouped; only that wallet can deposit with deposit-reserve, and STX or sBTC sent straight to the contract is added to the reserve. "
             )
             u"LAB requests the reserve with a description of what the funds will be used for, recorded on-chain, at least 7 days (1,008 Bitcoin blocks) before the deadline, about 90 days (12,960 Bitcoin blocks) after this contract is deployed; the owner then releases the whole reserve to LAB, once, before the deadline. The owner reviews the description in good faith and to the best of its ability, but does not verify or guarantee it; LAB alone is responsible for the accuracy of its description and for how the funds are used, and neither the owner nor UASU Inc. is liable or responsible for either. "
           )
