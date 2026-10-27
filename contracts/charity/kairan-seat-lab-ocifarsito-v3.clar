@@ -110,7 +110,7 @@
     (asserts! (is-none (var-get claim)) ERR_CLAIMED)
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
     (asserts! (> (len description) u0) ERR_DESCRIPTION_EMPTY)
-    (asserts! (< (+ burn-block-height REVIEW_WINDOW) DEADLINE) ERR_TOO_LATE)
+    (asserts! (<= (+ burn-block-height REVIEW_WINDOW) DEADLINE) ERR_TOO_LATE)
     (var-set request (some description))
     (print {
       event: "request-reserve",

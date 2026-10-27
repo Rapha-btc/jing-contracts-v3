@@ -367,7 +367,7 @@
     (asserts! agree-to-terms ERR_TERMS_NOT_ACCEPTED)
     (asserts! (is-eq (var-get total) TARGET) ERR_TARGET_NOT_REACHED)
     (try! (check-seat))
-    (asserts! (< (+ burn-block-height REVIEW_WINDOW) (failure-at)) ERR_TOO_LATE)
+    (asserts! (<= (+ burn-block-height REVIEW_WINDOW) (failure-at)) ERR_TOO_LATE)
     (asserts! (> (len builder) u0) ERR_URL_EMPTY)
     (asserts! (> (len repo) u0) ERR_URL_EMPTY)
     (asserts! (> (len grant) u0) ERR_URL_EMPTY)
