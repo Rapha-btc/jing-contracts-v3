@@ -14,7 +14,8 @@
 ;; it; USDCx sent straight to the contract goes to LAB with its claim.
 ;; LAB may claim-reserve any time from failure-at (no expiry).
 ;; Funds only ever go to LAB (claims) or back to donors (refunds). OWNER's
-;; only powers are release-seat and sweep, which can only pay LAB.
+;; only power is release-seat, which can only pay LAB. Anyone may sweep,
+;; which also only pays LAB.
 (define-constant OWNER tx-sender) ;; deployer: releases the seat to LAB, nothing else
 (define-constant LAB 'SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF)
 (define-constant FUNDRAISER 'SP12AVHNBR1K5BRAXP699V66CWK7PQTJJBT2H174F) ;; first-10K wallet: deposits the reserve
@@ -33,7 +34,7 @@
   u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. If USDCx leaves the contract other than by refund (for example an issuer burn), the last refunds are paid only what is left. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
-  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
+  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only power is to release the seat to LAB after reviewing LAB's seat receipt; anyone may sweep funds sent straight to the contract after the claim to LAB. ")
   u"The contract enforces all of this. ")
   u"Kairan's Seat at Let Africa Build (LAB) is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito). ")
   u"Ocifarsito asks for new gifts mainly in the 1 to 2 weeks before a 10K that RaphaStacks and friends of the Kairan team run with RunThrough USA or similar organizations. ")
@@ -67,7 +68,7 @@
   u"Once 2,000 USDCx is raised, LAB has about 90 days (12,960 Bitcoin blocks) to post the seat receipt, at least 7 days (1,008 Bitcoin blocks) before that window ends, and have the owner release the seat to LAB; if that does not happen, every USDCx gift is refunded in full to the wallet that sent it. ")
   u"Failure: if 2,000 USDCx is not raised by the deadline, each donor gets every USDCx gift back in full, to the wallet that sent it; refunds can be triggered by anyone in batches after the deadline, or after LAB's 90-day seat window if the seat was not claimed. ")
   u"Reserve on failure: once refunds open, LAB may claim the reserve for the Builder Fund pool at any time, with no expiry; the reserve never goes to UASU Inc. ")
-  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only powers are to release the seat to LAB after reviewing LAB's seat receipt, and to sweep funds sent straight to the contract after the claim to LAB. ")
+  u"No one, including UASU Inc. and the owner, can take or redirect donors' USDCx; the owner's only power is to release the seat to LAB after reviewing LAB's seat receipt; anyone may sweep funds sent straight to the contract after the claim to LAB. ")
   u"The contract enforces all of this. ")
   u"Kairan's Seat is raised by UASU Inc. (a Delaware corporation, operating as Ocifarsito); by giving through this contract you accept these donor terms. ")
   u"Gifts are voluntary. ")
@@ -461,7 +462,7 @@
   )
 )
 
-;; After the claim (and, on failure, once every gift is refunded), OWNER
+;; After the claim (and, on failure, once every gift is refunded), anyone
 ;; sends anything sent straight to the contract since to LAB. Pays only LAB.
 (define-public (sweep)
   (let (
@@ -469,7 +470,6 @@
       (stx (reserve-stx))
       (sats (reserve-sats))
     )
-    (asserts! (is-eq contract-caller OWNER) ERR_NOT_OWNER)
     (asserts! (is-some (var-get claim)) ERR_NOT_CLOSED)
     (asserts! (is-eq (var-get unrefunded) u0) ERR_NOT_CLOSED)
     (asserts! (or (> usdcx u0) (> stx u0) (> sats u0)) ERR_AMOUNT_ZERO)
