@@ -80,20 +80,21 @@ before DEADLINE (~90 days after deploy). From DEADLINE, if nothing was
 released, FUNDRAISER may `recoup-reserve` the whole balance instead.
 Round-2 audit: AIBTC bounty `mvpsdbgk51aa6064f7a2`.
 
-Tests (commit `76a38ee`, before the DEADLINE/recoup change in `cf4024c`;
-to be rerun), no contract bug found:
+Validation of the deadline/recoup implementation and round-2 fixes; no
+contract bug found:
 
-- Stxer mainnet fork, `simulations/verify-kairan-seat-lab-v3.js`: 113/113
-  ([4609d5d8](https://stxer.xyz/simulations/mainnet/4609d5d87a0cdbbdd7feed7101ea71d6)).
-  Every error code (u100-u107, u115), request swap, exact whole-balance
-  payout to LAB including direct sends, wrong signers and proxy contracts,
-  everything closed after release, deny-mode post-conditions.
-- Rendezvous, `tests/rv/kairan-seat-v3/` (`node tests/rv/kairan-seat-v3/run.mjs`):
-  18 jobs (3 release-timing profiles x invariant/property x 3 seeds x 600
-  runs), 0 failing. Invariants: funds leave only to LAB (now: LAB, or FUNDRAISER from
-  DEADLINE), claim and request frozen after release, release pays the full
-  balance. All 4 deliberately
-  broken copies of the contract were caught.
+- Clarinet unit suite, `tests/unit/kairan-seat-lab-v3.test.ts`: 21/21 on the
+  round-2 contract, including all public error codes, the exact request/release/
+  recoup boundaries, repeat deposits, direct STX/sBTC payouts, proxy guards,
+  and every flow call returning u106 after a claim. The local API proxy
+  returned 401 during the run, so the test used a temporary manifest pointed
+  at Hiro; the committed manifest was unchanged.
+- Stxer mainnet fork, `simulations/verify-kairan-seat-lab-v3.js`: 257/257
+  (`20c1e21`), including request at DEADLINE - 1008 and u113 at -1007, sweep
+  after release and recoup, u116 before a claim, and u102 when empty.
+- Rendezvous campaign at `d75f30c`: 24 jobs, 0 failing, covering the deadline
+  and recoup paths. This campaign predates the permissionless post-claim
+  sweep added in `22e19d1`.
 
 STX/sBTC sent straight to the contract after the release or recoup: anyone
 may `sweep` it to the claim's recipient (LAB after a release, FUNDRAISER

@@ -184,13 +184,16 @@ describe('request-reserve', function () {
     expect(event['terms-hash']).toBeBuff(termsHash());
   });
 
-  it('works at DEADLINE - 1009 and returns u113 at DEADLINE - 1008', function () {
+  it('works at DEADLINE - 1009 and DEADLINE - 1008, then returns u113 inside the review window', function () {
     toBurn(deadline() - REVIEW_WINDOW - 1n);
     expect(request().result).toBeOk(Cl.bool(true));
 
     toBurn(deadline() - REVIEW_WINDOW);
-    expect(request(REPLACEMENT).result).toBeErr(Cl.uint(113));
-    expect(readOnly('get-request')).toBeSome(Cl.stringAscii(DESCRIPTION));
+    expect(request(REPLACEMENT).result).toBeOk(Cl.bool(true));
+
+    toBurn(deadline() - REVIEW_WINDOW + 1n);
+    expect(request('Too late').result).toBeErr(Cl.uint(113));
+    expect(readOnly('get-request')).toBeSome(Cl.stringAscii(REPLACEMENT));
   });
 });
 
