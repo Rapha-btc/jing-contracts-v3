@@ -8,9 +8,13 @@
 //     (builder, repo, grant post, accepts TERMS), OWNER release-seat ->
 //     2,000 USDCx + the direct USDCx + whole reserve; nothing to Ocifarsito.
 //     Bounty mvllpu fixes: capped donate (overshoot gets only the remainder),
-//     request-seat u113 inside the last 1008 blocks of the seat window,
+//     request-seat ok at exactly failure-at - 1008, u113 one block later,
 //     release-seat (builder repo grant) u115 on a swapped receipt, sweep u116
-//     before the claim, then sweep of late direct transfers to LAB.
+//     before the claim, then anyone (even through a proxy) sweeps late
+//     direct transfers, which only ever go to LAB.
+//     Round-2 fixes: request window <=, permissionless sweep, get-donor 0
+//     once nothing is owed. The partial refund on a USDCx shortfall (issuer
+//     burn) has no fork step: the harness cannot burn USDCx.
 //  B. FAILURE: two real USDCx holders + 248 fresh donors give (250 donors,
 //     no cap), a direct USDCx transfer, a reserve; the fork advances to the
 //     DEADLINE Bitcoin block; LAB claim-reserve takes the reserve + only the
@@ -80,7 +84,8 @@ const receipt = (builder = BUILDER, repo = REPO, grant = SEAT_URL) => [stringAsc
 const BAD_GRANT = "https://letafricabuild.com/typo";
 const SEAT_WINDOW = 12_960;
 const A_ADVANCE_1 = 11_900; // request-seat still ok (11,900 + 1,008 < 12,960)
-const A_ADVANCE_2 = 100; // 12,000 + 1,008 >= 12,960 -> u113; release still open
+const A_ADVANCE_2 = 52; // failure-at - burn = 1,008: the last block a request lands
+const A_ADVANCE_3 = 1; // failure-at - burn = 1,007 -> u113; release still open
 const P = (s) => (s.includes(".") ? contractPrincipalCV(...s.split(".")) : standardPrincipalCV(s));
 const stxOf = (who) => `(stx-get-balance '${who})`;
 const ftOf = (token, who) => `(unwrap-panic (contract-call? '${token} get-balance '${who}))`;
@@ -174,7 +179,7 @@ function build(F, O, tipBurn) {
   evalc("fork: fundraiser sats = live read", ftOf(SBTC, FUNDRAISER), { expect: `u${F.sats}` });
   evalc("fork: chavita USDCx = live read", ftOf(USDCX, DEPLOYER), { expect: `u${O.usdcx}` });
   evalc("get-terms opens with the plain lines", "(get-terms)", { expect: has("Target: 2,000 USDCx for one Kairan's Seat, newly raised. Reserve:", "Deadline: Bitcoin block 1,025,386", "The contract enforces all of this.", "courts of Delaware.") });
-  evalc("get-terms: reserve inflows, sweep power, 7-day review", "(get-terms)", { expect: has("STX or sBTC sent straight to the contract is added to the reserve.", "to sweep funds sent straight to the contract after the claim to LAB.", "at least 7 days (1,008 Bitcoin blocks) before that window ends") });
+  evalc("get-terms: reserve inflows, sweep power, 7-day review", "(get-terms)", { expect: has("STX or sBTC sent straight to the contract is added to the reserve.", "anyone may sweep funds sent straight to the contract after the claim to LAB.", "a gift above what is still needed to reach the target is reduced to it.", "the last refunds are paid only what is left.", "at least 7 days (1,008 Bitcoin blocks) before that window ends") });
   evalc("get-donor-terms", "(get-donor-terms)", { expect: has("not in US dollars", "501(c)(3)", "Gifts are final except for the full USDCx refund", "A gift above the amount still needed to reach the target is reduced to that amount.") });
   status("A fresh", ["(closed false)", "(total u0)", `(remaining u${TARGET})`, `(deadline u${DEADLINE})`, "(claim none)"]);
 
@@ -188,7 +193,7 @@ function build(F, O, tipBurn) {
   call("donate terms false -> u103", DEPLOYER, A, "donate", [uintCV(1), boolCV(false)], "(err u103)");
   call(`chavita.btc donates its live ${OWN_USDCX} USDCx`, DEPLOYER, A, "donate", [uintCV(OWN_USDCX), boolCV(true)], `(ok u${OWN_USDCX})`);
   call("LAB request-seat under target -> u109", LAB, A, "request-seat", seatArgs(), "(err u109)");
-  call("ATTACK LAB sweep -> u100", LAB, A, "sweep", [], "(err u100)");
+  call("LAB sweep before any claim -> u116", LAB, A, "sweep", [], "(err u116)");
   call("owner sweep before any claim -> u116", DEPLOYER, A, "sweep", [], "(err u116)");
   call("donate want 0 -> u102", USDCX_WHALE, A, "donate", [uintCV(0), boolCV(true)], "(err u102)");
   const OVER = 12_345_678n;
@@ -216,11 +221,14 @@ function build(F, O, tipBurn) {
   call("SWAP owner release-seat other builder -> u115", DEPLOYER, A, "release-seat", receipt("Eve", REPO, SEAT_URL), "(err u115)");
   call("SWAP owner release-seat other repo -> u115", DEPLOYER, A, "release-seat", receipt(BUILDER, "https://github.com/eve/x", SEAT_URL), "(err u115)");
   advance(A_ADVANCE_1);
-  evalc(`A: failure-at - burn > 1008 after +${A_ADVANCE_1}`, "(- (failure-at) burn-block-height)", { expect: (v) => U(v) > 1_008n && U(v) <= BigInt(SEAT_WINDOW - A_ADVANCE_1) });
+  evalc(`A: failure-at - burn = ${SEAT_WINDOW - A_ADVANCE_1} after +${A_ADVANCE_1}`, "(- (failure-at) burn-block-height)", { expect: `u${SEAT_WINDOW - A_ADVANCE_1}` });
   call("LAB request-seat outside the last 1008 blocks (same receipt) -> ok", LAB, A, "request-seat", seatArgs(), "(ok true)");
   advance(A_ADVANCE_2);
-  evalc(`A: 0 < failure-at - burn <= 1008 after +${A_ADVANCE_2}`, "(- (failure-at) burn-block-height)", { expect: (v) => U(v) > 0n && U(v) <= 1_008n });
-  call("LATE LAB request-seat in the last 1008 blocks -> u113", LAB, A, "request-seat", seatArgs(BUILDER, REPO, BAD_GRANT), "(err u113)");
+  evalc(`A: failure-at - burn = 1008 after +${A_ADVANCE_2}`, "(- (failure-at) burn-block-height)", { expect: "u1008" });
+  call("BOUNDARY LAB request-seat at exactly failure-at - 1008 (same receipt) -> ok", LAB, A, "request-seat", seatArgs(), "(ok true)");
+  advance(A_ADVANCE_3);
+  evalc(`A: failure-at - burn = 1007 after +${A_ADVANCE_3}`, "(- (failure-at) burn-block-height)", { expect: "u1007" });
+  call("LATE LAB request-seat at failure-at - 1007 -> u113", LAB, A, "request-seat", seatArgs(BUILDER, REPO, BAD_GRANT), "(err u113)");
   evalc("late request did not replace the receipt", "(get-seat-request)", { expect: has(BUILDER, REPO, SEAT_URL) });
   call("ATTACK LAB release-seat -> u100", LAB, A, "release-seat", receipt(), "(err u100)");
   call("ATTACK fundraiser release-seat -> u100", FUNDRAISER, A, "release-seat", receipt(), "(err u100)");
@@ -236,20 +244,22 @@ function build(F, O, tipBurn) {
   delta("seat", "c", "apre", "apost", { usdcx: -(TARGET + 7_777n), stx: -RSTX, sats: -RSATS });
   evalc("get-claim seat", "(get-claim)", { expect: has('(kind "seat")', BUILDER, REPO, SEAT_URL) });
   status("A closed", ["(closed true)", `(total u${TARGET})`]);
+  evalc("get-donor after the seat release: nothing owed -> (some u0)", `(get-donor '${USDCX_WHALE})`, { expect: "(some u0)" });
+  evalc("get-donor never-donor after release -> none", `(get-donor '${ATTACKER})`, { expect: "none" });
   call("ATTACK owner double release-seat -> u106", DEPLOYER, A, "release-seat", receipt(), "(err u106)");
   call("fundraiser deposit-reserve after the claim -> u111 (already deposited)", FUNDRAISER, A, "deposit-reserve", [uintCV(1), uintCV(0)], "(err u111)");
   call("owner sweep right after release (nothing left) -> u102", DEPLOYER, A, "sweep", [], "(err u102)");
   usdcxSend("LATE direct usdcx transfer 555 after the claim", USDCX_WHALE, A, 555n);
   stxSend("LATE direct STX transfer 1 STX after the claim", STX_WHALE, A, 1_000_000n);
   call("LATE direct sBTC transfer 100 sats after the claim", SBTC_WHALE, SBTC, "transfer", [uintCV(100), P(SBTC_WHALE), P(A), noneCV()], "(ok true)");
-  call("ATTACK LAB sweep after claim -> u100", LAB, A, "sweep", [], "(err u100)");
-  call("ATTACK owner signs proxy-sweep -> u100", DEPLOYER, PROXY, "proxy-sweep", [], "(err u100)");
-  snap("swpre", { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, c: A }, A);
-  call("owner sweep: LAB gets the late 555 USDCx + 1 STX + 100 sats", DEPLOYER, A, "sweep", [], "(ok (tuple (sats u100) (stx u1000000) (usdcx u555)))");
-  snap("swpost", { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, c: A }, A);
+  snap("swpre", { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, atk: ATTACKER, proxy: PROXY, c: A }, A);
+  call("STRANGER attacker signs proxy-sweep: LAB (only) gets the late 555 USDCx + 1 STX + 100 sats", ATTACKER, PROXY, "proxy-sweep", [], "(ok (tuple (sats u100) (stx u1000000) (usdcx u555)))");
+  snap("swpost", { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, atk: ATTACKER, proxy: PROXY, c: A }, A);
   delta("sweep", "lab", "swpre", "swpost", { usdcx: 555n, stx: 1_000_000n, sats: 100n });
   delta("sweep", "oci", "swpre", "swpost", { usdcx: 0n, stx: 0n, sats: 0n });
-  delta("sweep", "owner", "swpre", "swpost", { usdcx: 0n, sats: 0n });
+  delta("sweep", "owner", "swpre", "swpost", { usdcx: 0n, stx: 0n, sats: 0n });
+  delta("sweep", "atk", "swpre", "swpost", { usdcx: 0n, sats: 0n });
+  delta("sweep", "proxy", "swpre", "swpost", { usdcx: 0n, stx: 0n, sats: 0n });
   delta("sweep", "c", "swpre", "swpost", { usdcx: -555n, stx: -1_000_000n, sats: -100n });
   call("owner sweep again -> u102", DEPLOYER, A, "sweep", [], "(err u102)");
   call("donate after close -> u106", USDCX_WHALE, A, "donate", [uintCV(1), boolCV(true)], "(err u106)");
@@ -289,7 +299,7 @@ function build(F, O, tipBurn) {
   call("B: LAB request-seat under target -> u109", LAB, B, "request-seat", seatArgs(), "(err u109)");
   call("B: owner sweep before any claim -> u116", DEPLOYER, B, "sweep", [], "(err u116)");
 
-  advance(DEADLINE - tipBurn + 3 - A_ADVANCE_1 - A_ADVANCE_2); // +3: the session may pin a slightly older tip
+  advance(DEADLINE - tipBurn + 3 - A_ADVANCE_1 - A_ADVANCE_2 - A_ADVANCE_3); // +3: the session may pin a slightly older tip
   evalc("B: fork at or past DEADLINE", "(>= burn-block-height u1025386)", { expect: "true", on: B });
   call("B: donate after DEADLINE -> u113", USDCX_HOLDER, B, "donate", [uintCV(1), boolCV(true)], "(err u113)");
   call("B: fundraiser deposit-reserve 10 STX + 1000 sats AFTER DEADLINE (no claim yet) -> ok", FUNDRAISER, B, "deposit-reserve", [uintCV(10_000_000), uintCV(1_000)], "(ok true)");
@@ -324,8 +334,7 @@ function build(F, O, tipBurn) {
   delta("refund", "d247", "bpre", "bpost", { usdcx: 3_470_000n });
   delta("refund", "c", "bpre", "bpost", { usdcx: -(book + 4_242n) + 999n, stx: -10_000_000n, sats: -1_000n });
   status("B: closed", ["(closed true)", "(unrefunded u0)", "(usdcx-balance u999)"], B);
-  call("B: ATTACK LAB sweep -> u100", LAB, B, "sweep", [], "(err u100)");
-  call("B: owner sweep after refunds: LAB gets the late 999 USDCx", DEPLOYER, B, "sweep", [], "(ok (tuple (sats u0) (stx u0) (usdcx u999)))");
+  call("B: STRANGER STX whale sweep after refunds: LAB gets the late 999 USDCx", STX_WHALE, B, "sweep", [], "(ok (tuple (sats u0) (stx u0) (usdcx u999)))");
   snap("bsw", { lab: LAB, c: B }, B);
   delta("B sweep", "lab", "bpost", "bsw", { usdcx: 999n, stx: 0n, sats: 0n });
   delta("B sweep", "c", "bpost", "bsw", { usdcx: -999n });

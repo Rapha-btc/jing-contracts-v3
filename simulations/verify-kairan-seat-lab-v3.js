@@ -3,7 +3,7 @@
 // contracts/charity/kairan-seat-lab-ocifarsito-v3.clar (reserve-only seat:
 // FUNDRAISER deposits STX + sBTC, LAB files a use-of-funds request, OWNER
 // releases the whole balance to LAB once, before DEADLINE = deploy burn
-// height + 12960; a request must land more than REVIEW_WINDOW = 1008 blocks
+// height + 12960; a request must land at least REVIEW_WINDOW = 1008 blocks
 // before DEADLINE; from DEADLINE, if nothing was released, FUNDRAISER
 // recoups the whole balance). Deploys the LOCAL source as chavita.btc
 // (OWNER) six times, all at the same burn height (same DEADLINE):
@@ -13,18 +13,20 @@
 //     files a request, replaces it with a 512-char one; OWNER release with the
 //     old description -> u115, with the new one -> LAB gets exactly the whole
 //     balance (deposits + direct sends). After the release every entry point
-//     is closed (u106) and the claim / request never change; STX sent in
-//     after the release stays in the contract (v3 has no sweep).
+//     is closed (u106) and the claim / request never change; STX + sBTC sent
+//     in after the release are swept by anyone, to LAB only (sweep u116
+//     before any claim, u102 when empty).
 //  B. EMPTY: LAB requests, release with nothing to pay -> u102; STX sent
 //     straight to the contract -> release pays LAB that STX only.
 //  C. SATS: sBTC-only deposit -> release pays sBTC only.
 //  D. RECOUP: deposits + direct sends; recoup before DEADLINE -> u112 (also
 //     one block before); LAB files a request at the last allowed block
-//     (DEADLINE - 1009), one block later -> u113; at DEADLINE the owner's
+//     (DEADLINE - 1008), one block later -> u113; at DEADLINE the owner's
 //     release -> u113 even with that request, FUNDRAISER recoups exactly the
 //     whole STX + sBTC balance (Deny-mode PCs), claim { to: FUNDRAISER,
-//     description: "" }; then deposit / request / release / recoup -> u106.
-//  E. DEADLINE: LAB requests at DEADLINE - 1009 (ok), DEADLINE - 1008
+//     description: "" }; then deposit / request / release / recoup -> u106;
+//     a late direct send is swept by anyone to FUNDRAISER only.
+//  E. DEADLINE: LAB requests at DEADLINE - 1008 (ok), DEADLINE - 1007
 //     (u113); the owner releases at DEADLINE - 1 (ok, pays LAB); recoup
 //     after that -> u106.
 //  F. RECOUP-EMPTY: recoup at DEADLINE with nothing -> u102; a deposit after
@@ -266,7 +268,7 @@ function build(F) {
   clockCheck("at deploy");
   evalc("fork: fundraiser STX = live read", stxOf(FUNDRAISER), { expect: `u${F.stx}` });
   evalc("fork: fundraiser sats = live read", ftOf(SBTC, FUNDRAISER), { expect: `u${F.sats}` });
-  evalc("get-terms", "(get-terms)", { expect: has("only that wallet can deposit", "the owner then releases the whole reserve to LAB, once, before the deadline", "at least 7 days (1,008 Bitcoin blocks) before the deadline, about 90 days (12,960 Bitcoin blocks)", "Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF, or, if the reserve was not released to LAB by the deadline, back to the fundraiser wallet", "courts of Delaware.") });
+  evalc("get-terms", "(get-terms)", { expect: has("only that wallet can deposit with deposit-reserve, and STX or sBTC sent straight to the contract is added to the reserve", "anyone may sweep STX or sBTC sent straight to the contract to the same wallet", "the owner then releases the whole reserve to LAB, once, before the deadline", "at least 7 days (1,008 Bitcoin blocks) before the deadline, about 90 days (12,960 Bitcoin blocks)", "Funds in this contract only ever go to LAB's wallet SP2RGCKAQH0ZZD0WEVB38H128DZ1M2S5V3ST871NF, or, if the reserve was not released to LAB by the deadline, back to the fundraiser wallet", "courts of Delaware.") });
   status("A fresh", [`(lab ${LAB})`, `(owner ${DEPLOYER})`, `(fundraiser ${FUNDRAISER})`, "(deadline u", "(stx u0)", "(sats u0)", "(claimed false)"]);
   evalc("A fresh: get-request none", "(get-request)", { expect: "none" });
   evalc("A fresh: get-claim none", "(get-claim)", { expect: "none" });
@@ -332,6 +334,8 @@ function build(F) {
     [sendsStx(A, A_STX - 1n), sendsSats(A, A_SATS)]);
   status("A untouched after the aborted release", [`(stx u${A_STX})`, `(sats u${A_SATS})`, "(claimed false)"]);
   call("A: fundraiser recoup with a full balance before DEADLINE -> u112", FUNDRAISER, A, "recoup-reserve", [], "(err u112)");
+  call("A: attacker sweep before any claim -> u116", ATTACKER, A, "sweep", [], "(err u116)");
+  call("A: owner sweep before any claim -> u116", DEPLOYER, A, "sweep", [], "(err u116)");
   evalc("A: claim still none", "(get-claim)", { expect: "none" });
 
   const watch = { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, fr: FUNDRAISER, atk: ATTACKER, c: A };
@@ -364,10 +368,21 @@ function build(F) {
   evalc("CLOSED request still D2", "(get-request)", { expect: `(some "${D2}")` });
   stxSend(`LATE direct STX ${LATE_STX} to A after the release`, STX_WHALE, A, LATE_STX);
   satsSend("LATE direct sBTC 50 sats to A after the release", SBTC_WHALE, A, 50n);
-  status("A holds the late sends (no sweep in v3)", [`(stx u${LATE_STX})`, "(sats u50)", "(claimed true)"]);
+  status("A holds the late sends until a sweep", [`(stx u${LATE_STX})`, "(sats u50)", "(claimed true)"]);
   call("CLOSED owner release with a balance -> u106", DEPLOYER, A, "release-reserve", [stringAsciiCV(D2)], "(err u106)");
   evalc("CLOSED claim unchanged", "(get-claim)", { capture: "claim2" });
   equals.push(["claim never changes after the release", "claim1", "claim2"]);
+  snap("aswpre", { lab: LAB, fr: FUNDRAISER, atk: ATTACKER, c: A }, A);
+  call(`SWEEP attacker sweeps A: LAB gets the late ${LATE_STX} uSTX + 50 sats`, ATTACKER, A, "sweep", [], tupleOk(LATE_STX, 50n), undefined,
+    [`stx ${LATE_STX} ${A} -> ${LAB}`, `ft 50 ${A} -> ${LAB}`, `event "sweep"`]);
+  snap("aswpost", { lab: LAB, fr: FUNDRAISER, atk: ATTACKER, c: A }, A);
+  delta("A sweep", "lab", "aswpre", "aswpost", { stx: LATE_STX, sats: 50n });
+  delta("A sweep", "c", "aswpre", "aswpost", { stx: -LATE_STX, sats: -50n });
+  delta("A sweep", "fr", "aswpre", "aswpost", { stx: 0n, sats: 0n });
+  delta("A sweep", "atk", "aswpre", "aswpost", { sats: 0n });
+  call("A: sweep again with nothing -> u102", ATTACKER, A, "sweep", [], "(err u102)");
+  evalc("A: claim unchanged after the sweep", "(get-claim)", { capture: "claim3" });
+  equals.push(["claim unchanged by the sweep", "claim1", "claim3"]);
 
   // ===== B. empty, then direct STX only =====
   call("B: LAB request D1", LAB, B, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(ok true)");
@@ -410,20 +425,20 @@ function build(F) {
   satsSend(`E: direct sBTC ${E_SATS} straight to E`, SBTC_WHALE, E, E_SATS);
   call("E: LAB request D1 early", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(ok true)");
 
-  // the last block a request can land: burn-block-height + 1008 < DEADLINE
-  const LAST_REQ = DEADLINE_OFFSET - REVIEW_WINDOW - 1;
+  // the last block a request can land: burn-block-height + 1008 <= DEADLINE
+  const LAST_REQ = DEADLINE_OFFSET - REVIEW_WINDOW;
   for (let left = LAST_REQ - clock; left > 0; left -= Math.min(4000, left)) advance(Math.min(4000, left));
   clockCheck("last request block");
-  evalc("burn-block-height + REVIEW_WINDOW < DEADLINE (still open)", "(< (+ burn-block-height REVIEW_WINDOW) DEADLINE)", { expect: "true", on: E });
-  call("E: LAB request D2 at DEADLINE - 1009 -> ok (replaces D1)", LAB, E, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
-  call("D: LAB request D2 at DEADLINE - 1009 -> ok", LAB, D, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
+  evalc("burn-block-height + REVIEW_WINDOW = DEADLINE (still open)", "(is-eq (+ burn-block-height REVIEW_WINDOW) DEADLINE)", { expect: "true", on: E });
+  call("E: LAB request D2 at DEADLINE - 1008 -> ok (replaces D1)", LAB, E, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
+  call("D: LAB request D2 at DEADLINE - 1008 -> ok", LAB, D, "request-reserve", [stringAsciiCV(D2), boolCV(true)], "(ok true)");
   evalc("E: get-request = D2", "(get-request)", { expect: `(some "${D2}")`, on: E });
   evalc("D: get-request = D2", "(get-request)", { expect: `(some "${D2}")`, on: D });
   advance(1);
   clockCheck("first late block");
-  call("E: LAB request D1 at DEADLINE - 1008 -> u113", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
-  call("D: LAB request D1 at DEADLINE - 1008 -> u113", LAB, D, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
-  call("F: LAB first request at DEADLINE - 1008 -> u113", LAB, F_, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("E: LAB request D1 at DEADLINE - 1007 -> u113", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("D: LAB request D1 at DEADLINE - 1007 -> u113", LAB, D, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
+  call("F: LAB first request at DEADLINE - 1007 -> u113", LAB, F_, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u113)");
   call("E: LAB late request terms false -> u103 (terms checked before the deadline)", LAB, E, "request-reserve", [stringAsciiCV(D1), boolCV(false)], "(err u103)");
   call("E: LAB late request empty -> u104 (description checked before the deadline)", LAB, E, "request-reserve", [stringAsciiCV(""), boolCV(true)], "(err u104)");
   call("ATTACK E: attacker late request -> u101", ATTACKER, E, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(err u101)");
@@ -489,7 +504,15 @@ function build(F) {
   call("D CLOSED: owner release D2 -> u106 (claim checked before the deadline)", DEPLOYER, D, "release-reserve", [stringAsciiCV(D2)], "(err u106)");
   stxSend("D CLOSED: direct 700000 uSTX to D after the recoup", STX_WHALE, D, 700_000n);
   call("D CLOSED: fundraiser recoup with a new balance -> u106", FUNDRAISER, D, "recoup-reserve", [], "(err u106)");
-  status("D keeps the late send (no sweep)", ["(stx u700000)", "(sats u0)", "(claimed true)"], D);
+  status("D holds the late send until a sweep", ["(stx u700000)", "(sats u0)", "(claimed true)"], D);
+  snap("dswpre", { lab: LAB, fr: FUNDRAISER, atk: ATTACKER, c: D }, D);
+  call("SWEEP attacker sweeps D after the recoup: FUNDRAISER gets the late 700000 uSTX", ATTACKER, D, "sweep", [], tupleOk(700_000n, 0n), undefined,
+    [`stx 700000 ${D} -> ${FUNDRAISER}`, `event "sweep"`]);
+  snap("dswpost", { lab: LAB, fr: FUNDRAISER, atk: ATTACKER, c: D }, D);
+  delta("D sweep", "fr", "dswpre", "dswpost", { stx: 700_000n, sats: 0n });
+  delta("D sweep", "lab", "dswpre", "dswpost", { stx: 0n, sats: 0n });
+  delta("D sweep", "c", "dswpre", "dswpost", { stx: -700_000n, sats: 0n });
+  call("D: sweep again with nothing -> u102", ATTACKER, D, "sweep", [], "(err u102)");
   evalc("D CLOSED: request still D2", "(get-request)", { expect: `(some "${D2}")`, on: D });
   evalc("D CLOSED: claim unchanged", "(get-claim)", { capture: "claimD2", on: D });
   equals.push(["D: claim never changes after the recoup", "claimD1", "claimD2"]);
