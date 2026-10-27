@@ -148,6 +148,10 @@ const stxOf = (who) => `(stx-get-balance '${who})`;
 const ftOf = (token, who) => `(unwrap-panic (contract-call? '${token} get-balance '${who}))`;
 const sendsStx = (who, n) => Pc.principal(who).willSendEq(n).ustx();
 const sendsSats = (who, n) => Pc.principal(who).willSendEq(n).ft(SBTC, "sbtc-token");
+// Release pays only LAB, so sign it with "at least": an exact amount lets a
+// 1-uSTX direct send abort it until DEADLINE (round-2 N-1).
+const releasesStx = (who, n) => Pc.principal(who).willSendGte(n).ustx();
+const releasesSats = (who, n) => Pc.principal(who).willSendGte(n).ft(SBTC, "sbtc-token");
 
 const PROXY_SRC = `
 (define-public (proxy-deposit)
@@ -333,7 +337,7 @@ function build(F) {
   const watch = { lab: LAB, oci: OCIFARSITO, owner: DEPLOYER, fr: FUNDRAISER, atk: ATTACKER, c: A };
   snap("apre", watch, A);
   call(`owner release D2: LAB gets ${A_STX} uSTX + ${A_SATS} sats (deposits + direct)`, DEPLOYER, A, "release-reserve", [stringAsciiCV(D2)], tupleOk(A_STX, A_SATS),
-    [sendsStx(A, A_STX), sendsSats(A, A_SATS)]);
+    [releasesStx(A, A_STX), releasesSats(A, A_SATS)]);
   snap("apost", watch, A);
   delta("release", "lab", "apre", "apost", { stx: A_STX, sats: A_SATS });
   delta("release", "c", "apre", "apost", { stx: -A_STX, sats: -A_SATS });
@@ -371,7 +375,7 @@ function build(F) {
   evalc("B: no claim after u102", "(get-claim)", { expect: "none", on: B });
   stxSend(`B: direct STX ${B_STX} straight to B`, STX_WHALE, B, B_STX);
   snap("bpre", { lab: LAB, c: B }, B);
-  call(`B: owner release pays LAB the ${B_STX} direct uSTX only`, DEPLOYER, B, "release-reserve", [stringAsciiCV(D1)], tupleOk(B_STX, 0n), [sendsStx(B, B_STX)]);
+  call(`B: owner release pays LAB the ${B_STX} direct uSTX only`, DEPLOYER, B, "release-reserve", [stringAsciiCV(D1)], tupleOk(B_STX, 0n), [releasesStx(B, B_STX)]);
   snap("bpost", { lab: LAB, c: B }, B);
   delta("B release", "lab", "bpre", "bpost", { stx: B_STX, sats: 0n });
   delta("B release", "c", "bpre", "bpost", { stx: -B_STX, sats: 0n });
@@ -383,7 +387,7 @@ function build(F) {
   call("C: owner release before any request -> u107", DEPLOYER, C, "release-reserve", [stringAsciiCV(D1)], "(err u107)");
   call("C: LAB request D1", LAB, C, "request-reserve", [stringAsciiCV(D1), boolCV(true)], "(ok true)");
   snap("cpre", { lab: LAB, c: C }, C);
-  call(`C: owner release pays LAB ${C_SATS} sats only`, DEPLOYER, C, "release-reserve", [stringAsciiCV(D1)], tupleOk(0n, C_SATS), [sendsSats(C, C_SATS)]);
+  call(`C: owner release pays LAB ${C_SATS} sats only`, DEPLOYER, C, "release-reserve", [stringAsciiCV(D1)], tupleOk(0n, C_SATS), [releasesSats(C, C_SATS)]);
   snap("cpost", { lab: LAB, c: C }, C);
   delta("C release", "lab", "cpre", "cpost", { stx: 0n, sats: C_SATS });
   delta("C release", "c", "cpre", "cpost", { stx: 0n, sats: -C_SATS });
@@ -434,7 +438,7 @@ function build(F) {
   call("E: owner release with the old D1 -> u115", DEPLOYER, E, "release-reserve", [stringAsciiCV(D1)], "(err u115)");
   snap("epre", { lab: LAB, fr: FUNDRAISER, c: E }, E);
   call(`E: owner release D2 at DEADLINE - 1: LAB gets ${E_STX} uSTX + ${E_SATS} sats`, DEPLOYER, E, "release-reserve", [stringAsciiCV(D2)], tupleOk(E_STX, E_SATS),
-    [sendsStx(E, E_STX), sendsSats(E, E_SATS)], [`stx ${E_STX} ${E} -> ${LAB}`, `ft ${E_SATS} ${E} -> ${LAB}`]);
+    [releasesStx(E, E_STX), releasesSats(E, E_SATS)], [`stx ${E_STX} ${E} -> ${LAB}`, `ft ${E_SATS} ${E} -> ${LAB}`]);
   snap("epost", { lab: LAB, fr: FUNDRAISER, c: E }, E);
   delta("E release", "lab", "epre", "epost", { stx: E_STX, sats: E_SATS });
   delta("E release", "c", "epre", "epost", { stx: -E_STX, sats: -E_SATS });
