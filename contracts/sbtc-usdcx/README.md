@@ -24,6 +24,23 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 3. rungs `jing-sell-sbtc-<bps>` / `jing-buy-sbtc-<bps>`, `initialize` each
 4. `jing-ladder-dispatch-sbtc-usdcx`, `jing-settle-batch-sbtc-usdcx`, `swap-router-sbtc-usdcx-jing-v5-5`
 
+## Mainnet deployment (2026-10-28)
+
+All from `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22`, deploy bytes = `bdaa349` (faktory-dao templates `8311fba5`).
+**Every deployed source below was verified manually against this repo by Rapha RS (2026-10-28).**
+
+| Contract | Block | Verified |
+|---|---|---|
+| `jing-ladder-sbtc-usdcx-v1` | 9350457 | Rapha RS |
+| `markets-sbtc-usdcx-jing-v6-4` | 9350458 | Rapha RS |
+| `jing-sell-sbtc-1`, `-10` ... `-90` (`jing-sell-sbtc-bps.clar`) | 9350637-9350642 | Rapha RS |
+| `jing-buy-sbtc-1`, `-10` ... `-90` (`jing-buy-sbtc-bps.clar`) | 9350710-9350713 | Rapha RS |
+| `jing-ladder-dispatch-sbtc-usdcx` | 9350750 | Rapha RS |
+| `jing-settle-batch-sbtc-usdcx` | 9350751 | Rapha RS |
+| `swap-router-sbtc-usdcx-jing-v5-5` | 9350751 | Rapha RS |
+
+Setup: core-v6 `set-verified-contract` by the Juice multisig (tx `0xd81c4cf0...`, 9350545); market `set-operator` -> multisig (9350572); multisig `initialize(market, sbtc-token, usdcx, u1000, u1000000, u1, u7)` `(ok true)` (tx `0x165c4a55...`, 9350596). Market operator stays the multisig. Rungs: bands 1, 10 ... 90 per side; canonical = the 1 rung per side; seated via faktory-dao `init-jing-rungs {set: "usdcx"}`.
+
 ## Pricing
 
 - Market mid: Pyth Lazer BTC/USD (feed 1) / USDC/USD (feed 7), one signed update, both expo -8. Keyless fetch: `GET /api/auction/pyth-lazer-update?pair=sbtc-usdcx` on the faktory-dao backend.
