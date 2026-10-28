@@ -32,8 +32,7 @@
 (define-constant SCALE u1000000000000)
 (define-constant PROCEEDS_SCALE u1000000000000000000)
 (define-read-only (miner-mid)
-  (let ((p (unwrap-panic (contract-call?
-      'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
+  (let ((p (unwrap-panic (contract-call? 'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
       get-value "BTC/USD"
     ))))
     (if (> (+ (/ (get timestamp p) u1000) u7200) stacks-block-time)
@@ -367,7 +366,9 @@
 (define-public (sync)
   (let (
       (shares (var-get total-shares))
-      (local (sub0 (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-uusdcx)))
+      (local (sub0 (unwrap-panic (contract-call? USDCX get-balance current-contract))
+        (var-get reserved-uusdcx)
+      ))
       (actual (+ (market-size) local))
       (recorded (pooled-usdcx))
       (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
@@ -616,7 +617,9 @@
       true
     )
     (let (
-        (free (sub0 (unwrap-panic (contract-call? USDCX get-balance current-contract)) (var-get reserved-uusdcx)))
+        (free (sub0 (unwrap-panic (contract-call? USDCX get-balance current-contract))
+          (var-get reserved-uusdcx)
+        ))
         (final-proceeds (var-get proceeds-index))
       )
       (map-set epoch-final-proceeds epo final-proceeds)

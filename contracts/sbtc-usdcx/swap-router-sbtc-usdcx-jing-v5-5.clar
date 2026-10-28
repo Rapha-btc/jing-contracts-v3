@@ -50,8 +50,8 @@
     (update (buff 8192))
     (deposit-x bool)
   )
-  (match (contract-call? JING_MARKET swap amount limit-price update SBTC ASSET_SBTC USDCX
-    ASSET_USDCX deposit-x
+  (match (contract-call? JING_MARKET swap amount limit-price update SBTC ASSET_SBTC
+    USDCX ASSET_USDCX deposit-x
   )
     res (some {
       spent: (- amount
@@ -588,7 +588,11 @@
             u0
           ))
         )
-        (if (and e1 (>= o1 o2) (>= o1 o3))
+        (if (and
+            e1
+            (>= o1 o2)
+            (>= o1 o3)
+          )
           u1
           (if (and e2 (>= o2 o3))
             u2
@@ -662,7 +666,12 @@
             up: (not sell-sbtc),
             threshold: threshold,
             initial-price: (get initial-price info),
-            factors: (unwrap-panic (slice? (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step (get bin-step info)))) lo hi)),
+            factors: (unwrap-panic (slice?
+              (unwrap-panic (unwrap-panic (contract-call? DLMM_CORE get-bin-factors-by-step
+                (get bin-step info)
+              )))
+              lo hi
+            )),
             base: lo,
             fee: fee,
             left: amount,

@@ -410,4 +410,3 @@
 (define-public (claim-sell (targets (list 10 <rung>)))
   (claim-many targets false)
 )
-

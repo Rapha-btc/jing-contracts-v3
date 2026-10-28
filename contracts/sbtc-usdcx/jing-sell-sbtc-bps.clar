@@ -32,8 +32,7 @@
 (define-constant SCALE u1000000000000)
 (define-constant PROCEEDS_SCALE u1000000000000000000)
 (define-read-only (miner-mid)
-  (let ((p (unwrap-panic (contract-call?
-      'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
+  (let ((p (unwrap-panic (contract-call? 'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
       get-value "BTC/USD"
     ))))
     (if (> (+ (/ (get timestamp p) u1000) u7200) stacks-block-time)

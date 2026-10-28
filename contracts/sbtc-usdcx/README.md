@@ -36,7 +36,7 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 |---|---|---|
 | `simulations/verify-sbtc-usdcx-v6-4.mjs` | market alone: deploy, core verify, initialize (feeds 1/7), USDCx moves, makers, takers both ways, cancel refund, [1,45] update rejected (u1023) | 23/23 [40b25b00](https://stxer.xyz/simulations/mainnet/40b25b00b8eea7827dd11dc484d4fad0) (before the ladder rebind) |
 | `simulations/verify-router-sbtc-usdcx-v5-5.mjs` | router: DLMM-only both ways, book + DLMM split, limit abort u3002, no residual balance | 41/41 [656b78df](https://stxer.xyz/simulations/mainnet/656b78df2451928d373bd314234109c3) (bin-step fix, ladder deployed first, multisig init) |
-| `simulations/verify-sbtc-usdcx-suite.mjs` | full suite: deploy order, band seating per side, DIA guard, dispatch deposits, settle-batch, router fills into rungs, payouts/decimals, partial withdraws, no residual | 72/72 [e3483205](https://stxer.xyz/simulations/mainnet/e3483205a22f03233c3bc06a1537abc9) (audit fixes #1, #3, #4; multisig init) |
+| `simulations/verify-sbtc-usdcx-suite.mjs` | full suite: deploy order, band seating per side, DIA guard, dispatch deposits, settle-batch, router fills into rungs, payouts/decimals, partial withdraws, no residual | 72/72 [467106c8](https://stxer.xyz/simulations/mainnet/467106c8b200edef379f293be15c73af) (deploy bytes: clarinet format 3.23.2 on all but the market; audit fixes #1, #3, #4; multisig init) |
 
 Run: `node simulations/<harness>` (keyless; Hiro 429s -> `simulations/_api-proxy.mjs`).
 The stxer harnesses do not age DIA; the Clarinet fork test below covers the 2h stale-feed path. A 0 bps rung cannot run on both sides at once (the second crosses the first at mid and is refunded, by design).
