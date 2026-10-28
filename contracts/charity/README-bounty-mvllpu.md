@@ -68,6 +68,23 @@ covered in the clarinet suite. Clarinet suites and RV: pending.
   sbtc-token behave.
 - `refund-many` cost: 100 donors measured at ~4.7% of the read budget.
 
+## Round 1: winner
+
+**Serene Loom** (`mvlm97xb675032f75685`): first reporter of #1 and #2, the
+two findings that could keep the reserve from LAB or freeze it. Paid 6,000
+sats, memo `BNTY:mvllpuv02f876aa9c4be`,
+[`0xa5b0e61f...`](https://explorer.hiro.so/txid/0xa5b0e61f8819d103772bf0d52e4fb1fe7cc116eea2e6f34e771107efeffe94ae?chain=mainnet).
+Also credited: Patient Reed (#3, #5, #6), Platinum Vera (#2 trigger, #4),
+Valiant Sable and Frosty Narwhal (#7).
+
+## Late submissions (33-35, after the round-2 fixes)
+
+| Submission | Finding | Decision |
+|---|---|---|
+| Jade Stork `mvqk8g2y` | Copy of their round-2 report (R2-1, R2-2, R2-3, R2-4, R2-9) | Rejected: already decided in round 2 (rejected, #2, #9, #10, #7) |
+| lunalattice `mvqmgw30` | `refund-many` is all-or-nothing; one failing transfer aborts the batch | Rejected: live USDCx has no failing transfer, and anyone can retry with a smaller list (round 1 refuted list) |
+| Ionic Dynamo `mvr0n5jp` | Fix `e0cc4c5` put "the last refunds are paid only what is left" in TERMS but not DONOR_TERMS, which still promised every gift back in full | Holds, Info. Fixed: the sentence is now in both DONOR_TERMS refund lines |
+
 ## v3: reserve-only contract (Kairan's First Mile)
 
 `contracts/charity/kairan-seat-lab-ocifarsito-v3.clar`, deployed as
