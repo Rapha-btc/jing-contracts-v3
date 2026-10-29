@@ -1,0 +1,66 @@
+[project]
+name = "yguazu-mm-loop-sell-usdcx"
+description = "Per-user MM loop vault: USDCx into the ten jing-buy-sbtc rungs, sBTC ask back on markets-sbtc-usdcx v6-4 over VWAP + 25 bps"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+# The vault names the live sBTC/USDCx market, rung trait and the ten rungs by full SPV9K21... principal;
+# remote_data resolves them from mainnet. If api.hiro.so rate-limits, run
+# node simulations/_api-proxy.mjs and set api_url = "http://127.0.0.1:8787".
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-1"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-10"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-20"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-30"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-40"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-50"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-60"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-70"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-80"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-sbtc-90"
+
+[contracts.yguazu-mm-loop-sell-usdcx]
+path = "contracts/rfq/yguazu-mm-loop-sell-usdcx.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.remote_data]
+enabled = true
+initial_height = 9352000
+api_url = 'http://127.0.0.1:8799'
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
