@@ -20,6 +20,8 @@ rungs, or a fak.fun smart buy.
 | `../../simulations/verify-btc-in-adapter-edges.js` | stxer edge harness (groups K-R). |
 | `../../simulations/verify-btc-in-adapter-v2.js` | stxer harness for owner hand-over, limit orders, rungs, relays (groups A-I). |
 | `../../simulations/verify-btc-in-escrow.js` | stxer harness for `jing-btc-in-escrow` (groups A-I, X). |
+| `jing-btc-in-escrow-v2.clar` | Escrow v1 with the mid read on-chain (market `refresh-mid`), so slippage is trustless. See the v2 section at the end. |
+| `../../simulations/verify-btc-in-escrow-v2.js` | stxer harness for `jing-btc-in-escrow-v2`. |
 
 ## Entry points
 
@@ -157,7 +159,7 @@ Not covered on stxer: the keeper's sponsored broadcast (not exercised: the
 harness overrides the sender and pays fee 0); the stale-update case on the
 sBTC/USDCx market (same `MAX_STALENESS` code path, only sBTC/STX run).
 
-Status: not deployed. Deploy templates: faktory-dao 7ae4aa44 (smart-buy-sbtc-trait, then jing-btc-in-adapter, then jing-btc-in-escrow, from 6adced2).
+Status: smart-buy-sbtc-trait, jing-btc-in-adapter and jing-btc-in-escrow DEPLOYED 2026-10-31 by SPV9K21… (deploy templates faktory-dao 7ae4aa44, from 6adced2; on-chain bytes match). Audit bounty: aibtc mvvu4w6v225cdbaf99bb.
 
 # jing-btc-in-escrow
 
@@ -258,4 +260,32 @@ Every path ends with the escrow holding 0 sBTC, 0 STX and 0 USDCx (or exactly
 the nets still armed). Not covered: the keeper's sponsored broadcast (the
 harness overrides the sender, fee 0).
 
-Status: not deployed. Deploy templates: faktory-dao 7ae4aa44 (smart-buy-sbtc-trait, then jing-btc-in-adapter, then jing-btc-in-escrow, from 6adced2).
+Status: smart-buy-sbtc-trait, jing-btc-in-adapter and jing-btc-in-escrow DEPLOYED 2026-10-31 by SPV9K21… (deploy templates faktory-dao 7ae4aa44, from 6adced2; on-chain bytes match). Audit bounty: aibtc mvvu4w6v225cdbaf99bb.
+
+# jing-btc-in-escrow-v2
+
+Same contract as v1 except where the mid comes from. In v1 the keeper passed
+`mid` to `execute`, so `slippage-bps` only held if the keeper was honest. In
+v2 `execute (id update)` takes no mid: the escrow calls the market's
+`refresh-mid update` (`markets-sbtc-stx-jing-v6-4` or
+`markets-sbtc-usdcx-jing-v6-4`), which verifies the Pyth Lazer signature and
+the 80 s window and returns the mid in the router's price units. Then
+`limit = mid * (10000 - slippage-bps) / 10000`, as in v1.
+
+- The keeper only picks which signed update to pass. A fake update (u2102)
+  or a stale one (u1002, from the Lazer oracle's staleness check before the
+  market's u1003) makes `execute` err: the order stays armed and the keeper
+  retries with a fresh update.
+- `min-out` stays as an optional absolute floor. The FE sends a hidden wide
+  value (20% under the quote) as a backstop; the user sets only max slippage.
+- Arm, cancel, owner and fee rules are unchanged from v1.
+
+`node simulations/verify-btc-in-escrow-v2.js`: **578/578**,
+[run](https://stxer.xyz/simulations/mainnet/af7f4bf37922ce1fef580a338ab2ffa1).
+Each execute checks that the printed mid equals `refresh-mid` on the same
+update. Added cases: garbage bytes (u2102, armed, later filled), a stale update
+past 80 s (u1002, armed, later filled with a fresh one), and slippage 0 with
+no book bid (router u3002, full refund).
+
+Status: not deployed. Deploy template: faktory-dao ae7476c4 (from 590968f;
+deploy bytes 8870, identical to the stripped + formatted source).

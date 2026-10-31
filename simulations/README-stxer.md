@@ -26,6 +26,7 @@ the relay vs the live dispatcher (u7106), and signed Originator caps.
 | `verify-btc-in-adapter-edges.js` | 324/324 | [run](https://stxer.xyz/simulations/mainnet/773907183a1278f81f80bd9150ae47cf) |
 | `verify-btc-in-adapter-v2.js` | 366/366 | [run](https://stxer.xyz/simulations/mainnet/c8185bb5eb15d7b10c6a379020f56c45) |
 | `verify-btc-in-escrow.js` (walk-away escrow: arm, keeper execute with a fresh update, timeout cancel; slippage-bps limit derived from the keeper mid) | 531/531 | [run](https://stxer.xyz/simulations/mainnet/5ebbc27f8fe355cb4099ee9a38676053) |
+| `verify-btc-in-escrow-v2.js` (escrow v2: mid verified on-chain via the market's refresh-mid; stale u1002 / garbage u2102 keep the order armed) | 578/578 | [run](https://stxer.xyz/simulations/mainnet/af7f4bf37922ce1fef580a338ab2ffa1) |
 
 Details and signing rules: [contracts/btc-in/README.md](../contracts/btc-in/README.md).
 
