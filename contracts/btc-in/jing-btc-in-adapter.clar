@@ -13,6 +13,9 @@
 (use-trait smart-buy .smart-buy-sbtc-trait.smart-buy-sbtc-trait)
 (use-trait rung .jing-rung-deposit-trait.rung-trait)
 
+;; Hard ceiling on max-fee-sats, so even the owner cannot set a large fee cap.
+(define-constant MAX_FEE_SATS u10000)
+
 (define-constant ERR_NOT_OWNER (err u4100))
 (define-constant ERR_FEE_TOO_HIGH (err u4101))
 (define-constant ERR_FEE_GE_AMOUNT (err u4102))
@@ -240,6 +243,7 @@
 (define-public (set-max-fee-sats (sats uint))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
+    (asserts! (<= sats MAX_FEE_SATS) ERR_FEE_TOO_HIGH)
     (ok (var-set max-fee-sats sats))
   )
 )
