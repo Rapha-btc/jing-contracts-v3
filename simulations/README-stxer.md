@@ -8,6 +8,18 @@ verified-contract registry flow + a market-specific scenario, and runs
 documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
 nothing else).
 
+## BTC-in adapter (2026-10-30)
+
+`contracts/btc-in/jing-btc-in-adapter.clar` takes a sats fee from the
+user's bridged sBTC, then swaps the rest through the live Jing routers
+(sBTC/STX, sBTC/USDCx) or an approved fak.fun smart buy.
+
+| Harness | N/M | Evidence |
+|---|---:|---|
+| `verify-btc-in-adapter.js` | 121/121 | [run](https://stxer.xyz/simulations/mainnet/5db14d60286c23183b8e0c1bccebde4e) |
+
+Details and signing rules: [contracts/btc-in/README.md](../contracts/btc-in/README.md).
+
 ## Six-rung audit fixes (2026-09-23)
 
 All six working-tree rungs now reject tail minting below `MINT_FLOOR`,
