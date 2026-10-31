@@ -3,13 +3,15 @@
 ;; BTC-first flow: the user bridges BTC to sBTC and pre-signs one sponsored
 ;; tx against this contract. When the sBTC mints, the keeper sponsors and
 ;; broadcasts it. The adapter pays the sponsor's STX fee back in sats, then
-;; spends the rest on a Jing router swap or a fak.fun smart buy.
+;; spends the rest on a Jing router swap, a Jing limit order, seated ladder
+;; rungs, or a fak.fun smart buy.
 ;;
 ;; No as-contract: tx-sender stays the user through every leg, so the sBTC
 ;; leaves the user's wallet and the swap output lands there. The user's
 ;; deny-mode post-condition caps the total sBTC spent (fee + swap).
 
 (use-trait smart-buy .smart-buy-sbtc-trait.smart-buy-sbtc-trait)
+(use-trait rung .jing-rung-deposit-trait.rung-trait)
 
 (define-constant ERR_NOT_OWNER (err u4100))
 (define-constant ERR_FEE_TOO_HIGH (err u4101))
@@ -18,6 +20,7 @@
 (define-constant ERR_PAUSED (err u4104))
 
 (define-data-var owner principal tx-sender)
+(define-data-var pending-owner (optional principal) none)
 (define-data-var fee-recipient principal tx-sender)
 ;; Ceiling on the sats a signed tx may route to fee-recipient. The FE sets
 ;; fee-sats per tx (STX fee priced in sats); this caps a bad quote.
@@ -127,16 +130,103 @@
   )
 )
 
+;; sBTC rests on the sBTC/STX book as a limit order (token-x side). No update
+;; needed: if the market parks it pending, the keeper settles it later.
+(define-public (deposit-sbtc-limit-stx
+    (amount uint)
+    (fee-sats uint)
+    (limit-price uint)
+    (spread-bps (optional uint))
+  )
+  (let ((net (try! (take-fee amount fee-sats))))
+    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      amount fee-sats
+    )
+    (ok {
+      fee-sats: fee-sats,
+      deposit: (try! (contract-call?
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+        deposit-token-x net limit-price spread-bps
+        'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token"
+      )),
+    })
+  )
+)
+
+;; Same on the sBTC/USDCx book.
+(define-public (deposit-sbtc-limit-usdcx
+    (amount uint)
+    (fee-sats uint)
+    (limit-price uint)
+    (spread-bps (optional uint))
+  )
+  (let ((net (try! (take-fee amount fee-sats))))
+    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
+      amount fee-sats
+    )
+    (ok {
+      fee-sats: fee-sats,
+      deposit: (try! (contract-call?
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
+        deposit-token-x net limit-price spread-bps
+        'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token "sbtc-token"
+      )),
+    })
+  )
+)
+
+;; sBTC into 1-10 seated sBTC/STX rungs (the ladder's buy side) through the
+;; relay dispatcher. Allocations must sum to amount - fee-sats.
+(define-public (dispatch-sbtc-rungs-stx
+    (amount uint)
+    (fee-sats uint)
+    (allocations (list 10 { rung: <rung>, amount: uint }))
+  )
+  (let ((net (try! (take-fee amount fee-sats))))
+    (log-btc-in .jing-ladder-dispatch-relay amount fee-sats)
+    (ok {
+      fee-sats: fee-sats,
+      dispatch: (try! (contract-call? .jing-ladder-dispatch-relay deposit-buy net allocations)),
+    })
+  )
+)
+
+;; sBTC into 1-10 seated sBTC/USDCx rungs. On this ladder sBTC is the sell side.
+(define-public (dispatch-sbtc-rungs-usdcx
+    (amount uint)
+    (fee-sats uint)
+    (allocations (list 10 { rung: <rung>, amount: uint }))
+  )
+  (let ((net (try! (take-fee amount fee-sats))))
+    (log-btc-in .jing-ladder-dispatch-sbtc-usdcx-relay amount fee-sats)
+    (ok {
+      fee-sats: fee-sats,
+      dispatch: (try! (contract-call? .jing-ladder-dispatch-sbtc-usdcx-relay deposit-sell
+        net allocations
+      )),
+    })
+  )
+)
+
 ;; --- owner ---
 
 (define-read-only (is-owner)
   (is-eq contract-caller (var-get owner))
 )
 
-(define-public (set-owner (new-owner principal))
+(define-public (propose-owner (new-owner principal))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
-    (ok (var-set owner new-owner))
+    (ok (var-set pending-owner (some new-owner)))
+  )
+)
+
+;; The proposed owner calls this itself, so a mistyped address never takes over.
+(define-public (accept-owner)
+  (begin
+    (asserts! (is-eq (some contract-caller) (var-get pending-owner)) ERR_NOT_OWNER)
+    (var-set owner contract-caller)
+    (ok (var-set pending-owner none))
   )
 )
 
@@ -173,6 +263,7 @@
 (define-read-only (get-config)
   {
     owner: (var-get owner),
+    pending-owner: (var-get pending-owner),
     fee-recipient: (var-get fee-recipient),
     max-fee-sats: (var-get max-fee-sats),
     paused: (var-get paused),
