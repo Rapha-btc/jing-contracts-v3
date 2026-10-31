@@ -10,9 +10,11 @@
 //      amount 0 -> u4102; amount above balance (swap leg fails); balance below
 //      the fee (fee leg fails, sBTC u1)
 //   M  owner lifecycle: fee-recipient move, max-fee raise/lower, pause/unpause,
-//      target revoke, set-owner hand-over (old owner u4100 on all 5 setters)
+//      target revoke, propose-owner + accept-owner hand-over (old owner keeps
+//      every right until accept, then u4100 on all 6 owner calls)
 //   N  contract-caller guard: the owner via an intermediate contract -> u4100;
-//      a contract owner works, and must guard itself
+//      the proposed owner via a contract cannot accept; a contract owner
+//      (proposed, accepts itself) works, and must guard itself
 //   O  error precedence: paused > fee > max > fee >= amount > target approval
 //   P  smart buy over every deployed *-smart-faktory (10)
 //   Q  real signed txs, Originator mode, sBTC cap: USDCx path and smart buy
@@ -36,6 +38,7 @@ import {
 import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
 
 const src = (f) => readFileSync(new URL(`../contracts/btc-in/${f}.clar`, import.meta.url), 'utf8');
+const csrc = (f) => readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
 const AD = `${DEP}.jing-btc-in-adapter`;
 const PROXY = `${DEP}.btc-in-owner-proxy`;
 const R_STX = `${DEP}.swap-router-sbtc-stx-jing-v5-5`;
@@ -160,7 +163,8 @@ async function advance(interval) {
 }
 
 const PROXY_SRC = `;; test-only: forwards owner setters, so contract-caller at the adapter is this contract
-(define-public (p-set-owner (p principal)) (contract-call? .jing-btc-in-adapter set-owner p))
+(define-public (p-propose-owner (p principal)) (contract-call? .jing-btc-in-adapter propose-owner p))
+(define-public (p-accept-owner) (contract-call? .jing-btc-in-adapter accept-owner))
 (define-public (p-set-fee-recipient (p principal)) (contract-call? .jing-btc-in-adapter set-fee-recipient p))
 (define-public (p-set-max-fee-sats (n uint)) (contract-call? .jing-btc-in-adapter set-max-fee-sats n))
 (define-public (p-set-paused (on bool)) (contract-call? .jing-btc-in-adapter set-paused on))
@@ -176,6 +180,8 @@ try {
 
   setGroup('setup');
   await deploy(DEP, 'smart-buy-sbtc-trait', src('smart-buy-sbtc-trait'));
+  await deploy(DEP, 'jing-ladder-dispatch-relay', csrc('jing-ladder-dispatch-relay'));
+  await deploy(DEP, 'jing-ladder-dispatch-sbtc-usdcx-relay', csrc('sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay'));
   await deploy(DEP, 'jing-btc-in-adapter', src('jing-btc-in-adapter'));
   await deploy(DEP, 'btc-in-owner-proxy', PROXY_SRC);
   for (const [who, amt] of [[USER, 4_000_000n], [FEE, 10_000n], [FEE2, 10_000n], [PCU, 1_000_000n], [TAKER, 200_000n]]) {
@@ -242,9 +248,18 @@ try {
   check('M5 is-approved-target pepe == false', (await evalIn(AD, `(is-approved-target '${PEPE})`)) === false);
   await failing('M5 revoked pepe -> u4103', USER, 'smart-buy-with-sbtc', [P_(PEPE), uintCV(30_000n), uintCV(500n), uintCV(1n)], E(4103));
   await tx('M5 re-approve pepe', DEP, AD, 'set-target', [P_(PEPE), boolCV(true)], { ok: true });
-  await tx('M6 set-owner NEWOWNER', DEP, AD, 'set-owner', [P_(NEWOWNER)], { ok: true });
-  check('M6 get-config owner == NEWOWNER', (await evalIn(AD, '(get-config)')).owner === NEWOWNER);
-  await tx('M6 old owner set-owner -> u4100', DEP, AD, 'set-owner', [P_(DEP)], E(4100));
+  await tx('M6 propose-owner NEWOWNER', DEP, AD, 'propose-owner', [P_(NEWOWNER)], { ok: true });
+  const c6p = await evalIn(AD, '(get-config)');
+  check('M6 proposed: owner still DEP, pending NEWOWNER', c6p.owner === DEP && c6p['pending-owner'] === NEWOWNER, show(c6p));
+  await tx('M6 proposed: NEWOWNER set-paused -> u4100 (not owner yet)', NEWOWNER, AD, 'set-paused', [boolCV(true)], E(4100));
+  await tx('M6 proposed: DEP still owner (set-max-fee-sats 3000)', DEP, AD, 'set-max-fee-sats', [uintCV(3000n)], { ok: true });
+  await tx('M6 STRANGER accept-owner -> u4100', STRANGER, AD, 'accept-owner', [], E(4100));
+  await tx('M6 DEP (owner, not pending) accept-owner -> u4100', DEP, AD, 'accept-owner', [], E(4100));
+  await tx('M6 NEWOWNER accept-owner', NEWOWNER, AD, 'accept-owner', [], { ok: true });
+  const c6a = await evalIn(AD, '(get-config)');
+  check('M6 get-config owner == NEWOWNER, pending-owner none', c6a.owner === NEWOWNER && c6a['pending-owner'] === null, show(c6a));
+  await tx('M6 accept-owner again (pending cleared) -> u4100', NEWOWNER, AD, 'accept-owner', [], E(4100));
+  await tx('M6 old owner propose-owner -> u4100', DEP, AD, 'propose-owner', [P_(DEP)], E(4100));
   await tx('M6 old owner set-fee-recipient -> u4100', DEP, AD, 'set-fee-recipient', [P_(DEP)], E(4100));
   await tx('M6 old owner set-max-fee-sats -> u4100', DEP, AD, 'set-max-fee-sats', [uintCV(1n)], E(4100));
   await tx('M6 old owner set-paused -> u4100', DEP, AD, 'set-paused', [boolCV(true)], E(4100));
@@ -254,26 +269,36 @@ try {
   await tx('M6 new owner set-paused true', NEWOWNER, AD, 'set-paused', [boolCV(true)], { ok: true });
   await tx('M6 new owner set-target welsh true', NEWOWNER, AD, 'set-target', [P_(SMART_ALL[1]), boolCV(true)], { ok: true });
   const c6 = await evalIn(AD, '(get-config)');
-  check('M6 config reflects the new owner\'s writes', canon(c6) === canon({ owner: NEWOWNER, 'fee-recipient': FEE2, 'max-fee-sats': 4000n, paused: true }) && (await evalIn(AD, `(is-approved-target '${SMART_ALL[1]})`)) === true, show(c6));
+  check('M6 config reflects the new owner\'s writes', canon(c6) === canon({ owner: NEWOWNER, 'pending-owner': null, 'fee-recipient': FEE2, 'max-fee-sats': 4000n, paused: true }) && (await evalIn(AD, `(is-approved-target '${SMART_ALL[1]})`)) === true, show(c6));
   await tx('M6 new owner restores: unpause', NEWOWNER, AD, 'set-paused', [boolCV(false)], { ok: true });
   await tx('M6 new owner restores: fee-recipient FEE', NEWOWNER, AD, 'set-fee-recipient', [P_(FEE)], { ok: true });
   await tx('M6 new owner restores: max 3000', NEWOWNER, AD, 'set-max-fee-sats', [uintCV(3000n)], { ok: true });
-  await tx('M6 new owner hands back: set-owner DEP', NEWOWNER, AD, 'set-owner', [P_(DEP)], { ok: true });
+  await tx('M6 new owner proposes STRANGER', NEWOWNER, AD, 'propose-owner', [P_(STRANGER)], { ok: true });
+  await tx('M6 re-propose DEP overwrites STRANGER', NEWOWNER, AD, 'propose-owner', [P_(DEP)], { ok: true });
+  check('M6 pending-owner == DEP after the overwrite', (await evalIn(AD, '(get-config)'))['pending-owner'] === DEP);
+  await tx('M6 overwritten STRANGER accept-owner -> u4100', STRANGER, AD, 'accept-owner', [], E(4100));
+  await tx('M6 DEP accept-owner (hand back)', DEP, AD, 'accept-owner', [], { ok: true });
   await tx('M6 NEWOWNER no longer owner -> u4100', NEWOWNER, AD, 'set-paused', [boolCV(true)], E(4100));
 
   setGroup('N contract-caller guard');
   const cfgN = await evalIn(AD, '(get-config)');
-  await tx('N1 owner via proxy: set-owner -> u4100', DEP, PROXY, 'p-set-owner', [P_(STRANGER)], E(4100));
+  await tx('N1 owner via proxy: propose-owner -> u4100', DEP, PROXY, 'p-propose-owner', [P_(STRANGER)], E(4100));
   await tx('N1 owner via proxy: set-fee-recipient -> u4100', DEP, PROXY, 'p-set-fee-recipient', [P_(STRANGER)], E(4100));
   await tx('N1 owner via proxy: set-max-fee-sats -> u4100', DEP, PROXY, 'p-set-max-fee-sats', [uintCV(1n)], E(4100));
   await tx('N1 owner via proxy: set-paused -> u4100', DEP, PROXY, 'p-set-paused', [boolCV(true)], E(4100));
   await tx('N1 owner via proxy: set-target -> u4100', DEP, PROXY, 'p-set-target', [P_(NEVER), boolCV(true)], E(4100));
   check('N1 config unchanged', canon(await evalIn(AD, '(get-config)')) === canon(cfgN) && (await evalIn(AD, `(is-approved-target '${NEVER})`)) === false);
-  await tx('N2 set-owner to the proxy contract', DEP, AD, 'set-owner', [P_(PROXY)], { ok: true });
+  await tx('N1 propose STRANGER', DEP, AD, 'propose-owner', [P_(STRANGER)], { ok: true });
+  await tx('N1 proposed STRANGER via proxy: accept-owner -> u4100 (contract-caller is the proxy)', STRANGER, PROXY, 'p-accept-owner', [], E(4100));
+  check('N1 owner still DEP, STRANGER still pending', (await evalIn(AD, '(get-config)')).owner === DEP && (await evalIn(AD, '(get-config)'))['pending-owner'] === STRANGER);
+  await tx('N2 propose-owner the proxy contract (overwrites STRANGER)', DEP, AD, 'propose-owner', [P_(PROXY)], { ok: true });
+  await tx('N2 the proxy accepts for itself (any caller)', STRANGER, PROXY, 'p-accept-owner', [], { ok: true });
+  check('N2 owner == proxy, pending none', (await evalIn(AD, '(get-config)')).owner === PROXY && (await evalIn(AD, '(get-config)'))['pending-owner'] === null);
   await tx('N2 deployer direct now -> u4100', DEP, AD, 'set-paused', [boolCV(true)], E(4100));
   await tx('N2 proxy (contract owner) set-max-fee-sats 3500 ok', DEP, PROXY, 'p-set-max-fee-sats', [uintCV(3500n)], { ok: true });
   await tx('N2 an unguarded contract owner forwards ANY caller (stranger) ok', STRANGER, PROXY, 'p-set-max-fee-sats', [uintCV(3000n)], { ok: true });
-  await tx('N2 proxy hands back: set-owner DEP', DEP, PROXY, 'p-set-owner', [P_(DEP)], { ok: true });
+  await tx('N2 proxy hands back: p-propose-owner DEP', DEP, PROXY, 'p-propose-owner', [P_(DEP)], { ok: true });
+  await tx('N2 DEP accept-owner', DEP, AD, 'accept-owner', [], { ok: true });
   check('N2 owner back to deployer, max 3000', (await evalIn(AD, '(get-config)')).owner === DEP && (await evalIn(AD, '(get-config)'))['max-fee-sats'] === 3000n);
 
   setGroup('O error precedence');

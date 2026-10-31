@@ -74,6 +74,29 @@ contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6
 [[project.requirements]]
 contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4"
 
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-sbtc-usdcx-v1"
+
+# Local copy so `.jing-rung-deposit-trait` resolves for the adapter and relays
+# (the deployed one under SPV9K21... is the same source).
+[contracts.jing-rung-deposit-trait]
+path = "contracts/jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-ladder-dispatch-relay]
+path = "contracts/jing-ladder-dispatch-relay.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-ladder-dispatch-sbtc-usdcx-relay]
+path = "contracts/sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay.clar"
+clarity_version = 5
+epoch = "latest"
+
 [contracts.smart-buy-sbtc-trait]
 path = "contracts/btc-in/smart-buy-sbtc-trait.clar"
 clarity_version = 5

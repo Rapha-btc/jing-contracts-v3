@@ -12,15 +12,19 @@ nothing else).
 
 `contracts/btc-in/jing-btc-in-adapter.clar` takes a sats fee from the
 user's bridged sBTC, then swaps the rest through the live Jing routers
-(sBTC/STX, sBTC/USDCx) or an approved fak.fun smart buy. The edge harness
+(sBTC/STX, sBTC/USDCx), a v6-4 limit order, seated ladder rungs (through the
+relay dispatchers) or an approved fak.fun smart buy. The edge harness
 covers atomicity, boundaries, owner lifecycle, the contract-caller guard,
 error order, all 10 deployed smart buys, signed Originator caps and the 80 s
-Lazer window.
+Lazer window. The v2 harness covers propose/accept, limit orders (pending +
+keeper settle, and the direct rest), rungs on 1/2/10 seated rungs per ladder,
+the relay vs the live dispatcher (u7106), and signed Originator caps.
 
 | Harness | N/M | Evidence |
 |---|---:|---|
-| `verify-btc-in-adapter.js` | 121/121 | [run](https://stxer.xyz/simulations/mainnet/5db14d60286c23183b8e0c1bccebde4e) |
-| `verify-btc-in-adapter-edges.js` | 306/306 | [run](https://stxer.xyz/simulations/mainnet/3538e8cf36cee3354537272c9507d7e6) |
+| `verify-btc-in-adapter.js` | 130/130 | [run](https://stxer.xyz/simulations/mainnet/394b0884f852adfb08c0f2a36044bf89) |
+| `verify-btc-in-adapter-edges.js` | 325/325 | [run](https://stxer.xyz/simulations/mainnet/b27789db5b71ddaf21dd0f03f0ca0a3a) |
+| `verify-btc-in-adapter-v2.js` | 363/363 | [run](https://stxer.xyz/simulations/mainnet/e060a8cd62c2931e16e53b9b09e572a7) |
 
 Details and signing rules: [contracts/btc-in/README.md](../contracts/btc-in/README.md).
 

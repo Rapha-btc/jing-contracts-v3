@@ -19,6 +19,8 @@
 //      cap == amount -> ok; cap == amount - 1 -> post-condition abort, nothing
 //      moves. Strict Deny is shown to abort even at cap == amount: on Stacks
 //      3.4 Deny also covers what the pools move, which a swap cannot enumerate.
+// Owner hand-over is two-step (propose-owner, then accept-owner by the new
+// owner); the relays the adapter's rung entry points name are deployed first.
 // Run: node simulations/verify-btc-in-adapter.js
 import { readFileSync } from 'node:fs';
 import {
@@ -33,6 +35,7 @@ import {
 import { lazerFeedTimes } from './_lazer.js';
 
 const src = (f) => readFileSync(new URL(`../contracts/btc-in/${f}.clar`, import.meta.url), 'utf8');
+const csrc = (f) => readFileSync(new URL(`../contracts/${f}.clar`, import.meta.url), 'utf8');
 const AD = `${DEP}.jing-btc-in-adapter`;
 const R_STX = `${DEP}.swap-router-sbtc-stx-jing-v5-5`;
 const R_USD = `${DEP}.swap-router-sbtc-usdcx-jing-v5-5`;
@@ -103,6 +106,10 @@ function ftMoves(receipt) {
     .map((e) => ({ asset: e.ft_transfer_event.asset_identifier, sender: e.ft_transfer_event.sender, recipient: e.ft_transfer_event.recipient, amount: BigInt(e.ft_transfer_event.amount) }));
 }
 const btcIn = (receipt) => prints(receipt).filter((p) => p.event === 'btc-in');
+// sBTC the market paid out in a receipt to makers (anyone but the taker): the
+// book leg crosses whichever live bids are best, not only the test maker's
+const makerPaid = (receipt, mkt, taker) => ftMoves(receipt).filter((m) => m.asset.startsWith(SBTC) && m.sender === mkt && m.recipient !== taker)
+  .reduce((a, m) => a + m.amount, 0n);
 
 // one adapter swap with exact accounting; returns the call + deltas
 async function adapterSwap(label, fn, args, amount, fee, outBal, target) {
@@ -130,6 +137,8 @@ try {
 
   setGroup('setup');
   await deploy(DEP, 'smart-buy-sbtc-trait', src('smart-buy-sbtc-trait'));
+  await deploy(DEP, 'jing-ladder-dispatch-relay', csrc('jing-ladder-dispatch-relay'));
+  await deploy(DEP, 'jing-ladder-dispatch-sbtc-usdcx-relay', csrc('sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay'));
   await deploy(DEP, 'jing-btc-in-adapter', src('jing-btc-in-adapter'));
   const r0 = await call(WHALE.x, SBTC, 'transfer', [uintCV(2_000_000n), P_(WHALE.x), P_(USER), noneCV()]);
   must('fund user 0.02 sBTC', r0.res?.ok === true, show(r0.res ?? r0.vm));
@@ -138,13 +147,14 @@ try {
 
   setGroup('A config + owner');
   const cfg = await evalIn(AD, '(get-config)');
-  check('defaults: owner = fee-recipient = deployer, max 5000, not paused', cfg.owner === DEP && cfg['fee-recipient'] === DEP && cfg['max-fee-sats'] === 5000n && cfg.paused === false, show(cfg));
+  check('defaults: owner = fee-recipient = deployer, no pending owner, max 5000, not paused', cfg.owner === DEP && cfg['pending-owner'] === null && cfg['fee-recipient'] === DEP && cfg['max-fee-sats'] === 5000n && cfg.paused === false, show(cfg));
   check('no target approved by default', (await evalIn(AD, `(is-approved-target '${SMART[0]})`)) === false);
   await tx('non-owner set-fee-recipient -> u4100', STRANGER, AD, 'set-fee-recipient', [P_(STRANGER)], E(4100));
   await tx('non-owner set-max-fee-sats -> u4100', STRANGER, AD, 'set-max-fee-sats', [uintCV(1n)], E(4100));
   await tx('non-owner set-target -> u4100', STRANGER, AD, 'set-target', [P_(SMART[0]), boolCV(true)], E(4100));
   await tx('non-owner set-paused -> u4100', STRANGER, AD, 'set-paused', [boolCV(true)], E(4100));
-  await tx('non-owner set-owner -> u4100', STRANGER, AD, 'set-owner', [P_(STRANGER)], E(4100));
+  await tx('non-owner propose-owner -> u4100', STRANGER, AD, 'propose-owner', [P_(STRANGER)], E(4100));
+  await tx('accept-owner with nothing proposed -> u4100', STRANGER, AD, 'accept-owner', [], E(4100));
   await tx('owner set-fee-recipient FEE', DEP, AD, 'set-fee-recipient', [P_(FEE)], { ok: true });
   await tx('owner set-max-fee-sats 3000', DEP, AD, 'set-max-fee-sats', [uintCV(3000n)], { ok: true });
   for (const t of SMART) await tx(`owner set-target ${t.split('.')[1]} true`, DEP, AD, 'set-target', [P_(t), boolCV(true)], { ok: true });
@@ -214,7 +224,13 @@ try {
   await tx('F8 paused: smart-buy -> u4104', USER, AD, 'smart-buy-with-sbtc', [P_(SMART[0]), uintCV(50_000n), uintCV(1_000n), uintCV(1n)], E(4104));
   check('F guards: only F2 moved sBTC', (await sbtcBal(USER)) === g1 && g0 - g1 > 0n, `${g0} -> ${g1} -> ${await sbtcBal(USER)}`);
   await tx('owner set-paused false', DEP, AD, 'set-paused', [boolCV(false)], { ok: true });
-  await tx('owner set-owner -> STRANGER', DEP, AD, 'set-owner', [P_(STRANGER)], { ok: true });
+  await tx('owner propose-owner -> STRANGER', DEP, AD, 'propose-owner', [P_(STRANGER)], { ok: true });
+  check('pending-owner = STRANGER, owner still deployer', (await evalIn(AD, '(get-config)'))['pending-owner'] === STRANGER && (await evalIn(AD, '(get-config)')).owner === DEP);
+  await tx('proposed only: old owner still works (set-paused false)', DEP, AD, 'set-paused', [boolCV(false)], { ok: true });
+  await tx('proposed only: STRANGER not yet owner -> u4100', STRANGER, AD, 'set-paused', [boolCV(true)], E(4100));
+  await tx('USER (not proposed) accept-owner -> u4100', USER, AD, 'accept-owner', [], E(4100));
+  await tx('STRANGER accept-owner', STRANGER, AD, 'accept-owner', [], { ok: true });
+  check('owner = STRANGER, pending cleared', (await evalIn(AD, '(get-config)')).owner === STRANGER && (await evalIn(AD, '(get-config)'))['pending-owner'] === null);
   await tx('old owner now refused -> u4100', DEP, AD, 'set-paused', [boolCV(true)], E(4100));
   await tx('new owner accepted', STRANGER, AD, 'set-paused', [boolCV(false)], { ok: true });
   check('adapter never holds sBTC', (await sbtcBal(AD)) === 0n);
@@ -233,8 +249,8 @@ try {
     [uintCV(200_000n), uintCV(2_000n), uintCV(mG * 9700n / BPS), someCV(updCV()), uintCV(mG), uintCV(1n)], 200_000n, 2_000n, stxBal, R_STX);
   check('G1 the book leg filled (jing-ok, jing-in > 0)', G.sw['jing-ok'] === true && G.sw['jing-in'] > 0n, show(G.sw));
   check('G1 legs add up to net 198000', G.sw['jing-in'] + G.sw['dlmm-in'] + G.sw['xyk-in'] + G.sw['velar-in'] + G.unsold === 198_000n, show(G.sw));
-  const pg = (await sbtcBal(MAKER_S)) - mkS0;
-  check('G1 maker was paid in sBTC: jing-in less the market fee (0 < paid <= jing-in, within 50 bps)', pg > 0n && pg <= G.sw['jing-in'] && (G.sw['jing-in'] - pg) * BPS <= G.sw['jing-in'] * 50n, `${pg} vs ${G.sw['jing-in']}`);
+  const pg = makerPaid(G.r.receipt, MKT_S, USER);
+  check('G1 book makers were paid in sBTC: jing-in less the market fee (0 < paid <= jing-in, within 50 bps)', pg > 0n && pg <= G.sw['jing-in'] && (G.sw['jing-in'] - pg) * BPS <= G.sw['jing-in'] * 50n, `${pg} vs ${G.sw['jing-in']} (test maker got ${(await sbtcBal(MAKER_S)) - mkS0})`);
 
   setGroup('H Jing book leg, sBTC/USDCx (deferred: fresh update)');
   const uh = await freshUsdcx();
@@ -248,8 +264,8 @@ try {
     [uintCV(100_000n), uintCV(1_500n), uintCV(uh2.mid * 9700n / BPS), someCV(buf(uh2.hex)), uintCV(uh2.mid), uintCV(1n)], 100_000n, 1_500n, usdcxBal, R_USD);
   check('H1 the book leg filled (jing-ok, jing-in > 0)', Hh.sw['jing-ok'] === true && Hh.sw['jing-in'] > 0n, show(Hh.sw));
   check('H1 legs add up to net 98500', Hh.sw['jing-in'] + Hh.sw['dlmm-in'] + Hh.sw['xyk-in'] + Hh.sw['velar-in'] + Hh.unsold === 98_500n, show(Hh.sw));
-  const ph = (await sbtcBal(MAKER_U)) - mkU0;
-  check('H1 maker was paid in sBTC: jing-in less the market fee (0 < paid <= jing-in, within 50 bps)', ph > 0n && ph <= Hh.sw['jing-in'] && (Hh.sw['jing-in'] - ph) * BPS <= Hh.sw['jing-in'] * 50n, `${ph} vs ${Hh.sw['jing-in']}`);
+  const ph = makerPaid(Hh.r.receipt, MKT_U, USER);
+  check('H1 book makers were paid in sBTC: jing-in less the market fee (0 < paid <= jing-in, within 50 bps)', ph > 0n && ph <= Hh.sw['jing-in'] && (Hh.sw['jing-in'] - ph) * BPS <= Hh.sw['jing-in'] * 50n, `${ph} vs ${Hh.sw['jing-in']} (test maker got ${(await sbtcBal(MAKER_U)) - mkU0})`);
 
   setGroup('I presigned fallback (no / stale update)');
   await freshUpd(true);
