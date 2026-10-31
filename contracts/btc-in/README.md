@@ -287,5 +287,5 @@ update. Added cases: garbage bytes (u2102, armed, later filled), a stale update
 past 80 s (u1002, armed, later filled with a fresh one), and slippage 0 with
 no book bid (router u3002, full refund).
 
-Status: not deployed. Deploy template: faktory-dao ae7476c4 (from 590968f;
-deploy bytes 8870, identical to the stripped + formatted source).
+Status: DEPLOYED 2026-10-31 by SPV9K21… (template faktory-dao ae7476c4, from
+590968f; on-chain bytes 8870 match the stripped + formatted source).
