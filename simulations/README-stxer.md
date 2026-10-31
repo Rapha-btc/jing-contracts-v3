@@ -22,9 +22,10 @@ the relay vs the live dispatcher (u7106), and signed Originator caps.
 
 | Harness | N/M | Evidence |
 |---|---:|---|
-| `verify-btc-in-adapter.js` | 130/130 | [run](https://stxer.xyz/simulations/mainnet/394b0884f852adfb08c0f2a36044bf89) |
-| `verify-btc-in-adapter-edges.js` | 325/325 | [run](https://stxer.xyz/simulations/mainnet/b27789db5b71ddaf21dd0f03f0ca0a3a) |
-| `verify-btc-in-adapter-v2.js` | 363/363 | [run](https://stxer.xyz/simulations/mainnet/e060a8cd62c2931e16e53b9b09e572a7) |
+| `verify-btc-in-adapter.js` | 128/128 | [run](https://stxer.xyz/simulations/mainnet/29448e0068efbb66bc05d68e764dde98) |
+| `verify-btc-in-adapter-edges.js` | 324/324 | [run](https://stxer.xyz/simulations/mainnet/773907183a1278f81f80bd9150ae47cf) |
+| `verify-btc-in-adapter-v2.js` | 366/366 | [run](https://stxer.xyz/simulations/mainnet/c8185bb5eb15d7b10c6a379020f56c45) |
+| `verify-btc-in-escrow.js` (walk-away escrow: arm, keeper execute with a fresh update, timeout cancel; slippage-bps limit derived from the keeper mid) | 531/531 | [run](https://stxer.xyz/simulations/mainnet/5ebbc27f8fe355cb4099ee9a38676053) |
 
 Details and signing rules: [contracts/btc-in/README.md](../contracts/btc-in/README.md).
 

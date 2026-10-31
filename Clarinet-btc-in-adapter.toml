@@ -107,5 +107,10 @@ path = "contracts/btc-in/jing-btc-in-adapter.clar"
 clarity_version = 5
 epoch = "latest"
 
+[contracts.jing-btc-in-escrow]
+path = "contracts/btc-in/jing-btc-in-escrow.clar"
+clarity_version = 5
+epoch = "latest"
+
 [repl.analysis]
 passes = []

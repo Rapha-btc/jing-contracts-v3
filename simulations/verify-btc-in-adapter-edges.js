@@ -180,8 +180,7 @@ try {
 
   setGroup('setup');
   await deploy(DEP, 'smart-buy-sbtc-trait', src('smart-buy-sbtc-trait'));
-  await deploy(DEP, 'jing-ladder-dispatch-relay', csrc('jing-ladder-dispatch-relay'));
-  await deploy(DEP, 'jing-ladder-dispatch-sbtc-usdcx-relay', csrc('sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay'));
+  // relays are LIVE on mainnet since 2026-10-30 (faktory-dao 1fcd8dfd): use them, no redeploy
   await deploy(DEP, 'jing-btc-in-adapter', src('jing-btc-in-adapter'));
   await deploy(DEP, 'btc-in-owner-proxy', PROXY_SRC);
   for (const [who, amt] of [[USER, 4_000_000n], [FEE, 10_000n], [FEE2, 10_000n], [PCU, 1_000_000n], [TAKER, 200_000n]]) {
@@ -232,6 +231,7 @@ try {
   await adapterSwap('M1 fee lands on FEE2', 'swap-sbtc-for-stx', argsS(50_000n, 1_234n), 50_000n, 1_234n, stxBal, R_STX, TS, { feeTo: FEE2 });
   check('M1 old fee-recipient got nothing', (await sbtcBal(FEE)) === fOld);
   await tx('M1 set-fee-recipient back to FEE', DEP, AD, 'set-fee-recipient', [P_(FEE)], { ok: true });
+  await tx('M2 max-fee-sats 10001 above MAX_FEE_SATS -> u4101', DEP, AD, 'set-max-fee-sats', [uintCV(10_001n)], E(4101));
   await tx('M2 raise max-fee-sats to 10000', DEP, AD, 'set-max-fee-sats', [uintCV(10_000n)], { ok: true });
   await adapterSwap('M2 fee 9000 now accepted', 'swap-sbtc-for-stx', argsS(100_000n, 9_000n), 100_000n, 9_000n, stxBal, R_STX, TS);
   await tx('M3 lower max-fee-sats to 100', DEP, AD, 'set-max-fee-sats', [uintCV(100n)], { ok: true });

@@ -11,6 +11,7 @@ rungs, or a fak.fun smart buy.
 | File | Purpose |
 |---|---|
 | `jing-btc-in-adapter.clar` | Fee in sats, then the swap. No `as-contract`: tx-sender stays the user. |
+| `jing-btc-in-escrow.clar` | Walk-away flow: arm (fee + park net), keeper `execute` with a fresh Lazer update, timeout `cancel`. See the section at the end. |
 | `smart-buy-sbtc-trait.clar` | The `smart-buy-with-sbtc (uint uint)` shape of every deployed `*-smart-faktory`. |
 | `../jing-ladder-dispatch-relay.clar` | Relay copy of the LIVE `jing-ladder-dispatch` (sBTC/STX ladder). |
 | `../sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay.clar` | Relay copy of the LIVE `jing-ladder-dispatch-sbtc-usdcx`. |
@@ -18,6 +19,7 @@ rungs, or a fak.fun smart buy.
 | `../../simulations/verify-btc-in-adapter.js` | stxer mainnet-fork harness (groups A-J). |
 | `../../simulations/verify-btc-in-adapter-edges.js` | stxer edge harness (groups K-R). |
 | `../../simulations/verify-btc-in-adapter-v2.js` | stxer harness for owner hand-over, limit orders, rungs, relays (groups A-I). |
+| `../../simulations/verify-btc-in-escrow.js` | stxer harness for `jing-btc-in-escrow` (groups A-I, X). |
 
 ## Entry points
 
@@ -104,13 +106,16 @@ contracts; the 39 requirements are downloaded and type-checked too. Proof:
 breaking the adapter's call into `deposit-token-x` or the router (4 args for
 5), or the relay's call into the ladder (`is-band-zz`), each fails the check.
 
-`node simulations/verify-btc-in-adapter.js`: **130/130**,
-[run](https://stxer.xyz/simulations/mainnet/394b0884f852adfb08c0f2a36044bf89).
-`node simulations/verify-btc-in-adapter-edges.js`: **325/325**,
-[run](https://stxer.xyz/simulations/mainnet/b27789db5b71ddaf21dd0f03f0ca0a3a).
-`node simulations/verify-btc-in-adapter-v2.js`: **363/363**,
-[run](https://stxer.xyz/simulations/mainnet/e060a8cd62c2931e16e53b9b09e572a7).
-Total **818/818**.
+`node simulations/verify-btc-in-adapter.js`: **128/128**,
+[run](https://stxer.xyz/simulations/mainnet/29448e0068efbb66bc05d68e764dde98).
+`node simulations/verify-btc-in-adapter-edges.js`: **324/324**,
+[run](https://stxer.xyz/simulations/mainnet/773907183a1278f81f80bd9150ae47cf).
+`node simulations/verify-btc-in-adapter-v2.js`: **366/366**,
+[run](https://stxer.xyz/simulations/mainnet/c8185bb5eb15d7b10c6a379020f56c45).
+Total **818/818**. The relays are live on mainnet since 2026-10-30
+(faktory-dao templates 1fcd8dfd, on-chain bytes match), so the harnesses use
+them instead of deploying copies. `max-fee-sats` is capped by
+`MAX_FEE_SATS` = u10000 in both the adapter (u4101) and the escrow (u4201).
 
 | Group | Covers |
 |---|---|
@@ -152,4 +157,105 @@ Not covered on stxer: the keeper's sponsored broadcast (not exercised: the
 harness overrides the sender and pays fee 0); the stale-update case on the
 sBTC/USDCx market (same `MAX_STALENESS` code path, only sBTC/STX run).
 
-Status: not deployed.
+Status: not deployed. Deploy templates: faktory-dao 7ae4aa44 (smart-buy-sbtc-trait, then jing-btc-in-adapter, then jing-btc-in-escrow, from 6adced2).
+
+# jing-btc-in-escrow
+
+Walk-away BTC-in with the price given at execution. The user's presigned,
+keeper-sponsored tx only arms an order; the keeper runs the swap later with a
+fresh Lazer update. The signed tx never carries a Lazer print, so it can never
+hit the market's 80 s staleness window.
+
+| Function | Who | What |
+|---|---|---|
+| `arm-swap-sbtc-for-stx (amount fee-sats slippage-bps min-stx-out)` | user (tx-sender) | fee to `fee-recipient`, net sBTC to the escrow, order stored and printed; returns the id |
+| `arm-swap-sbtc-for-usdcx (amount fee-sats slippage-bps min-usdcx-out)` | user | same, for `swap-router-sbtc-usdcx-jing-v5-5` |
+| `execute (id update mid)` | keeper (`contract-caller` in `keepers`) | under `as-contract?` derives `limit-price = mid * (10000 - slippage-bps) / 10000` from the keeper's mid and calls the order's router with `net limit-price (some update) mid min-out`; ok: the full `out` (STX or USDCx) and any unsold sats to the user; router err: rolled back, net refunded to the user. The order is deleted either way |
+| `cancel (id)` | anyone, from `cancel-height` on | refunds net to the order's user. Works while paused |
+| `get-order (id)`, `get-config`, `is-keeper` | read-only | |
+| `propose-owner`, `accept-owner`, `set-fee-recipient`, `set-max-fee-sats`, `set-paused`, `set-keeper`, `set-cancel-after-blocks` | owner (`contract-caller`) | same two-step hand-over as the adapter |
+
+Order: `{user, router, net, slippage-bps, min-out, cancel-height}` (no
+`armed-at` / `armed-at-height`); `cancel-height = stacks-block-height at arm +
+cancel-after-blocks`, fixed at arm time, so a later owner change never moves an
+armed order's deadline. Prints: `btc-in-armed` (the order + `id amount
+fee-sats`), `btc-in-executed` (`id user router net mid limit-price ok code spent out refund`),
+`btc-in-cancelled` (`id user router net caller`).
+
+Arm fee rules are the adapter's: paused, `fee-sats <= max-fee-sats`,
+`fee-sats < amount`, plus `slippage-bps < 10000`. `paused` blocks arm and execute;
+cancel never.
+
+Design choices:
+
+- **Timeout**: `cancel-after-blocks` defaults to u30 (about 5 min: mainnet ran
+  8.8-11.2 s per Stacks block over the 330 blocks before 2026-10-30). The owner
+  can set 1-360 (u4208 outside), so new orders can never be locked for more
+  than about 1 h. Anyone may cancel after the timeout and the refund always
+  goes to the user, so a user who walked away does not have to sign again.
+- **No separate force-refund**: the keeper can already refund any armed order
+  at any time: `execute` with `mid` 0 gives limit 0, so the router refuses (u3006) and the
+  net goes back to the user (group E3). The owner can do the same by adding
+  itself as keeper. A second refund entry point would add surface, not power.
+  Funds still only reach the order's user.
+- **Allowance**: the swap runs under `(with-ft sbtc (* u2 net))`. The
+  allowance counts GROSS outflows; on a book fill the market returns rolled /
+  rebate sats to the escrow and the router passes `amount - jing-in` to the
+  pools, so a returned sat can be re-sold and the gross can exceed net (at most
+  2 * net). The real bound is a balance check: the escrow's sBTC before and
+  after the swap, `spent <= net` or u4210. Other orders' sats can never be
+  spent. STX / USDCx forwards use exact `out` allowances.
+- **Output**: `out` is the router's own balance delta on the escrow, so it is
+  exactly what arrived. Unsold sats = `net - spent` from the escrow balance.
+- A runtime abort (not a router `err`) reverts the whole tx and leaves the
+  order armed for a retry or a cancel.
+
+| Error | Meaning |
+|---|---|
+| u4200 | not owner |
+| u4201 | fee-sats > max-fee-sats |
+| u4202 | fee-sats >= amount |
+| u4203 | paused (arm, execute) |
+| u4204 | not a keeper |
+| u4205 | no such order (unknown, executed or cancelled) |
+| u4206 | cancel before cancel-height |
+| u4207 | slippage-bps >= 10000 (ERR_BAD_SLIPPAGE) |
+| u4208 | cancel-after-blocks outside 1-360 |
+| u4209 | an `as-contract?` allowance was violated |
+| u4210 | the swap spent more than the order's net |
+
+Signing: the arm tx moves only the user's sBTC (fee + net), so one sBTC cap
+equal to `amount` works in Originator mode and in strict Deny (group G).
+
+Notes: at the market and router the escrow is the taker (`tx-sender`), so
+router prints, rebates and any per-taker stats show the escrow, not the user;
+the `btc-in-executed` print links the two. The keeper chooses the update and
+the mid. The limit is derived from that mid, so `slippage-bps` bounds the fill
+only relative to the keeper's mid; `min-out` is the only bound the user signs
+in absolute terms (group J1: a mid 200,000x below market still fills).
+
+Verification: `clarinet check` on `Clarinet-btc-in-adapter.toml` from a
+scratch copy: "6 contracts checked" (warnings only: `unwrap-panic` on the sBTC
+`get-balance`, and the asset-name constants used only in allowances).
+
+`node simulations/verify-btc-in-escrow.js`: **531/531**,
+[run](https://stxer.xyz/simulations/mainnet/5ebbc27f8fe355cb4099ee9a38676053).
+
+| Group | Covers |
+|---|---|
+| A | defaults (cancel-after 30, last-id 0, no keepers), u4200 on all 6 owner setters from a stranger, cancel-after 0 / 361 u4208 and 360 ok, keeper set / revoke, propose / accept (old owner u4200 on every setter after) |
+| B | arm on both pairs: user -amount, fee-recipient +fee, escrow +net exactly, `get-order` and `btc-in-armed` print exact, `cancel-height` = arm height (read from the sim) + timeout, fee 0 skips the transfer; u4203 paused (both), u4201, u4202 (fee == amount, amount 0), u4207 at slippage-bps 10000 (both pairs) and 2^128-1, 9999 and 0 accepted (then refunded by keeper mid 0, u3006), sBTC u1 above balance; nothing moves, last-id unchanged |
+| C / D | a maker bid rests, keeper executes with a fresh update on sBTC/STX and sBTC/USDCx: book leg fills, user gets exactly the router's `out` plus the unsold sats, `spent + refund == net`, escrow -net exactly, keeper gains nothing, order deleted, `btc-in-executed` print exact, router print `user` = escrow, `amount` = net |
+| E | `min-out` 1e15 on both pairs: router u3002 rolled back inside `as-contract?`, the only committed sBTC move is the net refund to the user, no STX / USDCx moves; keeper `mid` 0: limit 0, router u3006, refund (the keeper's refund path) |
+| F | stranger, order user, owner (not keeper) and a revoked keeper u4204; unknown id u4205; execute while paused u4203; the order is unchanged after every refusal; double execute u4205 |
+| G | real signed arm txs, sBTC cap on the user: Originator cap == amount ok with exact deltas, amount - 1 aborts with nothing moved; strict Deny cap == amount ok, amount - 1 aborts; both orders then execute |
+| X | probe: a copy with an exact `net` allowance on a book fill. It held here (the market returned 1 rolled sat, the router left it unsold); the 2 * net headroom covers the case where returned sats are re-sold |
+| J | slippage-bps: print `limit-price` exact (mid 123456789, 37 bps -> 122999998; every execute checks `mid * (10000 - bps) / 10000`); 0 and 5 bps with a maker bid rested at the mid: filled on the pools (DLMM / Velar), book leg 0 because the mid moved between the bid and the execute; keeper mid 2x market at 0 bps: limit above every venue, router u3002, exact refund; 300 bps with fresh updates: book leg fills on both pairs |
+| H | the clock moved 85 s past the update: book leg skipped (`jing-ok` false), the pools fill, exact deltas |
+| I | cancel before cancel-height by the user, a stranger and the keeper u4206 (also at cancel-height - 1); unknown id u4205; at cancel-height a stranger cancels: the user +net, the stranger gains nothing, `btc-in-cancelled` print exact; cancel / execute again u4205; the user cancels while paused; an order armed under cancel-after 360 is still u4206 60 blocks later and after the owner lowers it back to 30 (deadline fixed at arm), then the keeper executes it; `cancel-height` = arm height + 360 |
+
+Every path ends with the escrow holding 0 sBTC, 0 STX and 0 USDCx (or exactly
+the nets still armed). Not covered: the keeper's sponsored broadcast (the
+harness overrides the sender, fee 0).
+
+Status: not deployed. Deploy templates: faktory-dao 7ae4aa44 (smart-buy-sbtc-trait, then jing-btc-in-adapter, then jing-btc-in-escrow, from 6adced2).

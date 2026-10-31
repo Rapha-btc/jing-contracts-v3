@@ -137,8 +137,7 @@ try {
 
   setGroup('setup');
   await deploy(DEP, 'smart-buy-sbtc-trait', src('smart-buy-sbtc-trait'));
-  await deploy(DEP, 'jing-ladder-dispatch-relay', csrc('jing-ladder-dispatch-relay'));
-  await deploy(DEP, 'jing-ladder-dispatch-sbtc-usdcx-relay', csrc('sbtc-usdcx/jing-ladder-dispatch-sbtc-usdcx-relay'));
+  // relays are LIVE on mainnet since 2026-10-30 (faktory-dao 1fcd8dfd): use them, no redeploy
   await deploy(DEP, 'jing-btc-in-adapter', src('jing-btc-in-adapter'));
   const r0 = await call(WHALE.x, SBTC, 'transfer', [uintCV(2_000_000n), P_(WHALE.x), P_(USER), noneCV()]);
   must('fund user 0.02 sBTC', r0.res?.ok === true, show(r0.res ?? r0.vm));
