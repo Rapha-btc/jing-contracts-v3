@@ -12,11 +12,15 @@ nothing else).
 
 `contracts/btc-in/jing-btc-in-adapter.clar` takes a sats fee from the
 user's bridged sBTC, then swaps the rest through the live Jing routers
-(sBTC/STX, sBTC/USDCx) or an approved fak.fun smart buy.
+(sBTC/STX, sBTC/USDCx) or an approved fak.fun smart buy. The edge harness
+covers atomicity, boundaries, owner lifecycle, the contract-caller guard,
+error order, all 10 deployed smart buys, signed Originator caps and the 80 s
+Lazer window.
 
 | Harness | N/M | Evidence |
 |---|---:|---|
 | `verify-btc-in-adapter.js` | 121/121 | [run](https://stxer.xyz/simulations/mainnet/5db14d60286c23183b8e0c1bccebde4e) |
+| `verify-btc-in-adapter-edges.js` | 306/306 | [run](https://stxer.xyz/simulations/mainnet/3538e8cf36cee3354537272c9507d7e6) |
 
 Details and signing rules: [contracts/btc-in/README.md](../contracts/btc-in/README.md).
 
