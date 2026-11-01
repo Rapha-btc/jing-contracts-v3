@@ -47,6 +47,7 @@
 (define-constant ERR_ALLOWANCE (err u4209))
 (define-constant ERR_OVERSPENT (err u4210))
 (define-constant ERR_EXPIRED (err u4211))
+(define-constant ERR_SWEEP_PARKED (err u4212))
 
 (define-data-var owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -61,6 +62,9 @@
 ;; existing order's deadline.
 (define-data-var cancel-after-blocks uint u30)
 (define-data-var last-id uint u0)
+;; Sum of `net` over open orders: the sBTC here that belongs to users.
+;; Up on arm, down on execute / cancel. Only sBTC above it can be swept.
+(define-data-var parked uint u0)
 
 (define-map keepers
   principal
@@ -114,6 +118,7 @@
       (try! (contract-call? SBTC transfer net tx-sender current-contract none))
       (map-set orders id order)
       (var-set last-id id)
+      (var-set parked (+ (var-get parked) net))
       (print (merge order {
         event: "btc-in-armed",
         id: id,
@@ -240,6 +245,13 @@
           (- held-before held-after)
           u0
         ))
+        ;; sBTC the swap sent back beyond what it took (e.g. a rebate):
+        ;; it came from this order's trade, so it goes to this user
+        (gained (if (> held-after held-before)
+          (- held-after held-before)
+          u0
+        ))
+        (refund (+ (- net spent) gained))
         (filled (is-eq (get code result) u0))
         (out (get out result))
       )
@@ -262,9 +274,11 @@
         )
         true
       )
-      ;; unsold sats on a fill, the whole net on a router err (spent is 0)
-      (try! (pay-sbtc (- net spent) user))
+      ;; unsold sats (plus any gain) on a fill, the whole net on a router
+      ;; err (spent is 0)
+      (try! (pay-sbtc refund user))
       (map-delete orders id)
+      (var-set parked (- (var-get parked) net))
       (print {
         event: "btc-in-executed",
         id: id,
@@ -277,14 +291,14 @@
         code: (get code result),
         spent: spent,
         out: out,
-        refund: (- net spent),
+        refund: refund,
       })
       (ok {
         ok: filled,
         code: (get code result),
         spent: spent,
         out: out,
-        refund: (- net spent),
+        refund: refund,
       })
     )
   )
@@ -300,6 +314,7 @@
     (asserts! (>= stacks-block-height (get cancel-height order)) ERR_TOO_EARLY)
     (try! (pay-sbtc (get net order) (get user order)))
     (map-delete orders id)
+    (var-set parked (- (var-get parked) (get net order)))
     (print {
       event: "btc-in-cancelled",
       id: id,
@@ -368,6 +383,53 @@
   )
 )
 
+;; Sends stray sBTC (sent here directly, outside any order) to `to`. Only the
+;; balance above `parked` can leave, so open orders' sats are never touched.
+(define-public (sweep-sbtc
+    (amount uint)
+    (to principal)
+  )
+  (begin
+    (asserts! (is-owner) ERR_NOT_OWNER)
+    (asserts! (<= (+ amount (var-get parked)) (sbtc-held)) ERR_SWEEP_PARKED)
+    (pay-sbtc amount to)
+  )
+)
+
+;; No order ever parks STX or USDCx between txs (execute pays the output out
+;; in the same call), so any STX / USDCx held here is stray.
+(define-public (sweep-stx
+    (amount uint)
+    (to principal)
+  )
+  (begin
+    (asserts! (is-owner) ERR_NOT_OWNER)
+    (unwrap!
+      (as-contract? ((with-stx amount))
+        (try! (stx-transfer? amount current-contract to))
+      )
+      ERR_ALLOWANCE
+    )
+    (ok true)
+  )
+)
+
+(define-public (sweep-usdcx
+    (amount uint)
+    (to principal)
+  )
+  (begin
+    (asserts! (is-owner) ERR_NOT_OWNER)
+    (unwrap!
+      (as-contract? ((with-ft USDCX ASSET_USDCX amount))
+        (try! (contract-call? USDCX transfer amount current-contract to none))
+      )
+      ERR_ALLOWANCE
+    )
+    (ok true)
+  )
+)
+
 (define-public (set-cancel-after-blocks (blocks uint))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
@@ -382,6 +444,10 @@
 
 (define-read-only (get-order (id uint))
   (map-get? orders id)
+)
+
+(define-read-only (get-parked)
+  (var-get parked)
 )
 
 (define-read-only (is-keeper (who principal))
