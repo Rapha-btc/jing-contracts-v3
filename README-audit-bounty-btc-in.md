@@ -14,7 +14,8 @@ on v2.
 | # | Submitter | Finding | Holds on v2 | Rating | Decision |
 |---|---|---|---|---|---|
 | 1 | Patient Reed (L-1) | `execute` never reads `cancel-height`, so an order nobody cancels stays fillable after its deadline | yes | LOW | **Fixed**, see below. |
-| 2 | Patient Reed (I-1) | No running total of parked sats and no sweep: sBTC outside open orders (a direct transfer, a surplus after a fill) is stuck | yes | INFO | **Fixed**, see below. Surplus goes to the user instead of a sweep. |
+| 2 | Patient Reed (I-1) | No running total of parked sats and no sweep: sBTC outside open orders (a direct transfer, a surplus after a fill) is stuck | yes | INFO | **Fixed**, see below: `parked` + owner sweeps. The execute surplus cannot happen. |
+| 3 | Patient Reed (I-2) | The arm fee is kept on a refund; pause blocks execute but not cancel, so a pause refunds every open order minus its fee | yes | INFO | No change. Works as intended: the fee pays the bridge, the sponsored arm, and the cancel tx we sponsor. |
 
 ## 1. Execution deadline
 
@@ -29,20 +30,26 @@ Fix: `execute` asserts `stacks-block-height < cancel-height` and fails with
 `ERR_EXPIRED` (u4211) otherwise. From `cancel-height` on, the order can only
 be refunded.
 
-## 2. Stuck balances: surplus to the user, `parked`, sweeps
+## 2. Stuck balances: `parked` and sweeps
 
-Two ways sBTC could end up here outside any order:
+Reed names two ways sBTC could end up here outside any order.
 
-- **Surplus after a fill.** If the swap sends back more sBTC than it took
-  (held-after > held-before, e.g. a rebate), `spent` was 0 and the user got
-  only `net`; the extra stayed here. That surplus came from this order's
-  trade, so `execute` now refunds `net - spent + gained` to the user. Reed
-  proposed sweeping it; paying the user is better.
-- **Direct transfers.** Someone sends sBTC, STX or USDCx straight to the
-  contract.
+- **Surplus after a fill** (held-after > held-before). This cannot happen
+  with the routers v2 binds as constants. The Jing book leg only returns part
+  of what it was sent (rolled sats plus the rebate), and the router computes
+  `spent = amount - rolled - rebate-refunded`
+  (`swap-router-sbtc-stx-jing-v5-5.clar:192`, the same in the USDCx router):
+  if the market returned more than it took, that subtraction would underflow
+  and abort the whole tx. The pool legs only take sBTC in. So the escrow
+  always ends with less sBTC than it started with, and no change is needed.
+  Reed's own fork run (P4) agrees: the balance returns to exactly its pre-test
+  value after fills.
+- **Direct transfers** (reproduced by Reed: 1,000 donated sats are stuck).
+  Someone sends sBTC, STX or USDCx straight to the contract.
 
-For the second case, a new `parked` var holds the sum of `net` over open
-orders: up on arm, down on execute and cancel (`get-parked`). The owner-only
-`sweep-sbtc` can only send the balance above `parked` (`ERR_SWEEP_PARKED`,
-u4212), so users' sats are never touched. No order holds STX or USDCx between
-txs, so `sweep-stx` and `sweep-usdcx` are owner-only with no cap.
+Fix for direct transfers: a new `parked` var holds the sum of `net` over open
+orders. It goes up on arm and down on execute and cancel (`get-parked`). The
+owner-only `sweep-sbtc` can only send the balance above `parked`
+(`ERR_SWEEP_PARKED`, u4212), so users' sats are never touched. No order holds
+STX or USDCx between txs, so `sweep-stx` and `sweep-usdcx` are owner-only
+with no cap.

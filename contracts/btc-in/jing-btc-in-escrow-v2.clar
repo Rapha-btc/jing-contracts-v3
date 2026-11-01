@@ -245,13 +245,6 @@
           (- held-before held-after)
           u0
         ))
-        ;; sBTC the swap sent back beyond what it took (e.g. a rebate):
-        ;; it came from this order's trade, so it goes to this user
-        (gained (if (> held-after held-before)
-          (- held-after held-before)
-          u0
-        ))
-        (refund (+ (- net spent) gained))
         (filled (is-eq (get code result) u0))
         (out (get out result))
       )
@@ -274,9 +267,8 @@
         )
         true
       )
-      ;; unsold sats (plus any gain) on a fill, the whole net on a router
-      ;; err (spent is 0)
-      (try! (pay-sbtc refund user))
+      ;; unsold sats on a fill, the whole net on a router err (spent is 0)
+      (try! (pay-sbtc (- net spent) user))
       (map-delete orders id)
       (var-set parked (- (var-get parked) net))
       (print {
@@ -291,14 +283,14 @@
         code: (get code result),
         spent: spent,
         out: out,
-        refund: refund,
+        refund: (- net spent),
       })
       (ok {
         ok: filled,
         code: (get code result),
         spent: spent,
         out: out,
-        refund: refund,
+        refund: (- net spent),
       })
     )
   )
