@@ -46,6 +46,7 @@
 (define-constant ERR_BAD_TIMEOUT (err u4208))
 (define-constant ERR_ALLOWANCE (err u4209))
 (define-constant ERR_OVERSPENT (err u4210))
+(define-constant ERR_EXPIRED (err u4211))
 
 (define-data-var owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -185,6 +186,8 @@
       ERR_NOT_KEEPER
     )
     (asserts! (not (var-get paused)) ERR_PAUSED)
+    ;; past cancel-height the order can only be refunded, never filled
+    (asserts! (< stacks-block-height (get cancel-height order)) ERR_EXPIRED)
     (let (
         (user (get user order))
         (net (get net order))
