@@ -30,6 +30,8 @@
 ;; Upper bound on cancel-after-blocks, so the owner cannot lock new orders
 ;; for long (about 1 h at the current ~10 s Stacks block cadence).
 (define-constant MAX_CANCEL_AFTER_BLOCKS u360)
+;; Ceiling on lazer-fee-ustx (1 STX), out of the owner's reach.
+(define-constant MAX_LAZER_FEE_USTX u1000000)
 (define-constant BPS u10000)
 
 ;; Hard ceiling on max-fee-sats, so even the owner cannot set a large fee cap.
@@ -49,6 +51,7 @@
 (define-constant ERR_EXPIRED (err u4211))
 (define-constant ERR_SWEEP_PARKED (err u4212))
 (define-constant ERR_ARM_LATE (err u4213))
+(define-constant ERR_LAZER_FEE_TOO_HIGH (err u4214))
 
 (define-data-var owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -66,6 +69,11 @@
 ;; Sum of `net` over open orders: the sBTC here that belongs to users.
 ;; Up on arm, down on execute / cancel. Only sBTC above it can be swept.
 (define-data-var parked uint u0)
+;; STX the Pyth Lazer oracle charges per verify (u0 today). Inside the swap the
+;; escrow is tx-sender, so it pays: the keeper fronts this much at execute and
+;; the escrow allows it to leave. On the STX route the fee comes off the user's
+;; out, so the fronted STX stays here; the owner recovers it with sweep-stx.
+(define-data-var lazer-fee-ustx uint u0)
 
 (define-map keepers
   principal
@@ -212,14 +220,24 @@
         )))
         ;; real-time floor price for selling sats
         (limit-price (/ (* mid (- BPS (get slippage-bps order))) BPS))
+        (lazer-fee (var-get lazer-fee-ustx))
+        ;; the keeper fronts the Lazer fee the swap may charge the escrow
+        (fronted (if (> lazer-fee u0)
+          (try! (stx-transfer? lazer-fee tx-sender current-contract))
+          true
+        ))
         (held-before (sbtc-held))
         ;; Allowance: the router's sBTC outflows from here are counted GROSS.
         ;; On a book fill the market refunds rolled / rebate sats to us and
         ;; the router re-sells them on the pools, so the gross can exceed net
         ;; (at most 2 * net: the refund is a part of the book leg). The hard
         ;; bound on what leaves for good is the held-before / held-after check.
+        ;; STX: only the fronted Lazer fee may leave during the swap.
         (result (unwrap!
-          (as-contract? ((with-ft SBTC ASSET_SBTC (* u2 net)))
+          (as-contract? (
+              (with-ft SBTC ASSET_SBTC (* u2 net))
+              (with-stx lazer-fee)
+            )
             (if to-stx
               (match (contract-call? ROUTER_STX smart-swap-sbtc-for-stx net limit-price
                 (some update) mid (get min-out order)
@@ -430,6 +448,14 @@
   )
 )
 
+(define-public (set-lazer-fee-ustx (ustx uint))
+  (begin
+    (asserts! (is-owner) ERR_NOT_OWNER)
+    (asserts! (<= ustx MAX_LAZER_FEE_USTX) ERR_LAZER_FEE_TOO_HIGH)
+    (ok (var-set lazer-fee-ustx ustx))
+  )
+)
+
 (define-public (set-cancel-after-blocks (blocks uint))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
@@ -462,6 +488,7 @@
     max-fee-sats: (var-get max-fee-sats),
     paused: (var-get paused),
     cancel-after-blocks: (var-get cancel-after-blocks),
+    lazer-fee-ustx: (var-get lazer-fee-ustx),
     last-id: (var-get last-id),
   }
 )

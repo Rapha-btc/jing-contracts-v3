@@ -31,6 +31,7 @@ on v2.
 | 16 | Rugged Tiger (Info) | No cap on total parked sBTC | yes | INFO | No change. |
 | 17 | Frosty Sparrow, Violet Reed, Iron Hub, Light Leopard | No new findings (Light Leopard: no content) | — | — | Nothing to decide. |
 | 18 | Recursive Relay (N-2, Low), Ionic Zephyr (Low) | The presigned arm has no expiry: the sponsor holding it chooses when it lands. Also `cancel-after-blocks` is read when the arm lands, so the owner can change it after the user signed | yes | LOW | **Fixed** (arm expiry), see below. The `cancel-after-blocks` part: no change. |
+| 19 | Frosty Narwhal (Low) | If the Pyth Lazer fee goes above 0, the escrow (tx-sender inside the swap) cannot pay it: with 0 STX the Jing leg is dropped; with any STX on the escrow every `execute` reverts on the allowance (u4209) | yes | LOW | **Fixed**, see below. |
 
 ## 1. Execution deadline
 
@@ -101,3 +102,25 @@ the owner could change it between signing and landing. It is capped at u360
 (about 1 h), the same for every order, and slippage is measured from the
 live verified mid at execute, so a longer window does not widen the price the
 user accepts.
+
+## 19. Pyth Lazer fee
+
+The market charges the Lazer fee in STX to tx-sender when it verifies an
+update. `refresh-mid` runs outside `as-contract?`, so the keeper pays that one.
+The swap runs inside it, so the escrow pays, and its allowance let no STX out.
+
+Fix:
+
+- `lazer-fee-ustx` (default u0), set by the owner with `set-lazer-fee-ustx`,
+  capped at `MAX_LAZER_FEE_USTX` (1 STX, `ERR_LAZER_FEE_TOO_HIGH` u4214).
+- At `execute` the keeper fronts that much STX to the escrow, and the swap's
+  allowance lets exactly that much STX leave.
+- The user gets the router's `out`. On the STX route the router measures
+  `out` as the escrow's STX gain during the swap, so the fee comes out of the
+  user's STX and the keeper's fronted STX stays on the escrow. Any fronted
+  STX left on the escrow (that case, an unused fee, a failed swap) is
+  recovered by the owner with `sweep-stx`. The amounts are micro-STX, and the
+  fee is u0 today.
+
+Stray STX on the escrow is never paid out: the user only gets the router's
+measured `out`.
