@@ -270,3 +270,28 @@ events. But it is not a gas win:
   market's core fill path, after the market was already bountied and simmed.
 
 The market source stays as it was.
+
+### Frosty Narwhal: M-7, L-3, L-4
+
+Status: none holds, no change. Checked at router `15aef66` and market
+`ada49d8`; the same at the pinned `c14f038`.
+
+- **M-7, `settle-*-readmit` leaves the maker with limit 0: does not hold.**
+  Parking (`park-token-y` L908, `park-token-x` L936) moves the amount to
+  `token-*-parked` and does not touch `token-*-deposit-limits`. The limit is
+  deleted only when the order ends: a full fill or refund (L2928, L2947),
+  a taker rest (L3357, L3427), the cycle close (L3674, L3766) or a cancel
+  (L1717, L1791). Readmit reads the kept limit (`token-y-limit-at`
+  L1957, `token-x-limit-at` L2026). Proof: tests/unit/v6-3/lifecycle.test.ts
+  "deposit, park, refused readmit, readmit, walk": after the readmit, with
+  no `set-limit`, a taker walks the maker and a `match` prints, on both
+  sides.
+- **L-3, a manual DLMM leg reverts when every pool is disabled: by design.**
+  `amm-sell-sbtc` / `amm-sell-stx` (L309, L333) sell the DLMM amount the
+  caller named. A manual leg is all or nothing and the caller signs it, so
+  a dead venue reverts and nothing moves. The smart stage, which plans its
+  own legs, skips a disabled pool 1 (L1365-1371).
+- **L-4, `cp-split` sends the whole residual to Velar when both caps are
+  0: does not hold.** L894-916: with `total` 0 any residual above 0 takes
+  the `residual > total` branch and gets `{xyk: cap-xyk, velar: cap-velar}`
+  = `{0, 0}`. `cp-stage` then reports it all as `unsold`.

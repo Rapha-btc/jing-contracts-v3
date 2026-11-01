@@ -29,12 +29,17 @@
 ;; Check the entire allocation before the first asset transfer. Subtract from a
 ;; budget instead of summing caller-provided uints (avoids addition overflow).
 (define-private (validate-one
-    (entry { rung: <rung>, amount: uint })
+    (entry {
+      rung: <rung>,
+      amount: uint,
+    })
     (acc (response {
       remaining: uint,
       buy: bool,
       seen: (list 10 principal),
-    } uint))
+    }
+      uint
+    ))
   )
   (let (
       (state (try! acc))
@@ -61,12 +66,27 @@
 )
 
 (define-private (deposit-one
-    (entry { rung: <rung>, amount: uint })
+    (entry {
+      rung: <rung>,
+      amount: uint,
+    })
     (acc (response {
-      count: uint, stx-paid: uint, sbtc-paid: uint,
-      positions: (list 10 { rung: principal, amount: uint, shares: uint,
-        epoch: uint, stx-paid: uint, sbtc-paid: uint }),
-    } uint))
+      count: uint,
+      stx-paid: uint,
+      sbtc-paid: uint,
+      positions: (list 10
+        {
+          rung: principal,
+          amount: uint,
+          shares: uint,
+          epoch: uint,
+          stx-paid: uint,
+          sbtc-paid: uint,
+        }
+      ),
+    }
+      uint
+    ))
   )
   (let (
       (state (try! acc))
@@ -77,27 +97,47 @@
       count: (+ (get count state) u1),
       stx-paid: (+ (get stx-paid state) (get stx-paid result)),
       sbtc-paid: (+ (get sbtc-paid state) (get sbtc-paid result)),
-      positions: (unwrap! (as-max-len? (append (get positions state)
-        (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
+      positions: (unwrap!
+        (as-max-len?
+          (append (get positions state)
+            (merge result { rung: (contract-of target) })
+          )
+          u10
+        )
+        ERR_TOTAL
+      ),
     })
   )
 )
 
 (define-private (dispatch
     (total uint)
-    (allocations (list 10 { rung: <rung>, amount: uint }))
+    (allocations (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
     (buy bool)
   )
   (begin
     (asserts! (> (len allocations) u0) ERR_EMPTY)
     (asserts! (> total u0) ERR_TOTAL)
     (let ((validated (try! (fold validate-one allocations
-          (ok { remaining: total, buy: buy, seen: (list) })))))
+        (ok {
+          remaining: total,
+          buy: buy,
+          seen: (list),
+        })
+      ))))
       (asserts! (is-eq (get remaining validated) u0) ERR_TOTAL)
     )
-    (let ((done (try! (fold deposit-one allocations (ok {
-          count: u0, stx-paid: u0, sbtc-paid: u0, positions: (list),
-        })))))
+    (let ((done (try! (fold deposit-one allocations
+        (ok {
+          count: u0,
+          stx-paid: u0,
+          sbtc-paid: u0,
+          positions: (list),
+        })
+      ))))
       (print {
         event: "ladder-dispatched",
         member: tx-sender,
@@ -105,8 +145,11 @@
         amount: total,
         rungs: (get count done),
       })
-      (ok { amount: total, rungs: (get count done),
-        stx-paid: (get stx-paid done), sbtc-paid: (get sbtc-paid done),
+      (ok {
+        amount: total,
+        rungs: (get count done),
+        stx-paid: (get stx-paid done),
+        sbtc-paid: (get sbtc-paid done),
         positions: (get positions done),
       })
     )
@@ -115,14 +158,20 @@
 
 (define-public (deposit-buy
     (total uint)
-    (allocations (list 10 { rung: <rung>, amount: uint }))
+    (allocations (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
   )
   (dispatch total allocations true)
 )
 
 (define-public (deposit-sell
     (total uint)
-    (allocations (list 10 { rung: <rung>, amount: uint }))
+    (allocations (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
   )
   (dispatch total allocations false)
 )
@@ -132,8 +181,15 @@
 ;; targets before any sync or withdrawal. The registry's canonical gate is the
 ;; trust boundary, including for old code whose canonical has since changed.
 (define-private (validate-exit
-    (entry { rung: <rung>, amount: uint })
-    (acc (response { buy: bool, seen: (list 10 principal) } uint))
+    (entry {
+      rung: <rung>,
+      amount: uint,
+    })
+    (acc (response {
+      buy: bool,
+      seen: (list 10 principal),
+    } uint
+    ))
   )
   (let (
       (state (try! acc))
@@ -143,7 +199,12 @@
     )
     (asserts! (> (get amount entry) u0) ERR_ZERO_AMOUNT)
     (asserts! (is-none (index-of? (get seen state) who)) ERR_DUPLICATE)
-    (asserts! (is-eq (get side registration) (if (get buy state) "buy-band" "sel-band"))
+    (asserts!
+      (is-eq (get side registration)
+        (if (get buy state)
+          "buy-band"
+          "sel-band"
+        ))
       ERR_NOT_REGISTERED_SIDE
     )
     (ok {
@@ -154,49 +215,89 @@
 )
 
 (define-private (exit-one
-    (entry { rung: <rung>, amount: uint })
-    (acc (response { withdrawn: uint, stx: uint, sbtc: uint,
+    (entry {
+      rung: <rung>,
+      amount: uint,
+    })
+    (acc (response {
+      withdrawn: uint,
+      stx: uint,
+      sbtc: uint,
       update: (optional (buff 8192)),
-      positions: (list 10 { rung: principal, stx: uint, sbtc: uint }),
-    } uint))
+      positions: (list 10 {
+        rung: principal,
+        stx: uint,
+        sbtc: uint,
+      }),
+    }
+      uint
+    ))
   )
-  (let ((state (try! acc)) (target (get rung entry)))
+  (let (
+      (state (try! acc))
+      (target (get rung entry))
+    )
     ;; Every rung's withdraw settles its own escrow with the update carried in
     ;; the accumulator, then syncs and pays accrued proceeds, then caps the
     ;; request at the user's unsold inventory. A sold-out position returns its
     ;; normal ERR_NO_POSITION and rolls this whole batch back.
-    (let ((result (try! (contract-call? target withdraw (get amount entry)
-        (get update state)
-      ))))
+    (let ((result (try! (contract-call? target withdraw (get amount entry) (get update state)))))
       (ok {
         withdrawn: (+ (get withdrawn state) u1),
         stx: (+ (get stx state) (get stx result)),
         sbtc: (+ (get sbtc state) (get sbtc result)),
         update: (get update state),
-        positions: (unwrap! (as-max-len? (append (get positions state)
-          (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
+        positions: (unwrap!
+          (as-max-len?
+            (append (get positions state)
+              (merge result { rung: (contract-of target) })
+            )
+            u10
+          )
+          ERR_TOTAL
+        ),
       })
     )
   )
 )
 
 (define-private (withdraw-many
-    (requests (list 10 { rung: <rung>, amount: uint }))
+    (requests (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
     (buy bool)
     (update (optional (buff 8192)))
   )
   (begin
     (asserts! (> (len requests) u0) ERR_EMPTY)
-    (try! (fold validate-exit requests (ok { buy: buy, seen: (list) })))
+    (try! (fold validate-exit requests (ok {
+      buy: buy,
+      seen: (list),
+    })
+    ))
     (let ((done (try! (fold exit-one requests
-          (ok { withdrawn: u0, stx: u0, sbtc: u0, update: update, positions: (list) })))))
+        (ok {
+          withdrawn: u0,
+          stx: u0,
+          sbtc: u0,
+          update: update,
+          positions: (list),
+        })
+      ))))
       (print {
-        event: "ladder-withdrawn", member: tx-sender, buy: buy,
-        rungs: (len requests), withdrawn: (get withdrawn done),
+        event: "ladder-withdrawn",
+        member: tx-sender,
+        buy: buy,
+        rungs: (len requests),
+        withdrawn: (get withdrawn done),
       })
       (ok {
-        rungs: (len requests), withdrawn: (get withdrawn done),
-        stx: (get stx done), sbtc: (get sbtc done), positions: (get positions done),
+        rungs: (len requests),
+        withdrawn: (get withdrawn done),
+        stx: (get stx done),
+        sbtc: (get sbtc done),
+        positions: (get positions done),
       })
     )
   )
@@ -210,14 +311,20 @@
 ;; absent positions return their rung error and roll the whole batch back; use
 ;; each rung's claim for sold-out positions. Funds go directly to tx-sender.
 (define-public (withdraw-buy
-    (requests (list 10 { rung: <rung>, amount: uint }))
+    (requests (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
     (update (optional (buff 8192)))
   )
   (withdraw-many requests true update)
 )
 
 (define-public (withdraw-sell
-    (requests (list 10 { rung: <rung>, amount: uint }))
+    (requests (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
     (update (optional (buff 8192)))
   )
   (withdraw-many requests false update)
@@ -231,7 +338,11 @@
 ;; returns its rung's ERR_NO_POSITION and rolls the whole batch back.
 (define-private (validate-claim
     (target <rung>)
-    (acc (response { buy: bool, seen: (list 10 principal) } uint))
+    (acc (response {
+      buy: bool,
+      seen: (list 10 principal),
+    } uint
+    ))
   )
   (let (
       (state (try! acc))
@@ -239,7 +350,12 @@
       (registration (unwrap! (contract-call? LADDER get-registered who) ERR_NOT_REGISTERED_SIDE))
     )
     (asserts! (is-none (index-of? (get seen state) who)) ERR_DUPLICATE)
-    (asserts! (is-eq (get side registration) (if (get buy state) "buy-band" "sel-band"))
+    (asserts!
+      (is-eq (get side registration)
+        (if (get buy state)
+          "buy-band"
+          "sel-band"
+        ))
       ERR_NOT_REGISTERED_SIDE
     )
     (ok {
@@ -251,9 +367,18 @@
 
 (define-private (claim-one
     (target <rung>)
-    (acc (response { claimed: uint, stx: uint, sbtc: uint,
-      positions: (list 10 { rung: principal, stx: uint, sbtc: uint }),
-    } uint))
+    (acc (response {
+      claimed: uint,
+      stx: uint,
+      sbtc: uint,
+      positions: (list 10 {
+        rung: principal,
+        stx: uint,
+        sbtc: uint,
+      }),
+    }
+      uint
+    ))
   )
   (let (
       (state (try! acc))
@@ -263,8 +388,15 @@
       claimed: (+ (get claimed state) u1),
       stx: (+ (get stx state) (get stx result)),
       sbtc: (+ (get sbtc state) (get sbtc result)),
-      positions: (unwrap! (as-max-len? (append (get positions state)
-        (merge result { rung: (contract-of target) })) u10) ERR_TOTAL),
+      positions: (unwrap!
+        (as-max-len?
+          (append (get positions state)
+            (merge result { rung: (contract-of target) })
+          )
+          u10
+        )
+        ERR_TOTAL
+      ),
     })
   )
 )
@@ -275,17 +407,34 @@
   )
   (begin
     (asserts! (> (len targets) u0) ERR_EMPTY)
-    (try! (fold validate-claim targets (ok { buy: buy, seen: (list) })))
+    (try! (fold validate-claim targets (ok {
+      buy: buy,
+      seen: (list),
+    })
+    ))
     (let ((done (try! (fold claim-one targets
-          (ok { claimed: u0, stx: u0, sbtc: u0, positions: (list) })))))
+        (ok {
+          claimed: u0,
+          stx: u0,
+          sbtc: u0,
+          positions: (list),
+        })
+      ))))
       (print {
-        event: "ladder-claimed", member: tx-sender, buy: buy,
-        rungs: (len targets), claimed: (get claimed done),
-        stx: (get stx done), sbtc: (get sbtc done),
+        event: "ladder-claimed",
+        member: tx-sender,
+        buy: buy,
+        rungs: (len targets),
+        claimed: (get claimed done),
+        stx: (get stx done),
+        sbtc: (get sbtc done),
       })
       (ok {
-        rungs: (len targets), claimed: (get claimed done),
-        stx: (get stx done), sbtc: (get sbtc done), positions: (get positions done),
+        rungs: (len targets),
+        claimed: (get claimed done),
+        stx: (get stx done),
+        sbtc: (get sbtc done),
+        positions: (get positions done),
       })
     )
   )

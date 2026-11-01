@@ -52,16 +52,22 @@
 (define-data-var cancel-after-blocks uint u30)
 (define-data-var last-id uint u0)
 
-(define-map keepers principal bool)
+(define-map keepers
+  principal
+  bool
+)
 
-(define-map orders uint {
-  user: principal,
-  router: principal,
-  net: uint,
-  slippage-bps: uint,
-  min-out: uint,
-  cancel-height: uint,
-})
+(define-map orders
+  uint
+  {
+    user: principal,
+    router: principal,
+    net: uint,
+    slippage-bps: uint,
+    min-out: uint,
+    cancel-height: uint,
+  }
+)
 
 ;; --- internal ---
 
@@ -90,7 +96,9 @@
         })
       )
       (if (> fee-sats u0)
-        (try! (contract-call? SBTC transfer fee-sats tx-sender (var-get fee-recipient) none))
+        (try! (contract-call? SBTC transfer fee-sats tx-sender (var-get fee-recipient)
+          none
+        ))
         true
       )
       (try! (contract-call? SBTC transfer net tx-sender current-contract none))
@@ -113,9 +121,10 @@
     (to principal)
   )
   (if (> amount u0)
-    (ok (unwrap! (as-contract? ((with-ft SBTC ASSET_SBTC amount))
-      (try! (contract-call? SBTC transfer amount current-contract to none))
-    )
+    (ok (unwrap!
+      (as-contract? ((with-ft SBTC ASSET_SBTC amount))
+        (try! (contract-call? SBTC transfer amount current-contract to none))
+      )
       ERR_ALLOWANCE
     ))
     (ok true)
@@ -163,7 +172,9 @@
     (mid uint)
   )
   (let ((order (unwrap! (map-get? orders id) ERR_NO_ORDER)))
-    (asserts! (default-to false (map-get? keepers contract-caller)) ERR_NOT_KEEPER)
+    (asserts! (default-to false (map-get? keepers contract-caller))
+      ERR_NOT_KEEPER
+    )
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (let (
         (user (get user order))
@@ -181,20 +192,31 @@
         (result (unwrap!
           (as-contract? ((with-ft SBTC ASSET_SBTC (* u2 net)))
             (if to-stx
-              (match (contract-call? ROUTER_STX smart-swap-sbtc-for-stx net
-                limit-price (some update) mid (get min-out order)
+              (match (contract-call? ROUTER_STX smart-swap-sbtc-for-stx net limit-price
+                (some update) mid (get min-out order)
               )
-                r { out: (get out r), code: u0 }
-                e { out: u0, code: e }
+                r {
+                  out: (get out r),
+                  code: u0,
+                }
+                e {
+                  out: u0,
+                  code: e,
+                }
               )
               (match (contract-call? ROUTER_USDCX smart-swap-sbtc-for-usdcx net
                 limit-price (some update) mid (get min-out order)
               )
-                r { out: (get out r), code: u0 }
-                e { out: u0, code: e }
+                r {
+                  out: (get out r),
+                  code: u0,
+                }
+                e {
+                  out: u0,
+                  code: e,
+                }
               )
-            )
-          )
+            ))
           ERR_ALLOWANCE
         ))
         (held-after (sbtc-held))
@@ -209,14 +231,16 @@
       (asserts! (<= spent net) ERR_OVERSPENT)
       (if (and filled (> out u0))
         (if to-stx
-          (unwrap! (as-contract? ((with-stx out))
-            (try! (stx-transfer? out current-contract user))
-          )
+          (unwrap!
+            (as-contract? ((with-stx out))
+              (try! (stx-transfer? out current-contract user))
+            )
             ERR_ALLOWANCE
           )
-          (unwrap! (as-contract? ((with-ft USDCX ASSET_USDCX out))
-            (try! (contract-call? USDCX transfer out current-contract user none))
-          )
+          (unwrap!
+            (as-contract? ((with-ft USDCX ASSET_USDCX out))
+              (try! (contract-call? USDCX transfer out current-contract user none))
+            )
             ERR_ALLOWANCE
           )
         )
@@ -288,7 +312,9 @@
 ;; The proposed owner calls this itself, so a mistyped address never takes over.
 (define-public (accept-owner)
   (begin
-    (asserts! (is-eq (some contract-caller) (var-get pending-owner)) ERR_NOT_OWNER)
+    (asserts! (is-eq (some contract-caller) (var-get pending-owner))
+      ERR_NOT_OWNER
+    )
     (var-set owner contract-caller)
     (ok (var-set pending-owner none))
   )
@@ -316,7 +342,10 @@
   )
 )
 
-(define-public (set-keeper (keeper principal) (on bool))
+(define-public (set-keeper
+    (keeper principal)
+    (on bool)
+  )
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
     (ok (map-set keepers keeper on))
@@ -326,7 +355,9 @@
 (define-public (set-cancel-after-blocks (blocks uint))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
-    (asserts! (and (> blocks u0) (<= blocks MAX_CANCEL_AFTER_BLOCKS)) ERR_BAD_TIMEOUT)
+    (asserts! (and (> blocks u0) (<= blocks MAX_CANCEL_AFTER_BLOCKS))
+      ERR_BAD_TIMEOUT
+    )
     (ok (var-set cancel-after-blocks blocks))
   )
 )

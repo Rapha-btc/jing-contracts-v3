@@ -107,7 +107,10 @@ const capOf = (st, edge = EDGE) => {
     const o = other(s);
     const margin = full ? (o === 'x' ? 300n : 300_000n) : 0n;
     const net = need + (full ? oursAmt : oursAmt * BigInt(Math.round(frac * 1000)) / 1000n) + margin;
-    const gross = net * (BPS + 20n) / BPS + 1n;
+    let gross = net * (BPS + 20n) / BPS + 1n;
+    // the market refuses a taker deposit under its minimum (u1001): 1,000 sats / 1 STX
+    const minIn = o === 'x' ? 1_000n : 1_000_000n;
+    if (gross < minIn) gross = minIn;
     const taker = mk(takerN++);
     console.log(`  ${label}: our ${s} price ${our} (mid ${MID}), better orders ${need}, ours ${oursAmt}, taker sends ${gross} ${o}`);
     await stxTransfer(WHALE.y, taker, o === 'y' ? gross + 2_000_000n : 2_000_000n);
@@ -788,6 +791,14 @@ const capOf = (st, edge = EDGE) => {
   (begin (and (is-eq (var-get mode) u1) (try! (stx-transfer? u1 tx-sender current-contract))) (ok u0)))
 (define-public (cancel-token-x-deposit (t <ft-trait>) (n (string-ascii 128)))
   (begin (and (is-eq (var-get mode) u1) (try! (contract-call? '${SBTC} transfer u1 tx-sender current-contract none))) (ok u0)))
+(define-map pd principal { amount: uint, limit: uint, spread-bps: (optional uint), submitted-at: uint })
+(define-map pl principal { limit: uint, spread-bps: (optional uint), submitted-at: uint })
+(define-read-only (get-token-y-limit (who principal)) u0)
+(define-read-only (get-token-x-limit (who principal)) u0)
+(define-read-only (get-token-y-pending-deposit (who principal)) (map-get? pd who))
+(define-read-only (get-token-x-pending-deposit (who principal)) (map-get? pd who))
+(define-read-only (get-token-y-pending-limit (who principal)) (map-get? pl who))
+(define-read-only (get-token-x-pending-limit (who principal)) (map-get? pl who))
 `;
   }
 }

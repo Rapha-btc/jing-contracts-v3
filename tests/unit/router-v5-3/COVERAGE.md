@@ -12,13 +12,13 @@ Execution coverage of the real router with declared local dependency substitutio
 
 ## Source SHA-256
 
-- market: `5b795d0ed469b8d8fcbafd9d6456efaf54ee41b060ae2775efd659741f6c519e`.
-- router: `95661ab1bc246e1f21fc0121117aefbc22ca687f7159726d97b1d22562ae4faf`.
-- router-ref: `95661ab1bc246e1f21fc0121117aefbc22ca687f7159726d97b1d22562ae4faf`.
+- market: `943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67`.
+- router: `fb64c9a0c642bdf821cfb754900e58edc7d5b7f27aeab7348cc34a4645e43698`.
+- router-ref: `fb64c9a0c642bdf821cfb754900e58edc7d5b7f27aeab7348cc34a4645e43698`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 
 ## Remaining instrumentation points
 
 - Unhit functions: none.
-- Unhit lines: 903, 1421, 1601, 1602.
+- Unhit lines: 903, 1422, 1602, 1603.
 - Unhit branches (line, block, arm): `903,0,1`.

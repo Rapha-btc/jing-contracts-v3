@@ -3,7 +3,10 @@ import { vitestSetupFilePath } from '@stacks/clarinet-sdk/vitest';
 
 export default defineConfig({
   test: {
-    include: ['tests/unit/kairan-seat-lab-v2.test.ts'],
+    include: [
+      'tests/unit/kairan-seat-lab-v2.test.ts',
+      'tests/unit/kairan-seat-lab-v2-extra.test.ts',
+    ],
     testTimeout: 900000,
     environment: 'clarinet',
     pool: 'forks',

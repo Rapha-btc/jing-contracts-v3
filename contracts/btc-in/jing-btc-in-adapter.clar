@@ -31,18 +31,24 @@
 (define-data-var paused bool false)
 
 ;; fak.fun smart-buy contracts the adapter may call.
-(define-map approved-targets principal bool)
+(define-map approved-targets
+  principal
+  bool
+)
 
 ;; --- internal ---
 
-(define-private (take-fee (amount uint) (fee-sats uint))
+(define-private (take-fee
+    (amount uint)
+    (fee-sats uint)
+  )
   (begin
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (<= fee-sats (var-get max-fee-sats)) ERR_FEE_TOO_HIGH)
     (asserts! (< fee-sats amount) ERR_FEE_GE_AMOUNT)
     (if (> fee-sats u0)
-      (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token transfer
-        fee-sats tx-sender (var-get fee-recipient) none
+      (try! (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+        transfer fee-sats tx-sender (var-get fee-recipient) none
       ))
       true
     )
@@ -50,7 +56,11 @@
   )
 )
 
-(define-private (log-btc-in (target principal) (amount uint) (fee-sats uint))
+(define-private (log-btc-in
+    (target principal)
+    (amount uint)
+    (fee-sats uint)
+  )
   (print {
     event: "btc-in",
     user: tx-sender,
@@ -73,7 +83,8 @@
     (min-stx-out uint)
   )
   (let ((net (try! (take-fee amount fee-sats))))
-    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-5
+    (log-btc-in
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-5
       amount fee-sats
     )
     (ok {
@@ -96,7 +107,8 @@
     (min-usdcx-out uint)
   )
   (let ((net (try! (take-fee amount fee-sats))))
-    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-usdcx-jing-v5-5
+    (log-btc-in
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-usdcx-jing-v5-5
       amount fee-sats
     )
     (ok {
@@ -142,7 +154,8 @@
     (spread-bps (optional uint))
   )
   (let ((net (try! (take-fee amount fee-sats))))
-    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+    (log-btc-in
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
       amount fee-sats
     )
     (ok {
@@ -164,7 +177,8 @@
     (spread-bps (optional uint))
   )
   (let ((net (try! (take-fee amount fee-sats))))
-    (log-btc-in 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
+    (log-btc-in
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4
       amount fee-sats
     )
     (ok {
@@ -183,7 +197,10 @@
 (define-public (dispatch-sbtc-rungs-stx
     (amount uint)
     (fee-sats uint)
-    (allocations (list 10 { rung: <rung>, amount: uint }))
+    (allocations (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
   )
   (let ((net (try! (take-fee amount fee-sats))))
     (log-btc-in .jing-ladder-dispatch-relay amount fee-sats)
@@ -198,14 +215,17 @@
 (define-public (dispatch-sbtc-rungs-usdcx
     (amount uint)
     (fee-sats uint)
-    (allocations (list 10 { rung: <rung>, amount: uint }))
+    (allocations (list 10 {
+      rung: <rung>,
+      amount: uint,
+    }))
   )
   (let ((net (try! (take-fee amount fee-sats))))
     (log-btc-in .jing-ladder-dispatch-sbtc-usdcx-relay amount fee-sats)
     (ok {
       fee-sats: fee-sats,
-      dispatch: (try! (contract-call? .jing-ladder-dispatch-sbtc-usdcx-relay deposit-sell
-        net allocations
+      dispatch: (try! (contract-call? .jing-ladder-dispatch-sbtc-usdcx-relay deposit-sell net
+        allocations
       )),
     })
   )
@@ -227,7 +247,9 @@
 ;; The proposed owner calls this itself, so a mistyped address never takes over.
 (define-public (accept-owner)
   (begin
-    (asserts! (is-eq (some contract-caller) (var-get pending-owner)) ERR_NOT_OWNER)
+    (asserts! (is-eq (some contract-caller) (var-get pending-owner))
+      ERR_NOT_OWNER
+    )
     (var-set owner contract-caller)
     (ok (var-set pending-owner none))
   )
@@ -255,7 +277,10 @@
   )
 )
 
-(define-public (set-target (target principal) (approved bool))
+(define-public (set-target
+    (target principal)
+    (approved bool)
+  )
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
     (ok (map-set approved-targets target approved))

@@ -1,0 +1,10 @@
+[project]
+name = "community-payroll"
+description = "Weekly STX payroll for Jingswap/Juice community managers"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+[contracts.community-payroll]
+path = "contracts/community/community-payroll.clar"
+clarity_version = 4
+epoch = "3.3"
