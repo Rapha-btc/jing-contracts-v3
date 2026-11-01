@@ -34,6 +34,15 @@
 //      user; the stranger gains nothing; cancel / execute again u4205; cancel
 //      works while paused; a later timeout change does not move an armed order
 //   X  probe: the same escrow with an exact `net` allowance, on a book fill
+//   A7 prints on every owner call; A8 set-lazer-fee-ustx cap u4214, non-owner u4200
+//   R  arm-by: arm at height >= arm-by u4213 on both pairs, arm-by = height + 1 ok
+//   W  sweeps: sweep-sbtc of a donation ok, into parked sats u4212; sweep-stx /
+//      sweep-usdcx owner-only (u4200) and exact; btc-in-swept prints
+//   L  lazer-fee-ustx 1000: keeper fronts it, execute fills on both pairs, keeper
+//      STX drops by at most the fee, the owner sweeps the unspent fee back
+//   K  expiry: execute at cancel-height - 1 fills, at / past cancel-height u4211
+//      (order stays armed), cancel then refunds
+//   get-parked is checked on every arm / execute / cancel and ends at 0.
 // Every path ends with the escrow holding 0 sBTC (and 0 STX / 0 USDCx).
 // Run: node simulations/verify-btc-in-escrow-v2.js
 import { readFileSync } from 'node:fs';
@@ -48,12 +57,17 @@ import {
 import { lazerFeedTimes, fetchLazerUpdateAny } from './_lazer.js';
 
 const SRC = readFileSync(new URL('../contracts/btc-in/jing-btc-in-escrow-v2.clar', import.meta.url), 'utf8');
-const ESC = `${DEP}.jing-btc-in-escrow-v2`;
+// jing-btc-in-escrow-v2 is live on mainnet under DEP (an older build), so the
+// source under test deploys next to it under a sim-only name
+const ESC_NAME = process.env.ESC_NAME || 'jing-btc-in-escrow-v2-sim';
+const ESC = `${DEP}.${ESC_NAME}`;
 const R_STX = `${DEP}.swap-router-sbtc-stx-jing-v5-5`, R_USD = `${DEP}.swap-router-sbtc-usdcx-jing-v5-5`;
 const MKT_S = `${DEP}.markets-sbtc-stx-jing-v6-4`, MKT_U = `${DEP}.markets-sbtc-usdcx-jing-v6-4`;
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
 const USDC_WHALE = 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ';
 const BPS = 10_000n;
+// generous arm-by (a user-signed block height the arm must land before)
+const ARM_BY = 10n ** 12n, AB = uintCV(ARM_BY);
 const FEE = mk(8), STRANGER = mk(6), NEWOWNER = mk(2), KEEPER = mk(9), MAKER_S = mk(5), MAKER_U = mk(4), PCU = mk(3);
 const U = Object.fromEntries(Array.from({ length: 12 }, (_, i) => [`u${i + 1}`, mk(41 + i)]));
 const LAZER_HDR = { headers: { 'x-api-key': 'jc_e4d2e10396eef95215a7afd492f42d743a3325739d29200c2a28b256f778be01' } };
@@ -61,6 +75,7 @@ const buf = (hex) => bufferCV(Buffer.from(hex.replace(/^0x/, ''), 'hex'));
 const canon = (o) => show(Object.fromEntries(Object.entries(o ?? {}).sort(([a], [b]) => a.localeCompare(b))));
 const usdcxBal = async (who) => (await evalIn(USDCX, `(get-balance '${who})`)).ok;
 const height = async () => Number(await evalIn(MKT_S, 'stacks-block-height'));
+const parked = async () => await evalIn(ESC, '(get-parked)');
 
 // the two pairs, as one table
 const P = {
@@ -122,16 +137,20 @@ async function escrowEmpty(label, cid = ESC) {
 async function escrowHolds(label, want) {
   const s = await sbtcBal(ESC);
   check(`${label}: escrow holds exactly ${want} sBTC (the armed nets)`, s === want, `${s}`);
+  const pk = await parked();
+  check(`${label}: get-parked == ${want} (the armed nets)`, pk === want, `${pk}`);
 }
 
 // arm with exact accounting; returns { id, net, order }
-async function arm(tag, k, user, amount, fee, bps, minOut) {
+async function arm(tag, k, user, amount, fee, bps, minOut, armBy = ARM_BY) {
   const p = P[k];
-  const u0 = await sbtcBal(user), f0 = await sbtcBal(FEE), e0 = await sbtcBal(ESC);
+  const u0 = await sbtcBal(user), f0 = await sbtcBal(FEE), e0 = await sbtcBal(ESC), pk0 = await parked();
   const c0 = await evalIn(ESC, '(get-config)');
   const h = await height();
-  const r = await tx(`${tag} ${p.arm} ${amount} fee ${fee} slippage-bps ${bps} min-out ${minOut}`, user, ESC, p.arm, [uintCV(amount), uintCV(fee), uintCV(bps), uintCV(minOut)], OK);
+  const r = await tx(`${tag} ${p.arm} ${amount} fee ${fee} slippage-bps ${bps} min-out ${minOut}`, user, ESC, p.arm, [uintCV(amount), uintCV(fee), uintCV(bps), uintCV(minOut), uintCV(armBy)], OK);
   const id = r.res?.ok, net = amount - fee;
+  const pk1 = await parked();
+  check(`${tag}: get-parked +net (${pk0} -> ${pk0 + net})`, pk1 === pk0 + net, `${pk1}`);
   check(`${tag}: id == last-id + 1 (${c0['last-id'] + 1n})`, id === c0['last-id'] + 1n && (await evalIn(ESC, '(get-config)'))['last-id'] === id, show(r.res));
   const du = u0 - (await sbtcBal(user)), df = (await sbtcBal(FEE)) - f0, de = (await sbtcBal(ESC)) - e0;
   check(`${tag}: user sBTC -${amount}, fee-recipient +${fee}, escrow +${net}`, du === amount && df === fee && de === net, `${du} / ${df} / ${de}`);
@@ -147,8 +166,9 @@ async function arm(tag, k, user, amount, fee, bps, minOut) {
 }
 
 // execute with exact accounting
-async function execute(tag, k, id, upd, wantFilled = true) { // wantFilled null = either
+async function execute(tag, k, id, upd, wantFilled = true, lazerFee = 0n) { // wantFilled null = either
   const p = P[k];
+  const pk0 = await parked(), ks0 = await stxBal(KEEPER), es0 = await stxBal(ESC);
   // the verified mid for this update, read from the market's refresh-mid
   const rm = await call(STRANGER, p.mkt, 'refresh-mid', [buf(upd)]);
   must(`${tag}: refresh-mid read-out ok`, rm.res?.ok !== undefined && !rm.vm, show(rm.res ?? rm.vm));
@@ -164,8 +184,19 @@ async function execute(tag, k, id, upd, wantFilled = true) { // wantFilled null 
   check(`${tag}: spent + refund == net ${net}`, res.spent + res.refund === net, show(res));
   check(`${tag}: user got exactly out (${show(res.out)}) and refund (${show(res.refund)}) sBTC`, dout === res.out && du === res.refund, `${dout} / ${du}`);
   check(`${tag}: escrow sBTC -net exactly`, de === net, `${de}`);
-  check(`${tag}: keeper gained nothing`, (await sbtcBal(KEEPER)) === k0 && (await p.outBal(KEEPER)) === ko0);
+  if (lazerFee === 0n) {
+    check(`${tag}: keeper gained nothing`, (await sbtcBal(KEEPER)) === k0 && (await p.outBal(KEEPER)) === ko0);
+  } else {
+    const kd = ks0 - (await stxBal(KEEPER)), ed = (await stxBal(ESC)) - es0;
+    note(`${tag}: lazer-fee ${lazerFee}: keeper STX -${kd}, escrow STX +${ed} (oracle took ${kd - ed})`);
+    check(`${tag}: keeper sBTC unchanged, keeper STX drop in [0, lazer-fee ${lazerFee}]`, (await sbtcBal(KEEPER)) === k0 && kd >= 0n && kd <= lazerFee, `${kd}`);
+    if (k === 'usdcx') check(`${tag}: keeper USDCx unchanged`, (await usdcxBal(KEEPER)) === ko0);
+    const fr = evs(r.receipt).filter((e) => e.stx_transfer_event && e.stx_transfer_event.sender === KEEPER && e.stx_transfer_event.recipient === ESC && BigInt(e.stx_transfer_event.amount) === lazerFee);
+    check(`${tag}: receipt has the keeper -> escrow ${lazerFee} uSTX front`, fr.length === 1, show(evs(r.receipt).filter((e) => e.stx_transfer_event)));
+  }
   check(`${tag}: order deleted`, (await evalIn(ESC, `(get-order u${id})`)) === null);
+  const pk1 = await parked();
+  check(`${tag}: get-parked -net (${pk0} -> ${pk0 - net})`, pk1 === pk0 - net, `${pk1}`);
   const pr = evPrints(r.receipt, 'btc-in-executed');
   const want = { event: 'btc-in-executed', id, user, router: p.router, net, mid, 'limit-price': limit, ok: res.ok, code: res.code, spent: res.spent, out: res.out, refund: res.refund };
   check(`${tag}: print mid == refresh-mid read-out (${mid})`, pr.length === 1 && pr[0].mid === mid, show(pr[0]?.mid));
@@ -214,8 +245,8 @@ try {
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
 
   setGroup('setup');
-  await deploy(DEP, 'jing-btc-in-escrow-v2', SRC);
-  await deploy(DEP, 'jing-btc-in-escrow-v2-exact', SRC.replace('(with-ft SBTC ASSET_SBTC (* u2 net))', '(with-ft SBTC ASSET_SBTC net)'));
+  await deploy(DEP, ESC_NAME, SRC);
+  await deploy(DEP, `${ESC_NAME}-exact`, SRC.replace('(with-ft SBTC ASSET_SBTC (* u2 net))', '(with-ft SBTC ASSET_SBTC net)'));
   for (const [who, amt] of [...Object.values(U).map((u) => [u, 1_000_000n]), [PCU, 600_000n], [FEE, 10_000n]]) {
     const r = await call(WHALE.x, SBTC, 'transfer', [uintCV(amt), P_(WHALE.x), P_(who), noneCV()]);
     must(`fund ${who.slice(0, 8)} ${amt} sats`, r.res?.ok === true, show(r.res ?? r.vm));
@@ -224,9 +255,11 @@ try {
 
   setGroup('A config + owner');
   const c0 = await evalIn(ESC, '(get-config)');
-  check('A0 defaults', canon(c0) === canon({ owner: DEP, 'pending-owner': null, 'fee-recipient': DEP, 'max-fee-sats': 5000n, paused: false, 'cancel-after-blocks': 30n, 'last-id': 0n }), show(c0));
+  check('A0 defaults', canon(c0) === canon({ owner: DEP, 'pending-owner': null, 'fee-recipient': DEP, 'max-fee-sats': 5000n, paused: false, 'cancel-after-blocks': 30n, 'lazer-fee-ustx': 0n, 'last-id': 0n }), show(c0));
+  check('A0 get-parked == 0', (await parked()) === 0n);
   check('A0 nobody is a keeper', (await evalIn(ESC, `(is-keeper '${KEEPER})`)) === false && (await evalIn(ESC, `(is-keeper '${DEP})`)) === false);
-  for (const [fn, args] of [['propose-owner', [P_(STRANGER)]], ['set-fee-recipient', [P_(STRANGER)]], ['set-max-fee-sats', [uintCV(1n)]], ['set-paused', [boolCV(true)]], ['set-keeper', [P_(STRANGER), boolCV(true)]], ['set-cancel-after-blocks', [uintCV(10n)]]]) {
+  for (const [fn, args] of [['propose-owner', [P_(STRANGER)]], ['set-fee-recipient', [P_(STRANGER)]], ['set-max-fee-sats', [uintCV(1n)]], ['set-paused', [boolCV(true)]], ['set-keeper', [P_(STRANGER), boolCV(true)]], ['set-cancel-after-blocks', [uintCV(10n)]],
+    ['set-lazer-fee-ustx', [uintCV(1n)]], ['sweep-sbtc', [uintCV(0n), P_(STRANGER)]], ['sweep-stx', [uintCV(0n), P_(STRANGER)]], ['sweep-usdcx', [uintCV(0n), P_(STRANGER)]]]) {
     await tx(`A1 stranger ${fn} -> u4200`, STRANGER, ESC, fn, args, E(4200));
   }
   await tx('A2 set-cancel-after-blocks 0 -> u4208', DEP, ESC, 'set-cancel-after-blocks', [uintCV(0n)], E(4208));
@@ -247,13 +280,37 @@ try {
   await tx('A4 NEWOWNER has no rights before accept -> u4200', NEWOWNER, ESC, 'set-paused', [boolCV(true)], E(4200));
   await tx('A4 old owner keeps rights before accept', DEP, ESC, 'set-max-fee-sats', [uintCV(3000n)], { ok: true });
   await tx('A4 NEWOWNER accept-owner', NEWOWNER, ESC, 'accept-owner', [], { ok: true });
-  for (const [fn, args] of [['propose-owner', [P_(DEP)]], ['set-paused', [boolCV(true)]], ['set-keeper', [P_(DEP), boolCV(true)]], ['set-cancel-after-blocks', [uintCV(10n)]], ['set-fee-recipient', [P_(DEP)]], ['set-max-fee-sats', [uintCV(1n)]]]) {
+  for (const [fn, args] of [['propose-owner', [P_(DEP)]], ['set-paused', [boolCV(true)]], ['set-keeper', [P_(DEP), boolCV(true)]], ['set-cancel-after-blocks', [uintCV(10n)]], ['set-fee-recipient', [P_(DEP)]], ['set-max-fee-sats', [uintCV(1n)]],
+    ['set-lazer-fee-ustx', [uintCV(1n)]], ['sweep-sbtc', [uintCV(0n), P_(DEP)]], ['sweep-stx', [uintCV(0n), P_(DEP)]], ['sweep-usdcx', [uintCV(0n), P_(DEP)]]]) {
     await tx(`A5 old owner after accept: ${fn} -> u4200`, DEP, ESC, fn, args, E(4200));
   }
-  await tx('A6 NEWOWNER proposes DEP back', NEWOWNER, ESC, 'propose-owner', [P_(DEP)], { ok: true });
-  await tx('A6 DEP accept-owner', DEP, ESC, 'accept-owner', [], { ok: true });
+  const a6p = await tx('A6 NEWOWNER proposes DEP back', NEWOWNER, ESC, 'propose-owner', [P_(DEP)], { ok: true });
+  const a6a = await tx('A6 DEP accept-owner', DEP, ESC, 'accept-owner', [], { ok: true });
   const c6 = await evalIn(ESC, '(get-config)');
   check('A6 owner DEP, pending none, fee-recipient FEE, max 3000', canon(c6) === canon({ ...c0, 'fee-recipient': FEE, 'max-fee-sats': 3000n }), show(c6));
+  // A7 every owner function prints exactly one event
+  const onePrint = (label, r, want) => {
+    const pr = allPrints(r.receipt).filter((x) => String(x.event ?? '').startsWith('btc-in'));
+    check(`${label}: print exact ${show(want)}`, pr.length === 1 && canon(pr[0]) === canon(want), show(pr));
+  };
+  onePrint('A7 propose-owner', a6p, { event: 'btc-in-owner-proposed', 'new-owner': DEP });
+  onePrint('A7 accept-owner', a6a, { event: 'btc-in-owner-accepted', 'old-owner': NEWOWNER, 'new-owner': DEP });
+  for (const [fn, args, want] of [
+    ['set-fee-recipient', [P_(FEE)], { event: 'btc-in-fee-recipient-set', recipient: FEE }],
+    ['set-max-fee-sats', [uintCV(3000n)], { event: 'btc-in-max-fee-sats-set', sats: 3000n }],
+    ['set-paused', [boolCV(false)], { event: 'btc-in-paused-set', on: false }],
+    ['set-keeper', [P_(KEEPER), boolCV(true)], { event: 'btc-in-keeper-set', keeper: KEEPER, on: true }],
+    ['set-cancel-after-blocks', [uintCV(30n)], { event: 'btc-in-cancel-after-blocks-set', blocks: 30n }],
+    ['set-lazer-fee-ustx', [uintCV(0n)], { event: 'btc-in-lazer-fee-set', ustx: 0n }],
+  ]) onePrint(`A7 ${fn}`, await tx(`A7 owner ${fn} (same value)`, DEP, ESC, fn, args, { ok: true }), want);
+  // A8 lazer-fee-ustx: capped at 1 STX (u4214), owner-only
+  await failing('A8 set-lazer-fee-ustx 1000001 -> u4214', DEP, 'set-lazer-fee-ustx', [uintCV(1_000_001n)], E(4214));
+  await failing('A8 set-lazer-fee-ustx 2^128-1 -> u4214', DEP, 'set-lazer-fee-ustx', [uintCV(2n ** 128n - 1n)], E(4214));
+  await failing('A8 stranger set-lazer-fee-ustx 1 -> u4200', STRANGER, 'set-lazer-fee-ustx', [uintCV(1n)], E(4200));
+  onePrint('A8 set-lazer-fee-ustx 1000000', await tx('A8 set-lazer-fee-ustx 1000000 (cap) ok', DEP, ESC, 'set-lazer-fee-ustx', [uintCV(1_000_000n)], { ok: true }), { event: 'btc-in-lazer-fee-set', ustx: 1_000_000n });
+  check('A8 config lazer-fee-ustx 1000000', (await evalIn(ESC, '(get-config)'))['lazer-fee-ustx'] === 1_000_000n);
+  await tx('A8 set-lazer-fee-ustx back to 0', DEP, ESC, 'set-lazer-fee-ustx', [uintCV(0n)], { ok: true });
+  check('A8 config back to A6', canon(await evalIn(ESC, '(get-config)')) === canon(c6));
 
   setGroup('B arm');
   await freshUpd(true);
@@ -265,17 +322,30 @@ try {
   check('B3 fee 0: no transfer to fee-recipient in the receipt', ftMoves(B3.r.receipt).filter((m) => m.recipient === FEE).length === 0);
   await escrowHolds('B', B1.net + B2.net + B3.net);
   await tx('B4 pause', DEP, ESC, 'set-paused', [boolCV(true)], { ok: true });
-  await failing('B4 arm while paused -> u4203', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(limS), uintCV(1n)], E(4203));
-  await failing('B4 arm usdcx while paused -> u4203', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(limU), uintCV(1n)], E(4203));
+  await failing('B4 arm while paused -> u4203', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(limS), uintCV(1n), AB], E(4203));
+  await failing('B4 arm usdcx while paused -> u4203', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(limU), uintCV(1n), AB], E(4203));
   await tx('B4 unpause', DEP, ESC, 'set-paused', [boolCV(false)], { ok: true });
-  await failing('B5 fee 3001 > max -> u4201', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(3001n), uintCV(limS), uintCV(1n)], E(4201));
-  await failing('B5 fee == amount -> u4202', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2000n), uintCV(2000n), uintCV(limS), uintCV(1n)], E(4202));
-  await failing('B5 amount 0 -> u4202', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(0n), uintCV(0n), uintCV(limU), uintCV(1n)], E(4202));
-  await failing('B5 slippage-bps 10000 -> u4207', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(10_000n), uintCV(1n)], E(4207));
-  await failing('B5 usdcx slippage-bps 10000 -> u4207', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(10_000n), uintCV(1n)], E(4207));
-  await failing('B5 slippage-bps 2^128-1 -> u4207', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2n ** 128n - 1n), uintCV(100n), uintCV(2n ** 128n - 1n), uintCV(1n)], E(4207));
-  await failing('B5 amount above balance -> sBTC u1', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2_000_000n), uintCV(100n), uintCV(limS), uintCV(1n)], E(1));
+  await failing('B5 fee 3001 > max -> u4201', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(3001n), uintCV(limS), uintCV(1n), AB], E(4201));
+  await failing('B5 fee == amount -> u4202', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2000n), uintCV(2000n), uintCV(limS), uintCV(1n), AB], E(4202));
+  await failing('B5 amount 0 -> u4202', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(0n), uintCV(0n), uintCV(limU), uintCV(1n), AB], E(4202));
+  await failing('B5 slippage-bps 10000 -> u4207', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(10_000n), uintCV(1n), AB], E(4207));
+  await failing('B5 usdcx slippage-bps 10000 -> u4207', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(10_000n), uintCV(1n), AB], E(4207));
+  await failing('B5 slippage-bps 2^128-1 -> u4207', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2n ** 128n - 1n), uintCV(100n), uintCV(2n ** 128n - 1n), uintCV(1n), AB], E(4207));
+  await failing('B5 amount above balance -> sBTC u1', U.u4, 'arm-swap-sbtc-for-stx', [uintCV(2_000_000n), uintCV(100n), uintCV(limS), uintCV(1n), AB], E(1));
   check('B5 last-id unchanged by failures (3)', (await evalIn(ESC, '(get-config)'))['last-id'] === 3n);
+  // R arm-by: the arm must land at a height strictly below arm-by (u4213)
+  {
+    const h = BigInt(await height());
+    await failing(`R1 arm stx arm-by == height ${h} -> u4213`, U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(limS), uintCV(1n), uintCV(h)], E(4213));
+    await failing(`R1 arm usdcx arm-by == height ${h} -> u4213`, U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(limU), uintCV(1n), uintCV(h)], E(4213));
+    await failing(`R1 arm stx arm-by == height - 1 -> u4213`, U.u4, 'arm-swap-sbtc-for-stx', [uintCV(10_000n), uintCV(100n), uintCV(limS), uintCV(1n), uintCV(h - 1n)], E(4213));
+    await failing('R1 arm usdcx arm-by 0 -> u4213', U.u4, 'arm-swap-sbtc-for-usdcx', [uintCV(10_000n), uintCV(100n), uintCV(limU), uintCV(1n), uintCV(0n)], E(4213));
+    check('R1 last-id unchanged by the late arms (3)', (await evalIn(ESC, '(get-config)'))['last-id'] === 3n);
+    const R2 = await arm(`R2 arm-by == height + 1 (${h + 1n}) ok`, 'stx', U.u4, 20_000n, 200n, 300n, 1n, h + 1n);
+    await execute('R2 execute the arm-by order', 'stx', R2.id, (await P.stx.fresh()).hex, null);
+    const R3 = await arm(`R3 usdcx arm-by == height + 1 ok`, 'usdcx', U.u4, 20_000n, 200n, 300n, 1n, h + 1n);
+    await execute('R3 execute the usdcx arm-by order', 'usdcx', R3.id, (await freshUsdcx()).hex, null);
+  }
   const B6 = await arm('B6 slippage-bps 9999 accepted', 'stx', U.u4, 20_000n, 200n, 9999n, 1n);
   const B7 = await arm('B7 slippage-bps 0 accepted', 'usdcx', U.u4, 20_000n, 200n, 0n, 1n);
   // terminal paths for both with the verified mid (no keeper mid any more)
@@ -352,9 +422,70 @@ try {
   await failing('F5 double execute -> u4205', KEEPER, 'execute', fArgs, E(4205), [U.u7]);
   await escrowEmpty('F5');
 
+  setGroup('W owner sweeps (parked sats never leave)');
+  {
+    const W1 = await arm('W1', 'stx', U.u7, 60_000n, 600n, 300n, 1n);
+    const r = await call(WHALE.x, SBTC, 'transfer', [uintCV(5_000n), P_(WHALE.x), P_(ESC), noneCV()]);
+    must('W1 donate 5000 sats straight to the escrow', r.res?.ok === true, show(r.res ?? r.vm));
+    check('W1 escrow holds net + 5000, parked == net', (await sbtcBal(ESC)) === W1.net + 5_000n && (await parked()) === W1.net);
+    await failing('W2 stranger sweep-sbtc 1 -> u4200', STRANGER, 'sweep-sbtc', [uintCV(1n), P_(STRANGER)], E(4200));
+    await failing('W2 owner sweep-sbtc 5001 (1 sat into parked) -> u4212', DEP, 'sweep-sbtc', [uintCV(5_001n), P_(FEE)], E(4212), [U.u7]);
+    await failing('W2 owner sweep-sbtc everything held -> u4212', DEP, 'sweep-sbtc', [uintCV(W1.net + 5_000n), P_(FEE)], E(4212), [U.u7]);
+    await failing('W2 owner sweep-sbtc 2^128-1 -> u4212', DEP, 'sweep-sbtc', [uintCV(2n ** 128n - 1n - W1.net), P_(FEE)], E(4212), [U.u7]);
+    const f0 = await sbtcBal(FEE);
+    const ws = await tx('W3 owner sweep-sbtc 5000 (the donation) -> FEE', DEP, ESC, 'sweep-sbtc', [uintCV(5_000n), P_(FEE)], { ok: true });
+    check('W3 FEE +5000, escrow == net, parked == net', (await sbtcBal(FEE)) - f0 === 5_000n && (await sbtcBal(ESC)) === W1.net && (await parked()) === W1.net);
+    onePrint('W3 sweep-sbtc', ws, { event: 'btc-in-swept', asset: 'sbtc', amount: 5_000n, to: FEE });
+    check('W3 order untouched', canon(await evalIn(ESC, `(get-order u${W1.id})`)) === canon(W1.order));
+    await failing('W3 owner sweep-sbtc 1 more -> u4212', DEP, 'sweep-sbtc', [uintCV(1n), P_(FEE)], E(4212), [U.u7]);
+    // STX
+    await stxTransfer(WHALE.y, ESC, 1_000_000n);
+    await failing('W4 stranger sweep-stx -> u4200', STRANGER, 'sweep-stx', [uintCV(1_000_000n), P_(STRANGER)], E(4200));
+    const fx0 = await stxBal(FEE);
+    const wx = await tx('W4 owner sweep-stx 1000000 -> FEE', DEP, ESC, 'sweep-stx', [uintCV(1_000_000n), P_(FEE)], { ok: true });
+    check('W4 FEE +1 STX, escrow 0 STX', (await stxBal(FEE)) - fx0 === 1_000_000n && (await stxBal(ESC)) === 0n);
+    onePrint('W4 sweep-stx', wx, { event: 'btc-in-swept', asset: 'stx', amount: 1_000_000n, to: FEE });
+    const wxo = await call(DEP, ESC, 'sweep-stx', [uintCV(1n), P_(FEE)]);
+    note(`W4 owner sweep-stx 1 with 0 STX held -> ${show(wxo.res ?? wxo.vm)}`);
+    check('W4 sweep-stx above balance does not succeed', wxo.res?.ok === undefined);
+    // USDCx
+    const ru = await call(USDC_WHALE, USDCX, 'transfer', [uintCV(2_000_000n), P_(USDC_WHALE), P_(ESC), noneCV()]);
+    must('W5 donate 2 USDCx to the escrow', ru.res?.ok === true, show(ru.res ?? ru.vm));
+    await failing('W5 stranger sweep-usdcx -> u4200', STRANGER, 'sweep-usdcx', [uintCV(2_000_000n), P_(STRANGER)], E(4200));
+    const fu0 = await usdcxBal(FEE);
+    const wu = await tx('W5 owner sweep-usdcx 2000000 -> FEE', DEP, ESC, 'sweep-usdcx', [uintCV(2_000_000n), P_(FEE)], { ok: true });
+    check('W5 FEE +2 USDCx, escrow 0 USDCx', (await usdcxBal(FEE)) - fu0 === 2_000_000n && (await usdcxBal(ESC)) === 0n);
+    onePrint('W5 sweep-usdcx', wu, { event: 'btc-in-swept', asset: 'usdcx', amount: 2_000_000n, to: FEE });
+    await execute('W6 execute the order after the sweeps', 'stx', W1.id, (await P.stx.fresh()).hex);
+    await escrowEmpty('W6');
+    check('W6 get-parked back to 0', (await parked()) === 0n);
+  }
+
+  setGroup('L lazer-fee-ustx > 0: keeper fronts it, execute still fills');
+  {
+    const LF = 1_000n;
+    await stxTransfer(WHALE.y, KEEPER, 10_000_000n);
+    onePrint('L0 set-lazer-fee-ustx 1000', await tx('L0 owner set-lazer-fee-ustx 1000', DEP, ESC, 'set-lazer-fee-ustx', [uintCV(LF)], { ok: true }), { event: 'btc-in-lazer-fee-set', ustx: LF });
+    const L1 = await arm('L1 stx', 'stx', U.u7, 60_000n, 600n, 300n, 1n);
+    const L1x = await execute('L1 stx execute with lazer-fee 1000', 'stx', L1.id, (await P.stx.fresh()).hex, true, LF);
+    const L2 = await arm('L2 usdcx', 'usdcx', U.u6, 60_000n, 600n, 300n, 1n);
+    const L2x = await execute('L2 usdcx execute with lazer-fee 1000', 'usdcx', L2.id, (await freshUsdcx()).hex, true, LF);
+    note(`L out stx ${show(L1x.res.out)} usdcx ${show(L2x.res.out)}`);
+    // the fronted STX the oracle did not take stays on the escrow; the owner recovers it
+    const left = await stxBal(ESC);
+    check(`L3 escrow STX left (${left}) <= 2 * lazer-fee`, left <= 2n * LF, `${left}`);
+    if (left > 0n) {
+      const k0 = await stxBal(KEEPER);
+      onePrint('L3 sweep-stx the fronted fee', await tx(`L3 owner sweep-stx ${left} -> KEEPER`, DEP, ESC, 'sweep-stx', [uintCV(left), P_(KEEPER)], { ok: true }), { event: 'btc-in-swept', asset: 'stx', amount: left, to: KEEPER });
+      check('L3 keeper repaid', (await stxBal(KEEPER)) - k0 === left);
+    }
+    await tx('L4 set-lazer-fee-ustx back to 0', DEP, ESC, 'set-lazer-fee-ustx', [uintCV(0n)], { ok: true });
+    await escrowEmpty('L4');
+  }
+
   setGroup('G signed arm txs, sBTC cap');
   const capPc = (n) => [Pc.principal(PCU).willSendLte(n).ft(SBTC, 'sbtc-token')];
-  const gArgs = (amt) => [uintCV(amt), uintCV(1_000n), uintCV(limS), uintCV(1n)];
+  const gArgs = (amt) => [uintCV(amt), uintCV(1_000n), uintCV(limS), uintCV(1n), AB];
   const g0 = await sbtcBal(PCU), gf0 = await sbtcBal(FEE), ge0 = await sbtcBal(ESC), gid0 = (await evalIn(ESC, '(get-config)'))['last-id'];
   const G1 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-stx', gArgs(100_000n), capPc(99_999n));
   check('G1 Originator, cap = amount - 1: post-condition aborts', G1.pcAborted === true, show({ vm: G1.vm, res: G1.res }));
@@ -362,9 +493,9 @@ try {
   const G2 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-stx', gArgs(100_000n), capPc(100_000n));
   check('G2 Originator, cap = amount: ok', G2.pcAborted === false && !G2.vm && G2.res?.ok === gid0 + 1n, show({ vm: G2.vm, res: G2.res }));
   check('G2 user -100000, fee +1000, escrow +99000', g0 - (await sbtcBal(PCU)) === 100_000n && (await sbtcBal(FEE)) - gf0 === 1_000n && (await sbtcBal(ESC)) - ge0 === 99_000n);
-  const G3 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-usdcx', [uintCV(80_000n), uintCV(800n), uintCV(limU), uintCV(1n)], capPc(80_000n), PostConditionMode.Deny);
+  const G3 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-usdcx', [uintCV(80_000n), uintCV(800n), uintCV(limU), uintCV(1n), AB], capPc(80_000n), PostConditionMode.Deny);
   check('G3 strict Deny, cap = amount: ok (only the user moves sBTC at arm)', G3.pcAborted === false && !G3.vm && G3.res?.ok === gid0 + 2n, show({ vm: G3.vm, res: G3.res }));
-  const G4 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-usdcx', [uintCV(80_000n), uintCV(800n), uintCV(limU), uintCV(1n)], capPc(79_999n), PostConditionMode.Deny);
+  const G4 = await signedCall(PCU, ESC, 'arm-swap-sbtc-for-usdcx', [uintCV(80_000n), uintCV(800n), uintCV(limU), uintCV(1n), AB], capPc(79_999n), PostConditionMode.Deny);
   check('G4 strict Deny, cap = amount - 1: aborts', G4.pcAborted === true, show({ vm: G4.vm, res: G4.res }));
   const uG = await P.stx.fresh();
   await execute('G5 execute the signed stx order', 'stx', gid0 + 1n, uG.hex);
@@ -374,9 +505,9 @@ try {
 
   setGroup('X probe: exact `net` allowance on a book fill');
   {
-    const EX = `${DEP}.jing-btc-in-escrow-v2-exact`;
+    const EX = `${ESC}-exact`;
     await tx('X0 set-keeper on the exact copy', DEP, EX, 'set-keeper', [P_(KEEPER), boolCV(true)], { ok: true });
-    await tx('X0 arm on the exact copy', U.u8, EX, 'arm-swap-sbtc-for-stx', [uintCV(200_000n), uintCV(0n), uintCV(limS), uintCV(1n)], OK);
+    await tx('X0 arm on the exact copy', U.u8, EX, 'arm-swap-sbtc-for-stx', [uintCV(200_000n), uintCV(0n), uintCV(limS), uintCV(1n), AB], OK);
     await stxTransfer(WHALE.y, MAKER_S, 3_001_000_000n);
     await restBid('X0', MKT_S, MAKER_S, WSTX, 'wstx', 3_000_000_000n, P.stx.fresh);
     const uX = await P.stx.fresh();
@@ -475,6 +606,7 @@ try {
   const I4 = await tx('I4 stranger cancel after the timeout -> ok net', STRANGER, ESC, 'cancel', [uintCV(I1.id)], { ok: I1.net });
   check('I4 refund went to the user (+net), stranger gained nothing, escrow -net', (await sbtcBal(U.u10)) - iu0 === I1.net && (await sbtcBal(STRANGER)) === is0 && (await stxBal(STRANGER)) === isx0 && ie0 - (await sbtcBal(ESC)) === I1.net);
   check('I4 order deleted', (await evalIn(ESC, `(get-order u${I1.id})`)) === null);
+  check('I4 get-parked == I2 net (I1 cancelled)', (await parked()) === I2.net, show(await parked()));
   const pc = evPrints(I4.receipt, 'btc-in-cancelled');
   check('I4 btc-in-cancelled print exact', pc.length === 1 && canon(pc[0]) === canon({ event: 'btc-in-cancelled', id: I1.id, user: U.u10, router: R_STX, net: I1.net, caller: STRANGER }), show(pc));
   await failing('I5 cancel again -> u4205', STRANGER, 'cancel', [uintCV(I1.id)], E(4205), [U.u10]);
@@ -483,6 +615,7 @@ try {
   const iu2 = await sbtcBal(U.u11);
   await tx('I6 the user cancels its usdcx order while paused -> ok net', U.u11, ESC, 'cancel', [uintCV(I2.id)], { ok: I2.net });
   check('I6 user +net', (await sbtcBal(U.u11)) - iu2 === I2.net);
+  check('I6 get-parked == 0', (await parked()) === 0n);
   await tx('I6 unpause', DEP, ESC, 'set-paused', [boolCV(false)], { ok: true });
   // an order armed under the 360 timeout: still locked after 60 blocks
   const I7 = await arm('I7 under timeout 360', 'stx', U.u12, 30_000n, 300n, limS, 1n);
@@ -493,6 +626,39 @@ try {
   await failing('I7 still u4206', STRANGER, 'cancel', [uintCV(I7.id)], E(4206), [U.u12]);
   await execute('I8 the keeper executes I7 instead (fresh update)', 'stx', I7.id, (await P.stx.fresh()).hex);
   await escrowEmpty('I end');
+
+  setGroup('K expiry: execute refuses at / after cancel-height (u4211)');
+  {
+    // cancel-after-blocks is back at 30
+    const toHeight = async (target) => { const h0 = await height(); if (target - h0 > 0) await advance(target - h0, 1, target - h0); return await height(); };
+    const K1 = await arm('K1', 'stx', U.u10, 70_000n, 700n, 300n, 1n);
+    const ch1 = Number(K1.order['cancel-height']);
+    const h1 = await toHeight(ch1 - 1);
+    check(`K1 height ${h1} == cancel-height - 1 (${ch1 - 1})`, h1 === ch1 - 1, `${h1}`);
+    await execute('K1 execute at cancel-height - 1 fills', 'stx', K1.id, (await P.stx.fresh()).hex);
+    check('K1 still at cancel-height - 1 after execute', (await height()) === ch1 - 1);
+    const K2 = await arm('K2', 'stx', U.u10, 70_000n, 700n, 300n, 1n);
+    const K3 = await arm('K3', 'usdcx', U.u11, 40_000n, 400n, 300n, 1n);
+    const ch2 = Number(K2.order['cancel-height']);
+    const h2 = await toHeight(ch2);
+    check(`K2 height ${h2} == cancel-height (${ch2})`, h2 === ch2, `${h2}`);
+    const uK = await P.stx.fresh();
+    await failing('K2 keeper execute at cancel-height -> u4211', KEEPER, 'execute', [uintCV(K2.id), buf(uK.hex)], E(4211), [U.u10]);
+    await failing('K3 keeper execute usdcx at cancel-height -> u4211', KEEPER, 'execute', [uintCV(K3.id), buf((await freshUsdcx()).hex)], E(4211), [U.u11]);
+    check('K2/K3 orders still armed, unchanged', canon(await evalIn(ESC, `(get-order u${K2.id})`)) === canon(K2.order) && canon(await evalIn(ESC, `(get-order u${K3.id})`)) === canon(K3.order));
+    await escrowHolds('K2/K3 armed', K2.net + K3.net);
+    await advance(5, 1, 5);
+    await failing('K2 keeper execute 5 blocks past cancel-height -> u4211', KEEPER, 'execute', [uintCV(K2.id), buf((await P.stx.fresh()).hex)], E(4211), [U.u10]);
+    const ku0 = await sbtcBal(U.u10), kp0 = await parked();
+    const kc = await tx('K4 stranger cancels the expired K2 -> ok net', STRANGER, ESC, 'cancel', [uintCV(K2.id)], { ok: K2.net });
+    check('K4 user +net, parked -net', (await sbtcBal(U.u10)) - ku0 === K2.net && kp0 - (await parked()) === K2.net);
+    check('K4 btc-in-cancelled print', evPrints(kc.receipt, 'btc-in-cancelled').length === 1);
+    const ku1 = await sbtcBal(U.u11);
+    await tx('K4 user cancels the expired K3 -> ok net', U.u11, ESC, 'cancel', [uintCV(K3.id)], { ok: K3.net });
+    check('K4 K3 user +net', (await sbtcBal(U.u11)) - ku1 === K3.net);
+    await escrowEmpty('K end');
+  }
+  check('END get-parked == 0', (await parked()) === 0n, show(await parked()));
 } catch (e) {
   if (!(e instanceof Stop)) { console.error(e); S.fails.push(`EXC ${e.message}`); }
 }

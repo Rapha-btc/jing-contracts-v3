@@ -34,6 +34,31 @@ on v2.
 | 19 | Frosty Narwhal (Low) | If the Pyth Lazer fee goes above 0, the escrow (tx-sender inside the swap) cannot pay it: with 0 STX the Jing leg is dropped; with any STX on the escrow every `execute` reverts on the allowance (u4209) | yes | LOW | **Fixed**, see below. |
 | 20 | Recursive Relay (N-4, Info) | No print events on the admin setters, so keeper grants, fee-recipient swaps etc. are invisible to print indexers | yes | INFO | **Fixed**: every owner function prints (`btc-in-owner-proposed`, `-owner-accepted`, `-fee-recipient-set`, `-max-fee-sats-set`, `-paused-set`, `-keeper-set`, `-lazer-fee-set`, `-cancel-after-blocks-set`, and `btc-in-swept` with the asset on each sweep). |
 
+## Winner: Patient Reed (apeir)
+
+Patient Reed takes the 5,000 sats.
+
+- **First, and the most items that held.** First submission (2026-10-30
+  23:29). Three findings, all real on v2: the missing execution deadline
+  (#1, fixed), stuck balances with no `parked` total or rescue (#2, fixed
+  with `parked` and the sweeps), and the fee kept on refund (#3, confirmed,
+  works as intended).
+- **Proven, not argued.** Each item was reproduced on stxer mainnet forks
+  against the live escrow, including the cancel/execute race on one order at
+  the same height. Reed also checked that #1 still held on deployed v2, and
+  verified the exact one-line fix we shipped (9/9 on a fork).
+- **No false claims.** Reed reported nothing that turned out wrong, and the
+  only part we changed our mind on (sweeping the execute surplus) Reed had
+  left as an optional suggestion.
+
+Runners-up, not paid from this bounty:
+
+- **Frosty Narwhal**: the Lazer fee lockout (#19, fixed), and the fork run
+  that refuted the router-err High (#4).
+- **Recursive Relay**: arm expiry (#18, fixed) and admin prints (#20, fixed).
+  Both are smaller than #1, and arrived after Reed.
+- **Solid Gear / Super Orb**: the headline High (#4) was wrong.
+
 ## 1. Execution deadline
 
 `cancel-height` is set when the order is armed: the arm block plus
