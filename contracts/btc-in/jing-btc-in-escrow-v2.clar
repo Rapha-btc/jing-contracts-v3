@@ -48,6 +48,7 @@
 (define-constant ERR_OVERSPENT (err u4210))
 (define-constant ERR_EXPIRED (err u4211))
 (define-constant ERR_SWEEP_PARKED (err u4212))
+(define-constant ERR_ARM_LATE (err u4213))
 
 (define-data-var owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -91,8 +92,12 @@
     (fee-sats uint)
     (slippage-bps uint)
     (min-out uint)
+    (arm-by uint)
   )
   (begin
+    ;; the user signs this before the BTC is sent; the sponsor cannot hold the
+    ;; signed arm and land it later than the user agreed to
+    (asserts! (< stacks-block-height arm-by) ERR_ARM_LATE)
     (asserts! (not (var-get paused)) ERR_PAUSED)
     (asserts! (<= fee-sats (var-get max-fee-sats)) ERR_FEE_TOO_HIGH)
     (asserts! (< fee-sats amount) ERR_FEE_GE_AMOUNT)
@@ -155,14 +160,16 @@
 ;; Parks net sBTC for an sBTC -> STX swap on the Jing sBTC/STX router.
 ;; slippage-bps (0-9999) becomes the real-time limit at execute, from the
 ;; verified mid: limit = mid * (10000 - slippage-bps) / 10000. min-out is an
-;; optional absolute floor on what the user receives (0 = none).
+;; optional absolute floor on what the user receives (0 = none). arm-by is the
+;; Stacks block height the arm must land before (ERR_ARM_LATE otherwise).
 (define-public (arm-swap-sbtc-for-stx
     (amount uint)
     (fee-sats uint)
     (slippage-bps uint)
     (min-stx-out uint)
+    (arm-by uint)
   )
-  (arm ROUTER_STX amount fee-sats slippage-bps min-stx-out)
+  (arm ROUTER_STX amount fee-sats slippage-bps min-stx-out arm-by)
 )
 
 ;; Parks net sBTC for an sBTC -> USDCx swap on the Jing sBTC/USDCx router.
@@ -171,8 +178,9 @@
     (fee-sats uint)
     (slippage-bps uint)
     (min-usdcx-out uint)
+    (arm-by uint)
   )
-  (arm ROUTER_USDCX amount fee-sats slippage-bps min-usdcx-out)
+  (arm ROUTER_USDCX amount fee-sats slippage-bps min-usdcx-out arm-by)
 )
 
 ;; --- keeper ---
