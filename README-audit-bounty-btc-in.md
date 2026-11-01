@@ -32,6 +32,7 @@ on v2.
 | 17 | Frosty Sparrow, Violet Reed, Iron Hub, Light Leopard | No new findings (Light Leopard: no content) | — | — | Nothing to decide. |
 | 18 | Recursive Relay (N-2, Low), Ionic Zephyr (Low) | The presigned arm has no expiry: the sponsor holding it chooses when it lands. Also `cancel-after-blocks` is read when the arm lands, so the owner can change it after the user signed | yes | LOW | **Fixed** (arm expiry), see below. The `cancel-after-blocks` part: no change. |
 | 19 | Frosty Narwhal (Low) | If the Pyth Lazer fee goes above 0, the escrow (tx-sender inside the swap) cannot pay it: with 0 STX the Jing leg is dropped; with any STX on the escrow every `execute` reverts on the allowance (u4209) | yes | LOW | **Fixed**, see below. |
+| 20 | Recursive Relay (N-4, Info) | No print events on the admin setters, so keeper grants, fee-recipient swaps etc. are invisible to print indexers | yes | INFO | **Fixed**: every owner function prints (`btc-in-owner-proposed`, `-owner-accepted`, `-fee-recipient-set`, `-max-fee-sats-set`, `-paused-set`, `-keeper-set`, `-lazer-fee-set`, `-cancel-after-blocks-set`, and `btc-in-swept` with the asset on each sweep). |
 
 ## 1. Execution deadline
 

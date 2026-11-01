@@ -354,6 +354,10 @@
 (define-public (propose-owner (new-owner principal))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
+    (print {
+      event: "btc-in-owner-proposed",
+      new-owner: new-owner,
+    })
     (ok (var-set pending-owner (some new-owner)))
   )
 )
@@ -364,6 +368,11 @@
     (asserts! (is-eq (some contract-caller) (var-get pending-owner))
       ERR_NOT_OWNER
     )
+    (print {
+      event: "btc-in-owner-accepted",
+      old-owner: (var-get owner),
+      new-owner: contract-caller,
+    })
     (var-set owner contract-caller)
     (ok (var-set pending-owner none))
   )
@@ -372,6 +381,10 @@
 (define-public (set-fee-recipient (recipient principal))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
+    (print {
+      event: "btc-in-fee-recipient-set",
+      recipient: recipient,
+    })
     (ok (var-set fee-recipient recipient))
   )
 )
@@ -380,6 +393,10 @@
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
     (asserts! (<= sats MAX_FEE_SATS) ERR_FEE_TOO_HIGH)
+    (print {
+      event: "btc-in-max-fee-sats-set",
+      sats: sats,
+    })
     (ok (var-set max-fee-sats sats))
   )
 )
@@ -387,6 +404,10 @@
 (define-public (set-paused (on bool))
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
+    (print {
+      event: "btc-in-paused-set",
+      on: on,
+    })
     (ok (var-set paused on))
   )
 )
@@ -397,6 +418,11 @@
   )
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
+    (print {
+      event: "btc-in-keeper-set",
+      keeper: keeper,
+      on: on,
+    })
     (ok (map-set keepers keeper on))
   )
 )
@@ -410,6 +436,12 @@
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
     (asserts! (<= (+ amount (var-get parked)) (sbtc-held)) ERR_SWEEP_PARKED)
+    (print {
+      event: "btc-in-swept",
+      asset: "sbtc",
+      amount: amount,
+      to: to,
+    })
     (pay-sbtc amount to)
   )
 )
@@ -428,6 +460,12 @@
       )
       ERR_ALLOWANCE
     )
+    (print {
+      event: "btc-in-swept",
+      asset: "stx",
+      amount: amount,
+      to: to,
+    })
     (ok true)
   )
 )
@@ -444,6 +482,12 @@
       )
       ERR_ALLOWANCE
     )
+    (print {
+      event: "btc-in-swept",
+      asset: "usdcx",
+      amount: amount,
+      to: to,
+    })
     (ok true)
   )
 )
@@ -452,6 +496,10 @@
   (begin
     (asserts! (is-owner) ERR_NOT_OWNER)
     (asserts! (<= ustx MAX_LAZER_FEE_USTX) ERR_LAZER_FEE_TOO_HIGH)
+    (print {
+      event: "btc-in-lazer-fee-set",
+      ustx: ustx,
+    })
     (ok (var-set lazer-fee-ustx ustx))
   )
 )
@@ -462,6 +510,10 @@
     (asserts! (and (> blocks u0) (<= blocks MAX_CANCEL_AFTER_BLOCKS))
       ERR_BAD_TIMEOUT
     )
+    (print {
+      event: "btc-in-cancel-after-blocks-set",
+      blocks: blocks,
+    })
     (ok (var-set cancel-after-blocks blocks))
   )
 )
