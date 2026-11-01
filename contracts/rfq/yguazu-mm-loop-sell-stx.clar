@@ -1,21 +1,3 @@
-;; yguazu-mm-loop-sell-stx
-;; One user = one vault. The deployer is the owner. Non-custodial MM loop,
-;; STX side (mirror: yguazu-mm-loop-sell-sbtc):
-;;   leg 1  sell:     vault STX -> allowlisted sell-stx rung (bid at mid - spread)
-;;   claim:           vault claims rung sBTC proceeds; fill price + VWAP computed on-chain
-;;   leg 2  buy-back: vault sBTC -> pegged ask on markets-sbtc-stx-jing-v6-4,
-;;                    floor = VWAP sell * (10000 + edge-bps) / 10000 (rounded up)
-;; The keeper can only run the loop. Every outgoing asset move is bounded by an
-;; as-contract? allowance to the rung (STX) or the market (sBTC). Only the owner
-;; can withdraw, and only to the owner.
-;;
-;; Rungs: the ten deployed jing-sell-stx-<spread bps> rungs, passed as a
-;; jing-rung-deposit-trait reference and checked against the constant RUNGS
-;; list. No setter can change that list. get-position returns a plain tuple,
-;; so it cannot be a trait member; rung-remaining reads it per literal.
-;;
-;; Prices use the market unit: uSTX per sat x 1e10 (uSTX = sats * price / 1e10).
-
 (define-constant ERR_NOT_OWNER (err u8201))
 (define-constant ERR_NOT_AUTHORIZED (err u8202))
 (define-constant ERR_NOT_PENDING_OWNER (err u8203))
@@ -40,25 +22,20 @@
 (define-constant RUNG_70 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-70)
 (define-constant RUNG_80 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-80)
 (define-constant RUNG_90 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-90)
-;; the list goes through `plain` so its type is plain principal: a list of
-;; contract literals keeps the literal type, which index-of? refuses to match
 (define-private (plain (p principal))
   p
 )
 (define-constant RUNGS (map plain
-  (list RUNG_1 RUNG_10 RUNG_20 RUNG_30 RUNG_40 RUNG_50 RUNG_60 RUNG_70 RUNG_80
-    RUNG_90
+  (list
+    RUNG_1 RUNG_10 RUNG_20 RUNG_30 RUNG_40 RUNG_50 RUNG_60 RUNG_70
+    RUNG_80 RUNG_90
   )))
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_NAME "sbtc-token")
 
 (define-constant BPS u10000)
-;; default edge; the owner tunes it with set-edge-bps. Each resting leg pays the
-;; market's 10 bps fee and receives the taker's 20 bps rebate, so fees do not
-;; eat the edge.
 (define-constant DEFAULT_EDGE_BPS u25)
 (define-constant PRICE_SCALE u10000000000)
-;; open sBTC inventory below this resets the VWAP (inventory is back in STX)
 (define-constant RESET_DUST_SATS u1000)
 
 (define-data-var owner principal tx-sender)
@@ -66,30 +43,15 @@
 (define-data-var keeper (optional principal) none)
 (define-data-var paused bool false)
 (define-data-var edge-bps uint DEFAULT_EDGE_BPS)
-;; most uSTX a rung-withdraw may pay for the oracle update it carries (the
-;; rung settles its pending order with it). The fee is 0 today; the owner
-;; raises this only if the oracle starts charging.
 (define-data-var max-oracle-fee uint u0)
 
-;; Why these two: they set the least the buy-back ask may accept, so it never
-;; buys STX back at a loss. Only their ratio matters: VWAP sell = inv-stx *
-;; PRICE_SCALE / inv-sats, and buy-back-floor = VWAP sell plus the edge.
-;; - claim adds the real STX sold and the real sats received, so several sales
-;;   at different prices blend into one average.
-;; - reconcile removes the same share of both as sBTC is spent, so the average
-;;   of what is left stays the price it was really sold at.
-;; inv-stx is bookkeeping, not STX held: the STX actually bought back lands in
-;; the vault balance (more than inv-stx closed = profit).
 (define-data-var inv-sats uint u0)
 (define-data-var inv-stx uint u0)
 
-;; uSTX the vault has in each rung, not yet accounted as filled or returned
 (define-map rung-principal
   principal
   uint
 )
-
-;; ---------------------------------------------------------------- reads
 
 (define-read-only (get-owner)
   (var-get owner)
@@ -118,27 +80,42 @@
   )
 )
 
-;; rounded up in one step from the raw inventory (not from the rounded-down
-;; vwap-sell): the ask never rests below VWAP + edge
 (define-read-only (buy-back-floor)
   (let ((den (* (var-get inv-sats) BPS)))
     (if (is-eq den u0)
       u0
-      (/ (+ (* (* (var-get inv-stx) PRICE_SCALE) (+ BPS (var-get edge-bps))) (- den u1)) den)
+      (/
+        (+ (* (* (var-get inv-stx) PRICE_SCALE) (+ BPS (var-get edge-bps)))
+          (- den u1)
+        )
+        den
+      )
     )
   )
 )
 
 (define-read-only (sats-on-market)
   (+
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4 get-token-x-deposit
-      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4 get-current-cycle) current-contract
+    (contract-call?
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      get-token-x-deposit
+      (contract-call?
+        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+        get-current-cycle
+      )
+      current-contract
     )
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4 get-token-x-parked current-contract)
+    (contract-call?
+      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+      get-token-x-parked current-contract
+    )
     (default-to u0
-      (get amount (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4 get-token-x-pending-deposit current-contract))
-    )
-  )
+      (get amount
+        (contract-call?
+          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4
+          get-token-x-pending-deposit current-contract
+        ))
+    ))
 )
 
 (define-read-only (sats-open)
@@ -146,7 +123,9 @@
 )
 
 (define-read-only (sbtc-held)
-  (unwrap-panic (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token get-balance current-contract))
+  (unwrap-panic (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token
+    get-balance current-contract
+  ))
 )
 
 (define-read-only (get-state)
@@ -167,8 +146,6 @@
   }
 )
 
-;; ---------------------------------------------------------------- auth
-
 (define-private (is-owner)
   (is-eq contract-caller (var-get owner))
 )
@@ -180,7 +157,6 @@
   )
 )
 
-;; owner always; keeper only while not paused
 (define-private (check-operator)
   (begin
     (asserts!
@@ -197,15 +173,6 @@
   )
 )
 
-;; ---------------------------------------------------------------- inventory
-
-;; Shrink open sBTC inventory to what is still in the vault or on the market.
-;; Spent sBTC (ask fills, owner withdraws) removes STX pro rata, so the VWAP
-;; holds. Untracked extra sBTC never raises the inventory.
-;; Fresh sBTC = proceeds arriving from a rung (claim, or a deposit/withdraw that
-;; settles earlier fills). Spent sBTC = what left via buy-back fills or withdraws.
-;; Callers run this BEFORE any rung call: once fresh sBTC lands in the balance,
-;; it would hide the spent sBTC and those STX would never be closed.
 (define-private (reconcile-inner)
   (let (
       (have (sats-open))
@@ -249,12 +216,10 @@
   )
 )
 
-;; A sale booked while the ask rests can raise the floor above the ask's
-;; limit. The market keeps the old limit: reprice cannot reach a pending ask
-;; and only queues the change on a live one. Pull the ask back to the vault,
-;; so the keeper re-posts it at the new floor. A failed cancel is printed and
-;; never blocks booking a real sale. A limit of 0 means no such order.
-(define-private (below-floor (limit uint) (floor uint))
+(define-private (below-floor
+    (limit uint)
+    (floor uint)
+  )
   (and (> limit u0) (< limit floor))
 )
 
@@ -263,11 +228,13 @@
       (floor (buy-back-floor))
       (live (contract-call? MARKET get-token-x-limit current-contract))
       (pending (default-to u0
-        (get limit (contract-call? MARKET get-token-x-pending-deposit current-contract))
-      ))
+        (get limit
+          (contract-call? MARKET get-token-x-pending-deposit current-contract)
+        )))
       (queued (default-to u0
-        (get limit (contract-call? MARKET get-token-x-pending-limit current-contract))
-      ))
+        (get limit
+          (contract-call? MARKET get-token-x-pending-limit current-contract)
+        )))
     )
     (if (and
         (> (sats-on-market) u0)
@@ -285,8 +252,8 @@
           pending: pending,
           queued: queued,
           cancelled: (match (as-contract? ()
-              (is-ok (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
-            )
+            (is-ok (contract-call? MARKET cancel-token-x-deposit SBTC SBTC_NAME))
+          )
             done done
             e false
           ),
@@ -298,9 +265,6 @@
   )
 )
 
-;; Book a rung interaction from balance deltas.
-;; expected = rung principal before the call + uSTX sent in this call.
-;; consumed = expected - still in rung - STX returned to the vault.
 (define-private (book-rung
     (rung principal)
     (expected uint)
@@ -347,31 +311,66 @@
   )
 )
 
-;; ---------------------------------------------------------------- rung dispatch
-
-;; uSTX the vault still has in an allowlisted rung (its unfilled input).
-;; A read-only may only call a contract it names literally.
 (define-read-only (rung-remaining (rung principal))
   (if (is-eq rung RUNG_1)
-    (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-1 get-position current-contract))
+    (get stx
+      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-1
+        get-position current-contract
+      ))
     (if (is-eq rung RUNG_10)
-      (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-10 get-position current-contract))
+      (get stx
+        (contract-call?
+          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-10
+          get-position current-contract
+        ))
       (if (is-eq rung RUNG_20)
-        (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-20 get-position current-contract))
+        (get stx
+          (contract-call?
+            'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-20
+            get-position current-contract
+          ))
         (if (is-eq rung RUNG_30)
-          (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-30 get-position current-contract))
+          (get stx
+            (contract-call?
+              'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-30
+              get-position current-contract
+            ))
           (if (is-eq rung RUNG_40)
-            (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-40 get-position current-contract))
+            (get stx
+              (contract-call?
+                'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-40
+                get-position current-contract
+              ))
             (if (is-eq rung RUNG_50)
-              (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-50 get-position current-contract))
+              (get stx
+                (contract-call?
+                  'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-50
+                  get-position current-contract
+                ))
               (if (is-eq rung RUNG_60)
-                (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-60 get-position current-contract))
+                (get stx
+                  (contract-call?
+                    'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-60
+                    get-position current-contract
+                  ))
                 (if (is-eq rung RUNG_70)
-                  (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-70 get-position current-contract))
+                  (get stx
+                    (contract-call?
+                      'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-70
+                      get-position current-contract
+                    ))
                   (if (is-eq rung RUNG_80)
-                    (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-80 get-position current-contract))
+                    (get stx
+                      (contract-call?
+                        'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-80
+                        get-position current-contract
+                      ))
                     (if (is-eq rung RUNG_90)
-                      (get stx (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-90 get-position current-contract))
+                      (get stx
+                        (contract-call?
+                          'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-stx-90
+                          get-position current-contract
+                        ))
                       u0
                     )
                   )
@@ -389,15 +388,11 @@
     (rung <rung-trait>)
     (amount uint)
   )
-  (as-contract? ((with-stx amount))
-    (try! (contract-call? rung deposit amount))
-  )
+  (as-contract? ((with-stx amount)) (try! (contract-call? rung deposit amount)))
 )
 
 (define-private (rung-claim (rung <rung-trait>))
-  (as-contract? ()
-    (try! (contract-call? rung claim))
-  )
+  (as-contract? () (try! (contract-call? rung claim)))
 )
 
 (define-private (rung-withdraw-inner
@@ -409,8 +404,6 @@
     (try! (contract-call? rung withdraw amount update))
   )
 )
-
-;; ---------------------------------------------------------------- loop (keeper or owner)
 
 (define-public (sell
     (rung <rung-trait>)
@@ -468,10 +461,6 @@
   )
 )
 
-;; Pegged sBTC ask: mid * (1 + spread), never below the floor (the market sits
-;; it out while the pegged price is under the floor). A top-up overwrites the
-;; market's one limit per principal, so the floor is the VWAP of ALL open
-;; inventory, and the ask total stays within that inventory.
 (define-public (buy-back
     (amount uint)
     (spread-bps uint)
@@ -482,12 +471,14 @@
     (asserts! (< spread-bps BPS) ERR_BAD_SPREAD)
     (reconcile-inner)
     (asserts! (> (var-get inv-sats) u0) ERR_NO_INVENTORY)
-    (asserts! (<= (+ (sats-on-market) amount) (var-get inv-sats)) ERR_OVER_INVENTORY)
+    (asserts! (<= (+ (sats-on-market) amount) (var-get inv-sats))
+      ERR_OVER_INVENTORY
+    )
     (let ((floor (buy-back-floor)))
       (asserts! (> floor u0) ERR_ZERO_FLOOR)
       (try! (as-contract? ((with-ft SBTC SBTC_NAME amount))
-        (try! (contract-call? MARKET deposit-token-x amount floor (some spread-bps) SBTC
-          SBTC_NAME
+        (try! (contract-call? MARKET deposit-token-x amount floor (some spread-bps)
+          SBTC SBTC_NAME
         ))
       ))
       (print {
@@ -538,8 +529,6 @@
   )
 )
 
-;; ---------------------------------------------------------------- exits (rung-withdraw, cancel-buy-back: keeper or owner; the rest: owner only)
-
 (define-public (rung-withdraw
     (rung <rung-trait>)
     (amount uint)
@@ -557,7 +546,6 @@
     (try! (rung-withdraw-inner rung amount update))
     (let (
         (sbtc-in (- (sbtc-held) sbtc0))
-        ;; an oracle fee paid from the vault can leave less STX than before
         (stx-back (if (> (stx-get-balance current-contract) stx0)
           (- (stx-get-balance current-contract) stx0)
           u0
@@ -694,3 +682,4 @@
     (ok true)
   )
 )
+
