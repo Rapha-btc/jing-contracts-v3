@@ -107,8 +107,8 @@ path = "contracts/btc-in/jing-btc-in-adapter.clar"
 clarity_version = 5
 epoch = "latest"
 
-[contracts.jing-btc-in-escrow]
-path = "contracts/btc-in/jing-btc-in-escrow.clar"
+[contracts.jing-btc-in-escrow-v2]
+path = "contracts/btc-in/jing-btc-in-escrow-v2.clar"
 clarity_version = 5
 epoch = "latest"
 
