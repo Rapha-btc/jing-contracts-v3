@@ -16,10 +16,10 @@
 ;; signed Lazer update to pass; the mid comes from it on-chain, and the user's
 ;; slippage-bps and min-out bound the fill.
 
-;; DRAFT (uncommitted): arm reads the exact minted amount from the sBTC
-;; registry by the deposit's (txid, vout) instead of a user-signed amount, so
-;; no bridge-fee estimate is reserved. The user signs the BTC tx without
-;; broadcasting it, so the txid is known before the arm is signed.
+;; v4 (deployed as jing-btc-in-escrow-v4): arm reads the exact minted amount
+;; from the sBTC registry by the deposit's (txid, vout) instead of a
+;; user-signed amount, so no bridge-fee estimate is reserved. The user sends
+;; the BTC deposit, the wallet returns its txid, then the user signs the arm.
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant SBTC_REGISTRY 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry)
 (define-constant ASSET_SBTC "sbtc-token")
