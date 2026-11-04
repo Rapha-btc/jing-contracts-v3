@@ -22,6 +22,7 @@ rungs, or a fak.fun smart buy.
 | `../../simulations/verify-btc-in-escrow.js` | stxer harness for `jing-btc-in-escrow` (groups A-I, X). |
 | `jing-btc-in-escrow-v2.clar` | Escrow v1 with the mid read on-chain (market `refresh-mid`), so slippage is trustless. See the v2 section at the end. |
 | `../../simulations/verify-btc-in-escrow-v2.js` | stxer harness for `jing-btc-in-escrow-v2`. |
+| `../../simulations/verify-btc-in-escrow-v4.js` | stxer harness for `jing-btc-in-escrow-v4` (arm by sBTC deposit), on real mainnet deposits. See the v4 section at the end. |
 
 ## Entry points
 
@@ -289,3 +290,56 @@ no book bid (router u3002, full refund).
 
 Status: DEPLOYED 2026-10-31 by SPV9K21… (template faktory-dao ae7476c4, from
 590968f; on-chain bytes 8870 match the stripped + formatted source).
+
+# jing-btc-in-escrow-v4
+
+Source: `jing-btc-in-escrow-v2.clar` at 3685454 (the repo file keeps its name;
+the audit-fix version at 3d4ba6e is deployed as `jing-btc-in-escrow-v3`).
+
+v4 drops the bridge-fee estimate. Before, the user signed an `amount` = BTC
+sent minus a conservative ~8,000-sat sBTC bridge fee, so the swap was sized
+for the worst case. Now the arm names the deposit and the escrow reads what
+actually minted from `SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry`
+(`get-completed-deposit txid vout`, suggested by djordon-stacks in
+stacks-sbtc/sbtc#2164).
+
+Flow: the user sends the BTC deposit as usual, the wallet returns the txid,
+then the user signs the sponsored arm with `(txid, vout)`. The keeper lands it
+once the sBTC mints. Closing the tab between the two signatures loses nothing:
+the user just keeps the sBTC.
+
+| Change | Detail |
+|---|---|
+| `arm-swap-sbtc-for-stx / -usdcx (txid vout fee-sats slippage-bps min-out arm-by)` | No `amount`. Reads the minted amount from the registry; the deposit's recipient must be `tx-sender`. Returns `(ok net)`. |
+| `orders` | One map keyed `{txid, vout}` with `status` u0 open / u1 executed / u2 cancelled. Never deleted, so `map-insert` makes every deposit armable once, ever. `last-id` removed. |
+| `execute (txid vout update)`, `cancel (txid vout)`, `get-order (txid vout)` | Keyed by deposit; `execute` / `cancel` require status open (else u4205). |
+| New errors | u4215 no such minted deposit, u4216 not the recipient, u4217 deposit already armed. |
+| Prints | `btc-in-armed` / `-executed` / `-cancelled` carry `txid` + `vout` instead of `id`. |
+
+Notes:
+- The registry stores the txid in display byte order (as wallets and
+  mempool.space show it): pass the wallet's txid as-is. `vout` is the real
+  deposit output index (live deposits use 0 and 1); read it from the tx.
+- Arm pulls `amount - fee-sats` + `fee-sats` from the signer's sBTC balance.
+  It does not prove those exact sats are unspent; it only binds one order to
+  one minted deposit the signer owns.
+- Arm-once is per contract: a deposit already swapped through v3 or the
+  adapter can still be armed once in v4, by its own recipient only.
+
+`node simulations/verify-btc-in-escrow-v4.js`: **267/267**,
+[run](https://stxer.xyz/simulations/mainnet/87a543567eaf9c4d2f54f793bdc7397d)
+(fork at 9413930, on the live contract; bytes checked against
+`simulations/deploy-bytes-btc-in-escrow-v4/`). Five real mainnet deposits
+from v3 users: arm STX + USDCx with the exact minted amount, fee and parked
+accounting, execute (status u1), cancel early (u4206) / after (u2 refund),
+execute after cancel-height (u4211), re-arm of executed or cancelled
+deposits on both routes (u4217), non-recipient (u4216), unknown txid,
+reversed byte order, short txid and max vout (u4215), arm-by passed (u4213),
+recipient short of sBTC (sBTC u1, deposit stays armable), a Deny-mode
+post-condition at exactly the amount (amount - 1 aborts), and `sweep-sbtc`
+unable to take 1 parked sat. u4202 (fee >= amount) needs a deposit under
+10,000 sats and is not reached with these deposits.
+
+Status: DEPLOYED 2026-11-04 by SPV9K21… (template faktory-dao 87aea797; on-chain
+bytes 13193, sha256 42f84f1f…, match the stripped + formatted source).
+Audit bounty: aibtc mw2oljg38187074534dc (3,000 sats, until 2026-11-18).
