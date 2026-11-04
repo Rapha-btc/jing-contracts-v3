@@ -1,0 +1,51 @@
+# Simnet project for tests/btc-in-escrow (own deployments/ dir so the shared
+# root plan is never touched). Real sBTC token / registry / deposit from the
+# repo .cache; routers, markets and USDCx are local mocks. Build first:
+#   node tests/btc-in-escrow/build.mjs
+[project]
+name = "btc-in-escrow-tests"
+authors = []
+telemetry = false
+cache_dir = "../../.cache"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-deposit"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry"
+
+[contracts.mock-usdcx]
+path = "contracts/mock-usdcx.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-market-stx]
+path = "contracts/mock-market.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-market-usdcx]
+path = "contracts/mock-market.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-router-stx]
+path = "contracts/mock-router.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-router-usdcx]
+path = "contracts/mock-router.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-btc-in-escrow]
+path = ".build/jing-btc-in-escrow.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.analysis]
+passes = []

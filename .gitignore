@@ -13,3 +13,6 @@ tests/unit/v6-3/.build/
 tests/unit/v6-3/settings/
 tests/unit/integration-v6-3/.build/
 tests/unit/integration-v6-3/settings/
+tests/btc-in-escrow/.build/
+tests/btc-in-escrow/settings/
+tests/btc-in-escrow/rv/settings/

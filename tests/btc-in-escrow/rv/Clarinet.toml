@@ -1,0 +1,49 @@
+# Rendezvous project for the escrow (own deployments/). Build first:
+#   node tests/btc-in-escrow/build.mjs
+# Run:  npx rv tests/btc-in-escrow/rv jing-btc-in-escrow invariant --runs=1000
+[project]
+name = "btc-in-escrow-rv"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[[project.requirements]]
+contract_id = "SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token"
+
+[contracts.mock-registry]
+path = "../contracts/mock-registry.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-usdcx]
+path = "../contracts/mock-usdcx.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-market-stx]
+path = "../contracts/mock-market.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-market-usdcx]
+path = "../contracts/mock-market.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-router-stx]
+path = "../contracts/mock-router.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.mock-router-usdcx]
+path = "../contracts/mock-router.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-btc-in-escrow]
+path = "../.build/jing-btc-in-escrow-rv.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.analysis]
+passes = []
