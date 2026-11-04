@@ -16,7 +16,12 @@
 ;; signed Lazer update to pass; the mid comes from it on-chain, and the user's
 ;; slippage-bps and min-out bound the fill.
 
+;; DRAFT (uncommitted): arm reads the exact minted amount from the sBTC
+;; registry by the deposit's (txid, vout) instead of a user-signed amount, so
+;; no bridge-fee estimate is reserved. The user signs the BTC tx without
+;; broadcasting it, so the txid is known before the arm is signed.
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
+(define-constant SBTC_REGISTRY 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-registry)
 (define-constant ASSET_SBTC "sbtc-token")
 (define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
 (define-constant ASSET_USDCX "usdcx-token")
@@ -52,6 +57,15 @@
 (define-constant ERR_SWEEP_PARKED (err u4212))
 (define-constant ERR_ARM_LATE (err u4213))
 (define-constant ERR_LAZER_FEE_TOO_HIGH (err u4214))
+(define-constant ERR_NO_DEPOSIT (err u4215))
+(define-constant ERR_NOT_RECIPIENT (err u4216))
+(define-constant ERR_DEPOSIT_USED (err u4217))
+
+;; Order status. Orders are never deleted: one row per deposit, forever, so
+;; the same deposit can never be armed twice and every order stays readable.
+(define-constant STATUS_OPEN u0)
+(define-constant STATUS_EXECUTED u1)
+(define-constant STATUS_CANCELLED u2)
 
 (define-data-var owner principal tx-sender)
 (define-data-var pending-owner (optional principal) none)
@@ -65,7 +79,6 @@
 ;; Snapshotted per order at arm time, so a later change never moves an
 ;; existing order's deadline.
 (define-data-var cancel-after-blocks uint u30)
-(define-data-var last-id uint u0)
 ;; Sum of `net` over open orders: the sBTC here that belongs to users.
 ;; Up on arm, down on execute / cancel. Only sBTC above it can be swept.
 (define-data-var parked uint u0)
@@ -81,8 +94,12 @@
 )
 
 (define-map orders
-  uint
   {
+    txid: (buff 32),
+    vout: uint,
+  }
+  {
+    status: uint,
     user: principal,
     router: principal,
     net: uint,
@@ -96,13 +113,23 @@
 
 (define-private (arm
     (router principal)
-    (amount uint)
+    (txid (buff 32))
+    (vout uint)
     (fee-sats uint)
     (slippage-bps uint)
     (min-out uint)
     (arm-by uint)
   )
-  (begin
+  (let (
+      ;; exactly what the bridge minted for this deposit, no fee estimate
+      (deposit (unwrap!
+        (contract-call? SBTC_REGISTRY get-completed-deposit txid vout)
+        ERR_NO_DEPOSIT
+      ))
+      (amount (get amount deposit))
+    )
+    ;; only the deposit's own recipient can arm it
+    (asserts! (is-eq (get recipient deposit) tx-sender) ERR_NOT_RECIPIENT)
     ;; the user signs this before the BTC is sent; the sponsor cannot hold the
     ;; signed arm and land it later than the user agreed to
     (asserts! (< stacks-block-height arm-by) ERR_ARM_LATE)
@@ -112,8 +139,12 @@
     (asserts! (< slippage-bps BPS) ERR_BAD_SLIPPAGE)
     (let (
         (net (- amount fee-sats))
-        (id (+ (var-get last-id) u1))
+        (key {
+          txid: txid,
+          vout: vout,
+        })
         (order {
+          status: STATUS_OPEN,
           user: tx-sender,
           router: router,
           net: net,
@@ -128,17 +159,18 @@
         ))
         true
       )
+      ;; one order per deposit, ever: a second arm of it fails here
+      (asserts! (map-insert orders key order) ERR_DEPOSIT_USED)
       (try! (contract-call? SBTC transfer net tx-sender current-contract none))
-      (map-set orders id order)
-      (var-set last-id id)
       (var-set parked (+ (var-get parked) net))
       (print (merge order {
         event: "btc-in-armed",
-        id: id,
         amount: amount,
         fee-sats: fee-sats,
+        txid: txid,
+        vout: vout,
       }))
-      (ok id)
+      (ok net)
     )
   )
 )
@@ -171,24 +203,26 @@
 ;; optional absolute floor on what the user receives (0 = none). arm-by is the
 ;; Stacks block height the arm must land before (ERR_ARM_LATE otherwise).
 (define-public (arm-swap-sbtc-for-stx
-    (amount uint)
+    (txid (buff 32))
+    (vout uint)
     (fee-sats uint)
     (slippage-bps uint)
     (min-stx-out uint)
     (arm-by uint)
   )
-  (arm ROUTER_STX amount fee-sats slippage-bps min-stx-out arm-by)
+  (arm ROUTER_STX txid vout fee-sats slippage-bps min-stx-out arm-by)
 )
 
 ;; Parks net sBTC for an sBTC -> USDCx swap on the Jing sBTC/USDCx router.
 (define-public (arm-swap-sbtc-for-usdcx
-    (amount uint)
+    (txid (buff 32))
+    (vout uint)
     (fee-sats uint)
     (slippage-bps uint)
     (min-usdcx-out uint)
     (arm-by uint)
   )
-  (arm ROUTER_USDCX amount fee-sats slippage-bps min-usdcx-out arm-by)
+  (arm ROUTER_USDCX txid vout fee-sats slippage-bps min-usdcx-out arm-by)
 )
 
 ;; --- keeper ---
@@ -199,10 +233,18 @@
 ;; abort reverts the whole tx and leaves the order armed. A fake or stale
 ;; update fails refresh-mid: the tx errs and the order stays armed.
 (define-public (execute
-    (id uint)
+    (txid (buff 32))
+    (vout uint)
     (update (buff 8192))
   )
-  (let ((order (unwrap! (map-get? orders id) ERR_NO_ORDER)))
+  (let (
+      (key {
+        txid: txid,
+        vout: vout,
+      })
+      (order (unwrap! (map-get? orders key) ERR_NO_ORDER))
+    )
+    (asserts! (is-eq (get status order) STATUS_OPEN) ERR_NO_ORDER)
     (asserts! (default-to false (map-get? keepers contract-caller))
       ERR_NOT_KEEPER
     )
@@ -295,11 +337,12 @@
       )
       ;; unsold sats on a fill, the whole net on a router err (spent is 0)
       (try! (pay-sbtc (- net spent) user))
-      (map-delete orders id)
+      (map-set orders key (merge order { status: STATUS_EXECUTED }))
       (var-set parked (- (var-get parked) net))
       (print {
         event: "btc-in-executed",
-        id: id,
+        txid: txid,
+        vout: vout,
         user: user,
         router: (get router order),
         net: net,
@@ -327,15 +370,26 @@
 ;; Refunds the net to the order's user once cancel-height is reached. Open to
 ;; anyone so a user who walked away is refunded without signing again; the
 ;; caller can only ever send the sats to the user. Works while paused.
-(define-public (cancel (id uint))
-  (let ((order (unwrap! (map-get? orders id) ERR_NO_ORDER)))
+(define-public (cancel
+    (txid (buff 32))
+    (vout uint)
+  )
+  (let (
+      (key {
+        txid: txid,
+        vout: vout,
+      })
+      (order (unwrap! (map-get? orders key) ERR_NO_ORDER))
+    )
+    (asserts! (is-eq (get status order) STATUS_OPEN) ERR_NO_ORDER)
     (asserts! (>= stacks-block-height (get cancel-height order)) ERR_TOO_EARLY)
     (try! (pay-sbtc (get net order) (get user order)))
-    (map-delete orders id)
+    (map-set orders key (merge order { status: STATUS_CANCELLED }))
     (var-set parked (- (var-get parked) (get net order)))
     (print {
       event: "btc-in-cancelled",
-      id: id,
+      txid: txid,
+      vout: vout,
       user: (get user order),
       router: (get router order),
       net: (get net order),
@@ -520,8 +574,14 @@
 
 ;; --- read-only ---
 
-(define-read-only (get-order (id uint))
-  (map-get? orders id)
+(define-read-only (get-order
+    (txid (buff 32))
+    (vout uint)
+  )
+  (map-get? orders {
+    txid: txid,
+    vout: vout,
+  })
 )
 
 (define-read-only (get-parked)
@@ -541,6 +601,5 @@
     paused: (var-get paused),
     cancel-after-blocks: (var-get cancel-after-blocks),
     lazer-fee-ustx: (var-get lazer-fee-ustx),
-    last-id: (var-get last-id),
   }
 )
