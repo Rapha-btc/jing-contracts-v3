@@ -128,3 +128,105 @@ that is already armed with `fee-sats > 0`, the call fails with the token's
 the fee transfer. Nothing moves, so the result is safe, but a client keying
 on u4217 should also accept u1. The test `a user with no other sBTC
 re-arming…` pins this behaviour.
+
+## Bounty review (AIBTC mw2oljg3)
+
+### 1. A no-fill execute marks the deposit executed (valid, Low, no contract change)
+
+Reported first by Frosty Narwhal. Ionic Zephyr F1 is a duplicate.
+
+On a router err, `execute` refunds the full net (`spent` 0) but still sets
+the row to `STATUS_EXECUTED`, so the deposit cannot be armed again (u4217)
+and `get-order` reads as a swap that never happened.
+
+Decision: v4 stays as deployed. Re-arming is not needed: the user has the
+sBTC back and can swap it directly on the router from the normal UI,
+without an arm.
+
+Re-arming is also unwanted. The suggested fix (`STATUS_REFUNDED` that
+`arm` may overwrite) would bring a refunded deposit back to life for any
+other arm the user signed for it. A sponsor holding such a signed arm could
+land it after the refund, at terms and a time the user no longer intends.
+One row per deposit, forever, means every signed arm for a deposit dies
+once one of them lands.
+
+The
+`btc-in-executed` print already carries `ok: false`, `code`, `spent: 0`
+and `refund: net`, and the backend already uses it: since dcfe9f1c
+(2026-10-30) faktory-dao `escrowStateOf` (`backend/server/utils/btc-in-print.ts`)
+labels an executed event with `ok: false` as **refunded**, and the frontend
+shows that label. Nothing to change.
+
+### 2. A cancelled deposit cannot be armed again (rejected, by design)
+
+Reported by Stellar Wisp. Same cause as item 1: the order row is never
+deleted, so arming a cancelled deposit again fails with u4217.
+
+Not a problem: cancel refunds the full net to the user, who can swap it from
+the normal UI without an arm. v3 "allowed" re-arming only because it had no
+deposit identity at all (orders by counter id, user-signed amount), not as
+a feature. Re-arming would also revive any other arm the user signed for
+that deposit (see item 1).
+
+### 3. `arm` checks the recipient against `tx-sender` (rejected, out of scope)
+
+Reported by Patient Reed. Super Orb is the same author and the same gist.
+
+The claim: a contract the user calls can arm the user's deposit with bad
+terms (slippage 9999, min-out 1) and use up the deposit's one slot.
+
+Rejected. It needs the user to sign a transaction on an attacker's site that
+lets their sBTC leave their wallet, and such a site can already take the
+sBTC directly. Our UI calls the escrow directly. Checking `tx-sender` on a
+token operation is the standard pattern.
+
+The attack is also not clever. The attacker cannot change the price: execute
+reads the mid from the fresh Pyth Lazer update the keeper passes, verified
+by the market's `refresh-mid`. They control only the slippage bound, so the
+gain would come from sandwiching a high-slippage fill. The router splits
+that fill across several venues (Bitflow pools and the Jing book), so a
+sandwich has to move every venue at once. That takes far more work than just taking the sBTC, which the same signature already allows.
+(Our keeper does execute every armed order it sees, not only the ones we
+sponsored, so a foreign arm would be executed. The conclusion is the same.)
+
+### 4. v3 still unpaused (valid, Info, fixed on-chain)
+
+Reported by Frosty Narwhal (I-1). Dedupe is per contract, so the same
+deposit could also be armed on v3, which takes a user-signed amount. The
+user signs each arm and each pulls real sBTC, so nothing can be stolen.
+Fixed: v3 `set-paused true` in tx 0xeeaaf794…d521d (block 9422341);
+`get-config` now reads `paused: true`.
+
+### 5. Whole deposits only, wallet recipients only (rejected, by design)
+
+Reported by Frosty Narwhal (I-2). v4 arms the whole minted amount, never part
+of it. That is intended: the point of v4 is to arm exactly what the bridge
+minted. A deposit whose recipient is a contract (pox-5, a smart wallet)
+cannot be armed (u4216). That is by design too: a contract cannot sign the
+pre-signed arm, so the walk-away flow cannot apply to it.
+
+### 6. `execute` does not re-check `out >= min-out` (rejected, enforced by the router)
+
+Reported by Mystic Compass. The escrow stores the user-signed min-out at arm
+and hands it to the router, so the keeper cannot choose it:
+
+```clarity
+(contract-call? ROUTER_STX smart-swap-sbtc-for-stx net limit-price (some update) mid (get min-out order))
+```
+
+Both routers (fixed constants) measure `out` as the escrow's real balance
+change and revert with u3002 when it is below min-out
+(`swap-router-sbtc-stx-jing-v5-5` `smart-swap-sbtc-for-stx`,
+`swap-router-sbtc-usdcx-jing-v5-5` `smart-swap-sbtc-for-usdcx`). A second
+check in the escrow would be redundant.
+
+### 7. Claims that do not hold
+
+- **Ionic Zephyr F2, keeper-fronted Lazer fee left in the escrow:**
+  documented design (`lazer-fee-ustx` comment). The live fee is u0, and the
+  owner recovers any fronted STX with `sweep-stx`.
+- **Sly Compass, anyone can cancel to grief:** execute is already blocked
+  from cancel-height on, so cancel only does what was inevitable, and the
+  fee is spent either way. The only effect left is item 2.
+- **Super Orb, "1 Medium + 2 Low":** the gist contains only Patient Reed's
+  item 3.

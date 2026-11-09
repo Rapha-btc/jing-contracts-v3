@@ -1,0 +1,80 @@
+[project]
+name = "jing-contracts-v3-short"
+description = "STX short protocol (lender pool + short vault + rate model + Lazer adapter); unit tests use mocks deployed under the real market / router / oracle names"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx-v1"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle"
+
+[[project.requirements]]
+contract_id = "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard"
+
+# Production sources
+[contracts.stx-short-oracle-trait]
+path = "contracts/short/stx-short-oracle-trait.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.stx-short-oracle-lazer]
+path = "contracts/short/stx-short-oracle.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.stx-short-rate-model]
+path = "contracts/short/stx-short-rate-model.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.stx-short-pool]
+path = "contracts/short/stx-short-pool.clar"
+clarity_version = 5
+epoch = "latest"
+
+# Test doubles under the names the vault binds (.stx-short-oracle,
+# .markets-stx-usdcx-jing-v6-4, .swap-router-stx-usdcx-jing-v5-5). The real
+# market / router are validated against the vault in the stxer harness
+# simulations/verify-stx-short.mjs (mainnet fork).
+[contracts.stx-short-oracle]
+path = "contracts/short/mocks/stx-short-oracle-mock.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.markets-stx-usdcx-jing-v6-4]
+path = "contracts/short/mocks/markets-stx-usdcx-jing-v6-4-mock.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.swap-router-stx-usdcx-jing-v5-5]
+path = "contracts/short/mocks/swap-router-stx-usdcx-jing-v5-5-mock.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.stx-short-vault]
+path = "contracts/short/stx-short-vault.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.remote_data]
+enabled = true
+initial_height = 9318170
+# Hiro rate-limits remote_data: run simulations/_api-proxy.mjs with its port changed to 8797
+# (8787 is shared with other suites) and keep api_url on it.
+api_url = "http://127.0.0.1:8797"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }

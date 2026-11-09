@@ -1,0 +1,20 @@
+# Rendezvous project for stx-short-pool. Build first: bash tests/rv/short-pool/build.sh
+[project]
+name = "rv-stx-short-pool"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
+
+[contracts.mock-usdcx]
+path = "mock-usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.stx-short-pool]
+path = "../.build/short-pool/stx-short-pool.clar"
+clarity_version = 5
+epoch = "3.4"

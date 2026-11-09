@@ -1,0 +1,77 @@
+[project]
+name = "jing-contracts-v3-stx-usdcx"
+description = "clarinet check / format for the stx-usdcx set (not deployed)"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-core-v6"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait"
+
+[[project.requirements]]
+contract_id = "SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"
+
+[[project.requirements]]
+contract_id = "SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx-v1"
+
+[[project.requirements]]
+contract_id = "SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1"
+
+[[project.requirements]]
+contract_id = "SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle"
+
+[[project.requirements]]
+contract_id = "SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-bps-10"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-bps-4"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-bps-1"
+
+[[project.requirements]]
+contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2"
+
+[[project.requirements]]
+contract_id = "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1"
+
+# Same pattern as Clarinet-sbtc-usdcx.toml: core, ladder and market are
+# type-checked locally (they reach each other through `.name`). The rungs,
+# dispatch, settle-batch and router bind the market / ladder by the full
+# SPV9K21... principal, which is not on chain yet, so they are checked with a
+# throwaway copy that rewrites those principals to `.name` (see README).
+[contracts.jing-core-v6]
+path = "contracts/jing-core-v6.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-ladder-stx-usdcx-v1]
+path = "contracts/stx-usdcx/jing-ladder-stx-usdcx-v1.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.markets-stx-usdcx-jing-v6-4]
+path = "contracts/stx-usdcx/markets-stx-usdcx-jing-v6-4.clar"
+clarity_version = 5
+epoch = "latest"
+
+[repl.remote_data]
+enabled = true
+initial_height = 9318170
+api_url = "https://api.hiro.so"
+
+[repl.analysis]
+passes = []
+check_checker = { trusted_sender = false, trusted_caller = false, callee_filter = false }
