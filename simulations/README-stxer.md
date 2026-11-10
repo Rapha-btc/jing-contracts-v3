@@ -8,6 +8,40 @@ verified-contract registry flow + a market-specific scenario, and runs
 documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
 nothing else).
 
+## STX/USDCx router v6: Zest CLMM venue (2026-11-10)
+
+`contracts/stx-usdcx/swap-router-stx-usdcx-jing-v6.clar` is v5-5 plus Zest's
+CLMM STX/USDCx pool (`SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1`,
+pool 1, bin step 100, 30 bps) as a fourth AMM venue. Split swaps take a
+front-end `zest` amount and `zest-route` (ticks + price bound, no partial fill)
+and run Jing -> Zest -> DLMM -> XYK -> Velar. Smart swaps add an on-chain Zest
+stage between Jing and DLMM: ticks walked from `mid` (2-tick margin) to the
+limit, at most 32, limit converted to Zest's WAD price with the user's Zest fee
+folded in and rounded against the user, partial fill on, and any no-fill or Zest
+error counted as 0 so the remainder flows to DLMM. Native STX moves straight
+user <-> pool (Zest's `wstx` is a plain `stx-transfer?`); the router holds nothing.
+
+The harness is keyless (`update = none`, Jing leg 0). It covers Zest-only and
+mixed split legs both ways, deny-mode post-conditions, the guard errors (u3004,
+u3003, u5001, u5002, u3002, u5003), and smart swaps where Zest fills all, Zest
+fills part and DLMM takes the rest, and Zest fills 0 and DLMM takes all, in both
+directions, with limits pinned from DLMM's live price at run time.
+
+| Harness | N/M | Evidence |
+|---|---:|---|
+| `verify-router-stx-usdcx-v6-zest.mjs` | 107/107 | [run](https://stxer.xyz/simulations/mainnet/48f99e16c6592562ecbb8344ff33d55d) |
+
+Worst-case execution cost (share of the Nakamoto block limits):
+
+| Tx | Zest ticks | runtime | read_count | read_length | write_count | write_length |
+|---|---:|---:|---:|---:|---:|---:|
+| smart STX->USDCx, 400k STX, limit mid/2 | 32 | 0.43% | 11.41% | 10.94% | 1.26% | 0.06% |
+| smart USDCx->STX, 109k USDCx, limit mid x2 | 32 | 0.35% | 8.31% | 8.57% | 0.89% | 0.06% |
+| split STX->USDCx, Zest 181.7k STX + DLMM 50k | 20 | 0.15% | 3.09% | 2.06% | 0.43% | 0.04% |
+| split USDCx->STX, Zest 74.8k USDCx + DLMM 10k | 30 | 0.13% | 2.24% | 1.49% | 0.30% | 0.03% |
+
+Deploy order: v6 binds `markets-stx-usdcx-jing-v6-4`, which must be on mainnet first.
+
 ## BTC-in adapter (2026-10-30)
 
 `contracts/btc-in/jing-btc-in-adapter.clar` takes a sats fee from the
