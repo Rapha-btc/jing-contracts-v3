@@ -2,8 +2,31 @@
 ;;
 ;; v6: v5-5 + Zest CLMM STX/USDCx venue (pool 1 on
 ;; SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1, x = Zest `wstx`,
-;; y = usdcx, bin step 100, 30 bps both sides). Only the split entry points
-;; change; smart-swap-* are byte-for-byte v5-5 (no Zest stage).
+;; y = usdcx, bin step 100, 30 bps both sides), in the split entry points and
+;; as a stage of smart-swap-* (signatures unchanged).
+;; Smart swaps: Jing -> Zest -> DLMM -> cp, each stage on what the previous
+;; ones left.
+;;   - Zest keeps no active bin. Its price is WAD raw STX per raw USDCx, bin
+;;     `t` covers [1.01^t, 1.01^(t+1)]. The stage turns `mid` (untrusted, it
+;;     only picks which bins are read) and the price bound into ticks with
+;;     an on-chain log2: STX->USDCx walks up from tick(mid) - 2 to
+;;     tick(max-price) + 1, USDCx->STX walks down from tick(mid) + 2 to
+;;     tick(min-price) - 1, at most 32 ticks; a tight limit walks few, a limit
+;;     past the market walks none (stage skipped).
+;;   - Bound = limit-price (USDCx per STX, 1e8) inverted into Zest's
+;;     orientation with the user's own Zest fee folded in, rounded against
+;;     the user: max-price = floor(1e26 * (1 - fee) / limit) for x -> y,
+;;     min-price = ceil(1e26 / (limit * (1 - fee))) for y -> x. Zest bounds
+;;     the marginal post-trade price, so every unit fills at or better than
+;;     limit-price net of fee (up to Zest's 1-raw-unit output haircut).
+;;   - allow-partial-fill true, min-dy / min-dx 0: Zest takes what fits and
+;;     the rest goes on to DLMM. The combined min-out still guards the user.
+;;   - No fill never reverts: dust remainder, no ticks in range, zero output
+;;     and any Zest error (paused pool, ...) all give in = out = 0; an err
+;;     from the Zest call rolls back Zest's own writes, like the Jing leg.
+;;   - Receipt gains zest-in / zest-out after jing-out; print also gains
+;;     zest-ok (Zest call returned ok) and zest-ticks (ticks walked).
+;;   - unsold = amount - jing - zest - dlmm - cp.
 ;;   - VENUE_ZEST u4; `amm-amounts` / `amm-mins` gain a `zest` field, and the
 ;;     split check (u3004) is jing + dlmm + xyk + velar + zest = amount.
 ;;   - New trailing arg `zest-route { ticks, price }`: the FE hands the tick
@@ -1074,6 +1097,221 @@
   )
 )
 
+(define-constant ZEST_POOL 'SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1)
+(define-constant ZEST_FEE_ONE u100000000)
+(define-constant ZEST_WAD_PRICE u100000000000000000000000000)
+(define-constant ZEST_ONE u1152921504606846976)
+(define-constant ZEST_TWO u2305843009213693952)
+(define-constant ZEST_LOG2_WAD 68938602072359301496)
+(define-constant ZEST_LOG2_STEP 16550525978195695)
+(define-constant ZEST_MAX_TICK 4458)
+(define-constant ZEST_TICK_MARGIN 2)
+(define-constant ZEST_FRAC_BITS (list
+  u576460752303423488 u288230376151711744 u144115188075855872
+  u72057594037927936 u36028797018963968 u18014398509481984 u9007199254740992
+  u4503599627370496 u2251799813685248 u1125899906842624 u562949953421312
+  u281474976710656 u140737488355328 u70368744177664 u35184372088832
+  u17592186044416
+))
+(define-constant ZEST_WALK (list
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
+  u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31
+))
+(define-constant ZEST_NONE {
+  ok: false,
+  ticks: u0,
+  in: u0,
+  out: u0,
+})
+
+(define-private (zest-log2-bit
+    (bit uint)
+    (acc {
+      m: uint,
+      f: uint,
+    })
+  )
+  (let ((sq (/ (* (get m acc) (get m acc)) ZEST_ONE)))
+    (if (>= sq ZEST_TWO)
+      {
+        m: (/ sq u2),
+        f: (+ (get f acc) bit),
+      }
+      {
+        m: sq,
+        f: (get f acc),
+      }
+    )
+  )
+)
+
+(define-private (zest-log2 (x uint))
+  (let (
+      (n (log2 x))
+      (m (if (>= n u60)
+        (bit-shift-right x (- n u60))
+        (bit-shift-left x (- u60 n))
+      ))
+    )
+    (+ (* (to-int n) (to-int ZEST_ONE))
+      (to-int (get f
+        (fold zest-log2-bit ZEST_FRAC_BITS {
+          m: m,
+          f: u0,
+        })
+      ))
+    )
+  )
+)
+
+(define-private (zest-tick (wad uint))
+  (let (
+      (num (- (zest-log2 wad) ZEST_LOG2_WAD))
+      (q (/ num ZEST_LOG2_STEP))
+      (t (if (and (< num 0) (not (is-eq (* q ZEST_LOG2_STEP) num)))
+        (- q 1)
+        q
+      ))
+    )
+    (if (> t ZEST_MAX_TICK)
+      ZEST_MAX_TICK
+      (if (< t (- 0 ZEST_MAX_TICK))
+        (- 0 ZEST_MAX_TICK)
+        t
+      )
+    )
+  )
+)
+
+(define-private (zest-tick-step
+    (k uint)
+    (acc {
+      tick: int,
+      end: int,
+      up: bool,
+      ticks: (list 32 int),
+    })
+  )
+  (if (if (get up acc)
+      (> (get tick acc) (get end acc))
+      (< (get tick acc) (get end acc))
+    )
+    acc
+    (merge acc {
+      ticks: (unwrap-panic (as-max-len? (append (get ticks acc) (get tick acc)) u32)),
+      tick: (if (get up acc)
+        (+ (get tick acc) 1)
+        (- (get tick acc) 1)
+      ),
+    })
+  )
+)
+
+(define-private (zest-ticks
+    (mid-wad uint)
+    (bound uint)
+    (up bool)
+  )
+  (let (
+      (tm (zest-tick mid-wad))
+      (tb (zest-tick bound))
+    )
+    (get ticks
+      (fold zest-tick-step ZEST_WALK {
+        tick: (if up
+          (- tm ZEST_TICK_MARGIN)
+          (+ tm ZEST_TICK_MARGIN)
+        ),
+        end: (if up
+          (+ tb 1)
+          (- tb 1)
+        ),
+        up: up,
+        ticks: (list),
+      })
+    )
+  )
+)
+
+(define-private (zest-bound
+    (limit uint)
+    (fee uint)
+    (sell-stx bool)
+  )
+  (if sell-stx
+    (/ (/ (* ZEST_WAD_PRICE (- ZEST_FEE_ONE fee)) limit) ZEST_FEE_ONE)
+    (let ((c (/ (+ (* ZEST_WAD_PRICE ZEST_FEE_ONE) (- limit u1)) limit)))
+      (/ (+ c (- ZEST_FEE_ONE fee u1)) (- ZEST_FEE_ONE fee))
+    )
+  )
+)
+
+(define-private (zest-swap
+    (left uint)
+    (bound uint)
+    (ticks (list 32 int))
+    (sell-stx bool)
+  )
+  (if sell-stx
+    (match (contract-call? ZEST_ROUTER swap-x-for-y ZEST_WSTX USDCX ZEST_POOL_ID left
+      bound ticks u0 true stacks-block-time
+    )
+      r {
+        ok: true,
+        ticks: (len ticks),
+        in: (get dx r),
+        out: (get dy r),
+      }
+      e (merge ZEST_NONE { ticks: (len ticks) })
+    )
+    (match (contract-call? ZEST_ROUTER swap-y-for-x ZEST_WSTX USDCX ZEST_POOL_ID left
+      bound ticks u0 true stacks-block-time
+    )
+      r {
+        ok: true,
+        ticks: (len ticks),
+        in: (get dy r),
+        out: (get dx r),
+      }
+      e (merge ZEST_NONE { ticks: (len ticks) })
+    )
+  )
+)
+
+(define-private (zest-stage
+    (left uint)
+    (limit uint)
+    (mid uint)
+    (sell-stx bool)
+  )
+  (if (dust-left left limit sell-stx)
+    ZEST_NONE
+    (match (contract-call? ZEST_POOL get-fee-rates ZEST_POOL_ID tx-sender)
+      rates (let (
+          (fee (if sell-stx
+            (get fee-rate-x rates)
+            (get fee-rate-y rates)
+          ))
+          (mid-wad (/ ZEST_WAD_PRICE mid))
+          (bound (if (< fee ZEST_FEE_ONE)
+            (zest-bound limit fee sell-stx)
+            u0
+          ))
+          (ticks (if (and (> bound u0) (> mid-wad u0))
+            (zest-ticks mid-wad bound sell-stx)
+            (list)
+          ))
+        )
+        (if (> (len ticks) u0)
+          (zest-swap left bound ticks sell-stx)
+          ZEST_NONE
+        )
+      )
+      e ZEST_NONE
+    )
+  )
+)
+
 (define-private (cp-stage
     (left uint)
     (limit uint)
@@ -1111,8 +1349,9 @@
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price true)))
-        (cp (cp-stage (- amount jing-in (get in dlmm)) limit-price true))
+        (zest (zest-stage (- amount jing-in) limit-price mid true))
+        (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price true)))
+        (cp (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price true))
         (out (gain usdcx-before (usdcx-balance user)))
       )
       (asserts! (>= out min-usdcx-out) ERR_MIN_OUT)
@@ -1122,12 +1361,16 @@
         amount: amount,
         limit-price: limit-price,
         jing-cap: jing-amount,
+        zest-ticks: (get ticks zest),
         dlmm-cap: (get cap dlmm),
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        zest-ok: (get ok zest),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1141,6 +1384,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1175,8 +1420,9 @@
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price false)))
-        (cp (cp-stage (- amount jing-in (get in dlmm)) limit-price false))
+        (zest (zest-stage (- amount jing-in) limit-price mid false))
+        (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price false)))
+        (cp (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price false))
         (out (gain stx-before (stx-balance user)))
       )
       (asserts! (>= out min-stx-out) ERR_MIN_OUT)
@@ -1186,12 +1432,16 @@
         amount: amount,
         limit-price: limit-price,
         jing-cap: jing-amount,
+        zest-ticks: (get ticks zest),
         dlmm-cap: (get cap dlmm),
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        zest-ok: (get ok zest),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1205,6 +1455,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
