@@ -15,6 +15,7 @@
 (define-constant ERR_PUSH_PAUSED (err u7014))
 (define-constant ERR_ESCROW_COOLDOWN (err u7015))
 (define-constant ERR_TOO_MANY_SHARES (err u7016))
+(define-constant ERR_DEFICIT (err u7017))
 
 (define-constant SOLD_OUT_DUST u10000)
 
@@ -96,6 +97,10 @@
 (define-data-var proceeds-carry uint u0)
 (define-data-var push-paused bool false)
 (define-data-var escrow-cancelled-at uint u0)
+(define-map proceeds-debt
+  principal
+  uint
+)
 
 (define-map positions
   principal
@@ -128,7 +133,28 @@
     held-uusdcx: (var-get held-uusdcx),
     resting: (market-size),
     pooled: (pooled-usdcx),
+    deficit: (get-deficit),
   }
+)
+
+(define-read-only (proceeds-cash)
+  (unwrap-panic (contract-call? 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token get-balance current-contract))
+)
+
+(define-read-only (get-deficit)
+  (let (
+      (owed (var-get sats-accounted))
+      (cash (proceeds-cash))
+    )
+    (if (> owed cash)
+      (- owed cash)
+      u0
+    )
+  )
+)
+
+(define-read-only (get-debt (who principal))
+  (default-to u0 (map-get? proceeds-debt who))
 )
 
 (define-read-only (get-position (who principal))
@@ -166,12 +192,14 @@
         shares: sh,
         stx: (get input payout),
         sbtc: (get proceeds payout),
+        debt: (get-debt who),
       }
     )
     {
       shares: u0,
       stx: u0,
       sbtc: u0,
+      debt: (get-debt who),
     }
   )
 )
@@ -371,7 +399,7 @@
       ))
       (actual (+ (market-size) local))
       (recorded (pooled-usdcx))
-      (sbtc-now (unwrap-panic (contract-call? SBTC get-balance current-contract)))
+      (sbtc-now (proceeds-cash))
       (gained (sub0 sbtc-now (var-get sats-accounted)))
     )
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
@@ -387,7 +415,7 @@
           (new-proceeds (+ (var-get proceeds-index) (/ scaled shares)))
         )
         (var-set proceeds-index new-proceeds)
-        (var-set sats-accounted sbtc-now)
+        (var-set sats-accounted (+ (var-get sats-accounted) gained))
         (var-set current-proceeds (+ (var-get current-proceeds) gained))
         (var-set proceeds-carry (mod scaled shares))
         (if (or (< actual SOLD_OUT_DUST) (< new-index (/ MINT_FLOOR RESCALE)))
@@ -423,6 +451,7 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
+    (asserts! (is-eq (get-deficit) u0) ERR_DEFICIT)
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? USDCX transfer amount member current-contract none))
       (let (
@@ -580,7 +609,10 @@
 
 (define-public (claim)
   (begin
-    (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
+    (asserts!
+      (or (is-some (map-get? positions tx-sender)) (> (get-debt tx-sender) u0))
+      ERR_NO_POSITION
+    )
     (try! (sync))
     (settle-proceeds tx-sender)
   )
@@ -693,14 +725,8 @@
         ))
         (owed (get proceeds payout))
         (back (get input payout))
+        (paid (try! (pay-proceeds who owed)))
       )
-      (and
-        (> owed u0)
-        (try! (as-contract? ((with-ft SBTC SBTC_NAME owed))
-          (try! (contract-call? SBTC transfer owed current-contract who none))
-        ))
-      )
-      (var-set sats-accounted (- (var-get sats-accounted) owed))
       (and current (var-set current-proceeds (- (var-get current-proceeds) owed)))
       (and
         current
@@ -726,18 +752,51 @@
         (map-delete positions who)
       )
       (and
-        (or (> owed u0) (> back u0))
-        (is-ok (contract-call? LADDER log-payout who owed back pos-epoch))
+        (or (> paid u0) (> back u0))
+        (is-ok (contract-call? LADDER log-payout who paid back pos-epoch))
       )
       (ok {
-        sbtc: owed,
+        sbtc: paid,
         stx: back,
       })
     )
-    (ok {
-      stx: u0,
-      sbtc: u0,
-    })
+    (let ((paid (try! (pay-proceeds who u0))))
+      (and
+        (> paid u0)
+        (is-ok (contract-call? LADDER log-payout who paid u0 (var-get epoch)))
+      )
+      (ok {
+        stx: u0,
+        sbtc: paid,
+      })
+    )
+  )
+)
+
+(define-private (pay-proceeds
+    (who principal)
+    (owed uint)
+  )
+  (let (
+      (due (+ owed (get-debt who)))
+      (cash (proceeds-cash))
+      (pay (if (> due cash)
+        cash
+        due
+      ))
+    )
+    (and
+      (> pay u0)
+      (try! (as-contract? ((with-ft SBTC SBTC_NAME pay))
+        (try! (contract-call? SBTC transfer pay current-contract who none))
+      ))
+    )
+    (var-set sats-accounted (- (var-get sats-accounted) pay))
+    (if (> due pay)
+      (map-set proceeds-debt who (- due pay))
+      (map-delete proceeds-debt who)
+    )
+    (ok pay)
   )
 )
 

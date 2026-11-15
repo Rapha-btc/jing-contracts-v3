@@ -15,6 +15,7 @@
 (define-constant ERR_PUSH_PAUSED (err u7014))
 (define-constant ERR_ESCROW_COOLDOWN (err u7015))
 (define-constant ERR_TOO_MANY_SHARES (err u7016))
+(define-constant ERR_DEFICIT (err u7017))
 
 (define-constant SOLD_OUT_DUST u10)
 
@@ -96,6 +97,10 @@
 (define-data-var proceeds-carry uint u0)
 (define-data-var push-paused bool false)
 (define-data-var escrow-cancelled-at uint u0)
+(define-map proceeds-debt
+  principal
+  uint
+)
 
 (define-map positions
   principal
@@ -128,7 +133,28 @@
     held-sats: (var-get held-sats),
     resting: (market-size),
     pooled: (pooled-sbtc),
+    deficit: (get-deficit),
   }
+)
+
+(define-read-only (proceeds-cash)
+  (unwrap-panic (contract-call? 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx get-balance current-contract))
+)
+
+(define-read-only (get-deficit)
+  (let (
+      (owed (var-get usdcx-accounted))
+      (cash (proceeds-cash))
+    )
+    (if (> owed cash)
+      (- owed cash)
+      u0
+    )
+  )
+)
+
+(define-read-only (get-debt (who principal))
+  (default-to u0 (map-get? proceeds-debt who))
 )
 
 (define-read-only (get-position (who principal))
@@ -166,12 +192,14 @@
         shares: sh,
         sbtc: (get input payout),
         stx: (get proceeds payout),
+        debt: (get-debt who),
       }
     )
     {
       shares: u0,
       sbtc: u0,
       stx: u0,
+      debt: (get-debt who),
     }
   )
 )
@@ -387,7 +415,7 @@
           (new-proceeds (+ (var-get proceeds-index) (/ scaled shares)))
         )
         (var-set proceeds-index new-proceeds)
-        (var-set usdcx-accounted usdcx-now)
+        (var-set usdcx-accounted (+ (var-get usdcx-accounted) gained))
         (var-set current-proceeds (+ (var-get current-proceeds) gained))
         (var-set proceeds-carry (mod scaled shares))
         (if (or (< actual SOLD_OUT_DUST) (< new-index (/ MINT_FLOOR RESCALE)))
@@ -423,6 +451,7 @@
     (asserts! (var-get initialized) ERR_NOT_INITIALIZED)
     (asserts! (>= amount MIN_DEPOSIT) ERR_TOO_SMALL)
     (try! (sync))
+    (asserts! (is-eq (get-deficit) u0) ERR_DEFICIT)
     (let ((paid (try! (settle-proceeds member))))
       (try! (contract-call? SBTC transfer amount member current-contract none))
       (let (
@@ -580,7 +609,10 @@
 
 (define-public (claim)
   (begin
-    (asserts! (is-some (map-get? positions tx-sender)) ERR_NO_POSITION)
+    (asserts!
+      (or (is-some (map-get? positions tx-sender)) (> (get-debt tx-sender) u0))
+      ERR_NO_POSITION
+    )
     (try! (sync))
     (settle-proceeds tx-sender)
   )
@@ -693,14 +725,8 @@
         ))
         (owed (get proceeds payout))
         (back (get input payout))
+        (paid (try! (pay-proceeds who owed)))
       )
-      (and
-        (> owed u0)
-        (try! (as-contract? ((with-ft USDCX USDCX_NAME owed))
-          (try! (contract-call? USDCX transfer owed current-contract who none))
-        ))
-      )
-      (var-set usdcx-accounted (- (var-get usdcx-accounted) owed))
       (and current (var-set current-proceeds (- (var-get current-proceeds) owed)))
       (and
         current
@@ -726,18 +752,51 @@
         (map-delete positions who)
       )
       (and
-        (or (> owed u0) (> back u0))
-        (is-ok (contract-call? LADDER log-payout who owed back pos-epoch))
+        (or (> paid u0) (> back u0))
+        (is-ok (contract-call? LADDER log-payout who paid back pos-epoch))
       )
       (ok {
-        stx: owed,
+        stx: paid,
         sbtc: back,
       })
     )
-    (ok {
-      stx: u0,
-      sbtc: u0,
-    })
+    (let ((paid (try! (pay-proceeds who u0))))
+      (and
+        (> paid u0)
+        (is-ok (contract-call? LADDER log-payout who paid u0 (var-get epoch)))
+      )
+      (ok {
+        stx: paid,
+        sbtc: u0,
+      })
+    )
+  )
+)
+
+(define-private (pay-proceeds
+    (who principal)
+    (owed uint)
+  )
+  (let (
+      (due (+ owed (get-debt who)))
+      (cash (proceeds-cash))
+      (pay (if (> due cash)
+        cash
+        due
+      ))
+    )
+    (and
+      (> pay u0)
+      (try! (as-contract? ((with-ft USDCX USDCX_NAME pay))
+        (try! (contract-call? USDCX transfer pay current-contract who none))
+      ))
+    )
+    (var-set usdcx-accounted (- (var-get usdcx-accounted) pay))
+    (if (> due pay)
+      (map-set proceeds-debt who (- due pay))
+      (map-delete proceeds-debt who)
+    )
+    (ok pay)
   )
 )
 
