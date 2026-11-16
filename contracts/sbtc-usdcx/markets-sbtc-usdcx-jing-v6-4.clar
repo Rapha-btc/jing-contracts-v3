@@ -19,7 +19,11 @@ TAKER_REBATE_BPS)
 (define-constant PRICE_PRECISION u100000000)
 (define-constant DECIMAL_FACTOR u100)
 (define-constant MAX_STALENESS u80)
-(define-constant SETTLE_MAX_STALENESS u40)
+(define-constant MAX_STALENESS_MIN u40)
+(define-data-var max-staleness uint MAX_STALENESS)
+(define-constant SETTLE_STALENESS_MIN u20)
+(define-constant SETTLE_STALENESS_MAX u40)
+(define-data-var settle-max-staleness uint SETTLE_STALENESS_MAX)
 (define-constant MAX_CONF_RATIO u50)
 (define-constant SAINT 'SP000000000000000000002Q6VF78)
 (define-data-var token-x principal SAINT)
@@ -64,6 +68,7 @@ TAKER_REBATE_BPS)
 (define-constant ERR_ALREADY_PENDING (err u1031))
 (define-constant ERR_PRICE_BEFORE_ORDER (err u1032))
 (define-constant ERR_BAD_TREASURY (err u1033))
+(define-constant ERR_BAD_STALENESS (err u1034))
 (define-data-var treasury principal tx-sender)
 (define-data-var operator principal tx-sender)
 (define-data-var paused bool false)
@@ -828,7 +833,7 @@ prev-publish-time: u0,
 (define-private (lazer-feeds (update (buff 8192)))
 (let (
 (decoded (try! (contract-call? LAZER_ORACLE verify-price-feeds update LAZER_DECODER
-(some MAX_STALENESS))))
+(some (var-get max-staleness)))))
 (feeds (get price-feeds decoded))
 (publish-time (/ (get timestamp decoded) MICROS_PER_SECOND))
 (fx (unwrap!
@@ -880,7 +885,7 @@ publish-time: uint,
 prev-publish-time: uint,
 }))
 (let (
-(min-freshness (- stacks-block-time MAX_STALENESS))
+(min-freshness (- stacks-block-time (var-get max-staleness)))
 (pub-x (get publish-time feed-x))
 (pub-y (get publish-time feed-y))
 (oldest (if (< pub-x pub-y)
@@ -2049,8 +2054,8 @@ clearing (var-get token-x) (var-get token-y)))
 (asserts! (is-eq (contract-of tx-trait) (var-get token-x)) ERR_WRONG_TRAIT)
 (asserts! (is-eq (contract-of ty-trait) (var-get token-y)) ERR_WRONG_TRAIT)
 (let ((feeds (try! (lazer-feeds update))))
-(asserts! (> (get publish-time (get feed-x feeds)) (- stacks-block-time SETTLE_MAX_STALENESS)) ERR_STALE_PRICE)
-(asserts! (> (get publish-time (get feed-y feeds)) (- stacks-block-time SETTLE_MAX_STALENESS)) ERR_STALE_PRICE)
+(asserts! (> (get publish-time (get feed-x feeds)) (- stacks-block-time (var-get settle-max-staleness))) ERR_STALE_PRICE)
+(asserts! (> (get publish-time (get feed-y feeds)) (- stacks-block-time (var-get settle-max-staleness))) ERR_STALE_PRICE)
 (settle-with-verified-feeds (get feed-x feeds) (get feed-y feeds) tx-trait
 tx-name ty-trait ty-name))))
 (define-private (settle-with-verified-feeds
@@ -2690,7 +2695,7 @@ prev-publish-time: uint,
 (let (
 (price-x (to-uint (get price feed-x)))
 (price-y (to-uint (get price feed-y)))
-(min-freshness (- stacks-block-time MAX_STALENESS))
+(min-freshness (- stacks-block-time (var-get max-staleness)))
 (raw (get-cycle-totals cycle)))
 (asserts! (not (var-get paused)) ERR_PAUSED)
 (asserts!
@@ -2983,6 +2988,16 @@ ERR_NOT_AUTHORIZED)
 (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
 (asserts! (not (is-eq new-treasury current-contract)) ERR_BAD_TREASURY)
 (ok (var-set treasury new-treasury))))
+(define-public (set-max-staleness (secs uint))
+(begin
+(asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+(asserts! (and (>= secs MAX_STALENESS_MIN) (<= secs MAX_STALENESS)) ERR_BAD_STALENESS)
+(ok (var-set max-staleness secs))))
+(define-public (set-settle-max-staleness (secs uint))
+(begin
+(asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
+(asserts! (and (>= secs SETTLE_STALENESS_MIN) (<= secs SETTLE_STALENESS_MAX)) ERR_BAD_STALENESS)
+(ok (var-set settle-max-staleness secs))))
 (define-public (set-paused (is-paused bool))
 (begin
 (asserts! (is-eq tx-sender (var-get operator)) ERR_NOT_AUTHORIZED)
