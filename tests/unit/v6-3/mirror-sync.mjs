@@ -23,7 +23,7 @@ function tokens(path) {
   return out;
 }
 let failed = false;
-for (const base of ['contracts/markets-sbtc-stx-jing-v6-3', 'contracts/markets-sbtc-stx-jing-v6-4']) {
+for (const base of ['contracts/markets-sbtc-stx-jing-v6-3', 'contracts/markets-sbtc-stx-jing-v6-4', 'contracts/markets-sbtc-stx-jing-v6-5']) {
 const reference = tokens(`${base}.clar`);
 for (const copy of ['-formatted']) {
   const other = tokens(`${base}${copy}.clar`);
