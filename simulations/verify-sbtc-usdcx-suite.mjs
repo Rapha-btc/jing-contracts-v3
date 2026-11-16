@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs';
 import { uintCV, noneCV, someCV, boolCV, bufferCV, stringAsciiCV, tupleCV, listCV } from '@stacks/transactions';
 import { SimulationBuilder } from 'stxer';
 import { lazerFeedTimes } from './_lazer.js';
-import { NODE, DEP, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop } from './_yg-loop-common.js';
+import { NODE, DEP as LIVE_DEP_UNUSED, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop } from './_yg-loop-common.js';
+import { SIM_DEP as DEP, rebase, strip, deployCoreForSim } from './_sim-deployer.mjs';
 
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
 const USDC_WHALE = 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ';
@@ -24,7 +25,7 @@ const C = Object.fromEntries(Object.entries(N).map(([k, v]) => [k, `${DEP}.${v}`
 const CORE = `${DEP}.jing-core-v6`;
 const BANDS = [10, 20, 50]; // no 0 bps: a buy-0 bid and a sell-0 ask both sit at mid and cross (crossing refund)
 const BUY = (b) => `${DEP}.jing-buy-sbtc-${b}`, SELL = (b) => `${DEP}.jing-sell-sbtc-${b}`;
-const src = (f) => readFileSync(new URL(`../contracts/sbtc-usdcx/${f}.clar`, import.meta.url), 'utf8');
+const src = (f) => rebase(strip(readFileSync(new URL(`../contracts/sbtc-usdcx/${f}.clar`, import.meta.url), 'utf8')));
 const TX = P_(SBTC), TY = P_(USDCX), AX = stringAsciiCV('sbtc-token'), AY = stringAsciiCV('usdcx-token');
 const SCALE = 10_000_000_000n, BPS = 10_000n;
 const TAKER = mk(5);
@@ -67,6 +68,7 @@ try {
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
 
   group('deploy + init');
+  await deployCoreForSim(deploy);
   await deploy(DEP, N.ladder, src(N.ladder));
   check('ladder owner = DEP', (await evalIn(C.ladder, '(get-owner)')) === DEP);
   await deploy(DEP, N.market, src(N.market));

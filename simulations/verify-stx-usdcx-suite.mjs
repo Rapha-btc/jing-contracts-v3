@@ -18,7 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { uintCV, noneCV, someCV, boolCV, bufferCV, stringAsciiCV, tupleCV, listCV } from '@stacks/transactions';
 import { SimulationBuilder } from 'stxer';
-import { fetchLazerUpdate, lazerFeedTimes } from './_lazer.js';
+import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
 import { NODE, DEP, SBTC, WSTX, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, summary, Stop, stxTransfer, note } from './_yg-loop-common.js';
 
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
@@ -38,13 +38,14 @@ const SCALE = 100_000_000n, BPS = 10_000n; // 6 dp / 6 dp: y = x * price / 1e8
 const TAKER = mk(5);
 const Y_PER = 200_000_000n; // 200 USDCx per buy-stx-usdc rung
 const X_PER = 500_000_000n; // 500 STX per sell-stx-usdc rung
-const KEYED = !!process.env.PYTH_API_KEY;
+// keyed by default: [45,7] comes from PYTH_API_KEY or the faktory-dao route (pair=stx-usdcx, fd293b18); KEYLESS=1 skips it
+const KEYED = process.env.KEYLESS !== '1';
 
 let U = null;
 async function fresh() {
   const bt = Number(await evalIn(C.market, 'stacks-block-time'));
   for (let i = 0; i < 40; i++) {
-    const u = await retry(() => fetchLazerUpdate([45, 7])); const t = await retry(() => lazerFeedTimes(u.hex, [45, 7]));
+    const u = await retry(() => fetchLazerUpdateAny([45, 7])); const t = await retry(() => lazerFeedTimes(u.hex, [45, 7]));
     if (t.at > bt) { U = { ...u, mid: u.px * SCALE / u.py }; return U; }
     await sleep(3000);
   }
@@ -76,7 +77,7 @@ try {
   b.withSender(DEP).addEvalCode(USDCX, '(get-total-supply)');
   S.sid = await retry(() => b.run());
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
-  console.log(KEYED ? 'mode: keyed (PYTH_API_KEY set, [45,7] updates)' : 'mode: keyless (no [45,7] update: book settle / takers / claims skipped)');
+  console.log(KEYED ? 'mode: keyed ([45,7] updates via PYTH_API_KEY or the faktory-dao route)' : 'mode: keyless (no [45,7] update: book settle / takers / claims skipped)');
 
   group('deploy + init');
   await deploy(DEP, N.ladder, src(N.ladder));

@@ -9,14 +9,15 @@ import { readFileSync } from 'node:fs';
 import { boolCV, uintCV, noneCV, bufferCV, stringAsciiCV, contractPrincipalCV, deserializeCV } from '@stacks/transactions';
 import { SimulationBuilder } from 'stxer';
 import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
-import { NODE, DEP, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop, plain } from './_yg-loop-common.js';
+import { NODE, DEP as LIVE_DEP_UNUSED, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop, plain } from './_yg-loop-common.js';
+import { SIM_DEP as DEP, rebase, strip, deployCoreForSim } from './_sim-deployer.mjs';
 
 const NAME = 'markets-sbtc-usdcx-jing-v6-4';
 const MKT = `${DEP}.${NAME}`;
 const CORE = `${DEP}.jing-core-v6`;
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
 const USDC_WHALE = 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ'; // ~138.8k USDCx, standard principal
-const SRC = readFileSync(new URL('../contracts/sbtc-usdcx/markets-sbtc-usdcx-jing-v6-4.clar', import.meta.url), 'utf8');
+const SRC = rebase(strip(readFileSync(new URL('../contracts/sbtc-usdcx/markets-sbtc-usdcx-jing-v6-4.clar', import.meta.url), 'utf8')));
 const TX = P_(SBTC), TY = P_(USDCX), AX = stringAsciiCV('sbtc-token'), AY = stringAsciiCV('usdcx-token');
 const X_AMT = 100_000n;        // 0.001 sBTC
 const Y_AMT = 100_000_000n;    // 100 USDCx
@@ -51,9 +52,12 @@ try {
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
 
   S.group = 'setup';
+  await deployCoreForSim(deploy);
+  // the market binds .jing-ladder-sbtc-usdcx-v1: under a sim deployer it has to be deployed too
+  await deploy(DEP, 'jing-ladder-sbtc-usdcx-v1', rebase(strip(readFileSync(new URL('../contracts/sbtc-usdcx/jing-ladder-sbtc-usdcx-v1.clar', import.meta.url), 'utf8'))));
   await deploy(DEP, NAME, SRC);
   const owner = await evalIn(CORE, '(get-contract-owner)');
-  check('jing-core-v6 owner == DEP', owner === DEP, owner);
+  check('jing-core-v6 owner == DEP (sim core) or the multisig (live core)', owner === DEP || owner.startsWith('SM'), owner);
   const OWNER = owner;
   await tx('core set-verified-contract(new market)', OWNER, CORE, 'set-verified-contract', [P_(MKT)], (v) => v?.ok !== undefined);
   await tx('initialize(sbtc, usdcx, feeds 1/7)', DEP, MKT, 'initialize',

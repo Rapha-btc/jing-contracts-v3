@@ -12,10 +12,11 @@
 // Run: node simulations/verify-router-stx-usdcx-v6-zest.mjs
 import { readFileSync } from 'node:fs';
 import {
-  uintCV, intCV, noneCV, someCV, tupleCV, listCV, Pc, PostConditionMode,
+  uintCV, intCV, noneCV, someCV, tupleCV, listCV, Pc, PostConditionMode, bufferCV, stringAsciiCV,
   makeUnsignedContractCall, deserializeCV, cvToString, trueCV, deserializeTransaction, addressToString,
 } from '@stacks/transactions';
 import { SimulationBuilder, submitSimulationSteps, getNonce, setSender, getSimulationResult } from 'stxer';
+import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
 import { NODE, DEP, WHALE, P_, mk, plain, note, S, retry, check, must, show, tx, evalIn, call, deploy, summary, Stop, stxTransfer } from './_yg-loop-common.js';
 
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
@@ -318,9 +319,12 @@ try {
   await denyCall('deny: smart STX->USDCx 10 STX all Zest, user sends eq 10 STX, clmm-pool-v1 sends >= 1 USDCx', TAKER, 'smart-swap-stx-for-usdcx',
     [uintCV(sIn), uintCV(mid * 95n / 100n), noneCV(), uintCV(mid), uintCV(1)],
     [Pc.principal(TAKER).willSendEq(sIn).ustx(), Pc.principal(ZPOOL).willSendGte(1n).ft(USDCX, 'usdcx-token')], true);
-  await denyCall('deny: smart USDCx->STX 3 USDCx all Zest, user sends eq 3 USDCx, clmm-pool-v1 sends >= 1 uSTX', TAKER, 'smart-swap-usdcx-for-stx',
+  // after the drain groups above Zest may fill only part of the 3 USDCx and DLMM
+  // the rest (live-price dependent), so the DLMM pools get a >= 0 uSTX PC too
+  await denyCall('deny: smart USDCx->STX 3 USDCx, Zest leg (+ any DLMM top-up), user sends eq 3 USDCx, clmm-pool-v1 sends >= 1 uSTX', TAKER, 'smart-swap-usdcx-for-stx',
     [uintCV(uIn), uintCV(mid * 105n / 100n), noneCV(), uintCV(mid), uintCV(1)],
-    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(1n).ustx()], true);
+    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(1n).ustx(),
+      ...['bps-10', 'bps-4', 'bps-1'].map((b) => Pc.principal(`SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-${b}`).willSendGte(0n).ustx())], true);
   await denyCall('deny: smart STX->USDCx without the Zest pool PC aborts', TAKER, 'smart-swap-stx-for-usdcx',
     [uintCV(sIn), uintCV(mid * 95n / 100n), noneCV(), uintCV(mid), uintCV(1)],
     [Pc.principal(TAKER).willSendEq(sIn).ustx()], false);
@@ -343,6 +347,65 @@ try {
   const worst = rows.filter((x) => x.r === '(ok ' && x.amount >= 10_000_000_000n);
   check('worst cases found in the cost table (2 smart + 2 split)', worst.length === 4, show(worst.map((x) => [x.fn, x.amount])));
   for (const x of worst) check(`${x.fn} ${x.amount}: every dimension < 50% of the block limit`, Object.keys(LIM).every((k) => Number(x.c[k]) < LIM[k] * 0.5), Object.keys(LIM).map((k) => `${k} ${pct(x.c, k)}`).join(', '));
+
+  // ---- keyed: a signed [45,7] Lazer update (faktory-dao route pair=stx-usdcx, fd293b18) puts the
+  // Jing book leg in front of Zest. KEYLESS=1 skips this group.
+  if (process.env.KEYLESS !== '1') {
+    group('keyed: Jing book leg ahead of Zest / DLMM');
+    const WSTX = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2';
+    const TXc = P_(WSTX), TYc = P_(USDCX), AXc = stringAsciiCV('wstx'), AYc = stringAsciiCV('usdcx-token');
+    const CORE = `${DEP}.jing-core-v6`, BPS = 10_000n, SC = 100_000_000n;
+    const CORE_OWNER = await evalIn(CORE, '(get-contract-owner)');
+    await tx('core set-verified-contract(market)', CORE_OWNER, CORE, 'set-verified-contract', [P_(C.market)], (v) => v?.ok !== undefined);
+    await tx('market set-operator -> core owner', DEP, C.market, 'set-operator', [P_(CORE_OWNER)], { ok: true });
+    await tx('market initialize(token-stx, usdcx, 1, 1, 45, 7)', CORE_OWNER, C.market, 'initialize', [P_(C.market), TXc, TYc, uintCV(1_000_000n), uintCV(1_000_000n), uintCV(45), uintCV(7)], { ok: true });
+    let U;
+    const fresh = async () => {
+      const bt = Number(await evalIn(C.market, 'stacks-block-time'));
+      for (let i = 0; i < 40; i++) {
+        const u = await retry(() => fetchLazerUpdateAny([45, 7])); const t = await retry(() => lazerFeedTimes(u.hex, [45, 7]));
+        if (t.at > bt) { U = { ...u, mid: u.px * SC / u.py }; return U; }
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      throw new Error('no fresh [45,7] update');
+    };
+    const upd = () => bufferCV(Buffer.from(U.hex.replace(/^0x/, ''), 'hex'));
+    await fresh();
+    const MID = U.mid;
+    console.log(`  Lazer STX/USDC mid ${MID} ($${Number(MID) / 1e8})`);
+    must('fund taker 500 USDCx for the keyed group', (await call(USDC_WHALE, USDCX, 'transfer', [uintCV(500_000_000n), P_(USDC_WHALE), P_(TAKER), noneCV()])).res?.ok === true);
+    await stxTransfer(WHALE.y, TAKER, 1_000_000_000n);
+    const ASKER = WHALE.y;
+    await tx('STX maker rests 500 STX at mid + 10 bps', ASKER, C.market, 'deposit-token-x', [uintCV(500_000_000n), uintCV(MID * (BPS + 10n) / BPS), noneCV(), TXc, AXc], (v) => v?.ok !== undefined);
+    if (await evalIn(C.market, `(get-token-x-pending-deposit '${ASKER})`)) await tx('settle the ask', DEP, C.market, 'settle-token-x-deposit', [P_(ASKER), upd(), TXc, AXc], (v) => v?.ok !== undefined);
+    check('ask rests', (await evalIn(C.market, `(get-token-x-deposit (get-current-cycle) '${ASKER})`)) === 500_000_000n);
+    const askUsd = 500_000_000n * MID * (BPS + 10n) / BPS / SC;
+    const uBig = askUsd * 2n;
+    await fresh();
+    const a0 = await bals(TAKER), m0 = await usd(ASKER);
+    const r1 = await tx(`smart-swap-usdcx-for-stx ${uBig} uUSDCx (2x the ask), limit mid + 2%`, TAKER, C.router, 'smart-swap-usdcx-for-stx', [uintCV(uBig), uintCV(MID * 102n / 100n), someCV(upd()), uintCV(U.mid), uintCV(1)], (v) => v?.ok !== undefined);
+    const k1 = r1.res?.ok, a1 = await bals(TAKER);
+    console.log(`  ${show(k1)}`);
+    check('Jing leg took the ask, the rest went to Zest / DLMM', k1?.['jing-in'] > 0n && (k1?.['zest-in'] ?? 0n) + (k1?.['dlmm-in'] ?? 0n) + (k1?.['xyk-in'] ?? 0n) + (k1?.['velar-in'] ?? 0n) > 0n, show(k1));
+    check('ask fully filled (or dust)', (await evalIn(C.market, `(get-token-x-deposit (get-current-cycle) '${ASKER})`)) < 1_000_000n);
+    check('taker deltas = receipt', a0.us - a1.us === uBig - (k1?.unsold ?? 0n) && a1.st - a0.st === k1?.out, show({ paid: a0.us - a1.us, got: a1.st - a0.st }));
+    check('maker received USDCx at its ask', (await usd(ASKER)) > m0, `${(await usd(ASKER)) - m0}`);
+    check('router holds nothing', show(await bals(C.router)) === show({ st: 0n, us: 0n }), show(await bals(C.router)));
+    const BIDDER = USDC_WHALE;
+    await tx('USDCx maker rests 100 USDCx at mid - 10 bps', BIDDER, C.market, 'deposit-token-y', [uintCV(100_000_000n), uintCV(MID * (BPS - 10n) / BPS), noneCV(), TYc, AYc], (v) => v?.ok !== undefined);
+    if (await evalIn(C.market, `(get-token-y-pending-deposit '${BIDDER})`)) { await fresh(); await tx('settle the bid', DEP, C.market, 'settle-token-y-deposit', [P_(BIDDER), upd(), TYc, AYc], (v) => v?.ok !== undefined); }
+    check('bid rests', (await evalIn(C.market, `(get-token-y-deposit (get-current-cycle) '${BIDDER})`)) === 100_000_000n);
+    const sBig = 100_000_000n * SC / MID * 2n;
+    await fresh();
+    const b0 = await bals(TAKER), s0 = await stx(BIDDER);
+    const r2 = await tx(`smart-swap-stx-for-usdcx ${sBig} uSTX (2x the bid), limit mid - 2%`, TAKER, C.router, 'smart-swap-stx-for-usdcx', [uintCV(sBig), uintCV(MID * 98n / 100n), someCV(upd()), uintCV(U.mid), uintCV(1)], (v) => v?.ok !== undefined);
+    const k2 = r2.res?.ok, b1 = await bals(TAKER);
+    console.log(`  ${show(k2)}`);
+    check('Jing leg took the bid, the rest went to Zest / DLMM', k2?.['jing-in'] > 0n && (k2?.['zest-in'] ?? 0n) + (k2?.['dlmm-in'] ?? 0n) + (k2?.['xyk-in'] ?? 0n) + (k2?.['velar-in'] ?? 0n) > 0n, show(k2));
+    check('taker deltas = receipt', b0.st - b1.st === sBig - (k2?.unsold ?? 0n) && b1.us - b0.us === k2?.out, show({ paid: b0.st - b1.st, got: b1.us - b0.us }));
+    check('maker received STX at its bid', (await stx(BIDDER)) > s0, `${(await stx(BIDDER)) - s0}`);
+    check('router holds nothing', show(await bals(C.router)) === show({ st: 0n, us: 0n }), show(await bals(C.router)));
+  }
 } catch (e) {
   if (!(e instanceof Stop)) { console.error(e); S.fails.push(`crash: ${e.message}`); }
 }

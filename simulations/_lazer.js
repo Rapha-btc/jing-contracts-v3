@@ -44,9 +44,13 @@ export async function fetchLazerUpdateAny(ids = [1, 45]) {
   if (process.env.PYTH_API_KEY) return fetchLazerUpdate(ids);
   const key = process.env.FAKTORY_API_KEY || "jc_e4d2e10396eef95215a7afd492f42d743a3325739d29200c2a28b256f778be01";
   const base = process.env.FAKTORY_API_URL || "https://faktory-dao-backend.vercel.app";
-  const r = await fetch(`${base}/api/auction/pyth-lazer-update?pair=sbtc-stx`, { headers: { "x-api-key": key } });
+  // the route serves three pairs: [1,45] sbtc-stx, [1,7] sbtc-usdcx, [45,7] stx-usdcx (fd293b18)
+  const pair = { "1,45": "sbtc-stx", "1,7": "sbtc-usdcx", "45,7": "stx-usdcx" }[String(ids)];
+  if (!pair) throw new Error(`backend lazer: no pair for feeds [${ids}]`);
+  const r = await fetch(`${base}/api/auction/pyth-lazer-update?pair=${pair}`, { headers: { "x-api-key": key } });
   if (!r.ok) throw new Error(`backend lazer ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const d = (await r.json()).data;
+  if (String(d.feedIds) !== String(ids)) throw new Error(`backend lazer: asked [${ids}], got [${d.feedIds}]`);
   const ts = Number(d.timestampUs) / 1e6;
   return { hex: d.hex, px: BigInt(d.priceX), py: BigInt(d.priceY), ts, expo: d.exponent, futX: Number(d.timestampUs), futY: Number(d.timestampUs) };
 }

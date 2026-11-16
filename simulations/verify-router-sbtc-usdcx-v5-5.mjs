@@ -10,14 +10,15 @@ import { readFileSync } from 'node:fs';
 import { uintCV, noneCV, someCV, bufferCV, stringAsciiCV, tupleCV } from '@stacks/transactions';
 import { SimulationBuilder } from 'stxer';
 import { lazerFeedTimes } from './_lazer.js';
-import { NODE, DEP, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop } from './_yg-loop-common.js';
+import { NODE, DEP as LIVE_DEP_UNUSED, SBTC, WHALE, P_, mk, S, retry, sleep, check, must, show, tx, evalIn, call, deploy, prints, summary, Stop } from './_yg-loop-common.js';
+import { SIM_DEP as DEP, rebase, strip, deployCoreForSim } from './_sim-deployer.mjs';
 
 const MKT_NAME = 'markets-sbtc-usdcx-jing-v6-4', RT_NAME = 'swap-router-sbtc-usdcx-jing-v5-5';
 const MKT = `${DEP}.${MKT_NAME}`, RT = `${DEP}.${RT_NAME}`, CORE = `${DEP}.jing-core-v6`;
 const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
 const USDC_WHALE = 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ';
 const POOL_1 = 'SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-sbtc-usdcx-v-1-bps-10';
-const src = (f) => readFileSync(new URL(`../contracts/sbtc-usdcx/${f}.clar`, import.meta.url), 'utf8');
+const src = (f) => rebase(strip(readFileSync(new URL(`../contracts/sbtc-usdcx/${f}.clar`, import.meta.url), 'utf8')));
 const TX = P_(SBTC), TY = P_(USDCX), AX = stringAsciiCV('sbtc-token'), AY = stringAsciiCV('usdcx-token');
 const SCALE = 10_000_000_000n, BPS = 10_000n;
 const TAKER = mk(9);
@@ -69,6 +70,7 @@ try {
 
   group('setup');
   // the market binds jing-ladder-sbtc-usdcx-v1, so the ladder deploys first
+  await deployCoreForSim(deploy);
   await deploy(DEP, 'jing-ladder-sbtc-usdcx-v1', src('jing-ladder-sbtc-usdcx-v1'));
   await deploy(DEP, MKT_NAME, src(MKT_NAME));
   // jing-core-v6 is owned by the Juice multisig since 2026-10-24: verify as whoever owns it
@@ -92,7 +94,7 @@ try {
   check('A1 fill within 1% of mid', Math.abs(bpsOf(A1.p, U.mid)) < 100, bpsOf(A1.p, U.mid));
   const A2 = await smart('A2 smart-swap-usdcx-for-sbtc 80 USDCx, limit mid+3%', false, 80_000_000n, U.mid * 10300n / BPS, true);
   check('A2 all routed to DLMM, jing 0', A2.o['jing-in'] === 0n && A2.o['dlmm-in'] === 80_000_000n, show(A2.o));
-  check('A2 user deltas == dlmm-in / out', A2.spent === 80_000_000n && A2.got === A2.o.out && A2.got > 80_000n && A2.got < 120_000n, `${A2.spent} ${A2.got}`);
+  check('A2 user deltas == dlmm-in / out (sats within 5% of 80 USDCx at mid)', A2.spent === 80_000_000n && A2.got === A2.o.out && A2.got * U.mid > 80_000_000n * SCALE * 95n / 100n && A2.got * U.mid < 80_000_000n * SCALE * 105n / 100n, `${A2.spent} ${A2.got}`);
   check('A2 pool-1 took the USDCx, paid the sBTC', A2.pool.us === 80_000_000n && -A2.pool.sb === A2.got, show(A2.pool));
   check('A2 fill within 1% of mid', Math.abs(bpsOf(A2.p, U.mid)) < 100, bpsOf(A2.p, U.mid));
   await fresh();
