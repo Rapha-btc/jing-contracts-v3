@@ -163,8 +163,6 @@ seats: (refresh-seat-count),
 (define-data-var settle-total-token-x uint u0)
 (define-data-var settle-token-x-after-fee uint u0)
 (define-data-var settle-token-y-after-fee uint u0)
-(define-data-var bumped-token-y-principal principal tx-sender)
-(define-data-var bumped-token-x-principal principal tx-sender)
 (define-data-var acc-token-x-out uint u0)
 (define-data-var acc-token-y-out uint u0)
 (define-data-var acc-token-y-rolled uint u0)
@@ -551,11 +549,33 @@ acc
 )
 )
 )
-(define-private (not-eq-bumped-token-y (entry principal))
-(not (is-eq entry (var-get bumped-token-y-principal)))
+(define-private (drop-y
+(l (list 50 principal))
+(who principal)
 )
-(define-private (not-eq-bumped-token-x (entry principal))
-(not (is-eq entry (var-get bumped-token-x-principal)))
+(match (index-of? l who)
+i (unwrap-panic (as-max-len?
+(concat (default-to (list) (slice? l u0 i))
+(default-to (list) (slice? l (+ i u1) (len l)))
+)
+u50
+))
+l
+)
+)
+(define-private (drop-x
+(l (list 50 principal))
+(who principal)
+)
+(match (index-of? l who)
+i (unwrap-panic (as-max-len?
+(concat (default-to (list) (slice? l u0 i))
+(default-to (list) (slice? l (+ i u1) (len l)))
+)
+u50
+))
+l
+)
 )
 (define-private (top-y-insert
 (entry {
@@ -918,8 +938,7 @@ ERR_QUEUE_FULL
 cycle: cycle,
 depositor: who,
 })
-(var-set bumped-token-y-principal who)
-(map-set token-y-depositor-list cycle (filter not-eq-bumped-token-y depositors))
+(map-set token-y-depositor-list cycle (drop-y depositors who))
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
 )
@@ -944,8 +963,7 @@ depositor: who,
 cycle: cycle,
 depositor: who,
 })
-(var-set bumped-token-x-principal who)
-(map-set token-x-depositor-list cycle (filter not-eq-bumped-token-x depositors))
+(map-set token-x-depositor-list cycle (drop-x depositors who))
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
 )
@@ -1245,9 +1263,8 @@ smallest-principal: who,
 (smallest-who (get smallest-principal smallest-info))
 )
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-(var-set bumped-token-y-principal smallest-who)
 (map-set token-y-depositor-list cycle
-(unwrap! (as-max-len? (append (filter not-eq-bumped-token-y depositors) who) u50)
+(unwrap! (as-max-len? (append (drop-y depositors smallest-who) who) u50)
 ERR_QUEUE_FULL
 ))
 (and (> carry u0) (map-delete token-y-parked who))
@@ -1492,9 +1509,8 @@ smallest-principal: who,
 (smallest-who (get smallest-principal smallest-info))
 )
 (asserts! (> (+ carry amount) smallest-amount) ERR_QUEUE_FULL)
-(var-set bumped-token-x-principal smallest-who)
 (map-set token-x-depositor-list cycle
-(unwrap! (as-max-len? (append (filter not-eq-bumped-token-x depositors) who) u50)
+(unwrap! (as-max-len? (append (drop-x depositors smallest-who) who) u50)
 ERR_QUEUE_FULL
 ))
 (and (> carry u0) (map-delete token-x-parked who))
@@ -1748,9 +1764,8 @@ true
 cycle: cycle,
 depositor: caller,
 })
-(var-set bumped-token-y-principal caller)
 (map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+(drop-y (get-token-y-depositors cycle) caller)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
@@ -1828,9 +1843,8 @@ true
 cycle: cycle,
 depositor: caller,
 })
-(var-set bumped-token-x-principal caller)
 (map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+(drop-x (get-token-x-depositors cycle) caller)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
@@ -2497,9 +2511,8 @@ depositor: depositor,
 cycle: cycle,
 depositor: depositor,
 })
-(var-set bumped-token-y-principal depositor)
 (map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+(drop-y (get-token-y-depositors cycle) depositor)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- total-token-y amount) })
@@ -2546,9 +2559,8 @@ depositor: depositor,
 cycle: cycle,
 depositor: depositor,
 })
-(var-set bumped-token-x-principal depositor)
 (map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+(drop-x (get-token-x-depositors cycle) depositor)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- total-token-x amount) })
@@ -2590,9 +2602,8 @@ depositor: depositor,
 cycle: cycle,
 depositor: depositor,
 })
-(var-set bumped-token-y-principal depositor)
 (map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+(drop-y (get-token-y-depositors cycle) depositor)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-y: (- (get total-token-y totals) amount) })
@@ -2633,9 +2644,8 @@ depositor: depositor,
 cycle: cycle,
 depositor: depositor,
 })
-(var-set bumped-token-x-principal depositor)
 (map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+(drop-x (get-token-x-depositors cycle) depositor)
 )
 (map-set cycle-totals cycle
 (merge totals { total-token-x: (- (get total-token-x totals) amount) })
@@ -2926,9 +2936,8 @@ cycle: cycle,
 depositor: y-who,
 })
 (map-delete token-y-deposit-limits y-who)
-(var-set bumped-token-y-principal y-who)
 (map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+(drop-y (get-token-y-depositors cycle) y-who)
 )
 )
 (map-set token-y-deposits {
@@ -2944,9 +2953,8 @@ cycle: cycle,
 depositor: x-who,
 })
 (map-delete token-x-deposit-limits x-who)
-(var-set bumped-token-x-principal x-who)
 (map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+(drop-x (get-token-x-depositors cycle) x-who)
 )
 )
 (map-set token-x-deposits {
@@ -3354,9 +3362,8 @@ cycle: cycle,
 depositor: swapper,
 })
 (map-delete token-y-deposit-limits swapper)
-(var-set bumped-token-y-principal swapper)
 (map-set token-y-depositor-list cycle
-(filter not-eq-bumped-token-y (get-token-y-depositors cycle))
+(drop-y (get-token-y-depositors cycle) swapper)
 )
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-y: (- (get total-token-y (get-cycle-totals cycle)) rem) })
@@ -3423,9 +3430,8 @@ cycle: cycle,
 depositor: swapper,
 })
 (map-delete token-x-deposit-limits swapper)
-(var-set bumped-token-x-principal swapper)
 (map-set token-x-depositor-list cycle
-(filter not-eq-bumped-token-x (get-token-x-depositors cycle))
+(drop-x (get-token-x-depositors cycle) swapper)
 )
 (map-set cycle-totals cycle
 (merge (get-cycle-totals cycle) { total-token-x: (- (get total-token-x (get-cycle-totals cycle)) rem) })
