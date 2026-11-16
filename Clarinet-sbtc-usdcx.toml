@@ -47,6 +47,12 @@ contract_id = "SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-swap-router-v-1-2"
 [[project.requirements]]
 contract_id = "SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1"
 
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4"
+
+[[project.requirements]]
+contract_id = "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-sbtc-usdcx-v1"
+
 # These three local declarations make `clarinet check` type-check the exact
 # core/ladder/market sources. The Vitest suite separately deploys fresh copies
 # from those source files under the production SPV9 issuer.
@@ -62,6 +68,16 @@ epoch = "latest"
 
 [contracts.markets-sbtc-usdcx-jing-v6-4]
 path = "contracts/sbtc-usdcx/markets-sbtc-usdcx-jing-v6-4.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-sell-sbtc-bps]
+path = "contracts/sbtc-usdcx/jing-sell-sbtc-bps.clar"
+clarity_version = 5
+epoch = "latest"
+
+[contracts.jing-buy-sbtc-bps]
+path = "contracts/sbtc-usdcx/jing-buy-sbtc-bps.clar"
 clarity_version = 5
 epoch = "latest"
 

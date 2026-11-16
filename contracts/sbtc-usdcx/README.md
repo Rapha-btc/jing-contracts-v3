@@ -47,6 +47,44 @@ Setup: core-v6 `set-verified-contract` by the Juice multisig (tx `0xd81c4cf0...`
 - Rung fat-finger guard: DIA `get-value "BTC/USD"` (8 dp = the market price unit). DIA posts every ~15 min (max gap ~18 min); guard = +/-20% (`GUARD_BPS u2000`), u0 (no push) when DIA is >2h stale. The guard is refreshed on push or by anyone via `refresh-guard`.
 - sBTC = BTC and USDCx = USDC are assumed; a bridge depeg is handled by pausing the market (keeper).
 
+## Depeg response
+
+SetDev DP-2: the markets price sBTC as BTC (Pyth BTC/USD) and USDCx as USDC (Pyth USDC/USD), so a broken sBTC or USDCx peg is invisible to the contracts. The response is a market pause by the operator. Same runbook for `markets-sbtc-stx-jing-v6-4` (sBTC leg only).
+
+**Monitor.** faktory-dao backend cron `/api/bot/jing-peg-watch` (every 2 h, `41 */2 * * *`). It stores the latest result in `jing_peg_status` (migration `0123_jing_peg_status.sql`), serves it at `GET /api/public/jing-peg-status` (jingswap peg pill), and pages Rapha by Telegram + email via the node-watchdog channels. `?dry=1` runs the checks without storing or paging, `?test=1` sends a test page.
+
+| Check | Source | Amber (FYI) | Red (pause now) |
+|---|---|---|---|
+| sBTC reserve | `sbtc-token get-total-supply` vs BTC at the signers' peg wallet (output 0 of the latest `sweep-txid` printed by `sbtc-registry`, balance from mempool.space incl. mempool) | supply > reserve by > 0.1% | supply > reserve by > 0.5% |
+| USDCx reserve | `usdcx get-total-supply` vs Circle xReserve `balanceOfNativeCollateral(USDC, 10003)` on Ethereum (`0x8888888199b2Df864bf678259607d6D5EBb4e3Ce`) | any shortfall, or xReserve `paused()` / Stacks-domain deposits or withdrawals paused | supply > reserve by > 0.1% |
+| USDCx pause | `usdcx is-protocol-paused` | | `true` |
+| Price | deepest Bitflow DLMM pool (active bin holds >= $100) vs Pyth Lazer BTC/USD / USDC/USD (and BTC/USD / STX/USD for sBTC/STX); Coinbase spot if Lazer is down | gap > 3% | gap > 10% |
+
+Red re-pages every 6 h while the state is unchanged; amber pages once; a "recovered" page goes out when every check is back to normal.
+
+**Who signs.** The operator of both markets is the Juice multisig `SM1N7VX04M1TT23KD7YHVD6H6413QV2ZNJFTWVF9P`. Use the market pause, never the `jing-core-v6` pause.
+
+**Exact tx.** Multisig calls, in deny mode with no post-conditions (it moves no asset):
+
+```
+SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4  set-paused  true
+SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-4    set-paused  true
+```
+
+The ceremony is prepared on the juice FE: `https://www.juiceofbtc.com/multisig/jing-pause?market=sbtc-usdcx&paused=true` (or `market=sbtc-stx`). The red alert links straight to it. Build the session there, then sign and broadcast on `/multisig/sign/:id`. The contract asserts `tx-sender = operator`, so check the page shows the multisig as operator first. Pause the sBTC/STX market too when the sBTC reserve check is red; a USDCx-only event pauses only sBTC/USDCx.
+
+**What a pause blocks.** `deposit-token-x/y`, `settle-token-x/y-deposit`, `readmit-token-x/y`, `settle-token-x/y-readmit`, and every settlement path (`swap`, `reprice-or-swap-token-x/y`, `settle-with-refresh`, all through `execute-settlement`). Error `ERR_PAUSED` (u1007).
+
+**What stays open.** `cancel-token-x/y-deposit` and `withdraw-token-x/y`, so makers can always pull funds. The markets have no claim step: proceeds land at settlement. Also open: `set-token-x/y-limit` and `settle-token-x/y-limit` (they only reprice a resting order, nothing settles while paused), `refresh-mid`, `prune-cycles`, the seat syncs, and the operator admin calls.
+
+**Unpause criteria.** All of:
+1. The cron reports every check back to `ok` on two consecutive runs (4 h), not just one.
+2. For sBTC: peg wallet BTC >= sBTC supply, and peg-outs are processing (recent `withdrawal-accept` events on `sbtc-registry`). For USDCx: xReserve collateral >= supply, `is-protocol-paused` false, xReserve Stacks-domain withdrawals not paused.
+3. The DLMM price is within 3% of Pyth for the affected pair.
+4. The root cause is understood (issuer statement for an issuer-side event).
+
+Then multisig `set-paused false` on the same market(s): `https://www.juiceofbtc.com/multisig/jing-pause?market=sbtc-usdcx&paused=false`.
+
 ## stxer simulations (mainnet fork)
 
 | Harness | What it covers | Result |
