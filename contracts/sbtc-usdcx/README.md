@@ -44,7 +44,7 @@ Setup: core-v6 `set-verified-contract` by the Juice multisig (tx `0xd81c4cf0...`
 ## Pricing
 
 - Market mid: Pyth Lazer BTC/USD (feed 1) / USDC/USD (feed 7), one signed update, both expo -8. Keyless fetch: `GET /api/auction/pyth-lazer-update?pair=sbtc-usdcx` on the faktory-dao backend.
-- Rung fat-finger guard: DIA `get-value "BTC/USD"` (8 dp = the market price unit). DIA posts every ~15 min (max gap ~18 min); guard = +/-20% (`GUARD_BPS u2000`), u0 (no push) when DIA is >2h stale. The guard is refreshed on push or by anyone via `refresh-guard`.
+- Rung fat-finger guard: DIA `get-value "BTC/USD"` (8 dp = the market price unit). DIA posts every ~15 min (max gap ~18 min); guard = +/-20% (`GUARD_BPS u2000`), u0 (no push) when DIA is >2h stale. The guard is refreshed on push or by anyone via `refresh-guard`. It is a dollar fat-finger guard, not a pair-price guard: DIA is BTC/USD while the market prices BTC in USDC (BTC/USD / USDC/USD), so if USDC drifts off $1 the guard and the market differ by that drift. Within the +/-20% band that only matters in a deep USDC depeg, where one side of the rungs stops quoting (SetDev DP-1).
 - sBTC = BTC and USDCx = USDC are assumed; a bridge depeg is handled by pausing the market (keeper).
 
 ## Depeg response
@@ -76,6 +76,8 @@ The ceremony is prepared on the juice FE: `https://www.juiceofbtc.com/multisig/j
 **What a pause blocks.** `deposit-token-x/y`, `settle-token-x/y-deposit`, `readmit-token-x/y`, `settle-token-x/y-readmit`, and every settlement path (`swap`, `reprice-or-swap-token-x/y`, `settle-with-refresh`, all through `execute-settlement`). Error `ERR_PAUSED` (u1007).
 
 **What stays open.** `cancel-token-x/y-deposit` and `withdraw-token-x/y`, so makers can always pull funds. The markets have no claim step: proceeds land at settlement. Also open: `set-token-x/y-limit` and `settle-token-x/y-limit` (they only reprice a resting order, nothing settles while paused), `refresh-mid`, `prune-cycles`, the seat syncs, and the operator admin calls.
+
+**Rung pushes in flight (SetDev DP-3).** A rung's push lands in the market as a pending deposit, and `settle-token-x/y-deposit` is blocked while paused. Until the pause lifts, or the rung's 24 h escrow cancel opens (`settle-escrow`, `u86400`), members whose funds are in that pending push cannot withdraw them; funds already resting on the book can. Keep pauses short, or expect withdrawals from rungs with a pending push to wait up to 24 h.
 
 **Unpause criteria.** All of:
 1. The cron reports every check back to `ok` on two consecutive runs (4 h), not just one.

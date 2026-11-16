@@ -32,11 +32,18 @@
 
 (define-constant SCALE u1000000000000)
 (define-constant PROCEEDS_SCALE u1000000000000000000)
+;; DIA sanity (SetDev PD-1, PD-2): a value above $1,000 per STX (8 dp) or a
+;; timestamp more than 5 min ahead of the block is treated as stale.
+(define-constant DIA_MAX_SANE u100000000000)
 (define-read-only (miner-mid)
   (let ((p (unwrap-panic (contract-call? 'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle
       get-value "STX/USD"
     ))))
-    (if (> (+ (/ (get timestamp p) u1000) u7200) stacks-block-time)
+    (if (and
+        (> (+ (/ (get timestamp p) u1000) u7200) stacks-block-time)
+        (<= (/ (get timestamp p) u1000) (+ stacks-block-time u300))
+        (<= (get value p) DIA_MAX_SANE)
+      )
       (get value p)
       u0
     )
