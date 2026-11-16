@@ -13,13 +13,19 @@ export async function createRuntime(label) {
  const asset=Cl.stringAscii('mock-ft');
  const setup=(contract,fn,args)=>assert.equal(raw.callPublicFn(contract,fn,args,owner).result.type,'ok',`setup ${fn}`);
  setup('jing-core-v6','set-verified-contract',[Cl.principal(market)]);
- setup('market','initialize',[Cl.principal(market),traits.x,traits.y,Cl.uint(100),Cl.uint(10000),Cl.uint(1),Cl.uint(45)]);
+ setup('market','initialize',[Cl.principal(market),traits.x,traits.y,Cl.uint(100),Cl.uint(10000),Cl.uint(1),Cl.uint(7)]);
  setup('market','set-treasury',[Cl.contractPrincipal(owner,'mock-jing-ladder')]);
  setup('market','sync-seat-count',[]);setup('market','set-distance-slots',[Cl.uint(0)]);
  for(const who of meta.accounts)for(const token of ['mock-ft','mock-stx'])setup(token,'mint',[Cl.uint(100000000000000n),Cl.principal(who)]);
  assert.equal(cvToString(raw.callReadOnlyFn('jing-core-v6','is-registered',[Cl.principal(market)],owner).result),'true');
  const stats={publicCalls:0,invariantChecks:0,getterCrossChecks:0,pendingRefunds:{},refundEvents:{x:0,y:0}};
  const trace=[];let failure;
+ const supply=()=>Object.fromEntries([...raw.getAssetsMap()].map(([asset,balances])=>[asset,[...balances.values()].reduce((a,b)=>a+b,0n)]));
+ const initialSupply=supply();
+ const admin=new Set(['set-operator','set-treasury','set-paused','set-min-token-x-deposit','set-min-token-y-deposit','set-distance-slots','set-max-staleness','set-settle-max-staleness']);
+ const balance=(side,who)=>BigInt(raw.callReadOnlyFn('market',`rv-balance-${side}`,[Cl.principal(who)],owner).result.value);
+ const owned=(side,who)=>BigInt(raw.callReadOnlyFn('market',`rv-owned-${side}`,[Cl.principal(who)],owner).result.value);
+
  const keys=Object.fromEntries(['x','y'].map(side=>[side,meta.accounts.map(who=>Cl.tuple({token:traits[side],owner:Cl.principal(who)}))]));
  const coreUint=(map,key)=>{
   try{
@@ -31,7 +37,9 @@ export async function createRuntime(label) {
  };
 
  const check=()=>{
+  try{
   stats.invariantChecks++;
+  assert.deepEqual(supply(),initialSupply,'no native/FT tokens created or lost');
   const snapshot=raw.callReadOnlyFn('market','rv-accounting-snapshot',[],owner).result.value;
   const mismatches=[];
   for(const side of ['x','y']){
@@ -51,13 +59,27 @@ export async function createRuntime(label) {
    fs.writeFileSync(`tests/rv/sbtc-usdcx-v6-5/${label}-counterexample.json`,JSON.stringify(failure,null,2)+'\n');
    throw Error(`RV post-call invariant failed: ${JSON.stringify(flags)}`);
   }
+  }catch(error){
+   failure??={label,message:String(error),trace:[...trace]};
+   fs.writeFileSync(`tests/rv/sbtc-usdcx-v6-5/${label}-counterexample.json`,JSON.stringify(failure,null,2)+'\n');
+   throw error;
+  }
  };
  const sim=new Proxy(raw,{get(target,key){
   if(key==='callPublicFn')return (contract,fn,args,who)=>{
    if(failure)throw Error(`RV stopped after invariant failure; see ${label}-counterexample.json`);
    trace.push({contract,fn,args:args.map(cvToString),sender:who,blockHeight:raw.blockHeight,burnBlockHeight:raw.burnBlockHeight});stats.publicCalls++;
+   const operator=raw.getDataVar('market','operator').value;
+   const side=/^(?:withdraw-token-|(?:rv|test)-withdraw-)([xy])$/.exec(fn)?.[1]??null;
+   const before=side?{cash:balance(side,who),claim:owned(side,who)}:null;
    try{
     const receipt=target.callPublicFn(contract,fn,args,who);
+    if(admin.has(fn)&&who!==operator)assert.deepEqual(receipt.result,Cl.error(Cl.uint(1008)),'operator-only setter');
+    if(['set-max-staleness','set-settle-max-staleness'].includes(fn)&&who===operator){
+     const n=BigInt(args[0].value),lo=fn==='set-max-staleness'?40n:20n,hi=fn==='set-max-staleness'?80n:40n;
+     if(n<lo||n>hi)assert.deepEqual(receipt.result,Cl.error(Cl.uint(1034)),'staleness setter bounds');
+    }
+    if(side&&receipt.result.type==='ok')assert.ok(balance(side,who)-before.cash<=before.claim,'withdraw exceeds position');
     trace.at(-1).result=cvToString(receipt.result);
     for(const e of receipt.events??[])if(e.event==='print_event'&&e.data.contract_identifier===`${owner}.jing-core-v6`){
      const v=e.data.value.value,event=v?.event?.value;
@@ -68,6 +90,9 @@ export async function createRuntime(label) {
      if(event==='refund-x'||event==='refund-y')stats.refundEvents[event.slice(-1)]++;
     }
     return receipt;
+   }catch(error){
+    if(error?.code==='ERR_ASSERTION'){failure??={label,message:String(error),trace:[...trace]};fs.writeFileSync(`tests/rv/sbtc-usdcx-v6-5/${label}-counterexample.json`,JSON.stringify(failure,null,2)+'\n');}
+    throw error;
    }finally{check();} // Includes rejected calls and native VM exceptions.
   };
   const value=Reflect.get(target,key);return typeof value==='function'?value.bind(target):value;

@@ -7,9 +7,9 @@
   "scripts": {
     "test:redeploy": "vitest run --config vitest.redeploy.config.ts && node tests/unit/redeploy/verify-sources.mjs",
     "test:f01-fix": "vitest run --config tests/f01-fix/vitest.config.mjs",
-    "rv:build": "node tests/unit/redeploy/build.mjs && python3 tests/rv/v6-3/build.py && python3 tests/rv/sbtc-usdcx-v6-5/build.py && node tests/rv/ladder-v1/build.mjs",
-    "rv:v6": "node tests/rv/v6-3/run-seeded.mjs invariant 1000 20261116 --seeded && node tests/rv/sbtc-usdcx-v6-5/run-seeded.mjs invariant 1000 20261116 --seeded",
-    "rv:rungs": "node tests/rv/ladder-v1/run.mjs invariant 500 20261116 && tsx tests/rv/sbtc-usdcx-v6-5/rungs.ts",
+    "rv:build": "node tests/unit/redeploy/build.mjs && python3 tests/rv/v6-3/build.py && python3 tests/rv/sbtc-usdcx-v6-5/build.py && node tests/rv/ladder-v1/build.mjs && python3 tests/rv/stx-usdcx-v6-4/build.py",
+    "rv:v6": "node tests/rv/v6-3/run-seeded.mjs invariant 1000 20261116 --seeded && node tests/rv/sbtc-usdcx-v6-5/run-seeded.mjs invariant 1000 20261116 --seeded && node tests/rv/stx-usdcx-v6-4/run-seeded.mjs invariant 1000 20261116 --seeded",
+    "rv:rungs": "node tests/rv/ladder-v1/run.mjs invariant 500 20261116 && npm run rv:usdcx:rungs",
     "test": "vitest run && node tests/unit/v6-3/coverage.mjs",
     "sim:creator-escrow": "tsx simulations/simul-creator-escrow.js",
     "sim:creator-escrow-v2": "tsx simulations/simul-creator-escrow-v2.js",
@@ -66,7 +66,19 @@
     "rv:kairan-seat-v2": "node tests/rv/kairan-seat-v2/run.mjs both 1000 20261023 4",
     "test:router-v5-3": "vitest run --config vitest.router-v5-3.config.ts --reporter=default --reporter=json --outputFile=tests/unit/router-v5-3/.build/results.json && node tests/unit/router-v5-3/coverage.mjs",
     "test:core-ladder-v1": "vitest run --config vitest.core-ladder-v1.config.ts --reporter=default --reporter=json --outputFile=tests/unit/core-ladder-v1/.build/results.json && node tests/unit/core-ladder-v1/coverage.mjs",
-    "check:v6-3-mirrors": "node tests/unit/v6-3/mirror-sync.mjs"
+    "check:v6-3-mirrors": "node tests/unit/v6-3/mirror-sync.mjs",
+    "rv:usdcx:rungs": "tsx tests/rv/parity/rungs.ts sbtc-usdcx buy 500 && tsx tests/rv/parity/rungs.ts sbtc-usdcx sell 500 && tsx tests/rv/parity/rungs.ts stx-usdcx buy 500 && tsx tests/rv/parity/rungs.ts stx-usdcx sell 500",
+    "test:sbtc-usdcx:market": "PARITY_PAIR=sbtc-usdcx vitest run --config vitest.parity-markets.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-sbtc-usdcx/.build/results.json && node tests/unit/redeploy/parity/coverage-markets.mjs sbtc-usdcx",
+    "test:sbtc-usdcx:integration": "PARITY_PAIR=sbtc-usdcx vitest run --config vitest.parity-integration.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-sbtc-usdcx-integration/.build/results.json",
+    "test:sbtc-usdcx:ladder": "PARITY_PAIR=sbtc-usdcx vitest run --config vitest.parity-ladders.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-sbtc-usdcx-ladder/.build/results.json",
+    "test:sbtc-usdcx:parity": "npm run test:sbtc-usdcx:market && npm run test:sbtc-usdcx:integration && npm run test:sbtc-usdcx:ladder",
+    "test:stx-usdcx:market": "PARITY_PAIR=stx-usdcx vitest run --config vitest.parity-markets.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-stx-usdcx/.build/results.json && node tests/unit/redeploy/parity/coverage-markets.mjs stx-usdcx",
+    "test:stx-usdcx:integration": "PARITY_PAIR=stx-usdcx vitest run --config vitest.parity-integration.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-stx-usdcx-integration/.build/results.json",
+    "test:stx-usdcx:ladder": "PARITY_PAIR=stx-usdcx vitest run --config vitest.parity-ladders.config.ts --reporter=default --reporter=json --outputFile=tests/unit/parity-stx-usdcx-ladder/.build/results.json",
+    "test:stx-usdcx:parity": "npm run test:stx-usdcx:market && npm run test:stx-usdcx:integration && npm run test:stx-usdcx:ladder",
+    "rv:usdcx:markets": "node tests/rv/sbtc-usdcx-v6-5/run-seeded.mjs invariant 1000 20261116 --seeded && node tests/rv/stx-usdcx-v6-4/run-seeded.mjs invariant 1000 20261116 --seeded",
+    "test:parity:verify": "node tests/unit/redeploy/parity/verify.mjs",
+    "rv:usdcx:signed-rungs": "tsx tests/rv/sbtc-usdcx-v6-5/rungs.ts"
   },
   "dependencies": {
     "@stacks/clarinet-sdk": "^3.25.0",

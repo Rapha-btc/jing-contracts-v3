@@ -1,5 +1,6 @@
 // Public-call prelude gives RV parked/live/pending states from the first trial.
 // Uses RV's own checkProperties/checkInvariants and shrinking/reset routines.
+import assert from 'node:assert/strict';
 import {createRuntime} from './runtime.mjs';
 import { Cl, cvToString } from '@stacks/transactions';
 import { EventEmitter } from 'node:events';
@@ -34,8 +35,8 @@ async function reset(){
  console.log('PRELUDE: both sides have 2 live, 1 parked, 1 pending deposit, pending limit/readmit; all created by public calls.');
 }
 await reset();
-const radio=new EventEmitter();let failed=false;
-for(const name of ['logMessage','logInfo','logFailure'])radio.on(name,s=>{console.log(s);if(/\[FAIL\]|Error:|Runtime error|u9900|u9901/.test(s))failed=true;});
+const radio=new EventEmitter();let failed=false,passes=0;
+for(const name of ['logMessage','logInfo','logFailure'])radio.on(name,s=>{console.log(s);if(s.includes('[PASS]'))passes++;if(/\[FAIL\]|Error:|Runtime error|u9900|u9901/.test(s))failed=true;});
 const eligible=new Map([...simnet.getAccounts()].filter(([n])=>n!=='faucet').sort(([a],[b])=>a.localeCompare(b)));
 const all=getSimnetDeployerContractsInterfaces(simnet),list=[`${simnet.deployer}.market`];
 const functions=getFunctionsFromContractInterfaces(new Map([...all].filter(([id])=>list.includes(id))));
@@ -44,4 +45,5 @@ if(type==='test')await checkProperties(simnet,reset,list,functions,seed,runs,tru
 else await checkInvariants(simnet,reset,list,functions,seed,runs,undefined,true,false,radio,eligible,[...eligible.values()]);
 runtime.assertHealthy();
 console.log(`RV-MONITOR ${JSON.stringify(runtime.stats)}`);
-if(failed)process.exitCode=1;
+assert.equal(failed,false);assert.equal(passes,runs);
+console.log(`RV-MARKET-RESULT ${JSON.stringify({pair:'sbtc-usdcx-v6-5',runs,seed,passes,failures:0,...runtime.stats})}`);

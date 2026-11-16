@@ -104,6 +104,16 @@ path = "tests/unit/redeploy/.build/check-jing-ladder-sbtc-usdcx-v1.clar"
 clarity_version = 5
 epoch = "3.4"
 
+[contracts.jing-ladder-dispatch-sbtc-usdcx]
+path = "tests/unit/redeploy/.build/check-jing-ladder-dispatch-sbtc-usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-dispatch-sbtc-usdcx-relay]
+path = "tests/unit/redeploy/.build/check-jing-ladder-dispatch-sbtc-usdcx-relay.clar"
+clarity_version = 5
+epoch = "3.4"
+
 [contracts.jing-buy-sbtc-10-v2]
 path = "tests/unit/redeploy/.build/check-jing-buy-sbtc-10-v2.clar"
 clarity_version = 5

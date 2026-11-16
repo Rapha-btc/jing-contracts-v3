@@ -15,7 +15,7 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.mock-stx]
-path = "../v6-3/strict-ft.clar"
+path = "../.build/sbtc-usdcx-v6-5/usdcx.clar"
 clarity_version = 5
 epoch = "3.4"
 
@@ -25,7 +25,7 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.mock-lazer-oracle]
-path = "../mock-lazer-oracle.clar"
+path = "../.build/sbtc-usdcx-v6-5/oracle.clar"
 clarity_version = 5
 epoch = "3.4"
 

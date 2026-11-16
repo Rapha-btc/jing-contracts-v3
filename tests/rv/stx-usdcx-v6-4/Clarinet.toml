@@ -1,0 +1,40 @@
+[project]
+name = "rv-stx-usdcx-v6-4"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-ft]
+path = "../.build/stx-usdcx-v6-4/native.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-stx]
+path = "../.build/stx-usdcx-v6-4/usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = "../../../contracts/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-lazer-oracle]
+path = "../.build/stx-usdcx-v6-4/oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.mock-jing-ladder]
+path = "../.build/stx-usdcx-v6-4/ladder.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = "../.build/stx-usdcx-v6-4/market.clar"
+clarity_version = 5
+epoch = "3.4"

@@ -41,6 +41,11 @@ const sources = {
  'jing-ladder-sbtc-usdcx-v1':'contracts/sbtc-usdcx/jing-ladder-sbtc-usdcx-v1.clar',
  'jing-ladder-stx-usdcx-v1':'contracts/stx-usdcx/jing-ladder-stx-usdcx-v1.clar',
 };
+for(const pair of ['sbtc-usdcx','stx-usdcx'])for(const suffix of ['', '-relay']) {
+ const name=`jing-ladder-dispatch-${pair}${suffix}`;
+ sources[name]=`contracts/${pair}/${name}.clar`;
+}
+sources['jing-settle-batch-stx-usdcx']='contracts/stx-usdcx/jing-settle-batch-stx-usdcx.clar';
 for (const [prod,name] of [['markets-sbtc-stx-jing-v6-5','market'],['markets-sbtc-usdcx-jing-v6-5','market-sbtc-usdcx'],['markets-stx-usdcx-jing-v6-4','market-stx-usdcx'],...Object.keys(sources).filter(n=>n.startsWith('jing-ladder')).map(n=>[n,n])]) bindings[`'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.${prod}`]=local(name);
 for (const side of ['buy','sell']) {
  for (const suffix of ['-v2','']) sources[`jing-${side}-stx-10${suffix}`]=`contracts/jing-${side}-stx-rung-v3.clar`;
@@ -67,9 +72,10 @@ fs.writeFileSync(`${out}/zest.clar`, `(use-trait ft .sip-010-trait.sip-010-trait
 (define-public (swap-y-for-x (x <ft>) (y <ft>) (pool uint) (amount uint) (price uint) (ticks (list 32 int)) (minimum uint) (partial bool) (deadline uint))
  (if true (err u5001) (ok {dx:u0,dy:u0})))`);
 let manifest='[project]\nname = "redeploy-v6-5"\nauthors = []\ntelemetry = false\ncache_dir = "./.cache"\n';
+fs.writeFileSync(`${out}/usdcx.clar`,fs.readFileSync('tests/unit/v6-3/token.clar','utf8').replace('(get-decimals) (ok u8)','(get-decimals) (ok u6)'));
 const fixtures={
  zest:`${out}/zest.clar`,
- 'sip-010-trait':'tests/rv/sip-010-trait.clar', token:'tests/unit/v6-3/token.clar', usdcx:'tests/unit/v6-3/token.clar',
+ 'sip-010-trait':'tests/rv/sip-010-trait.clar', token:'tests/unit/v6-3/token.clar', usdcx:`${out}/usdcx.clar`,
  'asset-stx':'tests/rv/mock-wstx.clar',oracle:'tests/unit/v6-3/oracle.clar',dia:`${out}/dia.clar`,
  'miner-oracle':'tests/unit/integration-v6-3/miner-oracle.clar','jing-core-v6':'contracts/jing-core-v6.clar',
  'jing-rung-deposit-trait':'contracts/jing-rung-deposit-trait.clar',

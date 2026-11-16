@@ -1,0 +1,180 @@
+[project]
+name = "parity-integration-stx-usdcx"
+authors = []
+telemetry = false
+cache_dir = "../../../.cache"
+
+[contracts.sip-010-trait]
+path = "../../rv/sip-010-trait.clar"
+clarity_version = 4
+epoch = "3.3"
+
+[contracts.token]
+path = ".build/token.clar"
+clarity_version = 4
+epoch = "3.3"
+
+[contracts.usdcx]
+path = ".build/usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = ".build/oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.miner-oracle]
+path = ".build/miner-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = ".build/jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-v1]
+path = ".build/jing-ladder-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-rung-deposit-trait]
+path = ".build/jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-dispatch]
+path = ".build/jing-ladder-dispatch.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-relay]
+path = ".build/jing-ladder-relay.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.market]
+path = ".build/markets-stx-usdcx-jing-v6-4.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-0]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-10]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-20]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-25]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-30]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-40]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-50]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-60]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-70]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-80]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-90]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-stx-usdc-100]
+path = ".build/jing-buy-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-0]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-10]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-20]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-25]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-30]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-40]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-50]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-60]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-70]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-80]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-90]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-stx-usdc-100]
+path = ".build/jing-sell-stx-usdc-bps.clar"
+clarity_version = 5
+epoch = "3.4"

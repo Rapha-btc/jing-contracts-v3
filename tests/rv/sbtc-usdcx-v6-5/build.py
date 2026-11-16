@@ -12,6 +12,7 @@ subs["'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx"]='.mock-stx'
 subs['"usdcx-token"']='"mock-ft"'
 for a,b in subs.items():assert a in s;s=s.replace(a,b)
 production_prefix=s
+(out/'oracle.clar').write_text((root/'tests/rv/mock-lazer-oracle.clar').read_text().replace('(feed u45 100000000 ts)', '(feed u7 100000000 ts)'))
 props=(root/'tests/rv/v6-3/properties.clar').read_text().replace('(stx-get-balance who)', '(unwrap-panic (contract-call? .mock-stx get-balance who))')
 props += '''\n;; Exercise both accepted and refused bounds through production setters.
 (define-public (test-staleness (raw uint) (settle bool))
@@ -61,10 +62,11 @@ assert s[:len(production_prefix)] == production_prefix
 },indent=2)+'\n')
 (out/'ladder.clar').write_text((root/'tests/rv/mock-jing-ladder.clar').read_text().replace('(define-data-var max-band uint u2)',f'(define-data-var max-band uint u{0 if full_book else 48})'))
 (out/'core.clar').unlink(missing_ok=True)
+(out/'usdcx.clar').write_text((root/'tests/rv/v6-3/strict-ft.clar').read_text().replace('(get-decimals) (ok u8)', '(get-decimals) (ok u6)'))
 (root/'tests/rv/sbtc-usdcx-v6-5/settings').mkdir(exist_ok=True)
 shutil.copyfile(root/'settings/Devnet.toml',root/'tests/rv/sbtc-usdcx-v6-5/settings/Devnet.toml')
 manifest='[project]\nname = "rv-sbtc-usdcx-v6-5"\nauthors = []\ntelemetry = false\ncache_dir = "../../../.cache"\n'
-for n,p in [('sip-010-trait','../sip-010-trait.clar'),('mock-ft','../v6-3/strict-ft.clar'),('mock-stx','../v6-3/strict-ft.clar'),('jing-core-v6','../../../contracts/jing-core-v6.clar'),('mock-lazer-oracle','../mock-lazer-oracle.clar'),('mock-jing-ladder','../.build/sbtc-usdcx-v6-5/ladder.clar'),('market','../.build/sbtc-usdcx-v6-5/market.clar')]:
+for n,p in [('sip-010-trait','../sip-010-trait.clar'),('mock-ft','../v6-3/strict-ft.clar'),('mock-stx','../.build/sbtc-usdcx-v6-5/usdcx.clar'),('jing-core-v6','../../../contracts/jing-core-v6.clar'),('mock-lazer-oracle','../.build/sbtc-usdcx-v6-5/oracle.clar'),('mock-jing-ladder','../.build/sbtc-usdcx-v6-5/ladder.clar'),('market','../.build/sbtc-usdcx-v6-5/market.clar')]:
  manifest+=f'\n[contracts.{n}]\npath = "{p}"\nclarity_version = 5\nepoch = "3.4"\n'
 (root/'tests/rv/sbtc-usdcx-v6-5/Clarinet.toml').write_text(manifest)
 print('Built current sBTC/USDCx v6-5 with unchanged production declarations, real core, strict FT balances, and explicit oracle/ladder fixtures.')

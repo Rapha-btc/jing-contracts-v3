@@ -9,7 +9,7 @@ export const accounts=new Map([
 export const names:Record<string,string>={market:'markets-sbtc-stx-jing-v6-5','market-sbtc-usdcx':'markets-sbtc-usdcx-jing-v6-5','market-stx-usdcx':'markets-stx-usdcx-jing-v6-4',router:'swap-router-sbtc-stx-jing-v5-6','z-batch':'jing-settle-batch-v2'};
 export let simnet:any;
 let sdk:any;
-export async function boot({routers=false}={}){
+export async function boot({routers=false,extensions={} as Record<string,string>}={}){
  const raw:any=sdk??=await getSDK({trackCosts:false});
  await raw.initEmptySession(null);raw.setEpoch('4.0');
  const meta=JSON.parse(fs.readFileSync('tests/unit/redeploy/.build/sources.json','utf8'));
@@ -18,7 +18,7 @@ export async function boot({routers=false}={}){
   return rank(a)-rank(b);
  });
  for(const [alias,path] of ordered){
-  const result=raw.deployContract(names[alias]??alias,fs.readFileSync(path as string,'utf8'),{clarityVersion:5},owner);
+  const result=raw.deployContract(names[alias]??alias,fs.readFileSync(path as string,'utf8')+(extensions[alias]??''),{clarityVersion:5},owner);
   if(result.result.type!=='true')throw Error(`deploy ${alias}: ${Cl.prettyPrint(result.result)}`);
  }
  for(const who of accounts.values())raw.mintSTX(who,100000000000000n);
