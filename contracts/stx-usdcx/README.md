@@ -27,7 +27,7 @@ The market keeps the `(t <ft-trait>)` / asset-name arguments on the x side (same
 ## Deploy order (deployer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22)
 
 1. `jing-ladder-stx-usdcx-v1`, then the ladder owner sets the canonical rung hashes per side
-2. `markets-stx-usdcx-jing-v6-4`, then multisig (`SM1N7VX04M1TT23KD7YHVD6H6413QV2ZNJFTWVF9P`, core owner) `jing-core-v6 set-verified-contract`; deployer `set-operator` -> multisig, multisig `initialize(market, token-stx-v-1-2, usdcx, min-x, min-y, u45, u7)`, multisig `set-operator` -> deployer (or keep the multisig as operator, as sbtc-usdcx did). Suggested mins: `u1000000` (1 STX) / `u1000000` (1 USDCx)
+2. `markets-stx-usdcx-jing-v6-4`, then multisig (`SM1N7VX04M1TT23KD7YHVD6H6413QV2ZNJFTWVF9P`, core owner) `jing-core-v6 set-verified-contract`; deployer `set-operator` -> multisig, multisig `initialize(market, token-stx-v-1-2, usdcx, min-x, min-y, u45, u7)` (operator stays the multisig: it holds the market pause). Suggested mins: `u1000000` (1 STX) / `u1000000` (1 USDCx)
 3. rungs `jing-sell-stx-usdc-<bps>` / `jing-buy-stx-usdc-<bps>`, `initialize` each
 4. `jing-ladder-dispatch-stx-usdcx` (+ `-relay` if the BTC-in adapter path is wanted), `jing-settle-batch-stx-usdcx`, `swap-router-stx-usdcx-jing-v5-5`
 

@@ -20,7 +20,7 @@ Reused as deployed: `jing-core-v6`, `jing-rung-deposit-trait`. The rung trait ke
 ## Deploy order (deployer SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22)
 
 1. `jing-ladder-sbtc-usdcx-v1`, then the ladder owner sets the canonical rung hashes per side
-2. `markets-sbtc-usdcx-jing-v6-4`, then (core owner = Juice multisig `SM1N7VX04M1TT23KD7YHVD6H6413QV2ZNJFTWVF9P` since 2026-10-24) multisig `jing-core-v6 set-verified-contract`; `initialize` needs tx-sender = operator = core owner, so deployer `set-operator` -> multisig, multisig `initialize(market, sbtc-token, usdcx, min-x, min-y, u1, u7)`, multisig `set-operator` -> deployer
+2. `markets-sbtc-usdcx-jing-v6-4`, then (core owner = Juice multisig `SM1N7VX04M1TT23KD7YHVD6H6413QV2ZNJFTWVF9P` since 2026-10-24) multisig `jing-core-v6 set-verified-contract`; `initialize` needs tx-sender = operator = core owner, so deployer `set-operator` -> multisig, multisig `initialize(market, sbtc-token, usdcx, min-x, min-y, u1, u7)` (operator stays the multisig: it holds the market pause)
 3. rungs `jing-sell-sbtc-<bps>` / `jing-buy-sbtc-<bps>`, `initialize` each
 4. `jing-ladder-dispatch-sbtc-usdcx`, `jing-settle-batch-sbtc-usdcx`, `swap-router-sbtc-usdcx-jing-v5-5`
 
