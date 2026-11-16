@@ -4111,6 +4111,9 @@
   )
 )
 
+(define-read-only (get-taker-rebate-bps-for (update (buff 8192)))
+  (default-to TAKER_REBATE_BPS (capacity-rebate-hint update))
+)
 (define-private (gross-up (net uint) (bps uint))
   (if (is-eq net u0)
     u0

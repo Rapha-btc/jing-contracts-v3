@@ -616,10 +616,7 @@
   )
   (match update
     v (let (
-        (bps (get rebate-bps
-          (contract-call? JING_MARKET get-taker-capacity mid limit sell-stx
-            tx-sender (some v)
-          )))
+        (bps (contract-call? JING_MARKET get-taker-rebate-bps-for v))
         (blimit (book-limit limit bps sell-stx))
         (quote (contract-call? JING_MARKET get-taker-capacity mid blimit sell-stx
           tx-sender (some v)

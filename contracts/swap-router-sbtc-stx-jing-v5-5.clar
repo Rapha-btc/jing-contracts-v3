@@ -854,10 +854,7 @@
   ;; fail (the public already refused a zero mid), so it returns plain uints.
   (match update
     v (let (
-        (bps (get rebate-bps
-          (contract-call? JING_MARKET get-taker-capacity mid limit sell-sbtc
-            tx-sender (some v)
-          )))
+        (bps (contract-call? JING_MARKET get-taker-rebate-bps-for v))
         (blimit (book-limit limit bps sell-sbtc))
         (quote (contract-call? JING_MARKET get-taker-capacity mid blimit sell-sbtc
           tx-sender (some v)

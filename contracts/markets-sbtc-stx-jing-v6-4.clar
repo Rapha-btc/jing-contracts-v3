@@ -3117,6 +3117,8 @@ acc)))
       (pub-y (/ (unwrap! (get feed-update-timestamp fy) none) MICROS_PER_SECOND)))
     (some (rebate-bps-for-age (feed-age pub-x pub-y)))))
 
+(define-read-only (get-taker-rebate-bps-for (update (buff 8192)))
+(default-to TAKER_REBATE_BPS (capacity-rebate-hint update)))
 (define-private (gross-up (net uint) (bps uint))
 (if (is-eq net u0)
 u0
