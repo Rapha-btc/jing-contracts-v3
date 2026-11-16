@@ -17,7 +17,7 @@ if(!results.success||results.numFailedTests||results.numPendingTests||results.nu
  throw Error('Coverage release report requires a complete passing run, without skipped tests.');
 const metric=m=>({hit:[...m.values()].filter(n=>n>0).length,total:m.size,percent:Number((100*[...m.values()].filter(n=>n>0).length/m.size).toFixed(2))});
 const contracts={};
-for(const name of ['jing-buy-stx-core-spread-v1','jing-sell-stx-core-spread-v1']){
+for(const name of ['jing-buy-stx-rung-v3','jing-sell-stx-rung-v3']){
  const functions=new Map(),lines=new Map(),branches=new Map();let records=0;
  for(const record of lcov.split('end_of_record')){
   if(!record.split('\n').some(l=>l.startsWith('SF:')&&l.endsWith(`/${out}/${name}.clar`)))continue;
@@ -42,7 +42,7 @@ for(const name of ['jing-buy-stx-core-spread-v1','jing-sell-stx-core-spread-v1']
 // Dispatch is gated on raw instrumentation (no exceptions). Core, ladder and
 // market are reported for reference; their gates live in their own suites.
 const raw={};
-for(const name of ['jing-ladder-dispatch','jing-core-v6','jing-ladder-v1','markets-sbtc-stx-jing-v6-3']){
+for(const name of ['jing-ladder-dispatch','jing-core-v6','jing-ladder-v1','markets-sbtc-stx-jing-v6-5']){
  const functions=new Map(),lines=new Map(),branches=new Map();
  for(const record of lcov.split('end_of_record')){
   if(!record.split('\n').some(l=>l.startsWith('SF:')&&l.endsWith(`/${out}/${name}.clar`)))continue;

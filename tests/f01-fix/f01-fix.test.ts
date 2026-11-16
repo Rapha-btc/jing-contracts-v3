@@ -8,8 +8,8 @@ type Mode = 'burn' | 'lock';
 const variants: [Side, Mode][] = [['sell', 'burn'], ['buy', 'burn']]; // sBTC lock out of scope (only peg-outs lock; Rapha 2026-11-15)
 
 const cfg = (side: Side) => ({
-  name: `jing-${side}-sbtc-10`,
-  rung: DEP + `.jing-${side}-sbtc-10`,
+  name: `jing-${side}-sbtc-10-v2`,
+  rung: DEP + `.jing-${side}-sbtc-10-v2`,
   proceeds: side === 'sell' ? Y : X,
   input: side === 'sell' ? X : Y,
   proceedsKey: side === 'sell' ? 'stx' : 'sbtc',

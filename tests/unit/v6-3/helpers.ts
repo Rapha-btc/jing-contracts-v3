@@ -47,7 +47,7 @@ export function auditState(extra: string[] = []) {
     try { return simnet.getMapEntry(C, map, key); }
     catch (error) { if (String(error) === 'value not found') return Cl.none(); throw error; }
   };
-  const source = fs.readFileSync('contracts/markets-sbtc-stx-jing-v6-3.clar', 'utf8');
+  const source = fs.readFileSync('contracts/markets-sbtc-stx-jing-v6-5.clar', 'utf8');
   const variables = Object.fromEntries([...source.matchAll(/\(define-data-var\s+([^\s]+)/g)].map(m => [m[1], simnet.getDataVar(C, m[1])]));
   const current = Number(value(variables['current-cycle']));
   const people = new Set([...accounts.values(), market, ...extra]);

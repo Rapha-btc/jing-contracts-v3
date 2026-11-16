@@ -8,7 +8,7 @@ import {U,owner,alice,token,stx,call,read,ok,balance,specs} from './helpers';
 const dispatch='jing-ladder-dispatch';
 const pc=(r:string)=>`${owner}.${r}`;
 type Side=typeof specs[number];
-const rung=(s:Side,spread:number)=>`jing-${s.label}-stx-spread-${spread}`;
+const rung=(s:Side,spread:number)=>`jing-${s.label}-stx-${spread}-v2`;
 const list=(entries:[string,bigint][])=>Cl.list(entries.map(([r,amount])=>Cl.tuple({rung:Cl.principal(pc(r)),amount:U(amount)})));
 
 // Spreads 10 and 20 seated, 25 registered unseated, 0 never registered.

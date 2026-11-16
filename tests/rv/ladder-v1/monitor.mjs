@@ -107,6 +107,14 @@ export function createMonitor(sim, owner) {
   function check() {
     stats.checks++;
     const bad = [];
+    const swapAge=varOf('market','max-staleness'),settleAge=varOf('market','settle-max-staleness');
+    if(swapAge<40n||swapAge>80n||settleAge<20n||settleAge>40n)bad.push('market staleness outside bounds');
+    for(const x of [true,false]){
+      const mv=marketView(x),side=x?'x':'y';
+      const book=entry('market',`token-${side}-depositor-list`,Cl.uint(mv.cycle))??[];
+      const live=owners.filter(who=>mv.live(who)>0n);
+      if(new Set(book).size!==book.length||book.length!==live.length||book.some(who=>!live.includes(who)))bad.push(`market ${side} depositor list differs from nonzero makers`);
+    }
     for (const [idx, r] of RUNGS.entries()) {
       const st = rungState(r, idx), id = r.id;
       let sum = 0n, n = 0n, rows = 0n, pin = 0n, oldin = 0n, pout = 0n;

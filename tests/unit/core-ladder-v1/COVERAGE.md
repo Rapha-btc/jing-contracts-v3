@@ -7,19 +7,18 @@ Both contracts run on their unmodified bytes from `contracts/`. Gate: 100% funct
 | Contract | Functions | Lines | Branches |
 | --- | --- | --- | --- |
 | jing-core-v6 | 83/83 (100%) | 938/938 (100%) | 163/163 (100%) |
-| jing-ladder-v1 | 31/31 (100%) | 266/266 (100%) | 61/61 (100%) |
+| jing-ladder-v1 | 31/31 (100%) | 267/267 (100%) | 61/61 (100%) |
 
 ## Raw instrumentation (before exceptions)
 
 | Contract | Functions | Lines | Branches |
 | --- | --- | --- | --- |
 | jing-core-v6 | 83/83 (100%) | 938/938 (100%) | 163/164 (99.39%) |
-| jing-ladder-v1 | 31/31 (100%) | 266/267 (99.63%) | 61/61 (100%) |
+| jing-ladder-v1 | 31/31 (100%) | 267/267 (100%) | 61/61 (100%) |
 
 ## Exceptions
 
 - jing-core-v6 branch `137,0,0`: Saturating arm of the aggregate debit: total-token-equity is the sum of owner equities (credit/debit change both by the same amount) and applied <= the owner equity, so applied > total cannot occur.
-- jing-ladder-v1 line `365`: Tuple-literal let binding of executed retire-band; the SDK reports the opening line unhit although `key` is evaluated on every call (the map lookup on the next binding uses it).
 
 ## Source SHA-256
 

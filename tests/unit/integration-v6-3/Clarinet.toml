@@ -40,27 +40,27 @@ clarity_version = 5
 epoch = "3.4"
 
 [contracts.market]
-path = ".build/markets-sbtc-stx-jing-v6-3.clar"
+path = ".build/markets-sbtc-stx-jing-v6-5.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-0]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-0-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-0]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-0-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-25]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-25-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-25]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-25-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
@@ -74,102 +74,102 @@ path = ".build/jing-ladder-dispatch.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-10]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-10-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-20]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-20-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-30]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-30-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-40]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-40-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-50]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-50-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-60]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-60-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-70]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-70-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-80]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-80-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-90]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-90-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-buy-stx-spread-100]
-path = ".build/jing-buy-stx-core-spread-v1.clar"
+[contracts.jing-buy-stx-100-v2]
+path = ".build/jing-buy-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-10]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-10-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-20]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-20-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-30]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-30-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-40]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-40-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-50]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-50-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-60]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-60-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-70]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-70-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-80]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-80-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-90]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-90-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"
 
-[contracts.jing-sell-stx-spread-100]
-path = ".build/jing-sell-stx-core-spread-v1.clar"
+[contracts.jing-sell-stx-100-v2]
+path = ".build/jing-sell-stx-rung-v3.clar"
 clarity_version = 5
 epoch = "3.4"

@@ -43,9 +43,10 @@ export async function createRuntime(label) {
    const actual=coreUint('total-token-equity',traits[side]),total=expected.reduce((a,b)=>a+b,0n);
    if(actual!==total)mismatches.push({side,owner:'TOTAL',actual:String(actual),expected:String(total)});
   }
-  if(snapshot.structural.type!=='true'||mismatches.length){
-   const flags=Object.fromEntries(['properties','solvent-x','solvent-y','totals-x','totals-y','pending-positive-x','pending-positive-y','core-equity-x','core-equity-y']
-    .map(name=>[name,cvToString(raw.callReadOnlyFn('market',`invariant-${name}`,[],owner).result)]));
+  const redeployFlags=Object.fromEntries(['staleness','list-x','list-y'].map(name=>[name,cvToString(raw.callReadOnlyFn('market',`invariant-${name}`,[],owner).result)]));
+  if(snapshot.structural.type!=='true'||mismatches.length||Object.values(redeployFlags).some(v=>v!=='true')){
+   const flags={...redeployFlags,...Object.fromEntries(['properties','solvent-x','solvent-y','totals-x','totals-y','pending-positive-x','pending-positive-y','core-equity-x','core-equity-y']
+    .map(name=>[name,cvToString(raw.callReadOnlyFn('market',`invariant-${name}`,[],owner).result)]))};
    failure??={label,flags,mismatches,trace:[...trace]};
    fs.writeFileSync(`tests/rv/v6-3/${label}-counterexample.json`,JSON.stringify(failure,null,2)+'\n');
    throw Error(`RV post-call invariant failed: ${JSON.stringify(flags)}`);

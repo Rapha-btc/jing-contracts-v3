@@ -1,7 +1,7 @@
 // RV stack for the FINAL pooled-maker set: jing-ladder-dispatch (the RV
 // target) on four real miner-band rungs (jing-buy/sell-stx-core-spread-v1 at
 // spreads 20 and 50), the real jing-ladder-v1, the real jing-core-v6 and the
-// final markets-sbtc-stx-jing-v6-3.
+// final markets-sbtc-stx-jing-v6-5.
 //
 // Production sources are only rewritten for dependency identities (the same
 // substitution table as tests/unit/integration-v6-3/build.mjs: mainnet
@@ -22,10 +22,11 @@ const dir = 'tests/rv/ladder-v1';
 const out = 'tests/rv/.build/ladder-v1';
 const owner = 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM';
 export const substitutions = {
+  "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3": `'${owner}.market`,
   "'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait": '.sip-010-trait.sip-010-trait',
   "'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle": '.oracle',
   "'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1": '.oracle',
-  "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-3": `'${owner}.market`,
+  "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-5": `'${owner}.market`,
   "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-v1": `'${owner}.jing-ladder-v1`,
   "'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rfq-sbtc-stx-jing-v2-3": `'${owner}.miner-oracle`,
   "'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token": `'${owner}.token`,
@@ -61,9 +62,9 @@ function generate(name, suffix) {
   fs.writeFileSync(`${out}/${name}.clar`, text);
   sources[name] = { path, sha256: sha(source), prefixSha256: sha(prefix) };
 }
-generate('markets-sbtc-stx-jing-v6-3');
-generate('jing-buy-stx-core-spread-v1', inspect(true));
-generate('jing-sell-stx-core-spread-v1', inspect(false));
+generate('markets-sbtc-stx-jing-v6-5');
+generate('jing-buy-stx-rung-v3', inspect(true));
+generate('jing-sell-stx-rung-v3', inspect(false));
 generate('jing-ladder-dispatch');
 fs.writeFileSync(`${out}/rv-ladder-harness.clar`, harness());
 for (const name of ['jing-core-v6', 'jing-ladder-v1', 'jing-rung-deposit-trait'])
@@ -81,8 +82,8 @@ manifest += c('miner-oracle', '../../unit/integration-v6-3/miner-oracle.clar');
 manifest += c('jing-core-v6', '../../../contracts/jing-core-v6.clar');
 manifest += c('jing-ladder-v1', '../../../contracts/jing-ladder-v1.clar');
 manifest += c('jing-rung-deposit-trait', '../../../contracts/jing-rung-deposit-trait.clar');
-manifest += c('market', '../.build/ladder-v1/markets-sbtc-stx-jing-v6-3.clar');
-for (const r of RUNGS) manifest += c(r.name, `../.build/ladder-v1/jing-${r.buy ? 'buy' : 'sell'}-stx-core-spread-v1.clar`);
+manifest += c('market', '../.build/ladder-v1/markets-sbtc-stx-jing-v6-5.clar');
+for (const r of RUNGS) manifest += c(r.name, `../.build/ladder-v1/jing-${r.buy ? 'buy' : 'sell'}-stx-rung-v3.clar`);
 manifest += c('jing-ladder-dispatch', '../.build/ladder-v1/jing-ladder-dispatch.clar');
 manifest += c('rv-ladder-harness', '../.build/ladder-v1/rv-ladder-harness.clar');
 fs.writeFileSync(`${dir}/Clarinet.toml`, manifest);

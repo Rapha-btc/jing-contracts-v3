@@ -21,10 +21,10 @@ export const ACCOUNTS = [
   'ST3NBRSFKX28FQ2ZJ1MAKX58HKHSDGNV5N7R21XCP',
 ];
 export const RUNGS = [
-  { id: 'b20', name: 'jing-buy-stx-spread-20', buy: true, spread: 20 },
-  { id: 'b50', name: 'jing-buy-stx-spread-50', buy: true, spread: 50 },
-  { id: 's20', name: 'jing-sell-stx-spread-20', buy: false, spread: 20 },
-  { id: 's50', name: 'jing-sell-stx-spread-50', buy: false, spread: 50 },
+  { id: 'b20', name: 'jing-buy-stx-20-v2', buy: true, spread: 20 },
+  { id: 'b50', name: 'jing-buy-stx-50-v2', buy: true, spread: 50 },
+  { id: 's20', name: 'jing-sell-stx-20-v2', buy: false, spread: 20 },
+  { id: 's50', name: 'jing-sell-stx-50-v2', buy: false, spread: 50 },
 ];
 const H = `'${OWNER}.rv-ladder-harness`;
 const FEE = 10; // markets-sbtc-stx-jing-v6-3 FEE_BPS

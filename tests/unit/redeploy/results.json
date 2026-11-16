@@ -1,0 +1,571 @@
+{
+  "recordedAt": "2026-11-16T19:17:55.035512+00:00",
+  "head": "f87266ddb741ffd234956a8c4e602a3b50d36cd4",
+  "tools": {
+    "clarinet": "3.23.2",
+    "clarinetSdk": "3.25.0",
+    "vitest": "2.1.9",
+    "rendezvous": "1.0.0-rc.1"
+  },
+  "sources": {
+    "swap-router-sbtc-usdcx-jing-v5-6": {
+      "path": "contracts/sbtc-usdcx/swap-router-sbtc-usdcx-jing-v5-6.clar",
+      "sha256": "840ee59165e0dda0f85ebd0e6abe4f44c2b19b56a2fe48aa62c06f378e317bfe",
+      "generatedSha256": "ce2f5c669d99271a7612ae9667862179b422a5f297d9c361961419a7098be608"
+    },
+    "swap-router-stx-usdcx-jing-v5-5": {
+      "path": "contracts/stx-usdcx/swap-router-stx-usdcx-jing-v5-5.clar",
+      "sha256": "2c9362c058450a938b3d458c073295058d44c3f95185dee4d35168a2a0d395e7",
+      "generatedSha256": "1b89e4c93fcf8b2db334a8fb27cb289e280408169ac2c13cad375500489c26df"
+    },
+    "swap-router-stx-usdcx-jing-v6": {
+      "path": "contracts/stx-usdcx/swap-router-stx-usdcx-jing-v6.clar",
+      "sha256": "4f2f54c3f02a748e65583432d63e1a764be12f8489296e5916962da804b8e00e",
+      "generatedSha256": "4e4685623792b2fbae5ebe9d7af1d884bd00411365bb7f36d72d6a143340b124"
+    },
+    "jing-settle-batch-sbtc-usdcx-v2": {
+      "path": "contracts/sbtc-usdcx/jing-settle-batch-sbtc-usdcx-v2.clar",
+      "sha256": "8b9462c603e2570e98669c4165307e386bfead8ebbba68fafd7502af1036487c",
+      "generatedSha256": "b529f6d4c2ba1845520a8c4dae1d8eac9ef2ab834b428fede1daaf83f4b04fe2"
+    },
+    "jing-rung-deposit-trait": {
+      "path": "contracts/jing-rung-deposit-trait.clar",
+      "sha256": "927fbba4826710ded7e81fb4847ed92f5c4310bc4e0cf42537600876b0a01163",
+      "generatedSha256": "927fbba4826710ded7e81fb4847ed92f5c4310bc4e0cf42537600876b0a01163"
+    },
+    "jing-core-v6": {
+      "path": "contracts/jing-core-v6.clar",
+      "sha256": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697",
+      "generatedSha256": "132b0d477339ae01bac238a486b03debde486632a9ff6b0d7e06971092a163c2"
+    },
+    "market": {
+      "path": "contracts/markets-sbtc-stx-jing-v6-5.clar",
+      "sha256": "d77d79bacb0eba623fafde5b693512612e68b32f3694381216c9973703cb5e97",
+      "generatedSha256": "77a6a448647e6780b3024f6c0d08646b7b12f2db71b5757a4058ad11240a68ec"
+    },
+    "market-sbtc-usdcx": {
+      "path": "contracts/sbtc-usdcx/markets-sbtc-usdcx-jing-v6-5.clar",
+      "sha256": "3290d26a0f0fbac86628f579d558e62ad297cf22ecf5310ab49bbae35b040f37",
+      "generatedSha256": "2c48e9c99f191716495c1a937794ee8c47978c48edd762c824e95ca36b12c6ea"
+    },
+    "market-stx-usdcx": {
+      "path": "contracts/stx-usdcx/markets-stx-usdcx-jing-v6-4.clar",
+      "sha256": "999ef9f83723c99b0d34260b07489d904c31a34b9e32be38d715bbef16b8a65e",
+      "generatedSha256": "78540876c293436eca14c240a7e10cbd86c8876e5dc536d42a84aaab79d0ea6f"
+    },
+    "router": {
+      "path": "contracts/swap-router-sbtc-stx-jing-v5-6.clar",
+      "sha256": "bce05dae58b536be482b749cf5c6119ffefdf8235b4ace9b8382fb3ccfde1f79",
+      "generatedSha256": "736984c5276e81c7370a561e491a4fb78c472c26082e9b64c49f1ba8276cd107"
+    },
+    "z-batch": {
+      "path": "contracts/jing-settle-batch-v2.clar",
+      "sha256": "3122247dccea96d9ce91b670bedc51d6defa3f7464e60cda32bc706efd85a7ed",
+      "generatedSha256": "ec4f191360243273d3a7cac9419d19756cd7b0bf0a8181a03011296658f83f89"
+    },
+    "jing-ladder-v1": {
+      "path": "contracts/jing-ladder-v1.clar",
+      "sha256": "0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786",
+      "generatedSha256": "0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786"
+    },
+    "jing-ladder-sbtc-usdcx-v1": {
+      "path": "contracts/sbtc-usdcx/jing-ladder-sbtc-usdcx-v1.clar",
+      "sha256": "e3cb104bab2b1f8e09a621753989415825b97ff833acbf88baac92318d717888",
+      "generatedSha256": "e3cb104bab2b1f8e09a621753989415825b97ff833acbf88baac92318d717888"
+    },
+    "jing-ladder-stx-usdcx-v1": {
+      "path": "contracts/stx-usdcx/jing-ladder-stx-usdcx-v1.clar",
+      "sha256": "54586cf7dc8d65b2a9a75dfe63c29da43a5b0393f845fdce38341bb984ed6094",
+      "generatedSha256": "54586cf7dc8d65b2a9a75dfe63c29da43a5b0393f845fdce38341bb984ed6094"
+    },
+    "jing-buy-stx-10-v2": {
+      "path": "contracts/jing-buy-stx-rung-v3.clar",
+      "sha256": "8a80163a07425bb51563fcd8b551c3db11fb7a94450f4ab7937a47a61c0d5648",
+      "generatedSha256": "f9c8a813d4a3fabfc35aa79f72f2e82d7cff6a313d24ad92fb04c62b4fb615e8"
+    },
+    "jing-buy-stx-10": {
+      "path": "contracts/jing-buy-stx-rung-v3.clar",
+      "sha256": "8a80163a07425bb51563fcd8b551c3db11fb7a94450f4ab7937a47a61c0d5648",
+      "generatedSha256": "f9c8a813d4a3fabfc35aa79f72f2e82d7cff6a313d24ad92fb04c62b4fb615e8"
+    },
+    "jing-buy-sbtc-10-v2": {
+      "path": "contracts/sbtc-usdcx/jing-buy-sbtc-bps-v2.clar",
+      "sha256": "98bcbe8f64fd6162db7b1d9e5e1fe04d1fad8e4cceab79766db87a49c5007f22",
+      "generatedSha256": "9f2beb43bab3eed184cfc94fbec12b6dd4165773128a78cebfe70dfafc70e0e1"
+    },
+    "jing-buy-sbtc-10": {
+      "path": "contracts/sbtc-usdcx/jing-buy-sbtc-bps-v2.clar",
+      "sha256": "98bcbe8f64fd6162db7b1d9e5e1fe04d1fad8e4cceab79766db87a49c5007f22",
+      "generatedSha256": "9f2beb43bab3eed184cfc94fbec12b6dd4165773128a78cebfe70dfafc70e0e1"
+    },
+    "jing-buy-stx-usdc-10": {
+      "path": "contracts/stx-usdcx/jing-buy-stx-usdc-bps.clar",
+      "sha256": "ba684ac88526bc7b4b7bf773fdaec47290a5ac28800b71da80b5b3b77e4b6bcf",
+      "generatedSha256": "7b1d4fae4301c6191453152a03c2ec573e4072e997a63df63a891028249cedb5"
+    },
+    "jing-sell-stx-10-v2": {
+      "path": "contracts/jing-sell-stx-rung-v3.clar",
+      "sha256": "79c1704dfabf0ccc824cc2272f2cb95ee1a01abce49d99595740847fee2eda94",
+      "generatedSha256": "a97b6425f5ac5a866c326d2918c9dc1e9d4d29fd2a9f930d86ae0b73d1444bed"
+    },
+    "jing-sell-stx-10": {
+      "path": "contracts/jing-sell-stx-rung-v3.clar",
+      "sha256": "79c1704dfabf0ccc824cc2272f2cb95ee1a01abce49d99595740847fee2eda94",
+      "generatedSha256": "a97b6425f5ac5a866c326d2918c9dc1e9d4d29fd2a9f930d86ae0b73d1444bed"
+    },
+    "jing-sell-sbtc-10-v2": {
+      "path": "contracts/sbtc-usdcx/jing-sell-sbtc-bps-v2.clar",
+      "sha256": "303fde2a8f889cd571ace04d186e5b19b3059ed38e907c4cfb70bf4b9f9c1afb",
+      "generatedSha256": "bda2c6d25289c03f34f6a588e518ff5e433991f868a6937156bc11d3e9ff175b"
+    },
+    "jing-sell-sbtc-10": {
+      "path": "contracts/sbtc-usdcx/jing-sell-sbtc-bps-v2.clar",
+      "sha256": "303fde2a8f889cd571ace04d186e5b19b3059ed38e907c4cfb70bf4b9f9c1afb",
+      "generatedSha256": "bda2c6d25289c03f34f6a588e518ff5e433991f868a6937156bc11d3e9ff175b"
+    },
+    "jing-sell-stx-usdc-10": {
+      "path": "contracts/stx-usdcx/jing-sell-stx-usdc-bps.clar",
+      "sha256": "6e68d6fd1eeb14e35478a81c70ea7538f8390f2e45f5383a9150c83ac1d57cc5",
+      "generatedSha256": "4db0ef5cc64b0399f6f750bdf2bd29227cf702753b905baad4bedebc7e4eb32f"
+    }
+  },
+  "results": [
+    {
+      "suite": "npm test / unit/v6-3",
+      "metric": "vitest",
+      "passed": 351,
+      "total": 351,
+      "command": "npm test",
+      "log": "tests/unit/redeploy/.build/reports/npm-test-final.log",
+      "logSha256": "be05e0330f790ac8ced256d50b49ca8b39ac03d06aaf473e7e948934a861d74b"
+    },
+    {
+      "suite": "integration-v6-3 (current rung-v3)",
+      "metric": "vitest",
+      "passed": 118,
+      "total": 118,
+      "command": "npm run test:v6-3:integration",
+      "log": "tests/unit/redeploy/.build/reports/current-integration.log",
+      "logSha256": "21f4310f6fb2418278fa2399b12b0614d7076669d3686a2d7bdbf5729b69a3ac"
+    },
+    {
+      "suite": "core-ladder-v1",
+      "metric": "vitest",
+      "passed": 95,
+      "total": 95,
+      "command": "npm run test:core-ladder-v1",
+      "log": "tests/unit/redeploy/.build/reports/core-final.log",
+      "logSha256": "044cc87a3d2a44f00014e9ccaa949ae512af18870dd8eea6b258f6f2d0d4772a"
+    },
+    {
+      "suite": "redeploy",
+      "metric": "vitest",
+      "passed": 131,
+      "total": 131,
+      "command": "npm run test:redeploy",
+      "log": "tests/unit/redeploy/.build/reports/redeploy-final.log",
+      "logSha256": "9f3b4bc41811e2051cf37eae1d4266422b41e1ba38c5c9924866dd3b457a0e07",
+      "files": {
+        "lists.test.ts": 16,
+        "markets.test.ts": 66,
+        "rungs.test.ts": 32,
+        "pricing.test.ts": 17
+      }
+    },
+    {
+      "suite": "F-01 new USDCx rungs",
+      "metric": "vitest",
+      "passed": 4,
+      "total": 4,
+      "command": "npm run test:f01-fix",
+      "log": "tests/unit/redeploy/.build/reports/f01-final.log",
+      "logSha256": "204ac3f507d5f6ce9674d318ebcbeb58525a275204f01605b5abe13d9387ac2b"
+    },
+    {
+      "suite": "local sBTC/STX",
+      "metric": "clarinet",
+      "passed": 24,
+      "total": 24,
+      "command": "clarinet check -m Clarinet-redeploy-v6-5.toml",
+      "log": "tests/unit/redeploy/.build/reports/check-stx-set.log",
+      "logSha256": "6c87d18114bb96835069949cf552f637e33a3857a69ed7bf7e0fb31142be7b41"
+    },
+    {
+      "suite": "local sBTC/USDCx",
+      "metric": "clarinet",
+      "passed": 24,
+      "total": 24,
+      "command": "clarinet check -m Clarinet-redeploy-sbtc-usdcx.toml",
+      "log": "tests/unit/redeploy/.build/reports/check-sbtc-set.log",
+      "logSha256": "5ebd8e2407bb9d31a34baaf7f462c50e4112bddb833c6cce4152936fc1535aac"
+    },
+    {
+      "suite": "local STX/USDCx",
+      "metric": "clarinet",
+      "passed": 22,
+      "total": 22,
+      "command": "clarinet check -m Clarinet-redeploy-stx-usdcx.toml",
+      "log": "tests/unit/redeploy/.build/reports/check-stx-usdcx-set.log",
+      "logSha256": "458fb21cee02a05edab9d5e80e243b67b40901895af0d268563de78d073c5119"
+    },
+    {
+      "suite": "existing sBTC/USDCx",
+      "metric": "clarinet",
+      "passed": 5,
+      "total": 5,
+      "command": "clarinet check -m Clarinet-sbtc-usdcx.toml",
+      "log": "tests/unit/redeploy/.build/reports/check-sbtc.log",
+      "logSha256": "5a0fa89743f44d066cee5fe120a0813ebbf99b683de6d61872a42b5f72732254"
+    },
+    {
+      "suite": "existing STX/USDCx",
+      "metric": "clarinet",
+      "passed": 3,
+      "total": 3,
+      "command": "clarinet check -m Clarinet-stx-usdcx.toml",
+      "log": "tests/unit/redeploy/.build/reports/check-stx.log",
+      "logSha256": "6413214405678f757800218dc9e0c1660959ac9b6eb731f799768c8cd63802d3"
+    },
+    {
+      "suite": "RV build",
+      "metric": "command",
+      "passed": 1,
+      "total": 1,
+      "command": "npm run rv:build",
+      "log": "tests/unit/redeploy/.build/reports/rv-build-final.log",
+      "logSha256": "c41e8479803340f21591d025bebb9d1ba6d2751813e90e44e6190df8872780f5"
+    },
+    {
+      "suite": "formatted mirrors",
+      "metric": "command",
+      "passed": 3,
+      "total": 3,
+      "command": "npm run check:v6-3-mirrors",
+      "log": "tests/unit/redeploy/.build/reports/mirrors-final.log",
+      "logSha256": "ada84eb028bad17460efa5ef83ec15892fed0a896c2495d81ab5299032097bcc"
+    },
+    {
+      "suite": "RV sBTC/STX market",
+      "metric": "rv",
+      "passed": 1000,
+      "total": 1000,
+      "command": "node tests/rv/v6-3/run-seeded.mjs invariant 1000 20261116 --seeded",
+      "log": "tests/unit/redeploy/.build/reports/rv-market-postcall.log",
+      "logSha256": "e4c86820e10ae42d54de3de6144174463e2f6341fb49411ae4142c4526b52c59",
+      "seed": 20261116,
+      "evidence": {
+        "RV-MONITOR": [
+          {
+            "publicCalls": 9362,
+            "invariantChecks": 9363,
+            "getterCrossChecks": 1,
+            "pendingRefunds": {
+              "cancel": 40,
+              "queue-full": 7
+            },
+            "refundEvents": {
+              "x": 15,
+              "y": 18
+            }
+          }
+        ]
+      }
+    },
+    {
+      "suite": "RV sBTC/USDCx market",
+      "metric": "rv",
+      "passed": 1000,
+      "total": 1000,
+      "command": "node tests/rv/sbtc-usdcx-v6-5/run-seeded.mjs invariant 1000 20261116 --seeded",
+      "log": "tests/unit/redeploy/.build/reports/rv-usdcx-postcall.log",
+      "logSha256": "b79d53c5ce949088ba41f8f66859ab09507bf5c3722b8f4952140d4ff6ad6265",
+      "seed": 20261116,
+      "evidence": {
+        "RV-MONITOR": [
+          {
+            "publicCalls": 9361,
+            "invariantChecks": 9362,
+            "getterCrossChecks": 1,
+            "pendingRefunds": {
+              "cancel": 47,
+              "queue-full": 3
+            },
+            "refundEvents": {
+              "x": 10,
+              "y": 17
+            }
+          }
+        ]
+      }
+    },
+    {
+      "suite": "RV STX rung-v3 campaign",
+      "metric": "rv",
+      "passed": 500,
+      "total": 500,
+      "command": "node tests/rv/ladder-v1/run.mjs invariant 500 20261116",
+      "log": "tests/unit/redeploy/.build/reports/rv-rungs-final.log",
+      "logSha256": "ae26bf294865c9c028453ec724aef1a9b3fe0aff232afd48899e95b2d3ca8d44",
+      "seed": 20261116,
+      "evidence": {
+        "RV-MONITOR": [
+          {
+            "checks": 6294,
+            "crossChecks": 64,
+            "positionsCompared": 2560,
+            "maxStranded": {
+              "b20": 2364,
+              "b50": 1449,
+              "s20": 15,
+              "s50": 10
+            },
+            "maxShareGap": {
+              "b20": 3,
+              "b50": 3,
+              "s20": 3,
+              "s50": 1
+            },
+            "deepest": {
+              "b20": {
+                "epoch": 4,
+                "scale": 3,
+                "members": 9,
+                "escrowCancelled": true,
+                "oldEpochRows": 6,
+                "reservedMax": 1
+              },
+              "b50": {
+                "epoch": 1,
+                "scale": 3,
+                "members": 7,
+                "escrowCancelled": false,
+                "oldEpochRows": 4,
+                "reservedMax": 3
+              },
+              "s20": {
+                "epoch": 4,
+                "scale": 3,
+                "members": 7,
+                "escrowCancelled": true,
+                "oldEpochRows": 6,
+                "reservedMax": 1834
+              },
+              "s50": {
+                "epoch": 1,
+                "scale": 1,
+                "members": 8,
+                "escrowCancelled": false,
+                "oldEpochRows": 1,
+                "reservedMax": 6950
+              }
+            }
+          }
+        ],
+        "RV-SUCCESS": [
+          {
+            "publicCalls": 6293,
+            "success": {
+              "deposit-b20": 42,
+              "deposit-b50": 37,
+              "deposit-s20": 41,
+              "deposit-s50": 33,
+              "admit": 43,
+              "batch-deposit-buy": 26,
+              "batch-deposit-sell": 43,
+              "wait": 151,
+              "guard-b50": 18,
+              "fill-b20": 33,
+              "take-rung": 60,
+              "batch-claim-zero-sell": 37,
+              "fill-b50": 21,
+              "claim-zero-s20": 7,
+              "mid": 123,
+              "batch-withdraw-sell": 24,
+              "maker": 91,
+              "native": 135,
+              "claim-paid-b20": 11,
+              "cancel": 65,
+              "fill-s20": 37,
+              "batch-withdraw-buy": 15,
+              "withdraw-full-b50": 10,
+              "withdraw-part-s20": 12,
+              "fill-s50": 17,
+              "batch-claim-paid-sell": 6,
+              "push-paused": 15,
+              "push-s20": 6,
+              "take": 73,
+              "claim-paid-s20": 13,
+              "guard-s50": 16,
+              "batch-claim-zero-buy": 19,
+              "claim-paid-b50": 8,
+              "retire": 9,
+              "claim-paid-s50": 3,
+              "guard-s20": 21,
+              "batch-claim-paid-buy": 5,
+              "withdraw-full-s50": 11,
+              "claim-zero-b20": 3,
+              "withdraw-part-s50": 7,
+              "guard-b20": 15,
+              "withdraw-part-b20": 8,
+              "push-b20": 4,
+              "withdraw-part-b50": 6,
+              "withdraw-full-s20": 8,
+              "withdraw-full-b20": 7,
+              "seat": 7,
+              "settle": 1,
+              "claim-zero-b50": 3,
+              "claim-zero-s50": 7,
+              "push-b50": 1
+            }
+          }
+        ]
+      }
+    },
+    {
+      "suite": "RV USDCx rungs (500 per side)",
+      "metric": "rv",
+      "passed": 1000,
+      "total": 1000,
+      "command": "npx tsx tests/rv/sbtc-usdcx-v6-5/rungs.ts",
+      "log": "tests/unit/redeploy/.build/reports/rv-usdcx-rungs.log",
+      "logSha256": "9ce4a7109c70370d2c06eddb77f8c52ea325d21589dcabdd9bcf6a8fdb2659bf",
+      "seed": 20261116,
+      "evidence": {
+        "RV-RUNG-RESULT": [
+          {
+            "side": "buy",
+            "runs": 500,
+            "passes": 500,
+            "failures": 0,
+            "checks": 4814
+          },
+          {
+            "side": "sell",
+            "runs": 500,
+            "passes": 500,
+            "failures": 0,
+            "checks": 4230
+          }
+        ]
+      }
+    }
+  ],
+  "marketCoverage": {
+    "source": "contracts/markets-sbtc-stx-jing-v6-5.clar",
+    "sha256": "d77d79bacb0eba623fafde5b693512612e68b32f3694381216c9973703cb5e97",
+    "core": {
+      "source": "contracts/jing-core-v6.clar",
+      "sha256": "88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697"
+    },
+    "records": 701,
+    "functions": {
+      "hit": 144,
+      "total": 144,
+      "percent": 100
+    },
+    "lines": {
+      "hit": 2396,
+      "total": 2396,
+      "percent": 100
+    },
+    "branches": {
+      "hit": 873,
+      "total": 875,
+      "percent": 99.77
+    },
+    "uncoveredFunctions": [],
+    "uncoveredLines": [],
+    "uncoveredBranches": [
+      "1142,0,1",
+      "1333,0,1"
+    ]
+  },
+  "contractBugsFound": [],
+  "resolvedFailures": [
+    {
+      "classification": "test/harness drift",
+      "cause": "SPV9 remote Metadata collision; use fresh local identities with remote off"
+    },
+    {
+      "classification": "test/harness drift",
+      "cause": "Old market/rung identities and public settlement cutoff of 80 instead of 40"
+    },
+    {
+      "classification": "test/harness drift",
+      "cause": "Obsolete SDK coverage exclusions and missing new setter/read-only branches"
+    },
+    {
+      "classification": "test/harness drift",
+      "cause": "Full withdrawal intentionally rejects with u1024; cancel removes the position"
+    },
+    {
+      "classification": "test/harness drift",
+      "cause": "Noncrossing reprice queues its limit without advancing the cycle"
+    },
+    {
+      "classification": "test/harness drift",
+      "cause": "Fresh SDK per test accumulated WASM instances; reuse SDK with fresh sessions"
+    }
+  ],
+  "gaps": [
+    "Real mainnet Lazer feeds/signers and deployed owner/identity integrations",
+    "Live AMM/DLMM/Zest router execution",
+    "Current-source transaction costs and full-book Stxer traces"
+  ],
+  "changedFiles": [
+    " M .gitignore",
+    " M package.json",
+    " M tests/f01-fix/f01-fix.test.ts",
+    " M tests/f01-fix/lab.ts",
+    " M tests/rv/ladder-v1/Clarinet.toml",
+    " M tests/rv/ladder-v1/build.mjs",
+    " M tests/rv/ladder-v1/harness.mjs",
+    " M tests/rv/ladder-v1/monitor.mjs",
+    " M tests/rv/v6-3/README.md",
+    " M tests/rv/v6-3/build.py",
+    " M tests/rv/v6-3/runtime.mjs",
+    " M tests/rv/v6-3/source-integrity.mjs",
+    " M tests/unit/core-ladder-v1/COVERAGE.md",
+    " M tests/unit/core-ladder-v1/coverage.mjs",
+    " M tests/unit/integration-v6-3/COVERAGE.md",
+    " M tests/unit/integration-v6-3/Clarinet.toml",
+    " M tests/unit/integration-v6-3/README.md",
+    " M tests/unit/integration-v6-3/build.mjs",
+    " M tests/unit/integration-v6-3/coverage-exclusions.mjs",
+    " M tests/unit/integration-v6-3/coverage.mjs",
+    " M tests/unit/integration-v6-3/dispatch-claim.test.ts",
+    " M tests/unit/integration-v6-3/dispatch-guards.test.ts",
+    " M tests/unit/integration-v6-3/dispatch.test.ts",
+    " M tests/unit/integration-v6-3/helpers.ts",
+    " M tests/unit/integration-v6-3/withdraw-dust.test.ts",
+    " M tests/unit/v6-3/PATHS.md",
+    " M tests/unit/v6-3/README.md",
+    " M tests/unit/v6-3/STXER-CROSSCHECK.md",
+    " M tests/unit/v6-3/build.mjs",
+    " M tests/unit/v6-3/coverage.mjs",
+    " M tests/unit/v6-3/helpers.ts",
+    " M tests/unit/v6-3/oracle-boundaries.test.ts",
+    " M tests/unit/v6-3/path-matrix.mjs",
+    " M vitest.config.ts",
+    "?? Clarinet-redeploy-sbtc-usdcx.toml",
+    "?? Clarinet-redeploy-stx-usdcx.toml",
+    "?? Clarinet-redeploy-v6-5.toml",
+    "?? tests/rv/sbtc-usdcx-v6-5/Clarinet.toml",
+    "?? tests/rv/sbtc-usdcx-v6-5/README.md",
+    "?? tests/rv/sbtc-usdcx-v6-5/build.py",
+    "?? tests/rv/sbtc-usdcx-v6-5/run-seeded.mjs",
+    "?? tests/rv/sbtc-usdcx-v6-5/rungs.ts",
+    "?? tests/rv/sbtc-usdcx-v6-5/runtime.mjs",
+    "?? tests/unit/redeploy/README.md",
+    "?? tests/unit/redeploy/build.mjs",
+    "?? tests/unit/redeploy/lab.ts",
+    "?? tests/unit/redeploy/lists.test.ts",
+    "?? tests/unit/redeploy/markets.test.ts",
+    "?? tests/unit/redeploy/pricing.test.ts",
+    "?? tests/unit/redeploy/results.json",
+    "?? tests/unit/redeploy/rungs.test.ts",
+    "?? tests/unit/redeploy/verify-sources.mjs",
+    "?? tests/unit/v6-3/redeploy.test.ts",
+    "?? vitest.redeploy.config.ts"
+  ]
+}

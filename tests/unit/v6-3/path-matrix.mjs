@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import {inventory,responseFrames} from './path-inventory.mjs';
-const dir='tests/unit/v6-3', sourcePath='contracts/markets-sbtc-stx-jing-v6-3.clar';
+const dir='tests/unit/v6-3', sourcePath='contracts/markets-sbtc-stx-jing-v6-5.clar';
 const source=fs.readFileSync(sourcePath,'utf8'), sha256=crypto.createHash('sha256').update(source).digest('hex');
 const coverage=JSON.parse(fs.readFileSync(`${dir}/.build/coverage.json`));
 if(coverage.sha256!==sha256)throw Error('Stale market coverage');
@@ -51,7 +51,7 @@ const lines=[
  'Regenerate after a passing full suite with `node tests/unit/v6-3/path-matrix.mjs`. Full test attribution and rollback details are in `.build/path-matrix.json`.', '',
  '| Source line | Function | Exit | Negative witness | Related Stxer scenario |',
  '| ---: | --- | --- | --- | --- |',
- ...compact.map(a=>`| [${a.line}](../../../contracts/markets-sbtc-stx-jing-v6-3.clar#L${a.line}) | ${a.function} | \`${a.op}\` | ${a.failed.length?`[${a.failed[0].test}](#${a.failed[0].test.toLowerCase()})${a.failed[0].kind==='private'?' (private)':''}`:'unattributed'} | [${stxerArea(a.function)}](../../../${a.stxer.scenario}) |`),
+ ...compact.map(a=>`| [${a.line}](../../../contracts/markets-sbtc-stx-jing-v6-5.clar#L${a.line}) | ${a.function} | \`${a.op}\` | ${a.failed.length?`[${a.failed[0].test}](#${a.failed[0].test.toLowerCase()})${a.failed[0].kind==='private'?' (private)':''}`:'unattributed'} | [${stxerArea(a.function)}](../../../${a.stxer.scenario}) |`),
  '', '## Witness test catalog', '',
  ...uniq(compact.flatMap(a=>a.failed.map(e=>e.test))).flatMap(id=>[`<a id="${id.toLowerCase()}"></a>**${id}**: ${tests[id]}`, '']), '',
 ];

@@ -9,7 +9,7 @@ import {U,P,owner,alice,bob,taker,token,stx,name,update,value,call,read,balance,
 const dispatch='jing-ladder-dispatch',dispatcher=`${owner}.${dispatch}`;
 type Side=typeof specs[number];
 const sum=(xs:bigint[])=>xs.reduce((a,b)=>a+b,0n);
-const rungs=(s:Side)=>Array.from({length:10},(_,i)=>`jing-${s.label}-stx-spread-${(i+1)*10}`);
+const rungs=(s:Side)=>Array.from({length:10},(_,i)=>`jing-${s.label}-stx-${(i+1)*10}-v2`);
 const pc=(r:string)=>r.includes('.')?r:`${owner}.${r}`;
 const state=(r:string)=>read(r,'get-state');
 const position=(r:string,who=alice)=>read(r,'get-position',[Cl.principal(who)]);

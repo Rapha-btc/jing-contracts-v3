@@ -7,8 +7,8 @@ Gate: 100% functions / 99% executable lines / 99% reachable branches, unchanged.
 
 | Rung | Functions | Lines | Branches |
 | --- | --- | --- | --- |
-| jing-buy-stx-core-spread-v1 | 35/35 (100%) | 466/466 (100%) | 155/155 (100%) |
-| jing-sell-stx-core-spread-v1 | 35/35 (100%) | 464/464 (100%) | 155/155 (100%) |
+| jing-buy-stx-rung-v3 | 36/36 (100%) | 480/480 (100%) | 157/157 (100%) |
+| jing-sell-stx-rung-v3 | 36/36 (100%) | 478/478 (100%) | 157/157 (100%) |
 
 ## Dispatch and shared contracts (raw, no exceptions)
 
@@ -18,8 +18,8 @@ jing-ladder-dispatch is gated here at the same thresholds. Core, ladder and mark
 | --- | --- | --- | --- |
 | jing-ladder-dispatch | 15/15 (100%) | 132/132 (100%) | 40/40 (100%) |
 | jing-core-v6 | 32/83 (38.55%) | 405/938 (43.18%) | 41/164 (25%) |
-| jing-ladder-v1 | 25/31 (80.65%) | 217/267 (81.27%) | 29/61 (47.54%) |
-| markets-sbtc-stx-jing-v6-3 | 89/141 (63.12%) | 1354/2381 (56.87%) | 375/847 (44.27%) |
+| jing-ladder-v1 | 25/31 (80.65%) | 218/267 (81.65%) | 29/61 (47.54%) |
+| markets-sbtc-stx-jing-v6-5 | 89/144 (61.81%) | 1364/2396 (56.93%) | 385/875 (44%) |
 
 Dispatch unhit lines: none; branches: none.
 
@@ -27,64 +27,44 @@ Dispatch unhit lines: none; branches: none.
 
 | Rung | Functions | Lines | Branches |
 | --- | --- | --- | --- |
-| jing-buy-stx-core-spread-v1 | 35/35 (100%) | 466/478 (97.49%) | 155/157 (98.73%) |
-| jing-sell-stx-core-spread-v1 | 35/35 (100%) | 464/476 (97.48%) | 155/157 (98.73%) |
+| jing-buy-stx-rung-v3 | 36/36 (100%) | 480/482 (99.59%) | 157/159 (98.74%) |
+| jing-sell-stx-rung-v3 | 36/36 (100%) | 478/480 (99.58%) | 157/159 (98.74%) |
 
 ## Explicit exceptions
 
-### jing-buy-stx-core-spread-v1
+### jing-buy-stx-rung-v3
 
-- line `131`: Static contract principal of executed get-native-price call; not an evaluated expression.
-- line `132`: Static function name get-native-price; not an evaluated expression.
-- line `147`: Static contract principal of executed get-min-deposits call; not an evaluated expression.
-- line `148`: Static function name get-min-deposits; not an evaluated expression.
-- line `426`: Static contract principal of executed get-token-x-deposit call; not an evaluated expression.
-- line `427`: Static function name get-token-x-deposit; not an evaluated expression.
-- line `429`: Static contract principal of executed get-current-cycle call; not an evaluated expression.
-- line `430`: Static function name get-current-cycle; not an evaluated expression.
-- line `435`: Static contract principal of executed get-token-x-parked current-contract call; not an evaluated expression.
-- line `441`: Static contract principal of executed get-token-x-pending-deposit current-contract call; not an evaluated expression.
-- branch `882,0,0`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
-- line `882`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
-- branch `886,0,0`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
-- line `886`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
+- branch `893,0,0`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
+- line `893`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
+- branch `897,0,0`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
+- line `897`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
 
-### jing-sell-stx-core-spread-v1
+### jing-sell-stx-rung-v3
 
-- line `105`: Static contract principal of executed get-native-price call; not an evaluated expression.
-- line `106`: Static function name get-native-price; not an evaluated expression.
-- line `121`: Static contract principal of executed get-min-deposits call; not an evaluated expression.
-- line `122`: Static function name get-min-deposits; not an evaluated expression.
-- line `399`: Static contract principal of executed get-token-y-deposit call; not an evaluated expression.
-- line `400`: Static function name get-token-y-deposit; not an evaluated expression.
-- line `402`: Static contract principal of executed get-current-cycle call; not an evaluated expression.
-- line `403`: Static function name get-current-cycle; not an evaluated expression.
-- line `408`: Static contract principal of executed get-token-y-parked current-contract call; not an evaluated expression.
-- line `414`: Static contract principal of executed get-token-y-pending-deposit current-contract call; not an evaluated expression.
-- branch `837,0,0`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
-- line `837`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
-- branch `841,0,0`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
-- line `841`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
+- branch `848,0,0`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
+- line `848`: Defensive back > reserve arm: epoch payout <= remaining receipts invariant; never force-reached.
+- branch `852,0,0`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
+- line `852`: Defensive paid > proceeds arm: epoch payout <= remaining receipts invariant; never force-reached.
 
 
 ## Source SHA-256
 
-- markets-sbtc-stx-jing-v6-3: `943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67`.
+- markets-sbtc-stx-jing-v6-5: `d77d79bacb0eba623fafde5b693512612e68b32f3694381216c9973703cb5e97`.
 - jing-core-v6: `88a689affb23f13030953e891336af42a3f5cb275f13b3c54c79d8cd4de50697`.
 - jing-ladder-v1: `0f1e08b023272ed96a2653f727292626d4b0325dcf4e42963104d977860ec786`.
 - jing-rung-deposit-trait: `927fbba4826710ded7e81fb4847ed92f5c4310bc4e0cf42537600876b0a01163`.
 - jing-ladder-dispatch: `f6190711bcf7871a5f0e7931af0d130fc7b07da09527be39af33c30b1d620bbb`.
-- jing-buy-stx-core-spread-v1: `584b66804090ae2363244e277a6e840f1d60ece92ad67ee5525a772e0f3e9467`.
-- jing-sell-stx-core-spread-v1: `fdf5c2b11dadcf61d1e1d2d30df2f1127e1375fcf553f24105075035d70f10e5`.
+- jing-buy-stx-rung-v3: `8a80163a07425bb51563fcd8b551c3db11fb7a94450f4ab7937a47a61c0d5648`.
+- jing-sell-stx-rung-v3: `79c1704dfabf0ccc824cc2272f2cb95ee1a01abce49d99595740847fee2eda94`.
 
 ## Remaining instrumentation points
 
-### jing-buy-stx-core-spread-v1
+### jing-buy-stx-rung-v3
 
 - Unhit lines: none.
 - Unhit branches (line, block, arm): none.
 
-### jing-sell-stx-core-spread-v1
+### jing-sell-stx-rung-v3
 
 - Unhit lines: none.
 - Unhit branches (line, block, arm): none.

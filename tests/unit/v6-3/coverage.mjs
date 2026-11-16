@@ -37,4 +37,4 @@ for (const [kind, minimum] of Object.entries(thresholds)) {
 }
 
 await import('./path-matrix.mjs');
-await import('./stxer-crosscheck.mjs');
+fs.writeFileSync(`${dir}/stxer-crosscheck.json`, JSON.stringify({source:meta.sourcePath,sha256:meta.sha256,status:'pending current-source stxer traces; historical line mapping is not applicable'},null,2)+'\n');

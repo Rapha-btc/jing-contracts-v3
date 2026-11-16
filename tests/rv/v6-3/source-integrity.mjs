@@ -28,7 +28,7 @@ export function assertProductionPrefix(fullBook) {
 }
 
 export const sharedInputs = [
-  'contracts/markets-sbtc-stx-jing-v6-3.clar',
+  'contracts/markets-sbtc-stx-jing-v6-5.clar',
   'tests/rv/v6-3/Clarinet.toml', 'tests/rv/v6-3/properties.clar',
   'tests/rv/v6-3/build.py', 'tests/rv/v6-3/strict-ft.clar',
   'tests/rv/v6-3/source-integrity.mjs', 'tests/rv/sip-010-trait.clar',

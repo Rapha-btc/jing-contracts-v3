@@ -1,5 +1,7 @@
 # v6-3 Rendezvous fuzzing with the real core
 
+Current build targets: sBTC/STX market v6-5 and, where applicable, rung-v3 deployed with `-v2` names. See [current redeploy results](../../unit/redeploy/README.md); historical counts/source hashes below are not the current campaign report.
+
 **Current-source full campaigns pass.** These reports include the `34bbe18`
 net-based swap rebate and exact gross-up, the registered-maker accounting fix,
 `is-ok` cancellation/pending-refund logging, and bounded aggregate debits.

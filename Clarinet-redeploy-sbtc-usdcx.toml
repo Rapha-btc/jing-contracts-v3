@@ -1,0 +1,125 @@
+[project]
+name = "redeploy-sbtc-usdcx"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[contracts.zest]
+path = "tests/unit/redeploy/.build/check-zest.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.sip-010-trait]
+path = "tests/unit/redeploy/.build/check-sip-010-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.token]
+path = "tests/unit/redeploy/.build/check-token.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.usdcx]
+path = "tests/unit/redeploy/.build/check-usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.asset-stx]
+path = "tests/unit/redeploy/.build/check-asset-stx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.oracle]
+path = "tests/unit/redeploy/.build/check-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dia]
+path = "tests/unit/redeploy/.build/check-dia.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.miner-oracle]
+path = "tests/unit/redeploy/.build/check-miner-oracle.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-core-v6]
+path = "tests/unit/redeploy/.build/check-jing-core-v6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-rung-deposit-trait]
+path = "tests/unit/redeploy/.build/check-jing-rung-deposit-trait.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm]
+path = "tests/unit/redeploy/.build/check-dlmm.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm-2]
+path = "tests/unit/redeploy/.build/check-dlmm-2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm-3]
+path = "tests/unit/redeploy/.build/check-dlmm-3.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.xyk]
+path = "tests/unit/redeploy/.build/check-xyk.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.velar]
+path = "tests/unit/redeploy/.build/check-velar.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.dlmm-router]
+path = "tests/unit/redeploy/.build/check-dlmm-router.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.swap-router-sbtc-usdcx-jing-v5-6]
+path = "tests/unit/redeploy/.build/check-swap-router-sbtc-usdcx-jing-v5-6.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-settle-batch-sbtc-usdcx-v2]
+path = "tests/unit/redeploy/.build/check-jing-settle-batch-sbtc-usdcx-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.markets-sbtc-usdcx-jing-v6-5]
+path = "tests/unit/redeploy/.build/check-market-sbtc-usdcx.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-ladder-sbtc-usdcx-v1]
+path = "tests/unit/redeploy/.build/check-jing-ladder-sbtc-usdcx-v1.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-sbtc-10-v2]
+path = "tests/unit/redeploy/.build/check-jing-buy-sbtc-10-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-buy-sbtc-10]
+path = "tests/unit/redeploy/.build/check-jing-buy-sbtc-10.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-sbtc-10-v2]
+path = "tests/unit/redeploy/.build/check-jing-sell-sbtc-10-v2.clar"
+clarity_version = 5
+epoch = "3.4"
+
+[contracts.jing-sell-sbtc-10]
+path = "tests/unit/redeploy/.build/check-jing-sell-sbtc-10.clar"
+clarity_version = 5
+epoch = "3.4"

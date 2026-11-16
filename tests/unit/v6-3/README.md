@@ -1,6 +1,8 @@
 # v6-3 Clarinet unit tests
 
-This suite tests `contracts/markets-sbtc-stx-jing-v6-3.clar` from the current
+Current build targets: sBTC/STX market v6-5 and, where applicable, rung-v3 deployed with `-v2` names. See [current redeploy results](../redeploy/README.md); historical counts/source hashes below are not the current campaign report.
+
+This suite now tests `contracts/markets-sbtc-stx-jing-v6-5.clar` from the current
 checkout. The baseline was verified against GitHub
 [`chore/clarinet-v6-3-only` at `62d032c`](https://github.com/Rapha-btc/jing-contracts-v3/commit/62d032c9acab019d1db076febef018b6f6721022)
 on 2026-09-28; that revision was also merged into `master`.

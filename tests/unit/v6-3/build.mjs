@@ -6,7 +6,7 @@ const out = `${dir}/.build`;
 fs.mkdirSync(out, { recursive: true });
 // A rebuilt source must never inherit reports from an earlier revision.
 for (const file of ['lcov.info', 'market.lcov.info', 'coverage.json', 'path-evidence.jsonl', 'path-matrix.json', 'stxer-crosscheck.json', 'rejected-state-changes.jsonl']) fs.rmSync(`${out}/${file}`, { force: true });
-const sourcePath = 'contracts/markets-sbtc-stx-jing-v6-3.clar';
+const sourcePath = 'contracts/markets-sbtc-stx-jing-v6-5.clar';
 const source = fs.readFileSync(sourcePath, 'utf8');
 const substitutions = {
   "'SP3FBR2AGK5H9QBDH3EEN6DF8EK8JY7RX8QJ5SVTE.sip-010-trait-ft-standard.sip-010-trait": '.sip-010-trait.sip-010-trait',

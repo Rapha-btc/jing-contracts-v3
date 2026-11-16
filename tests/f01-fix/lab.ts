@@ -7,11 +7,11 @@ import {readFileSync} from 'node:fs';
 import {getSDK} from '@stacks/clarinet-sdk';
 import {Cl, ClarityValue, getAddressFromPrivateKey, privateKeyToPublic, signMessageHashRsv} from '@stacks/transactions';
 import {keccak_256} from '@noble/hashes/sha3';
-import {expect} from 'vitest';
+import assert from 'node:assert/strict';
 
 export {Cl};
 export const DEP = 'ST000000000000000000002AMW42H';
-export const M = 'markets-sbtc-usdcx-jing-v6-4', L = 'jing-ladder-sbtc-usdcx-v1';
+export const M = 'markets-sbtc-usdcx-jing-v6-5', L = 'jing-ladder-sbtc-usdcx-v1';
 export const X = DEP + '.sbtc-token', Y = DEP + '.usdcx';
 export const BTC = 10000000000000n;
 export const wallet = (n: number) => getAddressFromPrivateKey(BigInt(n + 700).toString(16).padStart(64, '0') + '01', 'testnet');
@@ -27,7 +27,7 @@ const bindings: [string, string][] = [
   ["'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx", '.usdcx'],
   ["'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle", '.pyth-lazer-oracle'],
   ["'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-decoder-v1", '.pyth-lazer-decoder-v1'],
-  ["'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4", '.' + M],
+  ["'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5", '.' + M],
   ["'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-ladder-sbtc-usdcx-v1", '.' + L],
   ["'SP1G48FZ4Y7JY8G2Z0N51QTCYGBQ6F4J43J77BQC0.dia-oracle", '.dia-oracle'],
 ];
@@ -59,7 +59,7 @@ export function signedUpdate(now: bigint, {px = BTC, py = 100000000n} = {}) {
 
 export const pp = (v: ClarityValue) => Cl.prettyPrint(v);
 
-export async function boot() {
+export async function boot({marketExtra = '', rungExtra = (_side: string) => ''} = {}) {
   const s: any = await getSDK({trackCosts: false} as any);
   await s.initEmptySession(null);
   s.setEpoch('4.0');
@@ -68,16 +68,16 @@ export async function boot() {
     const r = s.deployContract(name, code, {clarityVersion: 5}, DEP);
     return r;
   };
-  const call = (c: string, f: string, a: ClarityValue[] = [], w = DEP) => s.callPublicFn(c, f, a, w);
-  const read = (c: string, f: string, a: ClarityValue[] = [], w = DEP) => s.callReadOnlyFn(c, f, a, w);
-  const ok = (r: any) => { expect(r.result.type, pp(r.result)).toBe('ok'); return r; };
+  const call = (c: string, f: string, a: ClarityValue[] = [], w = DEP) => s.callPublicFn(c.includes('.') ? c : DEP + '.' + c, f, a, w);
+  const read = (c: string, f: string, a: ClarityValue[] = [], w = DEP) => s.callReadOnlyFn(c.includes('.') ? c : DEP + '.' + c, f, a, w);
+  const ok = (r: any) => { assert.equal(r.result.type, 'ok', pp(r.result)); return r; };
   deploy('sip-010-trait-ft-standard', trait);
   deploy('sbtc-registry', `(define-read-only (is-protocol-caller (flag (buff 1)) (who principal)) (if (is-eq who '${DEP}) (ok true) (err u9)))`);
   for (const n of ['sbtc-token', 'usdcx', 'pyth-lazer-traits', 'pyth-lazer-oracle', 'pyth-lazer-decoder-v1', 'trait-dia-oracle', 'dia-oracle'])
     deploy(n, depSrc(n));
   deploy('jing-core-v6', jingSrc('jing-core-v6.clar'));
   deploy(L, jingSrc('sbtc-usdcx/' + L + '.clar'));
-  deploy(M, jingSrc('sbtc-usdcx/' + M + '.clar'));
+  deploy(M, jingSrc('sbtc-usdcx/' + M + '.clar') + marketExtra);
   ok(call('usdcx', 'set-active-protocol-caller', [Cl.principal(DEP), Cl.bufferFromHex('01'), Cl.bool(true)]));
   ok(call('usdcx', 'set-active-protocol-caller', [Cl.principal(DEP), Cl.bufferFromHex('02'), Cl.bool(true)]));
   ok(call('pyth-lazer-oracle', 'set-trusted-signers', [Cl.list([Cl.tuple({pubkey: Cl.bufferFromHex(PUB), 'expires-at': Cl.uint(s.getBlockTime() + 31536000n)})])]));
@@ -87,8 +87,8 @@ export async function boot() {
   ok(call(M, 'sync-seat-count'));
   ok(call('dia-oracle', 'set-value', [Cl.stringAscii('BTC/USD'), Cl.uint(BTC), Cl.uint(s.getBlockTime() * 1000n)]));
   for (const side of ['sell', 'buy']) {
-    const name = 'jing-' + side + '-sbtc-10';
-    deploy(name, process.env.RUNG_DIR ? readFileSync(process.env.RUNG_DIR + '/jing-' + side + '-sbtc-bps.clar', 'utf8') : jingSrc('sbtc-usdcx/jing-' + side + '-sbtc-bps.clar'));
+    const name = 'jing-' + side + '-sbtc-10-v2';
+    deploy(name, process.env.RUNG_DIR ? readFileSync(process.env.RUNG_DIR + '/jing-' + side + '-sbtc-bps-v2.clar', 'utf8') : jingSrc('sbtc-usdcx/jing-' + side + '-sbtc-bps-v2.clar') + rungExtra(side));
     ok(call(L, 'set-canonical', [Cl.stringAscii(side === 'sell' ? 'sel-band' : 'buy-band'), Cl.principal(DEP + '.' + name)]));
     ok(call(name, 'initialize', [Cl.uint(10), Cl.bool(true)]));
   }

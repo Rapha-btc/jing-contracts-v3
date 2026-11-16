@@ -1,5 +1,7 @@
 # Core-spread v1 Clarinet tests
 
+Current build targets: sBTC/STX market v6-5 and, where applicable, rung-v3 deployed with `-v2` names. See [current redeploy results](../redeploy/README.md); historical counts/source hashes below are not the current campaign report.
+
 This revision uses whole carried shares in every proceeds
 segment, a scaled carry, and exact epoch balances with final-member payouts.
 The original 9-micro-STX rescale shortfall was reproduced before the fix; its

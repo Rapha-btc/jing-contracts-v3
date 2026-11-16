@@ -1,5 +1,7 @@
 # Stxer gaps cross-checked against Clarinet
 
+Historical v6-3 report. The current v6-5 suite does not regenerate or reuse these line mappings; current-source Stxer verification remains pending. See [redeploy results](../redeploy/README.md).
+
 Baseline: [Stxer report at f2386cf](https://github.com/Rapha-btc/jing-contracts-v3/blob/f2386cf/simulations/README-v6-3-coverage.md). Stxer market SHA-256: `7f7bc5cce3c6f01c92c2e69c8ffe5652d3dc038a7394a816e2740dd4490cdd74`.
 
 Clarinet market SHA-256: `943927cc5067d21d50c87e3f7464d379c3d704cb2ed8dcbfb5c88205a68c5a67`. The refund, registered-maker, refund logging, net-based rebate and age-aware capacity fixes change the source. The pinned Stxer runs do **not** validate this patched source; the table only maps their unchanged gap expressions to current Clarinet locations. RV results have separate source-hashed evidence in the [RV report](../../rv/v6-3/README.md).

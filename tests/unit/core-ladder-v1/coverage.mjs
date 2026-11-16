@@ -16,8 +16,7 @@ const metric = m => { const hit = [...m.values()].filter(n => n > 0).length; ret
 const exceptions = {
   'jing-core-v6': [{kind: 'branch', fragment: '      (- total (if (> applied total) total applied))', arm: 0, fn: 'debit',
     reason: 'Saturating arm of the aggregate debit: total-token-equity is the sum of owner equities (credit/debit change both by the same amount) and applied <= the owner equity, so applied > total cannot occur'}],
-  'jing-ladder-v1': [{kind: 'line', fragment: '      (key {', after: '(define-public (retire-band', fn: 'retire-band',
-    reason: 'Tuple-literal let binding of executed retire-band; the SDK reports the opening line unhit although `key` is evaluated on every call (the map lookup on the next binding uses it)'}],
+  'jing-ladder-v1': [],
 };
 const contracts = {};
 for (const [name, m] of Object.entries(meta.sources)) {

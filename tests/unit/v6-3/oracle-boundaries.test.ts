@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, it} from 'vitest';
+import {describe, expect, it} from 'vitest';
 import {Cl} from '@stacks/transactions';
 import {P, U, N, owner, alice, bob, call, ok, init, book, batch, oracle,
   rejectUnchanged, cycle, balance, custody} from './helpers';
@@ -6,7 +6,6 @@ import {P, U, N, owner, alice, bob, call, ok, init, book, batch, oracle,
 // Exercise the production market's validation of decoded price data. The real
 // core runs unchanged; these cases do not claim to verify signed Lazer updates.
 describe('independent oracle boundaries with funded settlement and recovery', () => {
-  beforeEach(() => { init(); book(); });
 
   function settleAndCheckPayouts() {
     const x = balance('x', bob), y = balance('y', alice);
@@ -19,6 +18,7 @@ describe('independent oracle boundaries with funded settlement and recovery', ()
 
   for (const side of ['x', 'y'] as const) {
     it.each([-1, 0, 1])(`${side} confidence at 2%% price plus %i: exact rejection and recovery`, delta => {
+      init(); book();
       const confidence = Cl.some(U((side === 'x' ? P : 100000000) / 50 + delta));
       ok(call('configure-confidence', side === 'x' ? [confidence, N] : [N, confidence], owner, 'oracle'));
       if (delta >= 0) {
@@ -29,9 +29,10 @@ describe('independent oracle boundaries with funded settlement and recovery', ()
       settleAndCheckPayouts();
     });
 
-    it.each([79, 80, 81])(`${side} feed aged %i seconds: exact settlement cutoff and recovery`, age => {
+    it.each([39, 40, 41])(`${side} feed aged %i seconds: exact settlement cutoff and recovery`, age => {
+      init(); book();
       oracle(0, side === 'x' ? age : 0, side === 'y' ? age : 0);
-      if (age >= 80) {
+      if (age >= 40) {
         rejectUnchanged(() => batch(), 1003);
         expect(cycle()).toBe(0n);
         oracle();

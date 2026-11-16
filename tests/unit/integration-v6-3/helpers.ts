@@ -34,7 +34,7 @@ const balance=(x:boolean,who:string)=>x?read('token','get-balance',[Cl.principal
 const specs=[{label:'buy',side:'x',x:true,ladderSide:'buy-band',amount:10000n}, {label:'sell',side:'y',x:false,ladderSide:'sel-band',amount:1000000n}] as const;
 function setup(spec:typeof specs[number], options:{initialize?:boolean;seat?:boolean;spread?:number}={}){
  const spread=options.spread??0;
- const rung=`jing-${spec.label}-stx-spread-${spread}`,principal=`${owner}.${rung}`;
+ const rung=`jing-${spec.label}-stx-${spread}-v2`,principal=`${owner}.${rung}`;
  // Manifest deployment lets Clarinet instrument the actual rung source.
  ok(call('jing-core-v6','set-verified-contract',[Cl.principal(`${owner}.market`)]));
  ok(call('market','initialize',[Cl.principal(`${owner}.market`),token,stx,U(100),U(10000),U(1),U(45)]));

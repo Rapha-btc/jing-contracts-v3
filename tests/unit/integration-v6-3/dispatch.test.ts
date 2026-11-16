@@ -6,7 +6,7 @@ import {U,P,owner,alice,bob,taker,token,stx,name,update,value,call,read,balance,
 const dispatch='jing-ladder-dispatch',dispatcher=`${owner}.${dispatch}`;
 type Side=typeof specs[number];
 const sum=(xs:bigint[])=>xs.reduce((a,b)=>a+b,0n);
-const rungs=(s:Side)=>Array.from({length:10},(_,i)=>`jing-${s.label}-stx-spread-${(i+1)*10}`);
+const rungs=(s:Side)=>Array.from({length:10},(_,i)=>`jing-${s.label}-stx-${(i+1)*10}-v2`);
 const principal=(r:string)=>r.includes('.')?r:`${owner}.${r}`;
 const additional:{side:string,rung:string}[]=[];
 const state=(r:string)=>read(r,'get-state');
@@ -276,7 +276,7 @@ describe('dispatch exits using only buy/sell core-spread v1',()=>{
   const oldClaims=rs.map(r=>position(r,alice)),oldCash=rs.map(r=>wallets(principal(r)));
   success('jing-ladder-v1','retire-band',[Cl.stringAscii(s.ladderSide),U(60)]);
   // Same generated source bytes, same spread/name, different deploying account.
-  const source=fs.readFileSync(`tests/unit/integration-v6-3/.build/jing-${s.label}-stx-core-spread-v1.clar`,'utf8');
+  const source=fs.readFileSync(`tests/unit/integration-v6-3/.build/jing-${s.label}-stx-rung-v3.clar`,'utf8');
   expect(simnet.deployContract(rs[6],source,{clarityVersion:5},bob).result).toEqual(Cl.bool(true));
   const replacement=`${bob}.${rs[6]}`;additional.push({side:s.side,rung:replacement});
   success(replacement,'initialize',[U(70),Cl.bool(true)]);

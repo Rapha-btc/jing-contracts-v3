@@ -56,11 +56,11 @@ describe('buy withdraw: reachability of close-epoch proceeds',()=>{
   deploy('pyth-lazer-traits',fs.readFileSync('tests/unit/integration-v6-3/fixtures/dust-pyth-lazer-traits.clar','utf8'));
   deploy('pyth-lazer-decoder-v1',fs.readFileSync('tests/unit/v6-3/oracle.clar','utf8')+'\n(impl-trait .pyth-lazer-traits.decoder-trait)\n(define-public (decode-and-verify-price-feeds (update (buff 8192))) (decode-lazer-payload update))\n');
   deploy('pyth-lazer-oracle',fs.readFileSync('tests/unit/integration-v6-3/fixtures/dust-pyth-lazer-oracle.clar','utf8'));
-  const market='dust-market',rung='jing-buy-stx-spread-75',principal=`${owner}.${rung}`;
-  let marketSource=fs.readFileSync('tests/unit/integration-v6-3/.build/markets-sbtc-stx-jing-v6-3.clar','utf8');
+  const market='dust-market',rung='jing-buy-stx-75-v2',principal=`${owner}.${rung}`;
+  let marketSource=fs.readFileSync('tests/unit/integration-v6-3/.build/markets-sbtc-stx-jing-v6-5.clar','utf8');
   marketSource=marketSource.replace('(define-constant LAZER_ORACLE .oracle)','(define-constant LAZER_ORACLE .pyth-lazer-oracle)').replaceAll('.oracle','.pyth-lazer-decoder-v1');
   deploy(market,marketSource);
-  deploy(rung,fs.readFileSync('tests/unit/integration-v6-3/.build/jing-buy-stx-core-spread-v1.clar','utf8').replaceAll(`${owner}.market`,`${owner}.${market}`));
+  deploy(rung,fs.readFileSync('tests/unit/integration-v6-3/.build/jing-buy-stx-rung-v3.clar','utf8').replaceAll(`${owner}.market`,`${owner}.${market}`));
   const token=Cl.contractPrincipal(owner,'token');
   ok(call('jing-core-v6','set-verified-contract',[Cl.principal(`${owner}.${market}`)]));
   ok(call(market,'initialize',[Cl.principal(`${owner}.${market}`),token,stx,U(100),U(10000),U(1),U(45)]));
