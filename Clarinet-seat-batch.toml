@@ -1,0 +1,10 @@
+[project]
+name = "jing-seat-batch"
+authors = []
+telemetry = false
+cache_dir = "./.cache"
+
+[contracts.jing-seat-batch]
+path = "contracts/ladder-tools/jing-seat-batch.clar"
+clarity_version = 5
+epoch = "latest"
