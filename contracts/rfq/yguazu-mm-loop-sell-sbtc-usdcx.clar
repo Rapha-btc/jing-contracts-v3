@@ -4,7 +4,7 @@
 ;; Port of yguazu-mm-loop-sell-sbtc with USDCx (an FT) in place of STX:
 ;;   leg 1  sell:     vault sBTC -> allowlisted sell-sbtc rung (ask at mid + spread)
 ;;   claim:           vault claims rung USDCx proceeds; fill price + VWAP computed on-chain
-;;   leg 2  buy-back: vault USDCx -> pegged bid on markets-sbtc-usdcx-jing-v6-4,
+;;   leg 2  buy-back: vault USDCx -> pegged bid on markets-sbtc-usdcx-jing-v6-5,
 ;;                    cap = VWAP sell * (10000 - edge-bps) / 10000
 ;; The keeper can only run the loop. Every outgoing asset move is bounded by an
 ;; as-contract? allowance to the rung (sBTC) or the market (USDCx). The only
@@ -34,17 +34,17 @@
 
 (use-trait rung-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait.rung-trait)
 
-(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4)
-(define-constant RUNG_1 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-1)
-(define-constant RUNG_10 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-10)
-(define-constant RUNG_20 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-20)
-(define-constant RUNG_30 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-30)
-(define-constant RUNG_40 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-40)
-(define-constant RUNG_50 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-50)
-(define-constant RUNG_60 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-60)
-(define-constant RUNG_70 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-70)
-(define-constant RUNG_80 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-80)
-(define-constant RUNG_90 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-90)
+(define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5)
+(define-constant RUNG_1 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-1-v2)
+(define-constant RUNG_10 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-10-v2)
+(define-constant RUNG_20 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-20-v2)
+(define-constant RUNG_30 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-30-v2)
+(define-constant RUNG_40 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-40-v2)
+(define-constant RUNG_50 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-50-v2)
+(define-constant RUNG_60 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-60-v2)
+(define-constant RUNG_70 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-70-v2)
+(define-constant RUNG_80 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-80-v2)
+(define-constant RUNG_90 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-90-v2)
 ;; the list goes through `plain` so its type is plain principal: a list of
 ;; contract literals keeps the literal type, which index-of? refuses to match
 (define-private (plain (p principal))
@@ -132,12 +132,12 @@
 
 (define-read-only (usdcx-on-market)
   (+
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4 get-token-y-deposit
-      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4 get-current-cycle) current-contract
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5 get-token-y-deposit
+      (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5 get-current-cycle) current-contract
     )
-    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4 get-token-y-parked current-contract)
+    (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5 get-token-y-parked current-contract)
     (default-to u0
-      (get amount (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-4 get-token-y-pending-deposit current-contract))
+      (get amount (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-usdcx-jing-v6-5 get-token-y-pending-deposit current-contract))
     )
   )
 )
@@ -352,25 +352,25 @@
 ;; A read-only may only call a contract it names literally.
 (define-read-only (rung-remaining (rung principal))
   (if (is-eq rung RUNG_1)
-    (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-1 get-position current-contract))
+    (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-1-v2 get-position current-contract))
     (if (is-eq rung RUNG_10)
-      (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-10 get-position current-contract))
+      (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-10-v2 get-position current-contract))
       (if (is-eq rung RUNG_20)
-        (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-20 get-position current-contract))
+        (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-20-v2 get-position current-contract))
         (if (is-eq rung RUNG_30)
-          (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-30 get-position current-contract))
+          (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-30-v2 get-position current-contract))
           (if (is-eq rung RUNG_40)
-            (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-40 get-position current-contract))
+            (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-40-v2 get-position current-contract))
             (if (is-eq rung RUNG_50)
-              (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-50 get-position current-contract))
+              (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-50-v2 get-position current-contract))
               (if (is-eq rung RUNG_60)
-                (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-60 get-position current-contract))
+                (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-60-v2 get-position current-contract))
                 (if (is-eq rung RUNG_70)
-                  (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-70 get-position current-contract))
+                  (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-70-v2 get-position current-contract))
                   (if (is-eq rung RUNG_80)
-                    (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-80 get-position current-contract))
+                    (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-80-v2 get-position current-contract))
                     (if (is-eq rung RUNG_90)
-                      (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-90 get-position current-contract))
+                      (get sbtc (contract-call? 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-sell-sbtc-90-v2 get-position current-contract))
                       u0
                     )
                   )
