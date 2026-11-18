@@ -1,4 +1,31 @@
-;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-6
+;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v6
+;; v6: v5-6 + Zest CLMM STX/sBTC venue (the bin-step-100 pool, id u3
+;; hardcoded as ZEST_POOL_ID, on
+;; SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1, x = sBTC,
+;; y = Zest `wstx`), ported from swap-router-stx-usdcx-jing-v6.
+;;
+;; Smart swaps: Jing -> Zest -> DLMM -> cp, each stage on what the previous
+;; left. Zest has no active bin: the stage walks up to 32 ticks from
+;; tick(mid) -/+ 2 to one past tick(bound), bound = limit-price (uSTX per
+;; sat x 1e10) inverted into Zest's WAD sats per uSTX (1e28 / limit) with
+;; the user's Zest fee folded in, rounded against the user. Partial fill on, min 0; dust, no ticks, oversized
+;; limit/mid, or any Zest err give in = out = 0 and the rest goes to DLMM.
+;; Print gains zest-ok / zest-ticks (ticks passed to Zest) / zest-in /
+;; zest-out.
+;;
+;; Split swaps: `amm-amounts` / `amm-mins` gain `zest`, the split check
+;; (u3004) adds it, and a trailing `zest-route { ticks, price }` carries the
+;; FE's walk (selling sBTC = swap-x-for-y, ticks ascending, price =
+;; max-price; selling STX = swap-y-for-x, ticks descending, price =
+;; min-price). Zest runs with partial fill on and min 0; a Zest err counts
+;; as 0; `amm-mins.zest` is scaled to the filled part and asserted (u3002).
+;; The Zest shortfall joins the Jing residual: to the `fallback` venue when
+;; set, else unsold. Zest is not a fallback venue.
+;;
+;; Native STX on the Zest leg: Zest's wstx is a pass-through
+;; `stx-transfer?`; this router never uses as-contract, so STX moves user
+;; <-> clmm-pool-v1 directly. Deny-mode PCs: clmm-pool-v1 sends >= 0
+;; (Zest may fill 0), plus the existing DLMM / XYK / Velar PCs.
 (define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-5)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
@@ -25,6 +52,16 @@
 (define-constant VENUE_DLMM u1)
 (define-constant VENUE_XYK u2)
 (define-constant VENUE_VELAR u3)
+(define-constant VENUE_ZEST u4)
+
+(define-constant ZEST_ROUTER 'SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-router-v1)
+(define-constant ZEST_WSTX 'SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.wstx)
+(define-constant ZEST_POOL 'SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1)
+
+;; The Zest STX/sBTC 1% pool id on clmm-pool-v1, bin-step 100. Assumed, not
+;; checked on-chain: token-x = sBTC, token-y = STX (Zest wstx). Every Zest
+;; call below passes SBTC as x and ZEST_WSTX as y on that assumption.
+(define-constant ZEST_POOL_ID u3)
 
 (define-constant ERR_ZERO_AMOUNT (err u3001))
 (define-constant ERR_MIN_OUT (err u3002))
@@ -245,6 +282,54 @@
   )
 )
 
+(define-private (leg-zest
+    (amount uint)
+    (min-received uint)
+    (route {
+      ticks: (list 32 int),
+      price: uint,
+    })
+    (sell-sbtc bool)
+  )
+  (if (> amount u0)
+    (let ((r (if sell-sbtc
+        (match (contract-call? ZEST_ROUTER swap-x-for-y SBTC ZEST_WSTX ZEST_POOL_ID
+          amount (get price route) (get ticks route) u0 true stacks-block-time
+        )
+          ok-r {
+            in: (get dx ok-r),
+            out: (get dy ok-r),
+          }
+          e {
+            in: u0,
+            out: u0,
+          }
+        )
+        (match (contract-call? ZEST_ROUTER swap-y-for-x SBTC ZEST_WSTX ZEST_POOL_ID
+          amount (get price route) (get ticks route) u0 true stacks-block-time
+        )
+          ok-r {
+            in: (get dy ok-r),
+            out: (get dx ok-r),
+          }
+          e {
+            in: u0,
+            out: u0,
+          }
+        )
+      ))
+      (asserts! (>= (get out r) (scale-min min-received amount (get in r)))
+        ERR_MIN_OUT
+      )
+      (ok r)
+    )
+    (ok {
+      in: u0,
+      out: u0,
+    })
+  )
+)
+
 (define-private (with-fallback
     (planned uint)
     (venue uint)
@@ -313,23 +398,29 @@
     (update (optional (buff 8192)))
     (fallback (optional uint))
     (amm-amounts {
+      zest: uint,
       dlmm: uint,
       xyk: uint,
       velar: uint,
     })
     (amm-mins {
+      zest: uint,
       dlmm: uint,
       xyk: uint,
       velar: uint,
     })
     (min-stx-out uint)
+    (zest-route {
+      ticks: (list 32 int),
+      price: uint,
+    })
   )
   (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts!
       (is-eq amount
         (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
-          (get velar amm-amounts)
+          (get velar amm-amounts) (get zest amm-amounts)
         ))
       ERR_SPLIT_MISMATCH
     )
@@ -345,7 +436,16 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (routed (fallback-residual residual jing true))
+        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route true)))
+        (zest-short (- (get zest amm-amounts) (get in zest)))
+        (routed (+ (fallback-residual residual jing true)
+          (fallback-residual zest-short
+            (some {
+              spent: (get in zest),
+              out: (get out zest),
+            })
+            true
+          )))
         (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
         (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
         (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
@@ -371,6 +471,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get in xyk),
@@ -379,8 +481,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -390,6 +492,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get in xyk),
@@ -398,8 +502,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -416,23 +520,29 @@
     (update (optional (buff 8192)))
     (fallback (optional uint))
     (amm-amounts {
+      zest: uint,
       dlmm: uint,
       xyk: uint,
       velar: uint,
     })
     (amm-mins {
+      zest: uint,
       dlmm: uint,
       xyk: uint,
       velar: uint,
     })
     (min-sbtc-out uint)
+    (zest-route {
+      ticks: (list 32 int),
+      price: uint,
+    })
   )
   (begin
     (asserts! (> amount u0) ERR_ZERO_AMOUNT)
     (asserts!
       (is-eq amount
         (+ jing-amount (get dlmm amm-amounts) (get xyk amm-amounts)
-          (get velar amm-amounts)
+          (get velar amm-amounts) (get zest amm-amounts)
         ))
       ERR_SPLIT_MISMATCH
     )
@@ -448,7 +558,16 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (routed (fallback-residual residual jing false))
+        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route false)))
+        (zest-short (- (get zest amm-amounts) (get in zest)))
+        (routed (+ (fallback-residual residual jing false)
+          (fallback-residual zest-short
+            (some {
+              spent: (get in zest),
+              out: (get out zest),
+            })
+            false
+          )))
         (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
         (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
         (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
@@ -474,6 +593,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get in xyk),
@@ -482,8 +603,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -493,6 +614,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get in xyk),
@@ -501,8 +624,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -1143,6 +1266,238 @@
   )
 )
 
+;; Zest CLMM STX/sBTC (pool ZEST_POOL_ID on clmm-pool-v1; x = sBTC, y =
+;; Zest wstx). Zest price = WAD raw x per raw y = sats per uSTX x 1e18, the
+;; inverse of limit-price (uSTX per sat x 1e10): WAD = 1e28 / limit.
+(define-constant ZEST_WAD_PRICE u10000000000000000000000000000)
+(define-constant ZEST_FEE_ONE u100000000)
+(define-constant ZEST_ONE u1152921504606846976)
+(define-constant ZEST_TWO u2305843009213693952)
+(define-constant ZEST_LOG2_WAD 68938602072359301496)
+(define-constant ZEST_LOG2_STEP 16550525978195695)
+(define-constant ZEST_MAX_TICK 4458)
+(define-constant ZEST_TICK_MARGIN 2)
+(define-constant ZEST_FRAC_BITS (list
+  u576460752303423488 u288230376151711744 u144115188075855872
+  u72057594037927936 u36028797018963968 u18014398509481984 u9007199254740992
+  u4503599627370496 u2251799813685248 u1125899906842624 u562949953421312
+  u281474976710656 u140737488355328 u70368744177664 u35184372088832
+  u17592186044416
+))
+(define-constant ZEST_WALK (list
+  u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
+  u21 u22 u23 u24 u25 u26 u27 u28 u29 u30 u31
+))
+(define-constant ZEST_NONE {
+  ok: false,
+  ticks: u0,
+  in: u0,
+  out: u0,
+})
+
+(define-private (zest-log2-bit
+    (bit uint)
+    (acc {
+      m: uint,
+      f: uint,
+    })
+  )
+  (let ((sq (/ (* (get m acc) (get m acc)) ZEST_ONE)))
+    (if (>= sq ZEST_TWO)
+      {
+        m: (/ sq u2),
+        f: (+ (get f acc) bit),
+      }
+      {
+        m: sq,
+        f: (get f acc),
+      }
+    )
+  )
+)
+
+(define-private (zest-log2 (x uint))
+  (let (
+      (n (log2 x))
+      (m (if (>= n u60)
+        (bit-shift-right x (- n u60))
+        (bit-shift-left x (- u60 n))
+      ))
+    )
+    (+ (* (to-int n) (to-int ZEST_ONE))
+      (to-int (get f
+        (fold zest-log2-bit ZEST_FRAC_BITS {
+          m: m,
+          f: u0,
+        })
+      ))
+    )
+  )
+)
+
+(define-private (zest-tick (wad uint))
+  (let (
+      (num (- (zest-log2 wad) ZEST_LOG2_WAD))
+      (q (/ num ZEST_LOG2_STEP))
+      (t (if (and (< num 0) (not (is-eq (* q ZEST_LOG2_STEP) num)))
+        (- q 1)
+        q
+      ))
+    )
+    (if (> t ZEST_MAX_TICK)
+      ZEST_MAX_TICK
+      (if (< t (- 0 ZEST_MAX_TICK))
+        (- 0 ZEST_MAX_TICK)
+        t
+      )
+    )
+  )
+)
+
+(define-private (zest-tick-step
+    (k uint)
+    (acc {
+      tick: int,
+      end: int,
+      up: bool,
+      ticks: (list 32 int),
+    })
+  )
+  (if (if (get up acc)
+      (> (get tick acc) (get end acc))
+      (< (get tick acc) (get end acc))
+    )
+    acc
+    (merge acc {
+      ticks: (unwrap-panic (as-max-len? (append (get ticks acc) (get tick acc)) u32)),
+      tick: (if (get up acc)
+        (+ (get tick acc) 1)
+        (- (get tick acc) 1)
+      ),
+    })
+  )
+)
+
+(define-private (zest-ticks
+    (mid-wad uint)
+    (bound uint)
+    (up bool)
+  )
+  (let (
+      (tm (zest-tick mid-wad))
+      (tb (zest-tick bound))
+    )
+    (get ticks
+      (fold zest-tick-step ZEST_WALK {
+        tick: (if up
+          (- tm ZEST_TICK_MARGIN)
+          (+ tm ZEST_TICK_MARGIN)
+        ),
+        end: (if up
+          (+ tb 1)
+          (- tb 1)
+        ),
+        up: up,
+        ticks: (list),
+      })
+    )
+  )
+)
+
+;; limit-price (x1e10) -> Zest WAD bound with the user's fee, rounded against
+;; the user. Selling sBTC (x -> y): max-price = floor(1e28 * (1 - fee) /
+;; limit); selling STX (y -> x): min-price = ceil(1e28 / (limit * (1 -
+;; fee))). Same shape as swap-router-stx-usdcx-jing-v6 with 1e28 for 1e26.
+(define-private (zest-bound
+    (limit uint)
+    (fee uint)
+    (sell-sbtc bool)
+  )
+  (if sell-sbtc
+    (/ (/ (* ZEST_WAD_PRICE (- ZEST_FEE_ONE fee)) limit) ZEST_FEE_ONE)
+    (let ((c (/ (+ (* ZEST_WAD_PRICE ZEST_FEE_ONE) (- limit u1)) limit)))
+      (/ (+ c (- ZEST_FEE_ONE fee u1)) (- ZEST_FEE_ONE fee))
+    )
+  )
+)
+
+(define-private (zest-swap
+    (left uint)
+    (bound uint)
+    (ticks (list 32 int))
+    (sell-sbtc bool)
+  )
+  (if sell-sbtc
+    (match (contract-call? ZEST_ROUTER swap-x-for-y SBTC ZEST_WSTX ZEST_POOL_ID left bound
+      ticks u0 true stacks-block-time
+    )
+      r {
+        ok: true,
+        ticks: (len ticks),
+        in: (get dx r),
+        out: (get dy r),
+      }
+      e (merge ZEST_NONE { ticks: (len ticks) })
+    )
+    (match (contract-call? ZEST_ROUTER swap-y-for-x SBTC ZEST_WSTX ZEST_POOL_ID left bound
+      ticks u0 true stacks-block-time
+    )
+      r {
+        ok: true,
+        ticks: (len ticks),
+        in: (get dy r),
+        out: (get dx r),
+      }
+      e (merge ZEST_NONE { ticks: (len ticks) })
+    )
+  )
+)
+
+(define-private (zest-stage
+    (left uint)
+    (limit uint)
+    (mid uint)
+    (sell-sbtc bool)
+  )
+  (if (dust-left left limit sell-sbtc)
+    ZEST_NONE
+    (zest-stage-pool left limit mid sell-sbtc)
+  )
+)
+
+(define-private (zest-stage-pool
+    (left uint)
+    (limit uint)
+    (mid uint)
+    (sell-sbtc bool)
+  )
+  (begin
+    (match (contract-call? ZEST_POOL get-fee-rates ZEST_POOL_ID tx-sender)
+      rates (let (
+          (fee (if sell-sbtc
+            (get fee-rate-x rates)
+            (get fee-rate-y rates)
+          ))
+          (mid-wad (/ ZEST_WAD_PRICE mid))
+          (bound (if (< fee ZEST_FEE_ONE)
+            (zest-bound limit fee sell-sbtc)
+            u0
+          ))
+          (ticks (if (and (> bound u0) (> mid-wad u0))
+            (zest-ticks mid-wad bound sell-sbtc)
+            (list)
+          ))
+        )
+        (if (> (len ticks) u0)
+          (zest-swap left bound ticks sell-sbtc)
+          ZEST_NONE
+        )
+      )
+      e ZEST_NONE
+    )
+  )
+)
+
 (define-private (cp-stage
     (left uint)
     (limit uint)
@@ -1225,8 +1580,11 @@
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price true)))
-        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price true)))
+        (zest (zest-stage (- amount jing-in) limit-price mid true))
+        (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price true)))
+        (cp (try! (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price
+          true
+        )))
         (out (gain stx-before (stx-get-balance user)))
       )
       (asserts! (>= out min-stx-out) ERR_MIN_OUT)
@@ -1236,12 +1594,16 @@
         amount: amount,
         limit-price: limit-price,
         jing-cap: jing-amount,
+        zest-ticks: (get ticks zest),
         dlmm-cap: (get cap dlmm),
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        zest-ok: (get ok zest),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1255,6 +1617,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1289,8 +1653,11 @@
           none
         ))
         (jing-in (jing-spent jing))
-        (dlmm (try! (dlmm-stage (- amount jing-in) limit-price false)))
-        (cp (try! (cp-stage (- amount jing-in (get in dlmm)) limit-price false)))
+        (zest (zest-stage (- amount jing-in) limit-price mid false))
+        (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price false)))
+        (cp (try! (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price
+          false
+        )))
         (out (gain sbtc-before (sbtc-balance user)))
       )
       (asserts! (>= out min-sbtc-out) ERR_MIN_OUT)
@@ -1300,12 +1667,16 @@
         amount: amount,
         limit-price: limit-price,
         jing-cap: jing-amount,
+        zest-ticks: (get ticks zest),
         dlmm-cap: (get cap dlmm),
         xyk-cap: (get xyk-cap cp),
         velar-cap: (get velar-cap cp),
         jing-ok: (is-some jing),
+        zest-ok: (get ok zest),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
@@ -1319,6 +1690,8 @@
         jing-ok: (is-some jing),
         jing-in: jing-in,
         jing-out: (jing-out jing),
+        zest-in: (get in zest),
+        zest-out: (get out zest),
         dlmm-in: (get in dlmm),
         dlmm-out: (get out dlmm),
         xyk-in: (get xyk-in cp),
