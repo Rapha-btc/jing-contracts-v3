@@ -35,15 +35,18 @@
 ;;     swap-x-for-y (ticks strictly ascending, price = max-price, WAD;
 ;;     UINT-MAX = unbounded); swap-usdcx-for-stx calls swap-y-for-x (ticks
 ;;     strictly descending, price = min-price, WAD; u0 = unbounded).
-;;     allow-partial-fill is always false (Zest reverts u5001 if the walk
-;;     does not take the whole leg), deadline = stacks-block-time (the tx is
-;;     already bound by block inclusion; no new user arg).
+;;     allow-partial-fill is true and a Zest err counts as in = out = 0, so a
+;;     walk gone stale between quote and inclusion does not revert the
+;;     swap: the Zest shortfall joins the Jing residual and goes to DLMM when
+;;     `fallback` is set (unsold otherwise; a dust shortfall at Zest's own
+;;     fill price stays unsold, like the Jing residual). deadline =
+;;     stacks-block-time (the tx is already bound by block inclusion).
 ;;   - zest = u0 skips the call entirely (ticks / price ignored). Zest is not
 ;;     a fallback venue: `fallback` stays DLMM-only, so a Jing residual never
 ;;     lands on the fixed Zest walk.
 ;;   - The Zest output is measured with the rest on the user balance, so it
-;;     counts toward the one combined min-out; `amm-mins.zest` (floored to u1)
-;;     is passed as Zest's own min-dy / min-dx.
+;;     counts toward the one combined min-out; `amm-mins.zest` is scaled to
+;;     the part Zest filled (scale-min) and asserted after the call (u3002).
 ;;   - Receipt + print gain zest-in / zest-out.
 ;;
 ;; Native STX on the Zest leg: Zest's wstx is a pass-through whose transfer
@@ -258,27 +261,36 @@
     (sell-stx bool)
   )
   (if (> amount u0)
-    (if sell-stx
-      (match (contract-call? ZEST_ROUTER swap-x-for-y ZEST_WSTX USDCX ZEST_POOL_ID
-        amount (get price route) (get ticks route) (amm-floor min-received)
-        false stacks-block-time
+    (let ((r (if sell-stx
+        (match (contract-call? ZEST_ROUTER swap-x-for-y ZEST_WSTX USDCX ZEST_POOL_ID
+          amount (get price route) (get ticks route) u0 true stacks-block-time
+        )
+          ok-r {
+            in: (get dx ok-r),
+            out: (get dy ok-r),
+          }
+          e {
+            in: u0,
+            out: u0,
+          }
+        )
+        (match (contract-call? ZEST_ROUTER swap-y-for-x ZEST_WSTX USDCX ZEST_POOL_ID
+          amount (get price route) (get ticks route) u0 true stacks-block-time
+        )
+          ok-r {
+            in: (get dy ok-r),
+            out: (get dx ok-r),
+          }
+          e {
+            in: u0,
+            out: u0,
+          }
+        )
+      )))
+      (asserts! (>= (get out r) (scale-min min-received amount (get in r)))
+        ERR_MIN_OUT
       )
-        r (ok {
-          in: (get dx r),
-          out: (get dy r),
-        })
-        e (err e)
-      )
-      (match (contract-call? ZEST_ROUTER swap-y-for-x ZEST_WSTX USDCX ZEST_POOL_ID
-        amount (get price route) (get ticks route) (amm-floor min-received)
-        false stacks-block-time
-      )
-        r (ok {
-          in: (get dy r),
-          out: (get dx r),
-        })
-        e (err e)
-      )
+      (ok r)
     )
     (ok {
       in: u0,
@@ -389,11 +401,19 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (routed (fallback-residual residual jing true))
+        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route true)))
+        (zest-short (- (get zest amm-amounts) (get in zest)))
+        (routed (+ (fallback-residual residual jing true)
+          (fallback-residual zest-short
+            (some {
+              spent: (get in zest),
+              out: (get out zest),
+            })
+            true
+          )))
         (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
         (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
         (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
-        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route true)))
         (dlmm (try! (leg-stx dlmm-in
           (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
           VENUE_DLMM
@@ -426,8 +446,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -447,8 +467,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -503,11 +523,19 @@
         ))
         (jing-in (jing-spent jing))
         (residual (- jing-amount jing-in))
-        (routed (fallback-residual residual jing false))
+        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route false)))
+        (zest-short (- (get zest amm-amounts) (get in zest)))
+        (routed (+ (fallback-residual residual jing false)
+          (fallback-residual zest-short
+            (some {
+              spent: (get in zest),
+              out: (get out zest),
+            })
+            false
+          )))
         (dlmm-in (with-fallback (get dlmm amm-amounts) VENUE_DLMM fallback routed))
         (xyk-in (with-fallback (get xyk amm-amounts) VENUE_XYK fallback routed))
         (velar-in (with-fallback (get velar amm-amounts) VENUE_VELAR fallback routed))
-        (zest (try! (leg-zest (get zest amm-amounts) (get zest amm-mins) zest-route false)))
         (dlmm (try! (leg-usdcx dlmm-in
           (scale-min (get dlmm amm-mins) (get dlmm amm-amounts) dlmm-in)
           VENUE_DLMM
@@ -540,8 +568,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
@@ -561,8 +589,8 @@
         velar-out: (get out velar),
         unsold: (+
           (if (is-none fallback)
-            residual
-            (- residual routed)
+            (+ residual zest-short)
+            (- (+ residual zest-short) routed)
           )
           (- dlmm-in (get in dlmm))
         ),
