@@ -6,7 +6,11 @@
 //   - mixed DLMM + Zest legs both ways (one combined min-out)
 //   - deny-mode post-conditions on the Zest leg (user STX eq, pool USDCx out)
 //   - zest = 0 ignores the route, split mismatch u3004, fallback u4 -> u3003,
-//     short walk u5001 (no partial fill), Zest min u5002, combined min u3002
+//     Zest min (scaled to the part filled) u3002, combined min u3002
+//   - split partial fill: a one-tick walk covers part of the Zest leg, the
+//     shortfall goes to DLMM (fallback u1) or stays unsold (no fallback); a
+//     Zest err (ticks in the wrong order, tick 4459) counts as in = out = 0
+//   - smart swap with Zest filling 0 under deny mode (clmm-pool-v1 >= 0 PC)
 // Ticks are read off the fork: x -> y walks the USDCx bins upward from the
 // active tick, y -> x walks the STX bins downward (Zest's route order rule).
 // Run: node simulations/verify-router-stx-usdcx-v6-zest.mjs
@@ -59,6 +63,7 @@ async function denyCall(label, sender, fn, args, pcs, wantOk) {
   const ok = wantOk === false ? !!t && !!t.post_condition_aborted // expect a deny-mode abort
     : !!t && !t.vm_error && !t.post_condition_aborted && (wantOk ? res?.startsWith('(ok') : true);
   check(label, ok, JSON.stringify({ res, vm: t?.vm_error, pc: t?.post_condition_aborted }).slice(0, 400));
+  return t?.result ? plain(deserializeCV(t.result))?.ok : undefined;
 }
 
 try {
@@ -97,7 +102,7 @@ try {
   console.log(`  ${show(r0.res?.ok)}; ${Number(a1.us - a0.us) / 1e6} USDCx for 10 STX`);
   check('user sent exactly 10 STX, got exactly the quote', a0.st - a1.st === sIn && a1.us - a0.us === qs.out, show({ st: a0.st - a1.st, us: a1.us - a0.us }));
   check('native STX landed on clmm-pool-v1, USDCx left it', p1.st - p0.st === sIn && p0.us - p1.us === qs.out, show({ st: p1.st - p0.st, us: p0.us - p1.us }));
-  check('receipt zest-in/out, other legs 0', r0.res?.ok?.['zest-in'] === sIn && r0.res?.ok?.['zest-out'] === qs.out && r0.res?.ok?.['dlmm-in'] === 0n && r0.res?.ok?.out === qs.out, show(r0.res?.ok));
+  check('receipt zest-in/out, other legs 0', r0.res?.ok?.['zest-in'] === sIn && r0.res?.ok?.['zest-out'] === qs.out && r0.res?.ok?.['dlmm-in'] === 0n && r0.res?.ok?.out === qs.out && r0.res?.ok?.unsold === 0n, show(r0.res?.ok));
 
   const uIn = 3_000_000n; // 3 USDCx
   const qu = await zquote(false, xTicks, uIn);
@@ -109,6 +114,7 @@ try {
   console.log(`  ${show(r1.res?.ok)}; ${Number(b1.st - b0.st) / 1e6} STX for 3 USDCx`);
   check('user paid exactly 3 USDCx, got exactly the quote in native STX', b0.us - b1.us === uIn && b1.st - b0.st === qu.out, show({ us: b0.us - b1.us, st: b1.st - b0.st }));
   check('pool paid native STX, took USDCx', q0.st - q1.st === qu.out && q1.us - q0.us === uIn);
+  check('receipt zest-in/out = transfers, other legs 0, unsold 0', r1.res?.ok?.['zest-in'] === uIn && r1.res?.ok?.['zest-out'] === qu.out && r1.res?.ok?.['dlmm-in'] === 0n && r1.res?.ok?.out === qu.out && r1.res?.ok?.unsold === 0n, show(r1.res?.ok));
 
   group('mixed DLMM + Zest');
   const m0 = await bals(TAKER);
@@ -117,23 +123,23 @@ try {
     [uintCV(2n * sIn), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(sIn, sIn), amm(1n, qm.out), uintCV(qm.out * 2n * 97n / 100n), route(yTicks, UMAX)], (v) => v?.ok !== undefined);
   const m1 = await bals(TAKER), k = r2.res?.ok;
   console.log(`  ${show(k)}`);
-  check('20 STX in; out = dlmm-out + zest-out = user gain', m0.st - m1.st === 2n * sIn && k?.out === k?.['dlmm-out'] + k?.['zest-out'] && k?.out === m1.us - m0.us && k?.['dlmm-in'] === sIn && k?.['zest-in'] === sIn && k?.['zest-out'] === qm.out, show(k));
+  check('20 STX in; out = dlmm-out + zest-out = user gain', m0.st - m1.st === 2n * sIn && k?.out === k?.['dlmm-out'] + k?.['zest-out'] && k?.out === m1.us - m0.us && k?.['dlmm-in'] === sIn && k?.['zest-in'] === sIn && k?.['zest-out'] === qm.out && k?.unsold === 0n, show(k));
   const qm2 = await zquote(false, xTicks, uIn);
   const r3 = await tx('swap-usdcx-for-stx 6 USDCx = dlmm 3 + zest 3', TAKER, C.router, 'swap-usdcx-for-stx',
     [uintCV(2n * uIn), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(uIn, uIn), amm(1n, qm2.out), uintCV(qm2.out * 2n * 97n / 100n), route(xTicks, 0n)], (v) => v?.ok !== undefined);
   const m2 = await bals(TAKER), k2 = r3.res?.ok;
   console.log(`  ${show(k2)}`);
-  check('6 USDCx in; out = dlmm-out + zest-out = user STX gain', m1.us - m2.us === 2n * uIn && k2?.out === k2?.['dlmm-out'] + k2?.['zest-out'] && k2?.out === m2.st - m1.st && k2?.['zest-out'] === qm2.out, show(k2));
+  check('6 USDCx in; out = dlmm-out + zest-out = user STX gain', m1.us - m2.us === 2n * uIn && k2?.out === k2?.['dlmm-out'] + k2?.['zest-out'] && k2?.out === m2.st - m1.st && k2?.['dlmm-in'] === uIn && k2?.['zest-in'] === uIn && k2?.['zest-out'] === qm2.out && k2?.unsold === 0n, show(k2));
 
   group('post-conditions (deny mode)');
   const qp = await zquote(true, yTicks, sIn);
-  await denyCall('deny mode: user sends eq 10 STX, clmm-pool-v1 sends >= quote USDCx', TAKER, 'swap-stx-for-usdcx',
+  await denyCall('deny mode: user sends eq 10 STX, clmm-pool-v1 sends >= 0 USDCx', TAKER, 'swap-stx-for-usdcx',
     [uintCV(sIn), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, sIn), amm(0n, qp.out), uintCV(qp.out), route(yTicks, UMAX)],
-    [Pc.principal(TAKER).willSendEq(sIn).ustx(), Pc.principal(ZPOOL).willSendGte(qp.out).ft(USDCX, 'usdcx-token')], true);
+    [Pc.principal(TAKER).willSendEq(sIn).ustx(), Pc.principal(ZPOOL).willSendGte(0n).ft(USDCX, 'usdcx-token')], true);
   const qp2 = await zquote(false, xTicks, uIn);
-  await denyCall('deny mode: user sends eq 3 USDCx, clmm-pool-v1 sends >= quote STX', TAKER, 'swap-usdcx-for-stx',
+  await denyCall('deny mode: user sends eq 3 USDCx, clmm-pool-v1 sends >= 0 STX', TAKER, 'swap-usdcx-for-stx',
     [uintCV(uIn), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, uIn), amm(0n, qp2.out), uintCV(qp2.out), route(xTicks, 0n)],
-    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(qp2.out).ustx()], true);
+    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(0n).ustx()], true);
 
   group('guards');
   await tx('zest = 0: bad route (non-monotonic ticks) ignored, DLMM-only ok', TAKER, C.router, 'swap-stx-for-usdcx',
@@ -142,17 +148,107 @@ try {
     [uintCV(3_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(1_000_000n, 1_000_000n), amm(1n, 1n), uintCV(0), route(yTicks, UMAX)], { err: 3004n });
   await tx('fallback = u4 (Zest) -> u3003', TAKER, C.router, 'swap-stx-for-usdcx',
     [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), someCV(uintCV(4)), amm(0n, 1_000_000n), amm(0n, 1n), uintCV(0), route(yTicks, UMAX)], { err: 3003n });
-  const one = yTicks[0], depth = live.find((b) => b.t === one).y;
-  const big = (depth * 10n ** 18n / 300_000_000_000_000_000n) * 3n; // ~3x the first bin's USDCx, in uSTX
-  await tx(`walk too short (1 tick, ${big} uSTX) -> u5001, no partial fill`, TAKER, C.router, 'swap-stx-for-usdcx',
-    [uintCV(big), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, big), amm(0n, 1n), uintCV(0), route([one], UMAX)], { err: 5001n });
+  // a short walk no longer reverts (partial fill on): see the 'split: partial Zest fill' group
   const qg = await zquote(true, yTicks, 1_000_000n);
-  await tx('zest min above quote -> u5002 (Zest slippage)', TAKER, C.router, 'swap-stx-for-usdcx',
-    [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, 1_000_000n), amm(0n, qg.out + 1n), uintCV(0), route(yTicks, UMAX)], { err: 5002n });
+  await tx('zest min above quote, full fill (scale-min keeps it whole) -> u3002', TAKER, C.router, 'swap-stx-for-usdcx',
+    [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, 1_000_000n), amm(0n, qg.out + 1n), uintCV(0), route(yTicks, UMAX)], { err: 3002n });
   await tx('combined min above quote -> u3002', TAKER, C.router, 'swap-stx-for-usdcx',
     [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, 1_000_000n), amm(0n, 1n), uintCV(qg.out + 1n), route(yTicks, UMAX)], { err: 3002n });
-  await tx('Zest token-y side: y->x ticks given ascending -> Zest route error', TAKER, C.router, 'swap-usdcx-for-stx',
-    [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, 1_000_000n), amm(0n, 1n), uintCV(0), route([...xTicks].reverse(), 0n)], (v) => v?.err !== undefined);
+  await tx('Zest token-y side: y->x ticks given ascending -> Zest route err caught: ok, zest 0, all unsold (no fallback)', TAKER, C.router, 'swap-usdcx-for-stx',
+    [uintCV(1_000_000n), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(0n, 1_000_000n), amm(0n, 1n), uintCV(0), route([...xTicks].reverse(), 0n)],
+    (v) => v?.ok?.['zest-in'] === 0n && v?.ok?.['zest-out'] === 0n && v?.ok?.unsold === 1_000_000n && v?.ok?.out === 0n);
+
+  // ---- split partial fill: allow-partial-fill true, min 0 to Zest, err caught as in = out = 0;
+  // the shortfall (planned - zest-in) joins `routed` (DLMM when fallback = u1, unsold otherwise)
+  group('split: partial Zest fill (short walk, Zest err)');
+  // split swap, keyless: receipt = transfers. User pays amount - unsold = zest-in + dlmm-in, out = user
+  // gain = zest-out + dlmm-out, clmm-pool-v1 moved exactly zest-in / zest-out, router keeps nothing.
+  async function split(label, sell, amount, fb, amts, mins, minOut, ticks, want) {
+    const u0 = await bals(TAKER), z0 = await bals(ZPOOL);
+    const r = await call(TAKER, C.router, sell ? 'swap-stx-for-usdcx' : 'swap-usdcx-for-stx',
+      [uintCV(amount), uintCV(0), uintCV(1), noneCV(), fb ? someCV(uintCV(fb)) : noneCV(), amm(amts[0], amts[1]), amm(mins[0], mins[1]), uintCV(minOut), route(ticks, sell ? UMAX : 0n)]);
+    const k = r.res?.ok;
+    console.log(`  ${label}: ${show(k ?? r.vm ?? r.res)}`);
+    if (!check(`${label}: ok`, !r.vm && !!k, show(r.vm ?? r.res))) return null;
+    const u1 = await bals(TAKER), z1 = await bals(ZPOOL), rb = await bals(C.router);
+    const spent = sell ? u0.st - u1.st : u0.us - u1.us, gained = sell ? u1.us - u0.us : u1.st - u0.st;
+    const zIn = sell ? z1.st - z0.st : z1.us - z0.us, zOut = sell ? z0.us - z1.us : z0.st - z1.st;
+    check(`${label}: paid = amount - unsold = zest-in + dlmm-in; out = user gain = zest-out + dlmm-out`,
+      k['jing-in'] === 0n && spent === amount - k.unsold && spent === k['zest-in'] + k['dlmm-in'] && k.out === gained && k.out === k['zest-out'] + k['dlmm-out'],
+      show({ spent, gained, k }));
+    check(`${label}: clmm-pool-v1 moved exactly zest-in / zest-out`, zIn === k['zest-in'] && zOut === k['zest-out'], show({ zIn, zOut }));
+    check(`${label}: router holds 0 STX / 0 USDCx`, rb.st === 0n && rb.us === 0n, show(rb));
+    if (want) check(`${label}: ${want.name}`, want(k), show(k));
+    return k;
+  }
+  for (const sell of [true, false]) {
+    const tag = sell ? 'STX->USDCx' : 'USDCx->STX', fn = sell ? 'swap-stx-for-usdcx' : 'swap-usdcx-for-stx', P = sell ? UMAX : 0n;
+    const extra = sell ? 5_000_000n : 2_000_000n; // shortfall past the one-tick walk: 5 STX / 2 USDCx
+    // stale walk: one live tick of the leg's side (Zest keeps no active bin, any tick can be walked alone),
+    // quoted for far more than it holds. Live ticks can hold more than the whales can fund, so take the
+    // first one in Zest order holding <= 5k STX / 1.5k USDCx of the asked asset (else the smallest).
+    const oneTick = async () => {
+      const { yT, xT } = await zLive(), ask = sell ? 10n ** 15n : 10n ** 13n, cap = sell ? 5_000_000_000n : 1_500_000_000n;
+      let best = null;
+      for (const t of sell ? yT : xT) {
+        const z = await zquote(sell, [t], ask), q = { ...z, in: ask - z.left };
+        if (q.in === 0n || q.out === 0n) continue;
+        if (!best || q.in < best.q.in) best = { t, q };
+        if (q.in <= cap) { best = { t, q }; break; }
+      }
+      return best && { ...best, amount: best.q.in + extra };
+    };
+    // a live tick can hold far more than the taker has: top it up to 2x the leg before each walk
+    const fund = async (amount) => {
+      const have = sell ? await stx(TAKER) : await usd(TAKER), need = amount * 2n;
+      if (have >= need) return;
+      if (sell) await stxTransfer(WHALE.y, TAKER, need);
+      else must(`fund taker ${need} uUSDCx for the partial-fill splits`, (await call(USDC_WHALE, USDCX, 'transfer', [uintCV(need), P_(USDC_WHALE), P_(TAKER), noneCV()])).res?.ok === true);
+    };
+    let w = await oneTick();
+    must(`${tag}: one-tick walk [${w.t}] covers ${w.q.in} of a ${w.amount} leg`, !!w && w.q.in > 0n && w.q.out > 0n && w.q.left > 0n, show(w));
+    await fund(w.amount);
+    // 4: amm-mins.zest is scaled to the part Zest filled: min * zest-in / planned. One raw unit above
+    // zest-out misses -> u3002 (rolls back); the floor that scales to exactly zest-out passes.
+    const zmFail = ((w.q.out + 1n) * w.amount + w.q.in - 1n) / w.q.in;
+    const zmPass = (w.q.out * w.amount) / w.q.in;
+    await tx(`${tag}: amm-mins.zest ${zmFail} scales past zest-out ${w.q.out} on a ${w.q.in}/${w.amount} fill -> u3002`, TAKER, C.router, fn,
+      [uintCV(w.amount), uintCV(0), uintCV(1), noneCV(), someCV(uintCV(1)), amm(0n, w.amount), amm(1n, zmFail), uintCV(1), route([w.t], P)], { err: 3002n });
+    // 1 + 4: same walk, boundary min passes; fallback DLMM takes the shortfall
+    await split(`${tag} one-tick walk + fallback DLMM, amm-mins.zest ${zmPass} (scales to zest-out)`, sell, w.amount, 1, [0n, w.amount], [1n, zmPass], 1n, [w.t],
+      function zestPartialDlmmTakesShortfall(k) { return k['zest-in'] === w.q.in && k['zest-out'] === w.q.out && k['zest-in'] < w.amount && k['dlmm-in'] === w.amount - w.q.in && k['dlmm-out'] > 0n && k.unsold === 0n; });
+    // 2: the walk above emptied that tick, take the next one; no fallback: shortfall unsold, user keeps it
+    w = await oneTick();
+    must(`${tag}: next one-tick walk [${w.t}] covers ${w.q.in} of a ${w.amount} leg`, !!w && w.q.in > 0n && w.q.out > 0n && w.q.left > 0n, show(w));
+    await fund(w.amount);
+    await split(`${tag} one-tick walk, fallback none: shortfall ${extra} unsold, user keeps it`, sell, w.amount, 0, [0n, w.amount], [0n, 0n], 0n, [w.t],
+      function shortfallUnsold(k) { return k['zest-in'] === w.q.in && k['zest-out'] === w.q.out && k['dlmm-in'] === 0n && k.unsold === w.amount - w.q.in; });
+    // mixed split with a short Zest walk: planned DLMM slice + the Zest shortfall both on DLMM
+    w = await oneTick();
+    const dl = sell ? 4_000_000n : 1_000_000n;
+    await fund(w.amount + dl);
+    await split(`${tag} dlmm ${dl} + one-tick zest ${w.amount}, fallback DLMM: dlmm-in = ${dl} + shortfall`, sell, w.amount + dl, 1, [dl, w.amount], [1n, 1n], 1n, [w.t],
+      function dlmmTakesSliceAndShortfall(k) { return k['zest-in'] === w.q.in && k['dlmm-in'] === dl + w.amount - w.q.in && k.unsold === 0n; });
+    // 3: the Zest call errs -> in = out = 0 (Zest's own writes rolled back). Ticks that hold the
+    // asked asset, but in the wrong order (Zest's route rule): a fill here would be nonzero.
+    const { yT, xT } = await zLive();
+    const wrong = (sell ? yT : xT).slice(0, 4).reverse();
+    const amt3 = sell ? 3_000_000n : 1_000_000n;
+    const q3 = await zquote(sell, [...wrong].reverse(), amt3);
+    must(`${tag}: ticks ${wrong} in Zest order would fill ${amt3}`, wrong.length >= 2 && q3.left === 0n && q3.out > 0n, show(q3));
+    await split(`${tag} Zest errs (ticks ${wrong} out of order) + fallback DLMM: slice to DLMM`, sell, amt3, 1, [0n, amt3], [1n, 1n], 1n, wrong,
+      function zestErrDlmmTakesAll(k) { return k['zest-in'] === 0n && k['zest-out'] === 0n && k['dlmm-in'] === amt3 && k.unsold === 0n; });
+    await split(`${tag} Zest errs (ticks ${wrong} out of order), fallback none: all unsold`, sell, amt3, 0, [0n, amt3], [1n, 1n], 0n, wrong,
+      function zestErrAllUnsold(k) { return k['zest-in'] === 0n && k['zest-out'] === 0n && k['dlmm-in'] === 0n && k.unsold === amt3 && k.out === 0n; });
+    // tick 4459 is past Zest's range (router ZEST_MAX_TICK 4458)
+    const zr = await call(TAKER, 'SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-router-v1', sell ? 'swap-x-for-y' : 'swap-y-for-x',
+      [P_(ZWSTX), P_(USDCX), uintCV(1), uintCV(amt3), uintCV(P), listCV([intCV(4459)]), uintCV(0), trueCV(), uintCV(2n ** 63n)]);
+    check(`${tag}: direct Zest call on tick 4459 errs (so the router legs below take the err path)`, !zr.vm && zr.res?.err !== undefined, show(zr.res ?? zr.vm));
+    await split(`${tag} tick 4459 + fallback DLMM: zest 0, slice to DLMM`, sell, amt3, 1, [0n, amt3], [1n, 1n], 1n, [4459],
+      function tick4459DlmmTakesAll(k) { return k['zest-in'] === 0n && k['zest-out'] === 0n && k['dlmm-in'] === amt3 && k.unsold === 0n; });
+    await split(`${tag} tick 4459, fallback none: all unsold`, sell, amt3, 0, [0n, amt3], [1n, 1n], 0n, [4459],
+      function tick4459AllUnsold(k) { return k['zest-in'] === 0n && k['zest-out'] === 0n && k.unsold === amt3 && k.out === 0n; });
+  }
 
   // ---- smart swaps: Jing (keyless: update = none -> jing-size 0) -> Zest -> DLMM -> cp
   group('smart swaps: Zest stage');
@@ -171,8 +267,16 @@ try {
   const smartPrint = (rc, topic) => (rc?.events ?? []).map((e) => typeof e === 'string' ? JSON.parse(e) : e)
     .filter((e) => e.contract_event).map((e) => { try { return plain(deserializeCV(e.contract_event.raw_value)); } catch { return null; } })
     .find((p) => p?.topic === topic);
-  // per-stage limit: out >= (in - 2) * limit (sell STX) / (in - 2) / limit (sell USDCx), the router's limit-min
-  const atLimit = (sell, i, o, L) => i <= 2n || (sell ? o >= ((i - 2n) * L) / 100_000_000n : o >= ((i - 2n) * 100_000_000n) / L);
+  // per-stage limit. in > 2: the router's limit-min, out >= floor((in - 2) * limit) (sell STX) / floor((in - 2) / limit)
+  // (sell USDCx). in of 1-2 raw units (limit-min is 0 there, so it would pass anything): out + in >= value at limit of
+  // (in - 1), i.e. slack = 1 raw input unit (Zest's fee rounds up: 1 of 2 raw units in can be all fee) + 1 raw output
+  // unit per bin (the per-bin output haircut; a leg of n raw units crosses at most n bins). Seen live: 2 uUSDCx in ->
+  // 2 uSTX out at limit 0.2694 (7 uSTX at limit; 1 unit fee, 1 net = 3.7 -> 3, haircut -> 2). in = 0 needs out = 0.
+  const atLimit = (sell, i, o, L) => {
+    if (i === 0n) return o === 0n;
+    if (i > 2n) return sell ? o >= ((i - 2n) * L) / 100_000_000n : o >= ((i - 2n) * 100_000_000n) / L;
+    return o + i >= (sell ? ((i - 1n) * L) / 100_000_000n : ((i - 1n) * 100_000_000n) / L);
+  };
   async function smart(label, sell, amount, limit, minOut, want) {
     const fn = sell ? 'smart-swap-stx-for-usdcx' : 'smart-swap-usdcx-for-stx';
     const u0 = await bals(TAKER), z0 = await bals(ZPOOL);
@@ -295,12 +399,13 @@ try {
   }
 
   group('cost: worst cases (32 Zest ticks + DLMM walk)');
-  const W = {};
+  const W = {}, worstAmts = new Set([400_000_000_000n]);
   W.smartX = await smart('worst smart STX->USDCx 400k STX, limit mid/2', true, 400_000_000_000n, mid / 2n, 1n,
     function walks32ticksAndDlmm(k, pr) { return pr['zest-ticks'] === 32n && k['zest-in'] > 0n && k['dlmm-in'] > 0n; });
   // Zest now holds the STX just sold into it, so size past its STX bins: all USDCx but a reserve for the split runs
   const uWorst = (await usd(TAKER)) - 12_000_000_000n;
   must(`taker has USDCx for the worst y->x smart swap (${uWorst})`, uWorst > 50_000_000_000n);
+  worstAmts.add(uWorst);
   W.smartY = await smart(`worst smart USDCx->STX ${uWorst} uUSDCx, limit mid*2`, false, uWorst, mid * 2n, 1n,
     function walks32ticksAndDlmm(k, pr) { return pr['zest-ticks'] === 32n && k['zest-in'] > 0n && k['dlmm-in'] > 0n; });
   for (const sell of [true, false]) {
@@ -309,6 +414,7 @@ try {
     must(`taker can fund worst split ${sell ? 'x->y' : 'y->x'} (has ${have})`, have > dl + 10_000_000n);
     const zl = await zq(sell, have - dl - 10_000_000n, sell ? UMAX : 0n);
     note(`worst split ${sell ? 'x->y' : 'y->x'}: zest leg ${zl.in} over ${zl.ticks.length} ticks, dlmm leg ${dl}`);
+    worstAmts.add(zl.in + dl);
     await tx(`worst split ${sell ? 'STX->USDCx' : 'USDCx->STX'}: zest leg over ${zl.ticks.length} ticks + DLMM ${dl}`, TAKER, C.router,
       sell ? 'swap-stx-for-usdcx' : 'swap-usdcx-for-stx',
       [uintCV(zl.in + dl), uintCV(0), uintCV(1), noneCV(), noneCV(), amm(dl, zl.in), amm(1n, 1n), uintCV(1), route(zl.ticks, sell ? UMAX : 0n)],
@@ -316,15 +422,33 @@ try {
   }
 
   group('smart swaps: deny-mode post-conditions');
-  await denyCall('deny: smart STX->USDCx 10 STX all Zest, user sends eq 10 STX, clmm-pool-v1 sends >= 1 USDCx', TAKER, 'smart-swap-stx-for-usdcx',
+  await denyCall('deny: smart STX->USDCx 10 STX all Zest, user sends eq 10 STX, clmm-pool-v1 sends >= 0 USDCx', TAKER, 'smart-swap-stx-for-usdcx',
     [uintCV(sIn), uintCV(mid * 95n / 100n), noneCV(), uintCV(mid), uintCV(1)],
-    [Pc.principal(TAKER).willSendEq(sIn).ustx(), Pc.principal(ZPOOL).willSendGte(1n).ft(USDCX, 'usdcx-token')], true);
+    [Pc.principal(TAKER).willSendEq(sIn).ustx(), Pc.principal(ZPOOL).willSendGte(0n).ft(USDCX, 'usdcx-token')], true);
   // after the drain groups above Zest may fill only part of the 3 USDCx and DLMM
   // the rest (live-price dependent), so the DLMM pools get a >= 0 uSTX PC too
-  await denyCall('deny: smart USDCx->STX 3 USDCx, Zest leg (+ any DLMM top-up), user sends eq 3 USDCx, clmm-pool-v1 sends >= 1 uSTX', TAKER, 'smart-swap-usdcx-for-stx',
+  await denyCall('deny: smart USDCx->STX 3 USDCx, Zest leg (+ any DLMM top-up), user sends eq 3 USDCx, clmm-pool-v1 sends >= 0 uSTX', TAKER, 'smart-swap-usdcx-for-stx',
     [uintCV(uIn), uintCV(mid * 105n / 100n), noneCV(), uintCV(mid), uintCV(1)],
-    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(1n).ustx(),
+    [Pc.principal(TAKER).willSendEq(uIn).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(0n).ustx(),
       ...['bps-10', 'bps-4', 'bps-1'].map((b) => Pc.principal(`SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-${b}`).willSendGte(0n).ustx())], true);
+  // Zest fills 0: live mid shifted 2x so the 32-tick window sits on bins holding none of the asked asset
+  // (x->y window below the USDCx bins, y->x window above the STX bins). clmm-pool-v1 >= 0 PC holds with
+  // no Zest transfer; limit 3% behind DLMM's live net price, so DLMM fills it all.
+  for (const sell of [true, false]) {
+    const tag = sell ? 'STX->USDCx' : 'USDCx->STX', amt = sell ? sIn : uIn;
+    const { yT, xT } = await zLive();
+    const liveMid = WADP / (await price(sell ? yT[0] : xT[0]));
+    const d = await dlmmNet(sell);
+    const L = sell ? (d * 97n) / 100n : (d * 103n) / 100n;
+    const dpc = (b) => Pc.principal(`SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-usdcx-v-1-${b}`).willSendGte(0n);
+    const k = await denyCall(`deny: smart ${tag} ${amt}, mid ${sell ? 'x2' : '/2'} (live ${liveMid}), limit ${L}: user eq, clmm-pool-v1 >= 0, DLMM >= 0`, TAKER,
+      sell ? 'smart-swap-stx-for-usdcx' : 'smart-swap-usdcx-for-stx',
+      [uintCV(amt), uintCV(L), noneCV(), uintCV(sell ? liveMid * 2n : liveMid / 2n), uintCV(1)],
+      sell ? [Pc.principal(TAKER).willSendEq(amt).ustx(), Pc.principal(ZPOOL).willSendGte(0n).ft(USDCX, 'usdcx-token'), ...['bps-10', 'bps-4', 'bps-1'].map((b) => dpc(b).ft(USDCX, 'usdcx-token'))]
+        : [Pc.principal(TAKER).willSendEq(amt).ft(USDCX, 'usdcx-token'), Pc.principal(ZPOOL).willSendGte(0n).ustx(), ...['bps-10', 'bps-4', 'bps-1'].map((b) => dpc(b).ustx())], true);
+    check(`deny: smart ${tag} shifted mid: Zest fills 0, DLMM fills all, out = dlmm-out`,
+      k?.['zest-in'] === 0n && k?.['zest-out'] === 0n && k?.['dlmm-in'] === amt && k?.unsold === 0n && k?.out === k?.['dlmm-out'] && k?.out > 0n, show(k));
+  }
   await denyCall('deny: smart STX->USDCx without the Zest pool PC aborts', TAKER, 'smart-swap-stx-for-usdcx',
     [uintCV(sIn), uintCV(mid * 95n / 100n), noneCV(), uintCV(mid), uintCV(1)],
     [Pc.principal(TAKER).willSendEq(sIn).ustx()], false);
@@ -344,7 +468,7 @@ try {
   const pct = (c, k) => ((100 * Number(c[k])) / LIM[k]).toFixed(2) + '%';
   console.log('  fn                          amount            res   runtime          read_count     read_length      write_count   write_length');
   for (const x of rows) console.log(`  ${x.fn.padEnd(27)} ${String(x.amount).padStart(15)}  ${x.r.padEnd(5)} ${Object.keys(LIM).map((k) => `${String(x.c[k]).padStart(9)} ${pct(x.c, k).padStart(6)}`).join('  ')}`);
-  const worst = rows.filter((x) => x.r === '(ok ' && x.amount >= 10_000_000_000n);
+  const worst = rows.filter((x) => x.r === '(ok ' && worstAmts.has(x.amount));
   check('worst cases found in the cost table (2 smart + 2 split)', worst.length === 4, show(worst.map((x) => [x.fn, x.amount])));
   for (const x of worst) check(`${x.fn} ${x.amount}: every dimension < 50% of the block limit`, Object.keys(LIM).every((k) => Number(x.c[k]) < LIM[k] * 0.5), Object.keys(LIM).map((k) => `${k} ${pct(x.c, k)}`).join(', '));
 

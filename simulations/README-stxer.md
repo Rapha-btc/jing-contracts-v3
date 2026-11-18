@@ -23,13 +23,17 @@ user <-> pool (Zest's `wstx` is a plain `stx-transfer?`); the router holds nothi
 
 The harness is keyless (`update = none`, Jing leg 0). It covers Zest-only and
 mixed split legs both ways, deny-mode post-conditions, the guard errors (u3004,
-u3003, u5001, u5002, u3002, u5003), and smart swaps where Zest fills all, Zest
-fills part and DLMM takes the rest, and Zest fills 0 and DLMM takes all, in both
+u3003, u3002 for the combined min and for `amm-mins.zest` scaled to the part
+Zest filled), split partial fills (a one-tick walk whose shortfall goes to DLMM
+with fallback u1 or stays unsold without it, and a Zest err counted as 0, both
+directions; Zest errs never surface, so no u5xxx is asserted), and smart swaps
+where Zest fills all, Zest fills part and DLMM takes the rest, and Zest fills 0
+and DLMM takes all (also under deny mode with a clmm-pool-v1 >= 0 PC), in both
 directions, with limits pinned from DLMM's live price at run time.
 
 | Harness | N/M | Evidence |
 |---|---:|---|
-| `verify-router-stx-usdcx-v6-zest.mjs` | 107/107 | [run](https://stxer.xyz/simulations/mainnet/48f99e16c6592562ecbb8344ff33d55d) |
+| `verify-router-stx-usdcx-v6-zest.mjs` | 211/211 | [run](https://stxer.xyz/simulations/mainnet/5c61e1305873dbea0f8f8955a5fee84c) |
 
 Worst-case execution cost (share of the Nakamoto block limits):
 

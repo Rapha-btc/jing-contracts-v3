@@ -25,7 +25,7 @@
 ;;     and any Zest error (paused pool, ...) all give in = out = 0; an err
 ;;     from the Zest call rolls back Zest's own writes, like the Jing leg.
 ;;   - Receipt gains zest-in / zest-out after jing-out; print also gains
-;;     zest-ok (Zest call returned ok) and zest-ticks (ticks walked).
+;;     zest-ok (Zest call returned ok) and zest-ticks (ticks passed to Zest).
 ;;   - unsold = amount - jing - zest - dlmm - cp.
 ;;   - VENUE_ZEST u4; `amm-amounts` / `amm-mins` gain a `zest` field, and the
 ;;     split check (u3004) is jing + dlmm + xyk + velar + zest = amount.
@@ -59,8 +59,9 @@
 ;; exactly like the Bitflow token-stx-v-1-2 facade. No wrapping, no router
 ;; custody, no allowance needed here.
 ;; Post-conditions (deny mode): user STX sent <= amount (STX side) or user
-;; USDCx sent <= amount (USDCx side), plus clmm-pool-v1 sends USDCx / STX
-;; to the user, alongside the existing DLMM pool PCs.
+;; USDCx sent <= amount (USDCx side), plus clmm-pool-v1 sends >= 0 USDCx /
+;; STX (not >= 1: Zest may fill 0 and leave it to DLMM), alongside the
+;; existing DLMM pool PCs. The combined min-out guards the total.
 (define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-stx-usdcx-jing-v6-4)
 (define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 (define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
