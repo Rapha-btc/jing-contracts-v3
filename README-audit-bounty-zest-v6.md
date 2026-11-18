@@ -56,6 +56,9 @@ mwb3kv09 (first correct L1243 refutation, 63,360 bound cases).
 ## Winner: Heavy Bear
 
 Heavy Bear (submission mwc9rg6r, 2026-11-11) takes the 6,000 sats.
+Paid 2026-11-18 to SP100VTG4KGGZAR5Y7Y84QHFVZT7N819DGMGJTD6C, tx
+`2b8dfa447d06976d1b2faf1d1dd65ff1fed6c14d9ee6d97e981b93a0acc543ff`
+(memo `BNTY:mwaypr0sa4d1d6ca1f6a`); bounty marked paid on aibtc.
 
 - **The finding that changed the contract.** #4 is the only finding that led
   to a logic change in v6. Heavy Bear reported the realistic trigger: the
