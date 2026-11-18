@@ -26,10 +26,12 @@
 (define-constant ERR_OVER_INVENTORY (err u8109))
 (define-constant ERR_BAD_SPREAD (err u8110))
 (define-constant ERR_ZERO_CAP (err u8111))
+(define-constant ERR_ABOVE_CAP (err u8112))
 
 (use-trait rung-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait.rung-trait)
 
 (define-constant MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-5)
+(define-constant ROUTER 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v5-6)
 (define-constant RUNG_1 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-1-v2)
 (define-constant RUNG_10 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-10-v2)
 (define-constant RUNG_20 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-buy-stx-20-v2)
@@ -555,6 +557,86 @@
         amount: amount,
       })
       (ok (book-rung r expected stx-in sbtc-back "rung-withdraw"))
+    )
+  )
+)
+
+;; swap-close: spend open STX proceeds straight through the Jing router
+;; (manual split: jing-amount + amm-amounts, as the arbs do) instead of waiting
+;; for the buy-back to fill. Any resting buy-back is pulled back first, so the
+;; whole position sits in the loop. The inventory closes pro rata, exactly as a
+;; buy-back fill would (reconcile-inner).
+;; Keeper: only at or better than the buy-back cap (take profit).
+;; Owner: any price (stop-loss). min-sbtc-out guards slippage either way.
+(define-public (swap-close
+    (amount uint)
+    (jing-amount uint)
+    (limit-price uint)
+    (update (optional (buff 8192)))
+    (fallback (optional uint))
+    (amm-amounts {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (amm-mins {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (min-sbtc-out uint)
+  )
+  (begin
+    (try! (check-operator))
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (reconcile-inner)
+    (asserts! (> (var-get inv-stx) u0) ERR_NO_INVENTORY)
+    (asserts! (<= amount (var-get inv-stx)) ERR_OVER_INVENTORY)
+    (if (> (stx-on-market) u0)
+      (begin
+        (try! (as-contract? ()
+          (try! (contract-call? MARKET cancel-token-y-deposit WSTX WSTX_NAME))
+        ))
+        true
+      )
+      true
+    )
+    (let (
+        (cap (buy-back-cap))
+        (spend0 (stx-get-balance current-contract))
+        (gain0 (sbtc-held))
+      )
+      (asserts! (> cap u0) ERR_ZERO_CAP)
+      (try! (as-contract? ((with-stx (+ amount (var-get max-oracle-fee))))
+        (try! (contract-call? ROUTER swap-stx-for-sbtc amount jing-amount limit-price update
+          fallback amm-amounts amm-mins min-sbtc-out
+        ))
+      ))
+      (let (
+          (spend1 (stx-get-balance current-contract))
+          (gain1 (sbtc-held))
+          (stx-in (if (> spend0 spend1) (- spend0 spend1) u0))
+          (sats-out (if (> gain1 gain0) (- gain1 gain0) u0))
+          (in-the-money (<= (* stx-in PRICE_SCALE) (* cap sats-out)))
+        )
+        (asserts! (> sats-out u0) ERR_ZERO_AMOUNT)
+        (asserts! (or (is-owner) in-the-money) ERR_ABOVE_CAP)
+        (reconcile-inner)
+        (print {
+          event: "yg-swap-close",
+          caller: contract-caller,
+          stx-in: stx-in,
+          sats-out: sats-out,
+          cap: cap,
+          in-the-money: in-the-money,
+          vwap-sell: (vwap-sell),
+        })
+        (ok {
+          stx-in: stx-in,
+          sats-out: sats-out,
+          in-the-money: in-the-money,
+        })
+      )
     )
   )
 )
