@@ -24,6 +24,8 @@
 //   H  owner exits (withdraws only to owner; rung-withdraw + cancel are operator paths) + two-step ownership handover
 //   I  allowances: a variant of the vault with jing-*-stx-90 and the market
 //      swapped for hostile contracts; every over-pull must abort
+//   SO swap-open (see _yg-swap-open.js), before SC and K
+//   SC swap-close (see _yg-swap-close.js), before K
 //   K  oracle-fee allowance: max-oracle-fee auth; fee 0 update path; none
 //      while pending < 24 h (u7012); oracle fee > 0 (governance impersonated)
 //      needs the owner's cap; the 24 h path cancels the pending order
@@ -35,6 +37,9 @@ import {
   stxTransfer, sbtcTransfer, deploy, sbtcBal, stxBal, freshUpd, updCV, curCycle, summary, blockTime,
 } from './_yg-loop-common.js';
 import { submitSimulationSteps } from 'stxer';
+import { setOracleFee } from './_yg-oracle-fee.js';
+import { swapOpenGroup } from './_yg-swap-open.js';
+import { swapCloseGroup, stxPair } from './_yg-swap-close.js';
 
 const MAX_UINT = 2n ** 128n - 1n;
 const other = (t) => (t === 'x' ? 'y' : 'x');
@@ -45,7 +50,7 @@ export async function runSide(cfg) {
   const OWNER = mk(cfg.seed), KEEPER = mk(cfg.seed + 1), STRANGER = mk(cfg.seed + 2), NEW_OWNER = mk(cfg.seed + 3);
   let takerN = cfg.seed + 10;
   const VAULT = `${OWNER}.${cfg.name}`;
-  const RUNG = (b) => `${DEP}.${cfg.rungPrefix}${b}`;
+  const RUNG = (b) => `${DEP}.${cfg.rungPrefix}${b}${cfg.rungSuffix ?? ''}`;
   const R1 = RUNG(1);
   const e = (k) => E(cfg.errBase + k);
   const ERR = { NOT_OWNER: 1, NOT_AUTH: 2, NOT_PENDING: 3, PAUSED: 4, BAD_RUNG: 5, ZERO: 6, NO_INV: 8, OVER_INV: 9, BAD_SPREAD: 10 };
@@ -607,7 +612,7 @@ const capOf = (st, edge = EDGE) => {
     const EVR = `${OWNER}.yg-evil-rung-${cfg.side}`, EVM = `${OWNER}.yg-evil-market-${cfg.side}`, VV = `${OWNER}.yg-variant-${cfg.side}`;
     await deploy(OWNER, `yg-evil-rung-${cfg.side}`, evilRung());
     await deploy(OWNER, `yg-evil-market-${cfg.side}`, evilMarket());
-    const r90 = `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.${cfg.rungPrefix}90`;
+    const r90 = RUNG(90);
     const vsrc = src.split(r90).join(EVR).replace(/\(define-constant MARKET '[^)]+\)/, `(define-constant MARKET '${EVM})`);
     must('variant source swaps rung 90 (2 sites) + MARKET', vsrc !== src && vsrc.split(EVR).length === 3 && vsrc.includes(`(define-constant MARKET '${EVM})`));
     await deploy(OWNER, `yg-variant-${cfg.side}`, vsrc);
@@ -654,6 +659,23 @@ const capOf = (st, edge = EDGE) => {
     check('owner withdraw more than the vault holds aborts', (r.res?.err !== undefined || r.vm) && same(a, await snap()), show(r.res ?? r.vm));
   }
 
+  // ---------------------------------------------------------------- SO ---
+  // Active entries before SC changes AMM prices and K advances the fork clock.
+  await swapOpenGroup({
+    cfg, src, MARKET, KEEPER, STRANGER, T, A, RUNG, invGot, invSold, bal, fund,
+    fundStx: (who, amt) => stxTransfer(WHALE.y, who, amt),
+    forceFill, settlePending, freshUpd, updCV, pair: stxPair(WHALE),
+  });
+
+  // ---------------------------------------------------------------- SC ---
+  // swap-close on a fresh vault (owner mk(seed + 5)); runs before K, whose
+  // +25 h clock jump leaves no fresh Lazer update. See _yg-swap-close.js.
+  await swapCloseGroup({
+    cfg, src, MARKET, KEEPER, STRANGER, T, A, RUNG, invGot, invSold, bal, fund,
+    fundStx: (who, amt) => stxTransfer(WHALE.y, who, amt),
+    forceFill, settlePending, freshUpd, updCV, pair: stxPair(WHALE),
+  });
+
   // ---------------------------------------------------------------- K ----
   // rung-withdraw carries a Lazer update the rung uses to settle its own
   // pending market order; the oracle charges its fee to tx-sender (the
@@ -663,7 +685,6 @@ const capOf = (st, edge = EDGE) => {
   setGroup('K oracle-fee allowance');
   {
     const ORACLE = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle';
-    const ORACLE_GOV = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8';
     const RK = RUNG(70), RF = RUNG(80), tk = `${cfg.rungPrefix}70`, tf = `${cfg.rungPrefix}80`;
     const ALL = uintCV(10n ** 15n);
     must(`${tk} and ${tf}: vault has no principal left`, (await rr(RK)) === 0n && (await rp(RK)) === 0n && (await rr(RF)) === 0n && (await rp(RF)) === 0n);
@@ -682,6 +703,24 @@ const capOf = (st, edge = EDGE) => {
       must(`${label}: the rung's market order is pending`, !!p, show(p));
       return p;
     };
+    // K0: a deposit only goes pending while the other side has depositors;
+    // group SC's Jing fills can empty it. Seed a far opposite-side order
+    // (never fills), as the USDCx engine's K0 does.
+    {
+      const o = other(sold), cyc = await curCycle();
+      const n = (await evalIn(MARKET, `(get-token-${o}-depositors u${cyc})`)).length;
+      if (n === 0) {
+        const SEED = mk(cfg.seed + 7);
+        const amt = o === 'x' ? 1_100n : 1_100_000n;
+        await freshUpd(true);
+        const lim = o === 'x' ? S.MID * 3n : 1n; // ask at 3x mid / bid at 1
+        await stxTransfer(WHALE.y, SEED, 1_000_000n);
+        if (o === 'x') await fund(o, SEED, amt); else await stxTransfer(WHALE.y, SEED, amt);
+        await tx(`K0 seed a far ${o} order (limit ${lim}) so the ${sold} side goes pending`, SEED, MARKET, `deposit-token-${o}`, [uintCV(amt), uintCV(lim), noneCV(), T[o], A[o]], { ok: amt });
+        await settlePending(o, SEED, 'K0 seed');
+        check(`K0 the seed order is live on side ${o}`, (await depOf(o, SEED)) === amt, `${await depOf(o, SEED)}`);
+      } else note(`K0: side ${o} already has ${n} depositors`);
+    }
     // K2: fee 0, the update settles the pending order, withdraw goes through at once
     await sellPending(RK, 'K2');
     await freshUpd();
@@ -694,12 +733,10 @@ const capOf = (st, edge = EDGE) => {
     const pK = await sellPending(RK, 'K3');
     await tx('K3 rung-withdraw with none while pending < 24 h -> rung ERR_UPDATE_REQUIRED u7012', KEEPER, VAULT, 'rung-withdraw', [P_(RK), ALL, noneCV()], E(7012));
     // K5: fee > 0 (oracle governance impersonated on the fork)
-    const gov = await evalIn(ORACLE, `(has-role '${ORACLE_GOV} 0x00)`);
-    if (!gov) note(`K5 skipped: ${ORACLE_GOV} no longer holds oracle governance`);
-    else {
+    {
       const F = 1_000n;
       const RCP = await evalIn(ORACLE, '(get-fee-recipient)');
-      await tx(`K5 oracle governance set-fee ${F}`, ORACLE_GOV, ORACLE, 'set-fee', [uintCV(F)], { ok: true });
+      await setOracleFee(`K5 oracle governance set-fee ${F}`, F);
       check(`K5 oracle fee = ${F}`, (await evalIn(ORACLE, '(get-fee)')) === F);
       if ((await stxBal(VAULT)) < F * 5n) await stxTransfer(WHALE.y, VAULT, F * 10n);
       await sellPending(RF, 'K5');
@@ -726,7 +763,7 @@ const capOf = (st, edge = EDGE) => {
       const a2 = await snapK();
       const r2 = await call(KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())]);
       check('K5b cap below the fee: rung-withdraw with update aborts, nothing moves', (r2.res?.err !== undefined || r2.vm) && show(a2) === show(await snapK()), show(r2.res ?? r2.vm));
-      await tx('K5 oracle governance set-fee 0 (restore)', ORACLE_GOV, ORACLE, 'set-fee', [uintCV(0n)], { ok: true });
+      await setOracleFee('K5 oracle governance set-fee 0 (restore)', 0n);
       await tx('K5 owner set-max-oracle-fee 0 (restore)', NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(0n)], { ok: true });
       await freshUpd();
       await tx(`K5b cleanup: rung-withdraw ${tf} with update at fee 0`, KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())], OK);
@@ -788,6 +825,15 @@ const capOf = (st, edge = EDGE) => {
   (begin (and (is-eq (var-get mode) u1) (try! (stx-transfer? u1 tx-sender current-contract))) (ok u0)))
 (define-public (cancel-token-x-deposit (t <ft-trait>) (n (string-ascii 128)))
   (begin (and (is-eq (var-get mode) u1) (try! (contract-call? '${SBTC} transfer u1 tx-sender current-contract none))) (ok u0)))
+;; reads the vault's drop-stale-buy-back makes on MARKET (b03d312)
+(define-map pd principal { amount: uint, limit: uint, spread-bps: (optional uint), submitted-at: uint })
+(define-map pl principal { limit: uint, spread-bps: (optional uint), submitted-at: uint })
+(define-read-only (get-token-y-limit (who principal)) u0)
+(define-read-only (get-token-x-limit (who principal)) u0)
+(define-read-only (get-token-y-pending-deposit (who principal)) (map-get? pd who))
+(define-read-only (get-token-x-pending-deposit (who principal)) (map-get? pd who))
+(define-read-only (get-token-y-pending-limit (who principal)) (map-get? pl who))
+(define-read-only (get-token-x-pending-limit (who principal)) (map-get? pl who))
 `;
   }
 }

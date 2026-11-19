@@ -18,7 +18,7 @@ export {
 };
 
 export const NODE = process.env.STACKS_NODE || 'http://77.42.3.101/stacks-api';
-export const MARKET = `${DEP}.markets-sbtc-usdcx-jing-v6-4`;
+export const MARKET = `${DEP}.markets-sbtc-usdcx-jing-v6-5`;
 export const USDCX = 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx';
 // x = sBTC whale, y = USDCx whale, stx = STX whale (tx fees are 0 on stxer; STX only funds accounts)
 export const WHALE = { x: 'SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2', y: 'SP13JV946AF23WA94SVANA8D6VRTTYEWCJJ8Q5YMJ', stx: 'SP354663MXNWN2B6HKNBYD8JBNJK2ZNBZE764X1RR' };

@@ -9,6 +9,8 @@
 //   G    realized profit per buy-back fill (received > inventory closed)
 //   I    hostile contracts also try to pull STX: with max-oracle-fee u0
 //        every STX pull aborts
+//   SO swap-open (see _yg-swap-open.js), before SC and K
+//   SC   swap-close (see _yg-swap-close.js), before K
 //   K    oracle-fee allowance (STX): max-oracle-fee auth; fee-0 update path;
 //        none while pending (u7012); oracle charging F (governance
 //        impersonated): cap 0 aborts, cap F pays exactly F and succeeds,
@@ -33,6 +35,9 @@ import {
   usdcxBal, usdcxTransfer, USDCX,
 } from './_yg-loop-usdcx-common.js';
 import { submitSimulationSteps } from 'stxer';
+import { setOracleFee } from './_yg-oracle-fee.js';
+import { swapOpenGroup } from './_yg-swap-open.js';
+import { swapCloseGroup, usdcxPair } from './_yg-swap-close.js';
 
 const MAX_UINT = 2n ** 128n - 1n;
 const other = (t) => (t === 'x' ? 'y' : 'x');
@@ -44,7 +49,7 @@ export async function runSide(cfg) {
   const OWNER = mk(cfg.seed), KEEPER = mk(cfg.seed + 1), STRANGER = mk(cfg.seed + 2), NEW_OWNER = mk(cfg.seed + 3);
   let takerN = cfg.seed + 10;
   const VAULT = `${OWNER}.${cfg.name}`;
-  const RUNG = (b) => `${DEP}.${cfg.rungPrefix}${b}`;
+  const RUNG = (b) => `${DEP}.${cfg.rungPrefix}${b}${cfg.rungSuffix ?? ''}`;
   const R1 = RUNG(1);
   const e = (k) => E(cfg.errBase + k);
   const ERR = { NOT_OWNER: 1, NOT_AUTH: 2, NOT_PENDING: 3, PAUSED: 4, BAD_RUNG: 5, ZERO: 6, NO_INV: 8, OVER_INV: 9, BAD_SPREAD: 10 };
@@ -450,6 +455,22 @@ const capOf = (st, edge = EDGE) => {
     await settlePending(sold, RA, ta);
     let f = await forceFill(sold, RA, 0.3, 'J1 fill ~30%'); addFill(f);
     // J1: first call = sell more (deposit); the top-up stays pending on the market
+    // J2 needs the J1 top-up to go pending: on this market a deposit only goes
+    // pending while the other side has depositors (the J1 taker can empty it).
+    // Seed a far opposite-side order first (never fills), as K0 does.
+    {
+      const o = other(sold), cyc = await curCycle();
+      if ((await evalIn(MARKET, `(get-token-${o}-depositors u${cyc})`)).length === 0) {
+        const SEED = mk(cfg.seed + 7);
+        const amt = o === 'x' ? 1_100n : 1_100_000n;
+        await freshUpd(true);
+        const lim = o === 'x' ? S.MID * 3n : 1n; // ask at 3x mid / bid at 1
+        await stxTransfer(WHALE.stx, SEED, 1_000_000n);
+        await fund(o, SEED, amt);
+        await tx(`J2 setup: seed a far ${o} order (limit ${lim}) so the top-up goes pending`, SEED, MARKET, `deposit-token-${o}`, [uintCV(amt), uintCV(lim), noneCV(), T[o], A[o]], { ok: amt });
+        await settlePending(o, SEED, 'J2 seed');
+      }
+    }
     addBook(await booked('J1 first call after fill = sell more', KEEPER, RA, 'sell', [P_(RA), uintCV(cfg.perRung)], cfg.perRung));
     const pend = await pendOf(sold, RA);
     check('J2 setup: the top-up is still pending on the market', !!pend, show(pend));
@@ -649,7 +670,7 @@ const capOf = (st, edge = EDGE) => {
   // ---------------------------------------------------------------- I ----
   setGroup('I allowances (hostile rung + hostile market variant)');
   const EVR = `${OWNER}.yg-evil-rung-${cfg.side}`, EVM = `${OWNER}.yg-evil-market-${cfg.side}`, VV = `${OWNER}.yg-variant-${cfg.side}`;
-  const r90 = `SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.${cfg.rungPrefix}90`;
+  const r90 = RUNG(90);
   const vsrc = src.split(r90).join(EVR).replace(/\(define-constant MARKET '[^)]+\)/, `(define-constant MARKET '${EVM})`);
   const mode = (c, m) => tx(`set ${c.split('.')[1]} mode ${m}`, OWNER, c, 'set-mode', [uintCV(m)], { ok: true });
   {
@@ -702,6 +723,23 @@ const capOf = (st, edge = EDGE) => {
     check('variant STX gift untouched', (await stxBal(VV)) === STX_GIFT);
   }
 
+  // ---------------------------------------------------------------- SO ---
+  // Active entries before SC changes AMM prices and K advances the fork clock.
+  await swapOpenGroup({
+    cfg, src, MARKET, KEEPER, STRANGER, T, A, RUNG, invGot, invSold, bal, fund,
+    fundStx: (who, amt) => stxTransfer(WHALE.stx, who, amt),
+    forceFill, settlePending, freshUpd, updCV, pair: usdcxPair(WHALE),
+  });
+
+  // ---------------------------------------------------------------- SC ---
+  // swap-close on a fresh vault (owner mk(seed + 5)); runs before K, whose
+  // +25 h clock jump leaves no fresh Lazer update. See _yg-swap-close.js.
+  await swapCloseGroup({
+    cfg, src, MARKET, KEEPER, STRANGER, T, A, RUNG, invGot, invSold, bal, fund,
+    fundStx: (who, amt) => stxTransfer(WHALE.stx, who, amt),
+    forceFill, settlePending, freshUpd, updCV, pair: usdcxPair(WHALE),
+  });
+
   // ---------------------------------------------------------------- K ----
   // rung-withdraw carries a Lazer update the rung uses to settle its own
   // pending market order; the oracle charges its fee to tx-sender (the
@@ -714,7 +752,6 @@ const capOf = (st, edge = EDGE) => {
   let lLeft = 0n, feePaid = 0n;
   {
     const ORACLE = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8.pyth-lazer-oracle';
-    const ORACLE_GOV = 'SPMV5HDZ4EMB8XY7HAYT3XW0DF7DZ4E8XEG2J1T8';
     const RK = RUNG(70), RF = RUNG(80), tk = `${cfg.rungPrefix}70`, tf = `${cfg.rungPrefix}80`;
     must(`${tk} and ${tf}: vault has no principal left`, (await rr(RK)) === 0n && (await rp(RK)) === 0n && (await rr(RF)) === 0n && (await rp(RF)) === 0n);
     // seed: a far opposite-side order, so rung deposits go pending (never fills)
@@ -759,12 +796,10 @@ const capOf = (st, edge = EDGE) => {
     const pK = await sellPending(RK, 'K3');
     await tx('K3 rung-withdraw with none while pending < 24 h -> rung ERR_UPDATE_REQUIRED u7012', KEEPER, VAULT, 'rung-withdraw', [P_(RK), ALL, noneCV()], E(7012));
     // K5: fee > 0 (oracle governance impersonated on the fork)
-    const gov = await evalIn(ORACLE, `(has-role '${ORACLE_GOV} 0x00)`);
-    if (!gov) note(`K5 skipped: ${ORACLE_GOV} no longer holds oracle governance`);
-    else {
+    {
       const F = 1_000n;
       const RCP = await evalIn(ORACLE, '(get-fee-recipient)');
-      await tx(`K5 oracle governance set-fee ${F}`, ORACLE_GOV, ORACLE, 'set-fee', [uintCV(F)], { ok: true });
+      await setOracleFee(`K5 oracle governance set-fee ${F}`, F);
       check(`K5 oracle fee = ${F}`, (await evalIn(ORACLE, '(get-fee)')) === F);
       check(`K5 the vault holds STX to pay from (${await stxBal(VAULT)} >= ${F})`, (await stxBal(VAULT)) >= F);
       await sellPending(RF, 'K5');
@@ -790,7 +825,7 @@ const capOf = (st, edge = EDGE) => {
       const a2 = await snapK();
       const r2 = await call(KEEPER, VAULT, 'rung-withdraw', [P_(RF), ALL, someCV(updCV())]);
       check('K5b fee above max-oracle-fee: rung-withdraw with update aborts, nothing moves', (r2.res?.err !== undefined || r2.vm) && show(a2) === show(await snapK()), show(r2.res ?? r2.vm));
-      await tx('K5 oracle governance set-fee 0 (restore)', ORACLE_GOV, ORACLE, 'set-fee', [uintCV(0n)], { ok: true });
+      await setOracleFee('K5 oracle governance set-fee 0 (restore)', 0n);
       await tx('K5 owner set-max-oracle-fee 0 (restore)', NEW_OWNER, VAULT, 'set-max-oracle-fee', [uintCV(0n)], { ok: true });
       await freshUpd();
       const x1 = await stxBal(VAULT);

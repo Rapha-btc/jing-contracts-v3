@@ -12,7 +12,7 @@ import { fetchLazerUpdateAny, lazerFeedTimes } from './_lazer.js';
 
 export const NODE = process.env.STACKS_NODE || 'http://77.42.3.101/stacks-api';
 export const DEP = 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22';
-export const MARKET = `${DEP}.markets-sbtc-stx-jing-v6-4`;
+export const MARKET = `${DEP}.markets-sbtc-stx-jing-v6-5`;
 export const SBTC = 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token';
 export const WSTX = 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2';
 export const WHALE = { x: 'SP2C7BCAP2NH3EYWCCVHJ6K0DMZBXDFKQ56KR7QN2', y: 'SP354663MXNWN2B6HKNBYD8JBNJK2ZNBZE764X1RR' };

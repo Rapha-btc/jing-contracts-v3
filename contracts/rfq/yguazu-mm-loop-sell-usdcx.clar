@@ -32,6 +32,7 @@
 (define-constant ERR_BAD_SPREAD (err u8210))
 (define-constant ERR_ZERO_FLOOR (err u8211))
 (define-constant ERR_BELOW_FLOOR (err u8212))
+(define-constant ERR_NO_TREASURY (err u8213))
 
 (use-trait rung-trait 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.jing-rung-deposit-trait.rung-trait)
 
@@ -79,6 +80,8 @@
 ;; rung settles its pending order with it). The fee is 0 today; the owner
 ;; raises this only if the oracle starts charging.
 (define-data-var max-oracle-fee uint u0)
+;; yguazu-treasury: may pull this loop's idle starting asset (to-treasury)
+(define-data-var treasury (optional principal) none)
 
 ;; Why these two: they set the least the buy-back ask may accept, so it never
 ;; buys USDCx back at a loss. Only their ratio matters: VWAP sell = inv-usdcx *
@@ -584,6 +587,73 @@
   )
 )
 
+;; swap-open: active entry. The owner buys sBTC with vault USDCx straight through the
+;; Jing router (manual split: jing-amount + amm-amounts, as swap-close does)
+;; instead of waiting for a resting rung to fill. The real amounts spent and
+;; received are booked into the inventory exactly like a rung fill (book-rung),
+;; so the keeper exits it with buy-back / swap-close at the buy-back floor (VWAP buy + edge).
+;; Owner only: an entry is a discretionary call, the keeper only runs exits.
+;; min-sbtc-out guards slippage. Any STX oracle fee the router charges comes out
+;; of the vault's STX (max-oracle-fee bounds it).
+(define-public (swap-open
+    (amount uint)
+    (jing-amount uint)
+    (limit-price uint)
+    (update (optional (buff 8192)))
+    (fallback (optional uint))
+    (amm-amounts {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (amm-mins {
+      dlmm: uint,
+      xyk: uint,
+      velar: uint,
+    })
+    (min-sbtc-out uint)
+  )
+  (begin
+    (try! (check-owner))
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (reconcile-inner)
+    (let (
+        (spend0 (usdcx-held))
+        (gain0 (sbtc-held))
+      )
+      (try! (as-contract? ((with-ft USDCX USDCX_NAME amount) (with-stx (var-get max-oracle-fee)))
+        (try! (contract-call? ROUTER swap-usdcx-for-sbtc amount jing-amount limit-price update
+          fallback amm-amounts amm-mins min-sbtc-out
+        ))
+      ))
+      (let (
+          (spend1 (usdcx-held))
+          (gain1 (sbtc-held))
+          (usdcx-in (if (> spend0 spend1) (- spend0 spend1) u0))
+          (sats-out (if (> gain1 gain0) (- gain1 gain0) u0))
+        )
+        (asserts! (> usdcx-in u0) ERR_ZERO_AMOUNT)
+        (asserts! (> sats-out u0) ERR_ZERO_AMOUNT)
+        (var-set inv-usdcx (+ (var-get inv-usdcx) usdcx-in))
+        (var-set inv-sats (+ (var-get inv-sats) sats-out))
+        (drop-stale-buy-back)
+        (print {
+          event: "yg-swap-open",
+          caller: contract-caller,
+          usdcx-in: usdcx-in,
+          sats-out: sats-out,
+          inv-sats: (var-get inv-sats),
+          vwap-sell: (vwap-sell),
+        })
+        (ok {
+          usdcx-in: usdcx-in,
+          sats-out: sats-out,
+        })
+      )
+    )
+  )
+)
+
 ;; swap-close: spend open sBTC proceeds straight through the Jing router
 ;; (manual split: jing-amount + amm-amounts, as the arbs do) instead of waiting
 ;; for the buy-back to fill. Any resting buy-back is pulled back first, so the
@@ -706,6 +776,44 @@
     (reconcile-inner)
     (print {
       event: "yg-withdraw-sbtc",
+      to: to,
+      amount: amount,
+    })
+    (ok amount)
+  )
+)
+
+;; ---------------------------------------------------------------- treasury
+
+(define-read-only (get-treasury)
+  (var-get treasury)
+)
+
+(define-public (set-treasury (who (optional principal)))
+  (begin
+    (try! (check-owner))
+    (var-set treasury who)
+    (print {
+      event: "yg-set-treasury",
+      treasury: who,
+    })
+    (ok true)
+  )
+)
+
+;; Send idle USDCx (this loop's starting asset) to the treasury, and only
+;; there, so the owner can reshuffle capital between loops without a
+;; withdraw. Owner or the treasury itself. Inventory is never touched.
+(define-public (to-treasury (amount uint))
+  (let ((to (unwrap! (var-get treasury) ERR_NO_TREASURY)))
+    (asserts! (or (is-owner) (is-eq contract-caller to)) ERR_NOT_AUTHORIZED)
+    (asserts! (> amount u0) ERR_ZERO_AMOUNT)
+    (try! (as-contract? ((with-ft USDCX USDCX_NAME amount))
+      (try! (contract-call? USDCX transfer amount current-contract to none))
+    ))
+    (print {
+      event: "yg-to-treasury",
+      caller: contract-caller,
       to: to,
       amount: amount,
     })
