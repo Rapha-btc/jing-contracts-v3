@@ -317,7 +317,7 @@
             out: u0,
           }
         )
-      ))
+      )))
       (asserts! (>= (get out r) (scale-min min-received amount (get in r)))
         ERR_MIN_OUT
       )
