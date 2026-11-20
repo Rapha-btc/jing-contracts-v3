@@ -248,6 +248,27 @@ update older than ~30 s (taker rebate above 20 bps, u16048). `router-swap-split`
 is DAO-only: the DAO passes a fresh update itself. Decided in the ccip028 bounty
 (`citycoins-protocol/README-audit-bounty-ccip028.md`).
 
+## Test runs (2026-11-20, after the fixes)
+
+Router v6 is live (block 9525511), so the router harnesses deploy the repo bytes
+(= 4593bbb, the deployed commit) under `ROUTER_AS=swap-router-sbtc-stx-jing-v6-sim`.
+
+| Repo | Suite | Result | stxer |
+|---|---|---|---|
+| jing-contracts-v3 | `verify-router-sbtc-stx-v6-zest.mjs` (`FORK_BLOCK=9530361`) | 267/267 | https://stxer.xyz/simulations/mainnet/e94864779dfabb08c61f7d526689b43c |
+| jing-contracts-v3 | same at the tip (9530391) | 263/267: 4 checks (worst split unsold, read_count ~81%) depend on DLMM pool 1's active-bin depth (20.5B vs 146B uSTX); same on pre- and post-fix bytes | https://stxer.xyz/simulations/mainnet/17645affea118a46cdbb7c5a551500c0 |
+| jing-contracts-v3 | `verify-router-sbtc-stx-v6-zest-nopool.mjs` | 127/127 | https://stxer.xyz/simulations/mainnet/8f811e55ac5875b49d0dffea963b5d1b |
+| jing-contracts-v3 | `verify-zest-dust-slack.mjs` (#5) | 22/22, worst slack 5 sats at the default sizes; 10 sats for a 10-sat sale at u1000 | https://stxer.xyz/simulations/mainnet/b08e3554ba67d015522c1bc54d6a665d |
+| fastpool-pox-5 | `pool-vault-stx-stxer.mjs` (fork / `--lifecycle`), live trait-v4 + router v6 | 33/33, 47/47 | https://stxer.xyz/simulations/mainnet/c940063b3c17b741697a85f53ff4774e, https://stxer.xyz/simulations/mainnet/ec28035a2157e61eb7f0b8b63d9e0a70 |
+| fastpool-pox-5 | `npx vitest run` / vault-stx suite | 49 passed (1 skipped) / 1/1 | – |
+| citycoins-protocol | `npm run test:vault` | 27/27 | – |
+| citycoins-protocol | stxer coverage / emergency / negatives / ccip028 activation | 113/113, 41/41, 123/123, 48/48 | https://stxer.xyz/simulations/mainnet/84975784c457b482e5a568128fa07835, https://stxer.xyz/simulations/mainnet/9fad0f24af0e4e174401866d46269ace, https://stxer.xyz/simulations/mainnet/847d524bc3bb5444ad893a78fd7b5eb7, https://stxer.xyz/simulations/mainnet/547d85a0f46c6c9b946f2717c85a85f5 |
+| juicestx | `autoswap-v2-stxer.mjs` with u72 | 78/78 (u72 then not shipped) | https://stxer.xyz/simulations/mainnet/42bef384d1af1bd7dd2dee72d3b1f305 |
+
+Harness flags added in this repo: `ROUTER_AS` (deploy the router under another
+name, v6 being live), `ZEST_FEE` (pool u3 fee, default 1%), `ROUTER_FIX=reed`
+(cost-measure Reed's clamp, #1), `FORK_BLOCK` (pin the fork height).
+
 ## Parked fixes (revisit if)
 
 Fixes the submitters proposed that we did not adopt, kept here so a later

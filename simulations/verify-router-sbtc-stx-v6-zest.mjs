@@ -42,7 +42,11 @@ const ZID = 3;
 const DLMM_CORE = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
 const DPOOLS = [1, 2, 3].map((n) => `SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-${n}-bps-15`);
 const N = { router: 'swap-router-sbtc-stx-jing-v6' };
-const C = { router: `${DEP}.${N.router}` };
+// v6 is live on mainnet under N.router: ROUTER_AS deploys the repo bytes under another name
+const AS = process.env.ROUTER_AS || N.router;
+// ZEST_FEE: pool 3 fee (1e8 = 100%); default 1% as the harness was written, u300000 = pool 1's 0.3%
+const ZFEE = process.env.ZEST_FEE || '1000000';
+const C = { router: `${DEP}.${AS}` };
 const src = (f) => readFileSync(new URL(`../contracts/sbtc-stx/${f}.clar`, import.meta.url), 'utf8');
 const UMAX = 340282366920938463463374607431768211455n;
 const L2W = 100_000_000n, ZMAX = 10n ** 21n, F1 = 100_000_000n, PS = 10_000_000_000n;
@@ -90,7 +94,9 @@ const sbtcPc = (who) => Pc.principal(who);
 try {
   // ---- first state change: create Zest pool 3 (x = wstx / y = sbtc-token, bin step 100, 1% / 1%, rebate 100%)
   const b = SimulationBuilder.new({ stacksNodeAPI: NODE });
-  b.withSender(DEP).addEvalCode(ZEXEC, `(as-contract? () (try! (contract-call? '${ZPOOL} create-pool '${ZWSTX} '${SBTC} u100 u1000000 u1000000 u100000000)))`);
+  // FORK_BLOCK pins the parent block (default tip): live DLMM depth moves block to block
+  if (process.env.FORK_BLOCK) b.useBlockHeight(Number(process.env.FORK_BLOCK));
+  b.withSender(DEP).addEvalCode(ZEXEC, `(as-contract? () (try! (contract-call? '${ZPOOL} create-pool '${ZWSTX} '${SBTC} u100 u${ZFEE} u${ZFEE} u100000000)))`);
   S.sid = await retry(() => b.run());
   console.log(`View: https://stxer.xyz/simulations/mainnet/${S.sid}`);
 
@@ -103,7 +109,7 @@ try {
   const pool = await evalIn(ZPOOL, `(get-pool u${ZID})`);
   must('pool 3 = Zest wstx (x, native-x) / sbtc-token (y), bin step 100, 1%/1%, rebate 1e8, live, public',
     pool?.['token-x'] === ZWSTX && pool?.['token-y'] === SBTC && pool?.['bin-step'] === 100n && pool?.['native-x'] === true && pool?.['native-y'] === false
-    && pool?.['fee-rate-x'] === 1_000_000n && pool?.['fee-rate-y'] === 1_000_000n && pool?.['fee-rebate'] === 100_000_000n
+    && pool?.['fee-rate-x'] === BigInt(ZFEE) && pool?.['fee-rate-y'] === BigInt(ZFEE) && pool?.['fee-rebate'] === 100_000_000n
     && pool?.paused === false && pool?.sunset === false && pool?.depositor === null, show(pool));
   check('pool-id-by-token {wstx, sbtc, 100} = u3', (await evalIn(ZPOOL, `(get-pool-id { token-x: '${ZWSTX}, token-y: '${SBTC}, bin-step: u100 })`)) === 3n);
   console.log(`  pool 1 ${show(await evalIn(ZPOOL, '(get-pool u1)'))}`);
@@ -122,7 +128,18 @@ try {
     rsrc = rsrc.replace(BAD, BAD.replace('      ))', '      )))'));
     note(`CONTRACT BUG: repo ${N.router}.clar is unbalanced (depth ${parenDepth(src(N.router))}); deployed with leg-zest ')' added (now depth ${parenDepth(rsrc)})`);
   }
-  await deploy(DEP, N.router, rsrc);
+  // ROUTER_FIX=reed: Patient Reed's suggested guard (bounty mwofjt42), cost-measure only. The Zest bound
+  // is clamped to the mid (selling sBTC: min-price >= mid; selling STX: max-price <= mid), so a Zest
+  // fill never prices worse than mid before its fee. Checks that expect fills at the limit then fail by
+  // design; compare the cost table rows against a plain run.
+  if (process.env.ROUTER_FIX === 'reed') {
+    const FROM = '          (bound (if (and sane (< fee ZEST_FEE_ONE))\n            (zest-bound limit fee sell-sbtc)\n            u0\n          ))';
+    const TO = '          (bound (if (and sane (< fee ZEST_FEE_ONE))\n            (let ((b (zest-bound limit fee sell-sbtc)))\n              (if sell-sbtc\n                (if (> mid-wad b) mid-wad b)\n                (if (and (> mid-wad u0) (< mid-wad b)) mid-wad b)\n              )\n            )\n            u0\n          ))';
+    must('zest-stage-pool bound site found exactly once', rsrc.split(FROM).length === 2);
+    rsrc = rsrc.replace(FROM, TO);
+    note('ROUTER_FIX=reed: Zest bound clamped to mid (cost measure)');
+  }
+  await deploy(DEP, AS, rsrc);
 
   // ---- live DLMM mid (deepest pool's active bin) -> Zest tick of the mid
   group('mid + tick math');

@@ -13,7 +13,7 @@
 //     list = DLMM-only; amm-mins.zest > 0 scales to 0 (no u3002)
 // Price units: router limit = uSTX per sat x 1e10; Zest WAD = limit x 1e8;
 // DLMM bin price = sats per uSTX x 1e8 (limit = 1e18 / p).
-// Run: node simulations/verify-router-sbtc-stx-v6-zest-nopool.mjs
+// Run: ROUTER_AS=swap-router-sbtc-stx-jing-v6-sim node simulations/verify-router-sbtc-stx-v6-zest-nopool.mjs
 import { readFileSync } from 'node:fs';
 import {
   uintCV, intCV, noneCV, someCV, tupleCV, listCV, Pc, PostConditionMode,
@@ -29,7 +29,9 @@ const ZID = 3;
 const DLMM_CORE = 'SP1PFR4V08H1RAZXREBGFFQ59WB739XM8VVGTFSEA.dlmm-core-v-1-1';
 const DPOOLS = [1, 2, 3].map((n) => `SM1FKXGNZJWSTWDWXQZJNF7B5TV5ZB235JTCXYXKD.dlmm-pool-stx-sbtc-v-${n}-bps-15`);
 const N = { router: 'swap-router-sbtc-stx-jing-v6' };
-const C = { router: `${DEP}.${N.router}` };
+// v6 is live on mainnet under N.router: ROUTER_AS deploys the repo bytes under another name
+const AS = process.env.ROUTER_AS || N.router;
+const C = { router: `${DEP}.${AS}` };
 const src = (f) => readFileSync(new URL(`../contracts/sbtc-stx/${f}.clar`, import.meta.url), 'utf8');
 const UMAX = 340282366920938463463374607431768211455n;
 const L2W = 100_000_000n, PS = 10_000_000_000n;
@@ -83,7 +85,7 @@ try {
   group('deploy');
   const rsrc = src(N.router);
   must('repo router source is paren-balanced', parenDepth(rsrc) === 0, `depth ${parenDepth(rsrc)}`);
-  await deploy(DEP, N.router, rsrc);
+  await deploy(DEP, AS, rsrc);
   check('ZEST_POOL_ID = u3', (await evalIn(C.router, 'ZEST_POOL_ID')) === 3n);
 
   group('mid + ticks');
