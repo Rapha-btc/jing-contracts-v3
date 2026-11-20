@@ -21,7 +21,7 @@ Status: triage of the first 16 done 2026-11-20; bounty left open, nobody paid ye
 | 2 | Vault splits pass fallback `none` and count the whole planned Zest (and Jing) slice in the min-out they send the router, so a partial fill, which router v6 allows, reverts the whole split (u3002) | Ruby Harp (2026-11-19 22:58); also Patient Reed Info 2 (22:52) | **Fixed in the vaults**, see below. |
 | 3 | The router hardcodes Zest pool `u3` as the bin-step-100 STX/sBTC pool and never checks its tokens or bin step; any other pool there makes every smart swap / vault `router-swap` skip Zest for good (immutable router) | Frosty Narwhal (2026-11-19 23:08) | **No change, by design**, see below. |
 | 4 | Zest's split floor (1%) breaks the vaults' own `floor <= 2 x venue fee` sandwich rule that gives Velar 60 bps; at a 0.3% u3 fee Zest should get 60 bps too | Vigilant Salmon (2026-11-19 23:57) | **Valid, no change**, see below. |
-| 5 | Zest dust bins can make a small vault `router-swap` lose more than `ROUTER_SLACK_SATS u8` to per-bin rounding, so the sale reverts (u16047) | Valiant Brio F-01 (2026-11-20 00:05) | **Fixed in the vaults** (u72), see below. |
+| 5 | Zest dust bins can make a small vault `router-swap` lose more than `ROUTER_SLACK_SATS u8` to per-bin rounding, so the sale reverts (u16047) | Valiant Brio F-01 (2026-11-20 00:05) | **Fixed in Fastpool + MIA** (u72); Juice no change, see below. |
 | 6 | Router `dlmm-pick` final tie-break lacks the `e1` / `e2` depth guards the USDCx routers have | Valiant Brio P-01 (00:05); Lunar Ox (04:34) | **Rejected, no impact**, see below. |
 | 7 | MIA Zest split leg is floored only on its total (fill-weighted), not per bin | Wide Sky F1 (01:40) | **Rejected, by design**, see below. |
 | 8 | Caller Zest ticks are never validated on chain; a bad walk reverts the split (u3002) | Wide Sky F2 (01:40) | **Fixed by #2**, see below. |
@@ -180,9 +180,15 @@ each of the 32 STX bins below tick(mid), smart swaps at the vault floor):
 `sold > ROUTER_SLACK_SATS` (smallest sellable chunk 73 sats) and, in ccd016, the
 unsellable-dust bound for a window restart (72 / 73-sat boundary tests).
 Fastpool 0fe7747, MIA 4a4123c (vault suite 27/27; stxer coverage 113/113,
-emergency 41/41, negatives 123/123). Juice: u72 in the repo, stxer 78/78
-(https://stxer.xyz/simulations/mainnet/42bef384d1af1bd7dd2dee72d3b1f305); the
-live autoswap v2 keeps u8, which is never hit at its 1% slippage.
+emergency 41/41, negatives 123/123).
+
+**Juice: no change, no redeploy.** `juice-sbtc-autoswap-v2` is live with u8 and
+stays. At its 1% slippage the sim needs 0 sats of slack at every size, so the
+bug only appears if the pool admin raises `slippage-bps` to ~5%+ and a chunk is
+~10 sats, and then the sale only reverts (the keeper retries, nothing is lost).
+Not worth a new autoswap. If Juice ever ships a new autoswap for another
+reason, take u72 then: it was tested on stxer, 78/78 including the 72 / 73-sat
+boundary (https://stxer.xyz/simulations/mainnet/42bef384d1af1bd7dd2dee72d3b1f305).
 
 Credit: valid, LOW (liveness, only at loose slippage on tiny chunks).
 
