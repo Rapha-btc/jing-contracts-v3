@@ -368,7 +368,10 @@ try {
   }
   await stxTransfer(WHALE.y, TAKER, 600_000_000_000n); // 600k STX: pinned cases + worst-case cost runs
   // tight limit = few ticks: 0.3% inside Zest's live net price -> window tick(mid)-2 .. tick(max-price)+1 stays short
-  const zt = await zNet(true);
+  // capped at mid: a dust USDCx bin below tick(mid) (seen 2026-11-20) can quote
+  // zNet above mid, and a sell limit above mid leaves the walk window empty
+  const zn = await zNet(true);
+  const zt = zn < mid ? zn : mid;
   await smart(`smart STX->USDCx 1 STX, limit ${zt * 997n / 1000n} (0.3% inside live Zest): few ticks`, true, 1_000_000n, (zt * 997n) / 1000n, 0n,
     function fewTicksAndFills(k, pr) { return pr['zest-ticks'] > 0n && pr['zest-ticks'] <= 6n && k['zest-in'] > 0n; });
   for (const sell of [true, false]) {
