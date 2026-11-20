@@ -8,6 +8,30 @@ verified-contract registry flow + a market-specific scenario, and runs
 documented below — `MAX_DEPOSITORS` patched in the queue-full sim and
 nothing else).
 
+## sBTC/STX router v6: Zest CLMM pool u3 (2026-11-19)
+
+`contracts/sbtc-stx/swap-router-sbtc-stx-jing-v6.clar` adds the Zest CLMM
+STX/sBTC pool as a venue. The pool is not on mainnet yet (pool count is 2).
+Emil (Zest) confirmed on 2026-11-19 that it will be id `u3` with the same fee
+structure and token setup as the STX/USDCx pool 1: token-x = Zest `wstx`,
+token-y = sBTC. So the router passes wstx as x and sBTC as y. Zest's price is
+uSTX per sat x 1e18, the same orientation as limit-price (x 1e10), so the WAD
+bound is `limit x 1e8`. Selling sBTC calls `swap-y-for-x` (ticks walk down,
+`min-price`); selling STX calls `swap-x-for-y` (ticks walk up, `max-price`).
+
+`ZEST_MAX_LIMIT` (1e21) caps limit and mid. The old code divided
+(`1e28 / limit`), so a huge limit only gave a 0 bound and skipped Zest. The new
+code multiplies, and a huge limit would overflow and abort the whole swap; the
+cap skips the Zest stage instead.
+
+The harness creates pool 3 on the fork as `executor-dao` (`create-pool wstx
+sbtc u100 ...` -> `(ok u3)`), seeds a band around the live mid, and covers the
+same groups as before plus 32 checks on the `ZEST_MAX_LIMIT` skip.
+
+| Harness | N/M | Evidence |
+|---|---:|---|
+| `verify-router-sbtc-stx-v6-zest.mjs` | 267/267 | [run](https://stxer.xyz/simulations/mainnet/745db6e2ed0e31fb72901d496814262a) |
+
 ## STX/USDCx router v6: Zest CLMM venue (2026-11-10)
 
 `contracts/stx-usdcx/swap-router-stx-usdcx-jing-v6.clar` is v5-5 plus Zest's
