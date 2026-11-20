@@ -31,6 +31,7 @@ same groups as before plus 32 checks on the `ZEST_MAX_LIMIT` skip.
 | Harness | N/M | Evidence |
 |---|---:|---|
 | `verify-router-sbtc-stx-v6-zest.mjs` | 267/267 | [run](https://stxer.xyz/simulations/mainnet/745db6e2ed0e31fb72901d496814262a) |
+| `verify-router-sbtc-stx-v6-zest-nopool.mjs` (pool 3 never created: router deployed first, Zest skipped both ways, smart + split) | 127/127 | [run](https://stxer.xyz/simulations/mainnet/b90aff52aa50a4a9bbd86f07ff49c366) |
 
 ## STX/USDCx router v6: Zest CLMM venue (2026-11-10)
 
