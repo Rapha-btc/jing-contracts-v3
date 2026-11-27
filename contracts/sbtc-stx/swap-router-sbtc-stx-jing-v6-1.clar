@@ -379,7 +379,9 @@
   )
   (if (or (is-eq planned u0) (is-eq actual planned))
     min-received
-    (/ (* min-received actual) planned)
+    ;; rounded up, so a partial fill never clears below the caller's price
+    ;; (bounty mwofjt42 #31, Little Orb)
+    (/ (+ (* min-received actual) (- planned u1)) planned)
   )
 )
 
