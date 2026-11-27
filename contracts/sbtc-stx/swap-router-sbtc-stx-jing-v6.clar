@@ -1,3 +1,32 @@
+;; SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.swap-router-sbtc-stx-jing-v6
+;; v6: v5-6 + Zest CLMM STX/sBTC venue (the bin-step-100 pool, id u3
+;; hardcoded as ZEST_POOL_ID, on
+;; SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1, x = Zest
+;; `wstx`, y = sBTC, same layout as the STX/USDCx pool 1), ported from
+;; swap-router-stx-usdcx-jing-v6.
+;;
+;; Smart swaps: Jing -> Zest -> DLMM -> cp, each stage on what the previous
+;; left. Zest has no active bin: the stage walks up to 32 ticks from
+;; tick(mid) +/- 2 to one past tick(bound), bound = limit-price (uSTX per
+;; sat x 1e10) scaled to Zest's WAD uSTX per sat (limit x 1e8) with
+;; the user's Zest fee folded in, rounded against the user. Partial fill on, min 0; dust, no ticks, oversized
+;; limit/mid, or any Zest err give in = out = 0 and the rest goes to DLMM.
+;; Print gains zest-ok / zest-ticks (ticks passed to Zest) / zest-in /
+;; zest-out.
+;;
+;; Split swaps: `amm-amounts` / `amm-mins` gain `zest`, the split check
+;; (u3004) adds it, and a trailing `zest-route { ticks, price }` carries the
+;; FE's walk (selling sBTC = swap-y-for-x, ticks descending, price =
+;; min-price; selling STX = swap-x-for-y, ticks ascending, price =
+;; max-price). Zest runs with partial fill on and min 0; a Zest err counts
+;; as 0; `amm-mins.zest` is scaled to the filled part and asserted (u3002).
+;; The Zest shortfall joins the Jing residual: to the `fallback` venue when
+;; set, else unsold. Zest is not a fallback venue.
+;;
+;; Native STX on the Zest leg: Zest's wstx is a pass-through
+;; `stx-transfer?`; this router never uses as-contract, so STX moves user
+;; <-> clmm-pool-v1 directly. Deny-mode PCs: clmm-pool-v1 sends >= 0
+;; (Zest may fill 0), plus the existing DLMM / XYK / Velar PCs.
 (define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-sbtc-stx-jing-v6-5)
 (define-constant SBTC 'SM3VDXK3WZZSA84XXFKAFAF15NNZX32CTSG82JFQ4.sbtc-token)
 (define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
@@ -30,6 +59,12 @@
 (define-constant ZEST_WSTX 'SP1A27KFY4XERQCCRCARCYD1CC5N7M6688BSYADJ7.wstx)
 (define-constant ZEST_POOL 'SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1)
 
+;; The Zest STX/sBTC 1% pool id on clmm-pool-v1, bin-step 100. The pool is
+;; not created yet (pool count is 2), so this is not checked on-chain. Emil
+;; (Zest) confirmed on 2026-11-19: the pool will be id u3, with the same
+;; fee structure and token setup as the STX/USDCx pool 1, i.e.
+;; token-x = STX (Zest wstx), token-y = sBTC. Every Zest call below passes
+;; ZEST_WSTX as x and SBTC as y on that assumption.
 (define-constant ZEST_POOL_ID u3)
 
 (define-constant ERR_ZERO_AMOUNT (err u3001))
@@ -1235,6 +1270,11 @@
   )
 )
 
+;; Zest CLMM STX/sBTC (pool ZEST_POOL_ID on clmm-pool-v1; x = Zest wstx,
+;; y = sBTC). Zest price = WAD raw x per raw y = uSTX per sat x 1e18, the
+;; same orientation as limit-price (uSTX per sat x 1e10): WAD = limit x 1e8.
+;; A limit or mid above ZEST_MAX_LIMIT (far past any real price) skips the
+;; stage instead of overflowing.
 (define-constant ZEST_LIMIT_TO_WAD u100000000)
 (define-constant ZEST_MAX_LIMIT u1000000000000000000000)
 (define-constant ZEST_FEE_ONE u100000000)
@@ -1246,10 +1286,10 @@
 (define-constant ZEST_TICK_MARGIN 2)
 (define-constant ZEST_FRAC_BITS (list
   u576460752303423488 u288230376151711744 u144115188075855872
-  u72057594037927936 u36028797018963968 u18014398509481984
-  u9007199254740992 u4503599627370496 u2251799813685248
-  u1125899906842624 u562949953421312 u281474976710656
-  u140737488355328 u70368744177664 u35184372088832 u17592186044416
+  u72057594037927936 u36028797018963968 u18014398509481984 u9007199254740992
+  u4503599627370496 u2251799813685248 u1125899906842624 u562949953421312
+  u281474976710656 u140737488355328 u70368744177664 u35184372088832
+  u17592186044416
 ))
 (define-constant ZEST_WALK (list
   u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
@@ -1371,6 +1411,10 @@
   )
 )
 
+;; limit-price (x1e10) -> Zest WAD bound with the user's fee, rounded against
+;; the user. Selling sBTC (y -> x, limit = min uSTX per sat): min-price =
+;; ceil(limit * 1e8 / (1 - fee)); selling STX (x -> y, limit = max uSTX per
+;; sat): max-price = floor(limit * 1e8 * (1 - fee)).
 (define-private (zest-bound
     (limit uint)
     (fee uint)
@@ -1391,8 +1435,8 @@
     (sell-sbtc bool)
   )
   (if sell-sbtc
-    (match (contract-call? ZEST_ROUTER swap-y-for-x ZEST_WSTX SBTC ZEST_POOL_ID left
-      bound ticks u0 true stacks-block-time
+    (match (contract-call? ZEST_ROUTER swap-y-for-x ZEST_WSTX SBTC ZEST_POOL_ID left bound
+      ticks u0 true stacks-block-time
     )
       r {
         ok: true,
@@ -1402,8 +1446,8 @@
       }
       e (merge ZEST_NONE { ticks: (len ticks) })
     )
-    (match (contract-call? ZEST_ROUTER swap-x-for-y ZEST_WSTX SBTC ZEST_POOL_ID left
-      bound ticks u0 true stacks-block-time
+    (match (contract-call? ZEST_ROUTER swap-x-for-y ZEST_WSTX SBTC ZEST_POOL_ID left bound
+      ticks u0 true stacks-block-time
     )
       r {
         ok: true,
@@ -1549,7 +1593,9 @@
         (jing-in (jing-spent jing))
         (zest (zest-stage (- amount jing-in) limit-price mid true))
         (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price true)))
-        (cp (try! (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price true)))
+        (cp (try! (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price
+          true
+        )))
         (out (gain stx-before (stx-get-balance user)))
       )
       (asserts! (>= out min-stx-out) ERR_MIN_OUT)
