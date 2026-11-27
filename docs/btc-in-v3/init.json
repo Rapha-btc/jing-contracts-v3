@@ -1,0 +1,67 @@
+{
+  "checkedAt": "2026-11-27T07:15:53.590Z",
+  "api": "https://api.mainnet.hiro.so",
+  "ready": true,
+  "results": [
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.pepe-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.welsh-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.b-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.mia-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.leo-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.flatearth-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.fakfun-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.lwb-smart-faktory",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-adapter-v3",
+      "fn": "is-approved-target",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.rock-smart-faktory-2",
+      "value": "true"
+    },
+    {
+      "contract": "jing-btc-in-escrow-v6",
+      "fn": "is-keeper",
+      "arg": "SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22",
+      "value": "true"
+    }
+  ]
+}
