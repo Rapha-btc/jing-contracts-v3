@@ -11,7 +11,7 @@ stx-usdcx Zest bounty (`README-audit-bounty-zest-v6.md`) was carried over.
 Sonic Mast, Violet Jaguar, Gusty Gecko, Valiant Sable, Feral Cleo, Lively
 Cougar, Nested Cube). The 8 with findings are triaged one at a time below.
 
-Status: triage of the first 16 done 2026-11-20; bounty left open, nobody paid yet. Leading: Ruby Harp (#2).
+Status: triage of the first 16 done 2026-11-20; round 2 (entries 17-44, 44 submissions total) in progress 2026-11-27, see "Round 2" below. Nobody paid yet. Leading: Ruby Harp (#2).
 
 ## Findings
 
@@ -247,6 +247,23 @@ Galactic Vulture F2. ccd016 `router-swap` is permissionless, so it refuses an
 update older than ~30 s (taker rebate above 20 bps, u16048). `router-swap-split`
 is DAO-only: the DAO passes a fresh update itself. Decided in the ccip028 bounty
 (`citycoins-protocol/README-audit-bounty-ccip028.md`).
+
+## Round 2 (submissions 17-44, triaged 2026-11-27)
+
+Entry numbers below are submission order on the bounty (1-44).
+
+| # | Finding | Submitter | Decision |
+|---|---|---|---|
+| 40 | Zest pool u3 now exists as x = sBTC, y = wstx, the inverse of router v6 (L62-68, L300/L312, L1438/L1449); every Zest call fails `check-tokens` (u2002), is swallowed as 0/0, and every zest > 0 split reverts u3002 | Hardy Finch (2026-11-24 10:47 UTC) | **Known, no payout.** We already knew the layout once u3 was created; the fix is router v6-1 (d2f6cad) and the vaults on it (fastpool 0b4438e). Valid, Medium, but not new to us. |
+| 38 | `DUST_SATS u2` vs `ROUTER_SLACK_SATS u72`: a 3-72 sat leftover can't be sold (router sale needs > slack, u16047) and isn't empty (close-batch u16043), so the cycle's STX waits for the 432-block recovery | Sacred Swan (2026-11-24 08:28 UTC; stxer fork proofs) | **Fixed (uncommitted)**: `DUST_SATS` removed, `ROUTER_SLACK_SATS` is the dust line too, in fastpool-swap-vault and ccd016-swap-vault-mia-v2. Juice v2 is live with u8 / u2: same bug on a 3-8 sat window (batch waits for the 432-block recovery, no loss); not redeployed for it, fix in the next Juice vault. Valid, Low (liveness, nothing lost). |
+| 27 | With a split `fallback`, the router re-sells the market refund (unfilled rest + rebate) and pulls it from the vault again; the split allowance is only `amount + min-x` (fastpool L569, MIA L730), so a refund just over min-x aborts the split | Giant Moth (2026-11-22 00:44 UTC; clarinet-sdk proof) | **Fixed (uncommitted)**: router-swap and both splits now allow `amount + 2 x min-x` (covers the refund: rest < min-x, rebate <= 0.7% of min-x, 51 sats dust); the two rebate constants are removed. Juice v2 passes fallback none: unaffected. Valid, Low (liveness, nothing lost). |
+
+Proof for #38 and #27 (stxer mainnet fork at block 9589221, router v6-1 fork-deployed, pre-fix source vs fixed source on the same book):
+- Fastpool A/B 43/43 <https://stxer.xyz/simulations/mainnet/201e0139a61d54cd4128cfb6176546db>; MIA A/B 38/38 <https://stxer.xyz/simulations/mainnet/e3ac37e3c45a2f79f18e2bc594e001b0>
+- #27: Jing-only split (863,603 sats, fallback DLMM, market refund 999 + 3 = 1,002 sats): pre `(err u0)`, fix ok and vault drained. Permissionless router-swap with the same refund under the new allowance: 10/10 <https://stxer.xyz/simulations/mainnet/c13cf0da8ff45ecc1cc9cf3cc0b6f063>. The Jing partial needed a fork-only whale bid (live book had no fill for a new seller).
+- #38: 50-sat leftover after a 20,000 chunk: pre batch stuck (u16047 / u16043 / finish u16032), fix closes on the sale and finish pays out.
+- Fastpool lifecycle harness on the fixed source: 48/48 <https://stxer.xyz/simulations/mainnet/a75724ca204eb6beaf059408712ad7bb>
+- Harness: fastpool-pox-5 `simulations/fixes-38-27-stxer.mjs`.
 
 ## Test runs (2026-11-20, after the fixes)
 
