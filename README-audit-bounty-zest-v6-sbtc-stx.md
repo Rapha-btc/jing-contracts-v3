@@ -11,7 +11,7 @@ stx-usdcx Zest bounty (`README-audit-bounty-zest-v6.md`) was carried over.
 Sonic Mast, Violet Jaguar, Gusty Gecko, Valiant Sable, Feral Cleo, Lively
 Cougar, Nested Cube). The 8 with findings are triaged one at a time below.
 
-Status: DONE 2026-11-27. **Winner: Sacred Swan (#38)**, 6,000 sats, tx `1ade4e3801a10200304b668e099b36f81040c2b8ce1efd8ecfff78184149f3ad`. Side tips 1,000 sats each: Giant Moth (#27) tx `a2c85c0c3f929db072e573a561825053c08830369a7f343b354adb881cfd9584`, Rough Manticore (#18) tx `973be3d69cd0998b0352fb80106f65f5ec65c115c97a8d123bf4e91b6cc05b0b`.
+Status: DONE 2026-11-27. **Winner: Sacred Swan (#38)**, 6,000 sats, tx `1ade4e3801a10200304b668e099b36f81040c2b8ce1efd8ecfff78184149f3ad`. Side tips 1,000 sats each: Giant Moth (#27) tx `a2c85c0c3f929db072e573a561825053c08830369a7f343b354adb881cfd9584`, Rough Manticore (#18) tx `973be3d69cd0998b0352fb80106f65f5ec65c115c97a8d123bf4e91b6cc05b0b`. Patient Reed (#2, first report) tx `c2d0499af3fd374a88470e9dcae9f585a415a00de4892a867ac8346cd9336035`.
 
 ## Findings
 
