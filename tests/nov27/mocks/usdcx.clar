@@ -1,0 +1,5 @@
+(define-fungible-token usdcx-token)
+(define-public (mint (n uint) (who principal)) (ft-mint? usdcx-token n who))
+(define-public (transfer (n uint) (sender principal) (recipient principal) (memo (optional (buff 34))))
+ (begin (asserts! (is-eq tx-sender sender) (err u4)) (ft-transfer? usdcx-token n sender recipient)))
+(define-read-only (get-balance (who principal)) (ok (ft-get-balance usdcx-token who)))

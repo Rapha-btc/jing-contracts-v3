@@ -1,0 +1,4 @@
+{
+  "swap-router-sbtc-stx-jing-v6-1": "contracts/sbtc-stx/swap-router-sbtc-stx-jing-v6-1.clar",
+  "swap-router-sbtc-usdcx-jing-v6": "contracts/sbtc-usdcx/swap-router-sbtc-usdcx-jing-v6.clar"
+}
