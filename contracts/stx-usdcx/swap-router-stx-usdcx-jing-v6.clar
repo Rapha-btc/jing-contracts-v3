@@ -1,67 +1,3 @@
-;; swap-router-stx-usdcx-jing-v6
-;;
-;; v6: v5-5 + Zest CLMM STX/USDCx venue (pool 1 on
-;; SP2NK9P261ZN3ZG2M1DS68PCJCRDFZVFMPYA6ZEST.clmm-pool-v1, x = Zest `wstx`,
-;; y = usdcx, bin step 100, 30 bps both sides), in the split entry points and
-;; as a stage of smart-swap-* (signatures unchanged).
-;; Smart swaps: Jing -> Zest -> DLMM -> cp, each stage on what the previous
-;; ones left.
-;;   - Zest keeps no active bin. Its price is WAD raw STX per raw USDCx, bin
-;;     `t` covers [1.01^t, 1.01^(t+1)]. The stage turns `mid` (untrusted, it
-;;     only picks which bins are read) and the price bound into ticks with
-;;     an on-chain log2: STX->USDCx walks up from tick(mid) - 2 to
-;;     tick(max-price) + 1, USDCx->STX walks down from tick(mid) + 2 to
-;;     tick(min-price) - 1, at most 32 ticks; a tight limit walks few, a limit
-;;     past the market walks none (stage skipped).
-;;   - Bound = limit-price (USDCx per STX, 1e8) inverted into Zest's
-;;     orientation with the user's own Zest fee folded in, rounded against
-;;     the user: max-price = floor(1e26 * (1 - fee) / limit) for x -> y,
-;;     min-price = ceil(1e26 / (limit * (1 - fee))) for y -> x. Zest bounds
-;;     the marginal post-trade price, so every unit fills at or better than
-;;     limit-price net of fee (up to Zest's 1-raw-unit output haircut).
-;;   - allow-partial-fill true, min-dy / min-dx 0: Zest takes what fits and
-;;     the rest goes on to DLMM. The combined min-out still guards the user.
-;;   - No fill never reverts: dust remainder, no ticks in range, zero output
-;;     and any Zest error (paused pool, ...) all give in = out = 0; an err
-;;     from the Zest call rolls back Zest's own writes, like the Jing leg.
-;;   - Receipt gains zest-in / zest-out after jing-out; print also gains
-;;     zest-ok (Zest call returned ok) and zest-ticks (ticks passed to Zest).
-;;   - unsold = amount - jing - zest - dlmm - cp.
-;;   - VENUE_ZEST u4; `amm-amounts` / `amm-mins` gain a `zest` field, and the
-;;     split check (u3004) is jing + dlmm + xyk + velar + zest = amount.
-;;   - New trailing arg `zest-route { ticks, price }`: the FE hands the tick
-;;     walk (same idea as the DLMM bins: the FE quotes, the contract trusts
-;;     only the min-out). swap-stx-for-usdcx calls clmm-router-v1
-;;     swap-x-for-y (ticks strictly ascending, price = max-price, WAD;
-;;     UINT-MAX = unbounded); swap-usdcx-for-stx calls swap-y-for-x (ticks
-;;     strictly descending, price = min-price, WAD; u0 = unbounded).
-;;     allow-partial-fill is true and a Zest err counts as in = out = 0, so a
-;;     walk gone stale between quote and inclusion does not revert the
-;;     swap: the Zest shortfall joins the Jing residual and goes to DLMM when
-;;     `fallback` is set (unsold otherwise; a dust shortfall at Zest's own
-;;     fill price stays unsold, like the Jing residual). deadline =
-;;     stacks-block-time (the tx is already bound by block inclusion).
-;;   - zest = u0 skips the call entirely (ticks / price ignored). Zest is not
-;;     a fallback venue: `fallback` stays DLMM-only, so a Jing residual never
-;;     lands on the fixed Zest walk.
-;;   - The Zest output is measured with the rest on the user balance, so it
-;;     counts toward the one combined min-out; `amm-mins.zest` is scaled to
-;;     the part Zest filled (scale-min) and asserted after the call (u3002).
-;;   - Receipt + print gain zest-in / zest-out.
-;;
-;; Native STX on the Zest leg: Zest's wstx is a pass-through whose transfer
-;; is `(stx-transfer? amount sender recipient)` with no caller check, and
-;; clmm-pool-v1 pulls with `sender = tx-sender` under
-;; `restrict-assets? tx-sender ((with-stx amount))`, pays out with
-;; `as-contract? ((with-stx out))` to tx-sender. This router never uses
-;; as-contract, so tx-sender is the user end to end: STX leaves the user's
-;; own balance straight to clmm-pool-v1 and STX proceeds land on the user,
-;; exactly like the Bitflow token-stx-v-1-2 facade. No wrapping, no router
-;; custody, no allowance needed here.
-;; Post-conditions (deny mode): user STX sent <= amount (STX side) or user
-;; USDCx sent <= amount (USDCx side), plus clmm-pool-v1 sends >= 0 USDCx /
-;; STX (not >= 1: Zest may fill 0 and leave it to DLMM), alongside the
-;; existing DLMM pool PCs. The combined min-out guards the total.
 (define-constant JING_MARKET 'SPV9K21TBFAK4KNRJXF5DFP8N7W46G4V9RCJDC22.markets-stx-usdcx-jing-v6-4)
 (define-constant WSTX 'SM1793C4R5PZ4NS4VQ4WMP7SKKYVH8JZEWSZ9HCCR.token-stx-v-1-2)
 (define-constant USDCX 'SP120SBRBQJ00MCWS7TM5R8WJNTTKD5K0HFRC2CNE.usdcx)
@@ -1134,10 +1070,10 @@
 (define-constant ZEST_TICK_MARGIN 2)
 (define-constant ZEST_FRAC_BITS (list
   u576460752303423488 u288230376151711744 u144115188075855872
-  u72057594037927936 u36028797018963968 u18014398509481984 u9007199254740992
-  u4503599627370496 u2251799813685248 u1125899906842624 u562949953421312
-  u281474976710656 u140737488355328 u70368744177664 u35184372088832
-  u17592186044416
+  u72057594037927936 u36028797018963968 u18014398509481984
+  u9007199254740992 u4503599627370496 u2251799813685248
+  u1125899906842624 u562949953421312 u281474976710656
+  u140737488355328 u70368744177664 u35184372088832 u17592186044416
 ))
 (define-constant ZEST_WALK (list
   u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20
@@ -1448,7 +1384,9 @@
         (jing-in (jing-spent jing))
         (zest (zest-stage (- amount jing-in) limit-price mid false))
         (dlmm (try! (dlmm-stage (- amount jing-in (get in zest)) limit-price false)))
-        (cp (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price false))
+        (cp (cp-stage (- amount jing-in (get in zest) (get in dlmm)) limit-price
+          false
+        ))
         (out (gain stx-before (stx-balance user)))
       )
       (asserts! (>= out min-stx-out) ERR_MIN_OUT)
